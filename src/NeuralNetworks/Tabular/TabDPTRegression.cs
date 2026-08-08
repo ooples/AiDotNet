@@ -41,9 +41,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("TabDPT: Scaling Tabular Foundation Models",
-    "https://arxiv.org/abs/2501.02487",
-    Year = 2025,
+// Citation corrected. arXiv 2501.02487 is "ACE++: Instruction-Based Image Creation and Editing",
+// unrelated. TabDPT is arXiv 2410.18164 (2024) and its full title ends "on Real Data".
+[ResearchPaper("TabDPT: Scaling Tabular Foundation Models on Real Data",
+    "https://arxiv.org/abs/2410.18164",
+    Year = 2024,
     Authors = "Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Hamidreza Kamkari, Alex Lacoste, Keyvan Golestan, Guangwei Yu, Maksims Volkovs, Anthony L. Caterini")]
 public class TabDPTRegression<T> : TabDPTBase<T>
 {

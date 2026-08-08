@@ -248,6 +248,13 @@ public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpe
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        // Force EVAL mode before the forward walk. The layer stack is built with
+        // dropoutRate: _options.DropoutRate (default 0.1), so with training mode left active the
+        // dropout masks are resampled on every inference call: ExtractEmbedding -> Predict returned a
+        // DIFFERENT embedding for identical audio (SameInput_SameEmbedding: "Values differ"), and every
+        // loss the training invariants measured was stochastic, which is why extra training read as a
+        // degradation. Inference must be deterministic; every other PredictCore here does the same.
+        SetTrainingMode(false);
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
@@ -257,7 +264,7 @@ public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpe
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

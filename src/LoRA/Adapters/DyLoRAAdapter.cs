@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -49,7 +50,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Rank=8 for desktops (90% parameter reduction, best quality)
 /// </para>
 /// </remarks>
-public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Maximum rank for the LoRA decomposition.
@@ -275,7 +277,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - Can change rank without retraining
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Select rank for this forward pass
         int activeRank = _isTraining
@@ -550,34 +552,6 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         return new Tensor<T>(new[] { batchSize, inputSize }, inputGradVector);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Base layer gradients (if not frozen)
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // LoRA layer gradients - use cached gradients computed in BackwardWithRank
-        if (_cachedLoRAGradients != null)
-        {
-            for (int i = 0; i < _cachedLoRAGradients.Length; i++)
-            {
-                ParameterGradients[idx++] = _cachedLoRAGradients[i];
-            }
-        }
     }
 
     /// <summary>

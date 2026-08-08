@@ -103,6 +103,15 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ResearchPaper("TripoSR: Fast 3D Object Reconstruction from a Single Image", "https://arxiv.org/abs/2403.02151", Year = 2024, Authors = "Tochilkin et al.")]
 public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_transformer);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     private const int LATENT_CHANNELS = 4;
@@ -143,7 +152,6 @@ public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override long ParameterCount => _transformer.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -209,31 +217,7 @@ public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var tParams = _transformer.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(tParams.Length + vaeParams.Length);
-        for (int i = 0; i < tParams.Length; i++) combined[i] = tParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[tParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int tCount = checked((int)_transformer.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-        if (parameters.Length != tCount + vaeCount)
-            throw new ArgumentException($"Expected {tCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var tParams = new Vector<T>(tCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < tCount; i++) tParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[tCount + i];
-        _transformer.SetParameters(tParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

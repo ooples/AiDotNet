@@ -31,8 +31,72 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "2, 4")]
-public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Roles from this layer's own arithmetic, not from convention: ForwardInternal states "Last two
+// dimensions are [sequence, embedding_dim]; all preceding dimensions are treated as batch dimensions",
+// and OnFirstForward guards rank>=2 while checking input.Shape[^1] == headCount * headDimension.
+//
+// SHAPE-PRESERVING, and the file says so in two places. OnFirstForward builds declaredOutput as all
+// LayerShape.Dynamic with only the trailing entry pinned to _embeddingDimension - and since the guard
+// immediately above it already rejects any input whose last axis differs from _embeddingDimension, that
+// pin is the input's own width restated. The reshape at the end of ForwardInternal confirms it directly:
+// outputShape copies _originalQueryShape for every leading axis, then sets [^2] = seqLengthQ and
+// [^1] = embeddingDimension. Input shape in, same shape out. So every relation below is Same -
+// deliberately NOT Fixed(_embeddingDimension), which would read as a claim the layer resizes the feature
+// axis when it only validates it.
+//
+// The sequence axis is emphatically NOT this layer's to fix - the comment at OnFirstForward records a
+// real defect where adopting a guessed seq=1 made the layer report [1, 128] and then produce [4, 128].
+//
+// BatchOptional covers rank 2 as [Time, Features] - the unbatched form ForwardInternal handles
+// explicitly ("2D [seq, dim] -> batch=1, seq, dim") - and rank 3 as [Batch, Time, Features], the rank
+// this layer is tested at. Rank 1 is deliberately NOT declared even though ForwardInternal reshapes it
+// to [1, dim]: OnFirstForward throws for rank<2, so the resolve path never reaches that branch.
+// Ranks above 3 run too (leading axes are flattened into batch and restored), but each extra leading
+// axis would need a distinct role to be named by a relation, and there is no second batch-like role.
+//
+// Multi-input (query/key/value ports) is safe to contract against ONE input here because the output
+// tracks the QUERY alone: ForwardTracedPorts requires "query" and defaults K and V to it, and the final
+// reshape reads _originalQueryShape and seqLengthQ. A cross-attention K/V of a different length does not
+// move the output.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Trailing axis is the embedding width and must equal headCount * headDimension.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Written by hand even though every relation is <c>Same</c>, because the generator derives its arms
+    /// from the DECLARED axis count and would therefore answer only for rank 3 - leaving the rank-2
+    /// <c>[Time, Features]</c> form that <c>BatchOptional</c> accepts, and that <c>ForwardInternal</c>
+    /// handles explicitly ("2D [seq, dim] -&gt; batch=1, seq, dim"), silently unresolvable. A contract
+    /// that declines on a form its own layout advertises is the failure mode these declarations exist to
+    /// remove.
+    /// </para>
+    /// <para>
+    /// Both arms are pure passthrough. Neither axis is this layer's to change: the sequence length comes
+    /// from the QUERY and is copied into the output reshape as <c>seqLengthQ</c>, and the embedding width
+    /// is validated against <c>_embeddingDimension</c> on the way in rather than chosen on the way out.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        return inputRank switch
+        {
+            // Unbatched [Time, Features] - the rank-2 reading of the BatchOptional layout above.
+            2 => new[] { Pass(TensorAxis.Time), Pass(TensorAxis.Features) },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), Pass(TensorAxis.Features) },
+            // Rank 1 is rejected by OnFirstForward; ranks above 3 run but have no second batch-like role
+            // to name their extra leading axes with, so they decline honestly.
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
     /// </summary>
@@ -101,6 +165,14 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
+    // RoPE / ALiBi hyper-parameters captured at ConfigurePositionalEncoding time so a
+    // deserialized layer (which rebuilds via the (headCount, headDimension) ctor and then
+    // re-applies ConfigurePositionalEncoding) can restore the SAME rotation frequencies —
+    // otherwise a cloned/loaded model with non-default theta or max length would compute a
+    // different attention output than the original. Defaults mirror ConfigurePositionalEncoding.
+    private double _ropeTheta = 10000.0;
+    private int _positionalMaxSequenceLength = 2048;
+
     /// <summary>
     /// Gets or sets whether causal masking is applied during attention computation.
     /// When true, positions can only attend to earlier positions (autoregressive behavior).
@@ -113,10 +185,31 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
+    /// <summary>Per-head embedding dimension (headCount × headDimension = embeddingDimension).</summary>
+    public int HeadDimension => _headDimension;
+
+    /// <summary>RoPE base frequency (theta) last passed to <see cref="ConfigurePositionalEncoding"/>.</summary>
+    public double RopeTheta => _ropeTheta;
+
+    /// <summary>Maximum sequence length last passed to <see cref="ConfigurePositionalEncoding"/>.</summary>
+    public int PositionalMaxSequenceLength => _positionalMaxSequenceLength;
+
     /// <summary>
     /// Gets the RoPE theta parameter if RoPE is configured, or the default 10000.0.
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
+
+    /// <summary>
+    /// Optional hook that rewrites the projected queries, keys and values before they are split into
+    /// heads. Null by default, in which case the forward pass is unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Set by techniques that steer a FROZEN attention block by editing Q/K/V rather than its output
+    /// — UniVST's query blending and key/value AdaIN, for instance. Not part of the layer's
+    /// parameters or serialized state: it is a caller-owned strategy, so cloning or reloading a layer
+    /// does not carry it along.
+    /// </remarks>
+    public IQkvTransform<T>? QkvTransform { get; set; }
 
     // Cached projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
     private Tensor<T>? _lastProjectedQueries = null;
@@ -280,20 +373,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     public int HeadCount => _headCount;
 
     /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <remarks>
-    /// Multi-head attention parameters are stored in multiple internal tensors (Q/K/V/O projections + output bias).
-    /// </remarks>
-    public override long ParameterCount => _isInitialized
-        // After EnsureInitialized has run the live tensor lengths are authoritative.
-        ? _queryWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length
-        // Lazy path: four dim×dim projection matrices + one bias vector of size dim.
-        // Reads the field without forcing the expensive tensor allocation, which is
-        // the whole point of staying lazy for existence checks.
-        : (4 * _embeddingDimension * _embeddingDimension) + _embeddingDimension;
-
-    /// <summary>
     /// Gets the query projection weights tensor for JIT compilation.
     /// Forces lazy weight allocation if the layer hasn't seen its first
     /// forward yet — callers (e.g. <c>QuantizedAttentionLayer</c>) need
@@ -348,8 +427,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     public MultiHeadAttentionLayer(
-        int headCount,
-        int headDimension,
+        [LayerState] int headCount,
+        [LayerState] int headDimension,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1, headCount * headDimension }, new[] { -1, headCount * headDimension },
@@ -423,6 +502,29 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Resolves shape on first forward; passthrough since output equals input shape.
     /// Validates that input.Shape[^1] == headCount * headDimension.
     /// </summary>
+    /// <summary>
+    /// Allocates Q/K/V/O, which are sized entirely by <c>_embeddingDimension</c>.
+    /// </summary>
+    /// <remarks>
+    /// The weights never depended on the input — only the sequence axis does — but the allocation
+    /// lived solely in <see cref="OnFirstForward"/>, so a layer that had not run a forward reported
+    /// five placeholder tensors totalling zero scalars. Deserialize then had 2,328 values and a
+    /// layer that believed it had none. Reading the parameter surface now materializes through the
+    /// same idempotent path a forward would use, and that path deliberately does NOT re-randomize
+    /// weights already installed by a restore or a copy-on-write clone.
+    /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Q/K/V/O are <c>embeddingDimension</c> square; only the sequence axis is input-dependent.
+    /// </remarks>
+    protected override bool ParametersAreConstructionSized => true;
+
+    protected override void EnsureInitialized()
+    {
+        EnsureWeightsAllocated();
+        base.EnsureInitialized();
+    }
+
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
@@ -438,8 +540,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"(headCount={_headCount} * headDimension={_headDimension}), but input.Shape[^1]={actualEmbed}.",
                 nameof(input));
 
+        // Self-attention preserves the sequence axis rather than fixing it, and the shape reaching
+        // this layer during chain resolution can carry a guessed length (seq=1). Adopting that as a
+        // concrete commitment made the layer report [1, 128] and then produce [4, 128] per sample.
+        // Only the embedding width is fixed at construction.
         var shape = input.Shape.ToArray();
-        ResolveShapes(shape, shape);
+        var declaredOutput = new int[shape.Length];
+        for (int i = 0; i < shape.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[shape.Length - 1] = _embeddingDimension;
+        ResolveShapes(shape, declaredOutput);
 
         // ResolveShapesOnly (used by InferenceOptimizer.ResolveLazyLayers
         // and similar shape-walker callers) sets IsResolvingShapesOnly so
@@ -467,6 +576,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int maxSequenceLength = 2048)
     {
         PositionalEncoding = encodingType;
+        _ropeTheta = ropeTheta;
+        _positionalMaxSequenceLength = maxSequenceLength;
+
+        // Keep the recursive layer graph synchronized when positional encoding
+        // is configured more than once or after generated sub-layer discovery.
+        if (_ropeLayer is not null) UnregisterSubLayer(_ropeLayer);
+        if (_alibiLayer is not null) UnregisterSubLayer(_alibiLayer);
         _ropeLayer = null;
         _alibiLayer = null;
 
@@ -475,9 +591,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             case PositionalEncodingType.Rotary:
                 _ropeLayer = new RotaryPositionalEncodingLayer<T>(
                     maxSequenceLength, _headDimension, ropeTheta);
+                RegisterSubLayer(_ropeLayer);
                 break;
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
+                RegisterSubLayer(_alibiLayer);
                 break;
             case PositionalEncodingType.None:
                 break;
@@ -727,6 +845,10 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // "embeddingDimension 1 is not divisible by headCount N".
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
+        metadata["UseCausalMask"] = UseCausalMask.ToString();
+        metadata["RopeTheta"] = _ropeTheta.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["PositionalMaxSequenceLength"] =
+            _positionalMaxSequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
 
@@ -939,7 +1061,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("query", out var query) || query == null)
@@ -972,12 +1094,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// like characters, plot, and setting all at once. Each "head" is like focusing on one of these aspects.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return ForwardInternal(input, input, input);
     }
 
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1) return ForwardInternal(inputs[0], inputs[0], inputs[0]);
         if (inputs.Length == 2) return ForwardInternal(inputs[0], inputs[1], inputs[1]); // Q, K=V (Cross Attention)
@@ -1190,9 +1312,37 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var k2D = Engine.Reshape(key, [batchSize * seqLengthKV, embeddingDimension]);
         var v2D = Engine.Reshape(value, [batchSize * seqLengthKV, embeddingDimension]);
 
+        static Tensor<T> ApplyQkvTransform(Tensor<T>? produced, Tensor<T> original, string method)
+        {
+            if (produced is null)
+                throw new InvalidOperationException(
+                    $"IQkvTransform.{method} returned null; it must return a tensor.");
+
+            // A transform that changes the element count would break the head reshape a few lines
+            // below with a confusing message about Q_flat. Failing here names the real culprit.
+            if (produced.Length != original.Length)
+                throw new InvalidOperationException(
+                    $"IQkvTransform.{method} must preserve shape: got [{string.Join(", ", produced._shape)}] " +
+                    $"({produced.Length} elements) from [{string.Join(", ", original._shape)}] " +
+                    $"({original.Length} elements).");
+
+            return produced;
+        }
+
         var Q_flat = Engine.TensorMatMul(q2D, _queryWeights);
         var K_flat = Engine.TensorMatMul(k2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(v2D, _valueWeights);
+
+        // Q/K/V steering hook (see IQkvTransform). Applied HERE — after projection, before the head
+        // split — because methods that rewrite Q/K/V need the projected tensors, and the only other
+        // wrapping point available (IAttentionBlockDecorator.PostProcess) sees the post-softmax
+        // OUTPUT instead. Null unless a caller attaches one, so the default path is unchanged.
+        if (QkvTransform is not null)
+        {
+            Q_flat = ApplyQkvTransform(QkvTransform.TransformQuery(Q_flat), Q_flat, "TransformQuery");
+            K_flat = ApplyQkvTransform(QkvTransform.TransformKey(K_flat), K_flat, "TransformKey");
+            V_flat = ApplyQkvTransform(QkvTransform.TransformValue(V_flat), V_flat, "TransformValue");
+        }
 
         // Reshape and Transpose to [Batch, HeadCount, Seq, HeadDim]
         int targetQElems = batchSize * seqLengthQ * _headCount * _headDimension;
@@ -1581,89 +1731,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             Engine.InvalidatePersistentTensor(_outputWeights);
             Engine.InvalidatePersistentTensor(_outputBias);
         }
-    }
-
-    /// <summary>
-    /// Extracts all parameters (weights and biases) from the layer into a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameters of the layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method collects all the layer's adjustable values (weights and biases) 
-    /// into a single list. Think of it like taking inventory of all the ingredients in a recipe.
-    /// This is useful for saving the model's state or for optimization algorithms that need to 
-    /// work with all parameters at once.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Materialize lazy-init tensors before copying their data — a fresh DiT
-        // block that's never seen a Forward() call otherwise returns an empty
-        // Vector here, which breaks any caller that concatenates per-layer
-        // parameter vectors (including NeuralNetworkBase.GetParameters itself).
-        EnsureWeightsAllocated();
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_queryWeights.Data),
-            Vector<T>.FromMemory(_keyWeights.Data),
-            Vector<T>.FromMemory(_valueWeights.Data),
-            Vector<T>.FromMemory(_outputWeights.Data),
-            Vector<T>.FromMemory(_outputBias.Data));
-    }
-
-    /// <summary>
-    /// Sets all parameters (weights and biases) of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set in the layer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method does the opposite of GetParameters - it takes a list of values 
-    /// and distributes them back into the layer's weights and biases. It's like restocking all the 
-    /// ingredients in your kitchen from a single shopping bag, putting each item in its proper place.
-    /// This is useful when loading a saved model or when optimization algorithms have computed 
-    /// improved parameter values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // SetParameters is the logical mirror of GetParameters — if the caller is
-        // loading a snapshot into a lazily-constructed layer, we still need the real
-        // tensors allocated first or every shape read below is 0.
-        EnsureWeightsAllocated();
-        // Calculate total number of parameters using tensor shape
-        int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
-        int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
-        int vRows = _valueWeights.Shape[0], vCols = _valueWeights.Shape[1];
-        int oRows = _outputWeights.Shape[0], oCols = _outputWeights.Shape[1];
-        int biasLen = _outputBias.Shape[0];
-
-        int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + oRows * oCols + biasLen;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        var qLen = qRows * qCols;
-        var kLen = kRows * kCols;
-        var vLen = vRows * vCols;
-        var oLen = oRows * oCols;
-
-        // Bulk copy in-place — preserves engine persistent tensor references
-        var src = parameters.AsSpan();
-        int idx = 0;
-        src.Slice(idx, qLen).CopyTo(_queryWeights.Data.Span); idx += qLen;
-        src.Slice(idx, kLen).CopyTo(_keyWeights.Data.Span); idx += kLen;
-        src.Slice(idx, vLen).CopyTo(_valueWeights.Data.Span); idx += vLen;
-        src.Slice(idx, oLen).CopyTo(_outputWeights.Data.Span); idx += oLen;
-        src.Slice(idx, biasLen).CopyTo(_outputBias.Data.Span);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

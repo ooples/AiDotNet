@@ -108,6 +108,15 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ResearchPaper("Exploiting Diffusion Prior for Real-World Image Super-Resolution", "https://arxiv.org/abs/2305.07015", Year = 2024, Authors = "Wang et al.")]
 public class StableSRModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -188,15 +197,7 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <summary>
-    /// Counts the flat-API parameter surface (predictor + VAE). The
-    /// trainable conditioner is intentionally excluded here because
-    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> move
-    /// only that surface — flat <see cref="Vector{T}"/> is int-bounded.
-    /// Callers needing the full count walk
-    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>.
-    /// </summary>
-    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+
 
     #endregion
 
@@ -385,58 +386,7 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureInitialized();
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[i] = unetParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[unetParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureInitialized();
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != unetCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[unetCount + i];
-        }
-
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

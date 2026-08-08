@@ -54,6 +54,16 @@ namespace AiDotNet.Diffusion.Control;
     [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
 public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_vae);
+        RegisterParameterComponent(_controlEncoder);
+    }
+
     private const int FLUX_LATENT_CHANNELS = 16;
     private const int FLUX_CONTEXT_DIM = 4096;
     private const double DEFAULT_GUIDANCE = 3.5;
@@ -73,8 +83,6 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => FLUX_LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _predictor.ParameterCount + _vae.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet-FLUX model.
@@ -125,54 +133,7 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
             seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Pre-allocate to avoid the List<T> doubling + ToArray triple-copy
-        // that OOMs CI on real-scale FLUX (~12B params doubles ⇒ ~96 GB).
-        int predCount = checked((int)_predictor.ParameterCount);
-        int vaeCount = checked((int)_vae.ParameterCount);
-        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
-        long expectedTotal = (long)predCount + vaeCount + ctrlCount;
-        var result = new Vector<T>(checked((int)expectedTotal));
-        var predParams = _predictor.GetParameters();
-        for (int i = 0; i < predParams.Length; i++) result[i] = predParams[i];
-        var vaeParams = _vae.GetParameters();
-        for (int i = 0; i < vaeParams.Length; i++) result[predCount + i] = vaeParams[i];
-        var ctrlParams = _controlEncoder.GetParameters();
-        for (int i = 0; i < ctrlParams.Length; i++) result[predCount + vaeCount + i] = ctrlParams[i];
-        return result;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int predCount = checked((int)_predictor.ParameterCount);
-        int vaeCount = checked((int)_vae.ParameterCount);
-        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
-        long expectedTotal = (long)predCount + vaeCount + ctrlCount;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        var predParams = new T[predCount];
-        for (int i = 0; i < predCount; i++) predParams[i] = parameters[offset + i];
-        _predictor.SetParameters(new Vector<T>(predParams));
-        offset += predCount;
-
-        var vaeParams = new T[vaeCount];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[offset + i];
-        _vae.SetParameters(new Vector<T>(vaeParams));
-        offset += vaeCount;
-
-        var ctrlParams = new T[ctrlCount];
-        for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
-        _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

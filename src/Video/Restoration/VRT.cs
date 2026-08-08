@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -196,7 +197,9 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         int numBlocks = 8,
         int scaleFactor = 4,
         VRTOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        : base(
+            architecture,
+            lossFunction ?? new CharbonnierLoss<T>(options?.CharbonnierEpsilon ?? 1e-3))
     {
         _options = options ?? new VRTOptions();
         Options = _options;
@@ -217,8 +220,13 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
 
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new CharbonnierLoss<T>(_options.CharbonnierEpsilon);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
 
         InitializeLayers();
     }
@@ -248,7 +256,9 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         string onnxModelPath,
         int scaleFactor = 4,
         VRTOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(
+            architecture,
+            new CharbonnierLoss<T>(options?.CharbonnierEpsilon ?? 1e-3))
     {
         _options = options ?? new VRTOptions();
         Options = _options;
@@ -267,7 +277,7 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         ScaleFactor = scaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
-        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _lossFunction = new CharbonnierLoss<T>(_options.CharbonnierEpsilon);
 
         try
         {
@@ -411,7 +421,7 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -533,12 +543,13 @@ public class VRT<T> : VideoSuperResolutionBase<T>
     {
         return new VRT<T>(
             Architecture,
-            _optimizer,
+            null,
             _lossFunction,
             _embedDim,
             _numFrames,
             _numBlocks,
-            _scaleFactor);
+            _scaleFactor,
+            new VRTOptions(_options));
     }
 
     #endregion

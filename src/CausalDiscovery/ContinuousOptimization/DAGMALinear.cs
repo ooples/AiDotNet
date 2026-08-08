@@ -108,6 +108,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     #region Fields
 
     private readonly double[] _sValues;
+    private readonly int? _configuredMaxIterations;
     private double _learningRate;
     private int _lastIterations;
     private double _lastH;
@@ -136,7 +137,10 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
         ApplyOptions(options);
 
         _sValues = [1.0, 0.9, 0.8, 0.7, 0.6];
-        _learningRate = DEFAULT_LEARNING_RATE;
+        _configuredMaxIterations = options?.MaxIterations;
+        _learningRate = options?.LearningRate ?? DEFAULT_LEARNING_RATE;
+        if (double.IsNaN(_learningRate) || double.IsInfinity(_learningRate) || _learningRate <= 0)
+            throw new ArgumentException("LearningRate must be a positive finite value.", nameof(options));
     }
 
     #endregion
@@ -158,7 +162,10 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
         for (int t = 0; t < T; t++)
         {
             double s = _sValues[t];
-            int maxInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
+            int defaultInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
+            int maxInner = _configuredMaxIterations.HasValue
+                ? Math.Min(defaultInner, _configuredMaxIterations.Value)
+                : defaultInner;
 
             int actualIter;
             (W, actualIter) = SolveInnerProblem(data, W, mu, s, d, maxInner);

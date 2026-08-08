@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -86,6 +86,15 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         }
 
         _threshold = threshold;
+
+        // Build the layer chain now rather than on first Predict. Until this ran, Layers was
+        // EMPTY, so both parameter surfaces described a model with no layers at all while the
+        // model plainly has a Dense(3 -> 1). ParameterCount papered over that by returning
+        // FeatureCount + 1 whenever the base returned less -- four parameters GetParameters
+        // could not produce, because the tensors did not exist yet. With the layer built here
+        // and sized explicitly in InitializeLayers, both surfaces report the true 4 from
+        // construction, and neither changes value across the first Predict.
+        EnsureArchitectureInitialized();
     }
 
     /// <inheritdoc />
@@ -97,13 +106,20 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
             return;
         }
 
-        // Single learnable Dense (3 → 1) with Sigmoid for the [0, 1] score range.
-        // Initialised so the default forward pass approximately matches the
-        // hand-tuned heuristic weights from Xu et al. 2018 §4
-        // (HF: 0.40, histogram: 0.30, squeezing: 0.30).
-        // DenseLayer<T>(outputSize, activation) — input dim is resolved on first
-        // forward via lazy weight init.
-        Layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>?)new SigmoidActivation<T>()));
+        // Single learnable Dense (3 → 1) with Sigmoid for the [0, 1] score range,
+        // per Xu et al. 2018 §4 (HF energy, histogram, feature squeezing).
+        //
+        // Sized EXPLICITLY at FeatureCount inputs rather than deferred. The input width is not
+        // actually unknown here — PredictCore always feeds exactly FeatureCount features, which
+        // it computes itself — so deferring it only hid that fact from the parameter surfaces.
+        // A deferred layer gets its width from the architecture's declared input during lazy
+        // resolution, and this model's architecture describes the IMAGE ([3, 32, 32]), not the
+        // feature vector the layer consumes. Resolution therefore built a 32-input Dense worth
+        // 33 parameters, which the first forward pass discarded and rebuilt at the real width of
+        // 3. Stating the width the layer is always given makes ParameterCount and GetParameters
+        // both report the true 4 from construction onward, and they no longer change value
+        // across the first Predict.
+        Layers.Add(new FullyConnectedLayer<T>(FeatureCount, 1, new SigmoidActivation<T>()));
     }
 
     /// <inheritdoc />
@@ -125,9 +141,38 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         // cascade-fails every test in AdversarialImageEvaluatorTests.
         if (Layers.Count == 0) InitializeLayers();
 
+        var features = ExtractFeatures(input, out bool wasUnbatched);
+
+        // Run through the learnable Dense layer → [batch, 1]
+        var score = Layers[0].Forward(features);
+
+        if (wasUnbatched && score.Rank > 1 && score.Shape[0] == 1)
+        {
+            var squeezed = new int[score.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = score.Shape[i + 1];
+            score = score.Reshape(squeezed);
+        }
+        return score;
+    }
+
+    /// <summary>
+    /// Builds the <c>[B, FeatureCount]</c> heuristic feature tensor that the learnable layer
+    /// consumes: HF energy, histogram anomaly, and feature-squeezing distance (Xu et al. 2018 §4).
+    /// </summary>
+    /// <remarks>
+    /// Shared by <see cref="PredictCore"/> and <see cref="ForwardForTraining"/> so both paths feed
+    /// the layer the same representation. They previously did not, and the consequences were
+    /// silent: training pushed the RAW image through the layer chain, sizing the deferred Dense to
+    /// the image width, and the first Predict then re-resolved that same layer to the 3-feature
+    /// width -- discarding every weight training had learned. The model trained and predicted on
+    /// different inputs, and nothing failed, because lazy re-resolution quietly rebuilt the layer
+    /// instead of reporting the conflict.
+    /// </remarks>
+    private Tensor<T> ExtractFeatures(Tensor<T> input, out bool wasUnbatched)
+    {
         // Promote rank-3 single-sample to rank-4 batched, mirror the
         // MobileNetV3 / Mask2Former pattern.
-        bool wasUnbatched = input.Rank == 3;
+        wasUnbatched = input.Rank == 3;
         var batched = wasUnbatched
             ? input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] })
             : input;
@@ -161,16 +206,27 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
             features[b, 2] = NumOps.FromDouble(ComputeFeatureSqueezingScore(sampleSpan));
         }
 
-        // Run through the learnable Dense layer → [batch, 1]
-        var score = Layers[0].Forward(features);
+        return features;
+    }
 
-        if (wasUnbatched && score.Rank > 1 && score.Shape[0] == 1)
-        {
-            var squeezed = new int[score.Rank - 1];
-            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = score.Shape[i + 1];
-            score = score.Reshape(squeezed);
-        }
-        return score;
+    /// <inheritdoc />
+    /// <remarks>
+    /// Routes training through the SAME feature extraction <see cref="PredictCore"/> uses. Without
+    /// this the base walked the layer chain over the raw image, so the weights training adjusted
+    /// belonged to a differently-shaped layer than the one inference used. Mirrors the
+    /// <c>PANNs</c> pattern of normalising the model input before delegating.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (Layers.Count == 0) InitializeLayers();
+
+        // Already-extracted features pass straight through: callers that have done the extraction
+        // themselves (and the layer-only path) must not be made to round-trip an image.
+        if (input.Rank == 2 && input.Shape[1] == FeatureCount)
+            return base.ForwardForTraining(input);
+
+        return base.ForwardForTraining(ExtractFeatures(input, out _));
     }
 
     /// <inheritdoc />
@@ -253,44 +309,6 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         };
     }
 
-    /// <summary>
-    /// AIE's pipeline always emits a 3-element feature vector to a single
-    /// <c>DenseLayer(3 → 1)</c>: <c>3 × 1 = 3</c> weights + <c>1</c> bias = 4
-    /// learnable parameters. The base class's <c>ParameterCount</c> tries to
-    /// pre-resolve lazy layer shapes by propagating <c>Architecture.InputShape</c>
-    /// through the layer chain, but AIE's Dense doesn't see the architecture's
-    /// image shape <c>[C, H, W]</c> — it sees the C#-computed feature vector
-    /// <c>[B, 3]</c> instead (feature extraction happens in <see cref="Predict"/>,
-    /// outside the layer chain). The result: lazy Dense's <c>InputShape[0]</c>
-    /// stays at the <c>-1</c> sentinel and contributes <c>0</c> to the sum,
-    /// making the
-    /// <c>NeuralNetworkModelTestBase.Parameters_ShouldBeNonEmpty</c>
-    /// invariant trivially fail despite the model having a perfectly
-    /// well-defined parameter count.
-    /// </summary>
-    /// <remarks>
-    /// Custom <c>Architecture.Layers</c> from the caller are honoured (we
-    /// defer to the base sum in that case). The override only short-circuits
-    /// for the default Xu et al. 2018 Dense(3 → 1) topology.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Caller-supplied custom Layers: base knows best — defer.
-            if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-                return base.ParameterCount;
-
-            // Default topology: AFTER a Forward has run, base.ParameterCount
-            // returns the correct 4 (lazy Dense is materialised). BEFORE the
-            // first Forward, base returns 0 because lazy Dense's
-            // InputShape[0] is still −1. Take base's value when it's already
-            // ≥ FeatureCount + 1 (post-Forward); otherwise emit the
-            // architecturally known count.
-            long baseCount = base.ParameterCount;
-            return baseCount >= FeatureCount + 1 ? baseCount : FeatureCount + 1;
-        }
-    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>

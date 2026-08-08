@@ -86,6 +86,15 @@ namespace AiDotNet.Classification.Boosting;
     [ResearchPaper("LightGBM: A Highly Efficient Gradient Boosting Decision Tree", "https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree")]
 public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from the getter, which is what ModelBase already does. The inherited override
+    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
+    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
+    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
+    /// </remarks>
+    public override long ParameterCount => GetParameters().Length;
+
     /// <summary>
     /// The ensemble of histogram-based decision trees.
     /// </summary>

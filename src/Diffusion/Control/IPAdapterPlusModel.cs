@@ -58,6 +58,15 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2308.06721", Year = 2023, Authors = "Ye et al.")]
 public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_imageProjection);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const int IMAGE_EMBED_DIM = 1024;
     private const int CROSS_ATTENTION_DIM = 768;
@@ -78,7 +87,6 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _imageProjection.ParameterCount;
 
     /// <summary>
     /// Initializes a new IP-Adapter Plus model.
@@ -137,32 +145,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
         _imageProjection.ResolveFromShape(new[] { 1, IMAGE_EMBED_DIM });
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        var baseParams = _baseUNet.GetParameters();
-        for (int i = 0; i < baseParams.Length; i++) allParams.Add(baseParams[i]);
-        var projParams = _imageProjection.GetParameters();
-        for (int i = 0; i < projParams.Length; i++) allParams.Add(projParams[i]);
-        return new Vector<T>(allParams.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        int baseCount = checked((int)_baseUNet.ParameterCount);
-        var baseParams = new T[baseCount];
-        for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
-        _baseUNet.SetParameters(new Vector<T>(baseParams));
-        offset += baseCount;
-
-        int projCount = checked((int)_imageProjection.ParameterCount);
-        var projParams = new T[projCount];
-        for (int i = 0; i < projCount; i++) projParams[i] = parameters[offset + i];
-        _imageProjection.SetParameters(new Vector<T>(projParams));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

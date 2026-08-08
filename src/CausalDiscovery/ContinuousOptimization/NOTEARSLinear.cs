@@ -245,6 +245,9 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
         for (int iter = 0; iter < INNER_MAX_ITERATIONS; iter++)
         {
+            // Snapshot the iterate at the start of this step for the L1-aware convergence test below.
+            double[] wStart = (double[])w.Clone();
+
             // Compute objective and gradient
             var currentW = UnflattenMatrix(w, d);
             var (grad, objValue) = ComputeAugmentedLagrangianGradient(X, currentW, alpha, rho, d);
@@ -328,6 +331,21 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
                         w[i * d + i] = 0;
                     }
                 }
+            }
+
+            // L1-aware convergence stop. The gradient-norm test above (maxGrad < INNER_TOLERANCE)
+            // can NEVER fire for this L1-regularized objective: the L1 subgradient pins |g_i| >= Lambda1
+            // (0.1) for every ACTIVE weight, so without this the inner L-BFGS ran ALL
+            // INNER_MAX_ITERATIONS (1000) every outer step (~3.5 min per solve, timing the
+            // DiscoverStructure tests out at 60 s). Stop when the projected iterate stops moving — the
+            // correct convergence signal for the L1 proximal subproblem; it reaches the same solution
+            // in one-to-two orders of magnitude fewer iterations.
+            double maxStep = 0.0;
+            for (int i = 0; i < vecLen; i++)
+                maxStep = Math.Max(maxStep, Math.Abs(w[i] - wStart[i]));
+            if (maxStep < INNER_TOLERANCE)
+            {
+                break;
             }
 
             // Update L-BFGS memory (skip first iteration since we have no valid previous gradient)

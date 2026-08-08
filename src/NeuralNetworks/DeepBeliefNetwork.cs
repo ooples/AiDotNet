@@ -703,7 +703,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         // Add the size of the final hidden layer
         if (_rbmLayers.Count > 0)
         {
-            layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputShape()[0]);
+            layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
         }
 
         return new ModelMetadata<T>

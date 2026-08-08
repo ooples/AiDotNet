@@ -37,11 +37,68 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "2")]
-public class SpyNetLayer<T> : LayerBase<T>
+// NCHW, per OnFirstForward's own guard - "requires rank-3 [2C,H,W] or rank-4 [B,2C,H,W]". The channel
+// axis carries TWO STACKED FRAMES on the way in and a TWO-COMPONENT FLOW FIELD on the way out; those
+// are different quantities that happen to share an axis, which is exactly why the output channel width
+// is not a function of the input channel width.
+//
+// _numLevels shapes the internal pyramid, not the result: BuildPyramid halves each level and
+// EstimateFlow upsamples back, so the flow returned is always at full input resolution.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Two frames stacked along the channel axis; the count must be even.")]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Straight from <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { totalChannels, inH, inW }, new[] { 2, inH, inW })</c>. The spatial axes
+    /// are carried through untouched and the channel axis becomes 2.
+    /// </para>
+    /// <para>
+    /// THE LITERAL 2 IS DELIBERATE AND IS NOT AN OBSERVED CONSTANT - the usual objection to a hardcoded
+    /// size does not apply. It is the (dx, dy) component count of an optical flow field, stated in
+    /// <c>EstimateFlow</c>'s own return doc ("[2, H, W] representing (dx, dy) per pixel") and written
+    /// literally into <c>ResolveShapes</c>. No constructor argument can change it: <c>_numLevels</c>
+    /// drives the pyramid depth and the input channel count is discovered per input, but neither
+    /// reaches this axis. A field would be a rename of the number, not a source for it.
+    /// </para>
+    /// <para>
+    /// Note the input channel count is DIVIDED by two internally (<c>_inputChannels = totalChannels /
+    /// 2</c>) to recover the per-frame width, but that value never reaches the output either - the flow
+    /// field is two-wide regardless of how many channels each frame carries.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var flow = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(2));
+        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width));
+
+        return inputRank switch
+        {
+            3 => new[] { flow, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                flow,
+                height,
+                width,
+            },
+            _ => null,
+        };
+    }
+
     #region Fields
 
-    private readonly IEngine _engine;
     private readonly int _numLevels;
     // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
     private int _inputChannels;
@@ -71,10 +128,8 @@ public class SpyNetLayer<T> : LayerBase<T>
     /// <param name="inputWidth">Width of input frames.</param>
     /// <param name="inputChannels">Number of input channels (typically 3 for RGB).</param>
     /// <param name="numLevels">Number of pyramid levels (default: 5).</param>
-    /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
     public SpyNetLayer(
-        int numLevels = 5,
-        IEngine? engine = null)
+        int numLevels = 5)
         : base([-1, -1, -1], [2, -1, -1])
     {
         // Reject numLevels <= 0 at construction. The pyramid loop below
@@ -88,7 +143,6 @@ public class SpyNetLayer<T> : LayerBase<T>
                 nameof(numLevels),
                 $"SpyNetLayer requires numLevels >= 1; got {numLevels}.");
 
-        _engine = engine ?? new CpuEngine();
         _inputHeight = -1; // resolved in OnFirstForward
         _inputWidth = -1;  // resolved in OnFirstForward
         _inputChannels = -1; // resolved in OnFirstForward (single-frame channels)
@@ -195,7 +249,7 @@ public class SpyNetLayer<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -260,9 +314,16 @@ public class SpyNetLayer<T> : LayerBase<T>
         _cachedPyramid1.AddRange(pyramid1);
         _cachedPyramid2.AddRange(pyramid2);
 
-        // Initialize flow at coarsest level (zeros)
-        int coarseH = height >> (_numLevels - 1);
-        int coarseW = width >> (_numLevels - 1);
+        // Initialize flow at the coarsest level (zeros). Size it from the ACTUAL coarsest pyramid
+        // level rather than `height >> (_numLevels - 1)`: BuildPyramid's per-level halving rounds
+        // (e.g. ceil / floor of odd dims) independently of the shift, so the two can disagree by a
+        // pixel — leaving the initial flow mismatched with img1/img2 at the coarsest level and
+        // overrunning the warp/concat buffers (IndexOutOfRange in ConcatenateForModule on the
+        // BasicVSR++ second-order alignment path). Deriving from the pyramid keeps flow, img1 and
+        // warped2 exactly aligned at every level (finer levels already upsample flow to levelH/levelW).
+        var coarsestLevel = pyramid1[_numLevels - 1];
+        int coarseH = hasBatch ? coarsestLevel.Shape[2] : coarsestLevel.Shape[1];
+        int coarseW = hasBatch ? coarsestLevel.Shape[3] : coarsestLevel.Shape[2];
         var flowShape = hasBatch ? new[] { batch, 2, coarseH, coarseW } : new[] { 2, coarseH, coarseW };
         var flow = new Tensor<T>(flowShape);
 
@@ -831,21 +892,20 @@ public class SpyNetLayer<T> : LayerBase<T>
             }
         }
 
-        // Ensure image is in 4D format for GridSample
-        var image4D = image;
-        if (!hasBatch)
-        {
-            image4D = image.Reshape(new[] { 1, channels, height, width });
-        }
+        // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, standardized in Tensors #777):
+        // input [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. SpyNet
+        // already works in channels-first [C, H, W], so pass the NCHW image directly — no permute. (An
+        // earlier revision permuted to NHWC because the engine was NHWC at the time; that flipped after
+        // #777, so the permute became backwards: it re-labelled the image's H dim as "channels", warping
+        // a 3-channel frame into a 2-"channel" tensor at the coarse 2×2 pyramid level, which made
+        // ConcatenateForModule read past its end → IndexOutOfRange. The grid is already in GridSample's
+        // [B, outH, outW, 2] layout with align-corners normalization, so it needs no change.)
+        var image4D = hasBatch ? image : image.Reshape(new[] { 1, channels, height, width });
+        var warped = Engine.GridSample(image4D, grid);                           // [B, C, H, W]
 
-        // Use IEngine.GridSample for hardware-accelerated bilinear sampling
-        var warped = _engine.GridSample(image4D, grid);
-
-        // Remove batch dimension if input didn't have it
+        // Remove batch dimension if input didn't have it.
         if (!hasBatch && warped.Rank == 4)
         {
-            // Use actual warped dimensions, not original image dimensions
-            // (GridSample output may differ from input at different pyramid levels)
             warped = warped.Reshape(new[] { warped.Shape[1], warped.Shape[2], warped.Shape[3] });
         }
 
@@ -1322,49 +1382,6 @@ public class SpyNetLayer<T> : LayerBase<T>
     #endregion
 
     #region Parameter Management
-
-    /// <inheritdoc/>
-    public override long ParameterCount => (int)_basicModules.Sum(m => m.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var module in _basicModules)
-        {
-            var moduleParams = module.GetParameters();
-            for (int i = 0; i < moduleParams.Length; i++)
-            {
-                allParams.Add(moduleParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: per-pyramid-level conv shapes are unresolved.
-        // Buffer and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        foreach (var module in _basicModules)
-        {
-            var moduleParams = module.GetParameters();
-            var newParams = new T[moduleParams.Length];
-            for (int i = 0; i < moduleParams.Length; i++)
-            {
-                newParams[i] = parameters[offset + i];
-            }
-            module.SetParameters(new Vector<T>(newParams));
-            offset += moduleParams.Length;
-        }
-    }
 
     private Vector<T>? _pendingParameters;
 

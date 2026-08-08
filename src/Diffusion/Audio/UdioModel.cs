@@ -101,6 +101,15 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelMetadataExempt]
 public class UdioModel<T> : AudioDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_dit);
+        RegisterParameterComponent(_audioVAE);
+    }
+
     #region Constants
 
     private const int LATENT_CHANNELS = 64;
@@ -141,8 +150,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     public override bool SupportsTextToSpeech => false;
     /// <inheritdoc />
     public override bool SupportsAudioToAudio => true;
-    /// <inheritdoc />
-    public override long ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _audioVAE.ParameterCount; } }
+
 
     #endregion
 
@@ -200,33 +208,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureInitialized();
-        var dParams = _dit.GetParameters();
-        var vaeParams = _audioVAE.GetParameters();
-        var combined = new Vector<T>(dParams.Length + vaeParams.Length);
-        for (int i = 0; i < dParams.Length; i++) combined[i] = dParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[dParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureInitialized();
-        int dCount = checked((int)_dit.ParameterCount);
-        int vaeCount = checked((int)_audioVAE.ParameterCount);
-        if (parameters.Length != dCount + vaeCount)
-            throw new ArgumentException($"Expected {dCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var dParams = new Vector<T>(dCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < dCount; i++) dParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[dCount + i];
-        _dit.SetParameters(dParams);
-        _audioVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

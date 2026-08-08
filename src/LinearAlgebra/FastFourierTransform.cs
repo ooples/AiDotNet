@@ -83,7 +83,8 @@ public readonly struct FastFourierTransform<T>
     }
 
     /// <summary>
-    /// Internal recursive implementation of the FFT algorithm using the Cooley-Tukey method.
+    /// Internal FFT implementation. Power-of-two inputs use radix-2 Cooley-Tukey;
+    /// all other lengths use Bluestein's chirp-z reduction to a power-of-two convolution.
     /// </summary>
     /// <param name="input">The input vector of complex numbers.</param>
     /// <param name="inverse">Whether to perform the inverse transform.</param>
@@ -102,6 +103,21 @@ public readonly struct FastFourierTransform<T>
         int n = input.Length;
         if (n <= 1) return input;
 
+        return IsPowerOfTwo(n)
+            ? Radix2Transform(input, inverse)
+            : BluesteinTransform(input, inverse);
+    }
+
+    /// <summary>
+    /// Computes an FFT whose length is known to be a power of two.
+    /// The inverse transform is intentionally unnormalized; <see cref="Inverse"/>
+    /// applies the public 1/N normalization once at the end.
+    /// </summary>
+    private Vector<Complex<T>> Radix2Transform(Vector<Complex<T>> input, bool inverse)
+    {
+        int n = input.Length;
+        if (n <= 1) return input;
+
         var even = new Vector<Complex<T>>(n / 2);
         var odd = new Vector<Complex<T>>(n / 2);
 
@@ -111,8 +127,8 @@ public readonly struct FastFourierTransform<T>
             odd[i] = input[2 * i + 1];
         }
 
-        even = FFTInternal(even, inverse);
-        odd = FFTInternal(odd, inverse);
+        even = Radix2Transform(even, inverse);
+        odd = Radix2Transform(odd, inverse);
 
         var output = new Vector<Complex<T>>(n);
         T angleSign = inverse ? _numOps.One : _numOps.Negate(_numOps.One);
@@ -128,4 +144,64 @@ public readonly struct FastFourierTransform<T>
 
         return output;
     }
+
+    /// <summary>
+    /// Computes an arbitrary-length DFT with Bluestein's algorithm.
+    /// This preserves exact FFT sizes used by audio models such as Whisper's
+    /// 400-sample analysis window instead of silently padding them to 512.
+    /// </summary>
+    private Vector<Complex<T>> BluesteinTransform(Vector<Complex<T>> input, bool inverse)
+    {
+        int n = input.Length;
+        long requiredLength = (2L * n) - 1L;
+        const int maxPowerOfTwo = 1 << 30;
+        if (requiredLength > maxPowerOfTwo)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(input),
+                $"FFT length {n} is too large for Bluestein's convolution buffer.");
+        }
+
+        int convolutionLength = 1;
+        while (convolutionLength < requiredLength)
+            convolutionLength <<= 1;
+
+        var a = new Vector<Complex<T>>(convolutionLength);
+        var b = new Vector<Complex<T>>(convolutionLength);
+        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+        double direction = inverse ? 1.0 : -1.0;
+
+        for (int i = 0; i < n; i++)
+        {
+            double phase = direction * Math.PI * ((double)i * i / n);
+            var inputChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(phase));
+            var convolutionChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(-phase));
+
+            a[i] = complexOps.Multiply(input[i], inputChirp);
+            b[i] = convolutionChirp;
+            if (i != 0)
+                b[convolutionLength - i] = convolutionChirp;
+        }
+
+        var spectrumA = Radix2Transform(a, inverse: false);
+        var spectrumB = Radix2Transform(b, inverse: false);
+        var product = new Vector<Complex<T>>(convolutionLength);
+        for (int i = 0; i < convolutionLength; i++)
+            product[i] = complexOps.Multiply(spectrumA[i], spectrumB[i]);
+
+        var convolution = Radix2Transform(product, inverse: true);
+        var scale = new Complex<T>(_numOps.FromDouble(convolutionLength), _numOps.Zero);
+        var output = new Vector<Complex<T>>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double phase = direction * Math.PI * ((double)i * i / n);
+            var outputChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(phase));
+            var normalized = complexOps.Divide(convolution[i], scale);
+            output[i] = complexOps.Multiply(normalized, outputChirp);
+        }
+
+        return output;
+    }
+
+    private static bool IsPowerOfTwo(int value) => (value & (value - 1)) == 0;
 }

@@ -375,13 +375,34 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
                 kVec[t] = NumOps.Add(NumOps.Subtract(NumOps.Subtract(kVec[t], kMean), mean[t]), grandMean);
             }
 
-            // Project to kernel PCA space and compute scores
-            T reconstructionError = ComputeKernel(point, point, effectiveGamma);
-            T mahalanobis = NumOps.Zero;
+            // Reconstruction error in the CENTERED kernel feature space is the
+            // KPCA novelty score (Hoffmann, "Kernel PCA for novelty detection",
+            // Pattern Recognition 40(3):863-874, 2007). A point far from the training
+            // distribution cannot be reconstructed from the learned principal
+            // subspace, so its residual is large -> higher score = more anomalous.
+            //
+            // The residual is  k~(x,x) - sum_c beta_c^2  where beta_c is the
+            // projection onto the c-th UNIT principal component and the centered
+            // self-similarity is  k~(x,x) = k(x,x) - 2*kMean(x) + grandMean.
+            // (Using the uncentered k(x,x) here -- a constant 1 for the RBF kernel --
+            // makes the residual constant across points and cannot separate novel
+            // points from normal ones: it is the bug this replaces.)
+            //
+            // NOTE (paper scope): this is a novelty detector -- it assumes the
+            // training set is free of the anomalies it must later flag. A point that
+            // was itself part of the fitted data dominates its own principal
+            // component and is reconstructed with ~zero residual by design; scoring
+            // such an in-sample outlier is outside Hoffmann's method.
+            T selfSim = ComputeKernel(point, point, effectiveGamma);
+            T reconstructionError = NumOps.Add(
+                NumOps.Subtract(selfSim, NumOps.Multiply(NumOps.FromDouble(2), kMean)),
+                grandMean);
 
             for (int c = 0; c < _nComponents; c++)
             {
-                // Projection coefficient
+                // Projection onto the c-th unit principal component:
+                // beta_c^2 = (u_c . k~vec)^2 / lambda_c, since the eigenvectors
+                // u_c are unit-length and V_c = u_c / sqrt(lambda_c) in feature space.
                 T proj = NumOps.Zero;
                 for (int t = 0; t < nTrain; t++)
                 {
@@ -390,17 +411,18 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 
                 if (NumOps.GreaterThan(lambdas[c], eps10))
                 {
-                    T projSq = NumOps.Multiply(proj, proj);
-                    T projSqOverLambda = NumOps.Divide(projSq, lambdas[c]);
+                    T projSqOverLambda = NumOps.Divide(NumOps.Multiply(proj, proj), lambdas[c]);
                     reconstructionError = NumOps.Subtract(reconstructionError, projSqOverLambda);
-                    mahalanobis = NumOps.Add(mahalanobis, projSqOverLambda);
                 }
             }
 
-            // Combined score: Mahalanobis distance + reconstruction error
-            T combined = NumOps.Add(mahalanobis,
-                NumOps.GreaterThan(reconstructionError, NumOps.Zero) ? reconstructionError : NumOps.Zero);
-            scores[i] = NumOps.Sqrt(combined);
+            // The residual is non-negative in exact arithmetic; clamp tiny negative
+            // values from numerical error before taking the square root for a
+            // distance-like, well-scaled score.
+            T clamped = NumOps.GreaterThan(reconstructionError, NumOps.Zero)
+                ? reconstructionError
+                : NumOps.Zero;
+            scores[i] = NumOps.Sqrt(clamped);
         }
 
         return scores;

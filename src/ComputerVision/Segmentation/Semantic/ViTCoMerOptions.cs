@@ -27,6 +27,12 @@ public class ViTCoMerOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
     }
 
+    /// <summary>
+    /// Gets or sets the initial AdamW learning rate. The default follows the ViT-CoMer
+    /// ADE20K training configuration from the original paper.
+    /// </summary>
+    public double LearningRate { get; set; } = 6e-5;
 }

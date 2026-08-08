@@ -43,8 +43,97 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "AiDotNet.Enums.PoolingType.Max")]
-public class GlobalPoolingLayer<T> : LayerBase<T>
+// Roles and ranks come from GetReductionAxes, which is this layer's own statement of what each rank
+// MEANS, and from the keepDims flag ForwardTraced pairs with it (`keepDims: input.Shape.Length >= 4`).
+// That pairing is the whole story: at rank 4 and 5 the reduced axes survive as size 1, while at rank 3
+// the reduced axis is DROPPED, so a rank-3 input emits a rank-2 output.
+//
+// Rank 4 and 5 are NCHW/NCDHW, not NHWC. That is not a preference - GetReductionAxes documents the
+// correction at length ("Against real NCHW input the old axes reduced channels and height and kept
+// width, so global pooling collapsed the feature dimension it exists to preserve"). CalculateOutputShape
+// still carries the older NHWC reading in its rank-4 branch; the forward is what these relations follow.
+//
+// Rank 1 is accepted by the layer but NOT declared: GetReductionAxes returns [0] with keepDims false,
+// so the result is a rank-0 scalar, and a layout needs at least one axis to name.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+// NOTE: rank 3 is declared by the BatchOptional [Batch?, Channels, Height, Width] layout below, as the
+// per-sample [C,H,W] form. A rank-3 [Batch, Time, Features] layout used to be declared here as well;
+// two layouts accepting one rank with different axis names is ADNSHAPE001, and the shadow comparison
+// showed the per-sample reading is the one that ships - a [768,16,16] feature map resolves to
+// [768,1,1], not to [768,16]. Sequence pooling over [B,T,F] therefore resolves through the rank-2
+// declaration or declines, rather than silently mislabelling a spatial map.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the rank itself changes at rank 3, which no per-axis generator can express.
+    /// Each case is read off <c>GetReductionAxes</c> together with ForwardTraced's keepDims choice:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>rank 2 — <c>2 =&gt; []</c>, and ForwardTraced's axes-empty branch returns the input object.</item>
+    /// <item>rank 3 — <c>3 =&gt; [1]</c> with keepDims false, so the token axis vanishes entirely.</item>
+    /// <item>rank 4 — <c>4 =&gt; [2, 3]</c> with keepDims true, so both spatial axes become 1.</item>
+    /// <item>rank 5 — <c>rank &gt; 4 =&gt; Range(2, rank - 2)</c>, the same thing over three spatial axes.</item>
+    /// </list>
+    /// <para>
+    /// The pooled axes are <c>Fixed(1)</c> rather than a scale because a global reduction is not a
+    /// proportional one: whatever the extent, it collapses to exactly one. OnFirstForward says the same
+    /// in the resolved record — <c>ResolveShapes(new[] { c, hOut, wOut }, new[] { c, 1, 1 })</c>.
+    /// </para>
+    /// <para>
+    /// Ranks above five decline, matching OnFirstForward, which throws for them outright.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+        OutputAxisContract Pooled(TensorAxis a) => new(a, AxisRelation.Fixed(1));
+
+        return inputRank switch
+        {
+            2 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Features) },
+
+            // RANK 3 IS PER-SAMPLE [Channels, Height, Width] - the batch-elided form of rank 4 - and
+            // pooling KEEPS the spatial axes at 1 rather than dropping them. This previously answered
+            // [Batch, Features], reading [768,16,16] as a batch of 768 sequences and reducing to
+            // [768,16], where the layer actually concludes [768,1,1]. Wrong on both counts: which axes
+            // those are, and whether the rank changes.
+            3 => new[]
+            {
+                Pass(TensorAxis.Channels),
+                Pooled(TensorAxis.Height),
+                Pooled(TensorAxis.Width),
+            },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch),
+                Pass(TensorAxis.Channels),
+                Pooled(TensorAxis.Height),
+                Pooled(TensorAxis.Width),
+            },
+            5 => new[]
+            {
+                Pass(TensorAxis.Batch),
+                Pass(TensorAxis.Channels),
+                Pooled(TensorAxis.Depth),
+                Pooled(TensorAxis.Height),
+                Pooled(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The type of pooling operation to apply globally (Max or Average).
     /// </summary>
@@ -380,7 +469,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// preserving the most important information about each feature.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
@@ -428,16 +517,31 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     {
         return rank switch
         {
-            // 4D: [batch, height, width, channels] -> reduce height (1) and width (2)
-            4 => [1, 2],
-            // 3D: [batch, seq_len, features] -> reduce seq_len (1)
+            // 4D: [batch, channels, height, width] -> reduce the SPATIAL axes (2, 3).
+            //
+            // This read [1, 2] and described the input as [batch, height, width, channels]. The
+            // rest of this layer does not use that layout and neither does the library:
+            // OnFirstForward takes channels from index 1, the resolved output contract is
+            // [C, 1, 1], ConvolutionalLayer emits [B, C, H, W], and the integration tests
+            // document 3-D input as [channels, height, width]. Against real NCHW input the old
+            // axes reduced channels and height and kept width, so global pooling collapsed the
+            // feature dimension it exists to preserve — a wrong tensor, not merely a wrong
+            // declaration. It surfaced as "[C,1,1] declared but [B,1,1,W] produced".
+            4 => [2, 3],
+            // 3D: [batch, seq_len, features] -> reduce seq_len (1).
+            //
+            // Deliberately unchanged. Rank 3 is genuinely ambiguous here: this is the mean-pool
+            // over a token axis that transformer encoders rely on, while OnFirstForward reads the
+            // same rank as an unbatched [C, H, W]. Only the batched reading affects the computed
+            // tensor, so it stays; the declaration side is the part that disagrees.
             3 => [1],
             // 2D: [batch, features] -> nothing to reduce
             2 => [],
             // 1D: [features] -> reduce all to single value
             1 => [0],
-            // 5D+: reduce all middle dimensions
-            _ when rank > 4 => Enumerable.Range(1, rank - 2).ToArray(),
+            // 5D+: [batch, channels, ...spatial] -> reduce every spatial axis, keep channels.
+            // Same correction as the rank-4 case; OnFirstForward reads rank-5 as [B, C, D, H, W].
+            _ when rank > 4 => Enumerable.Range(2, rank - 2).ToArray(),
             // 0D: nothing to reduce
             _ => []
         };
@@ -526,59 +630,6 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
             FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, output),
             _ => gradOutput // Identity or unsupported - pass through
         };
-    }
-
-    /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the global pooling layer has no
-    /// trainable parameters to update, so it performs no operation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method does nothing because pooling layers have no adjustable weights.
-    /// 
-    /// Unlike layers like convolutional or fully connected layers:
-    /// - Global pooling layers don't have weights or biases to learn
-    /// - They perform a fixed operation (finding maximum or average values)
-    /// - There's nothing to update during training
-    /// 
-    /// This method exists only to fulfill the requirements of the base layer class.
-    /// The pooling layer influences the network by reducing dimensions and providing
-    /// translation invariance, not by learning parameters.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in a pooling layer
-    }
-
-    /// <summary>
-    /// Gets the trainable parameters of the layer.
-    /// </summary>
-    /// <returns>
-    /// An empty vector since global pooling layers have no trainable parameters.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the global pooling layer has no
-    /// trainable parameters to retrieve, so it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because pooling layers have no learnable values.
-    /// 
-    /// Unlike layers with weights and biases:
-    /// - Global pooling layers don't have any parameters that change during training
-    /// - They perform a fixed operation (pooling) that doesn't involve learning
-    /// - There are no values to save when storing a trained model
-    /// 
-    /// This method returns an empty vector, indicating there are no parameters to collect.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // GlobalPoolingLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

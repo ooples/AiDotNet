@@ -52,10 +52,10 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("PSRT: Progressive Spatio-temporal Alignment for Video Super-Resolution",
-    "https://arxiv.org/abs/2208.09906",
+[ResearchPaper("Rethinking Alignment in Video Super-Resolution Transformers",
+    "https://arxiv.org/abs/2207.08494",
     Year = 2022,
-    Authors = "Dacheng Shi, Dan Zhong, Zhiwei Xiong")]
+    Authors = "Shuwei Shi, Jinjin Gu, Liangbin Xie, Xintao Wang, Yujiu Yang, Chao Dong")]
 public class PSRT<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -144,7 +144,7 @@ public class PSRT<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

@@ -57,5 +57,8 @@ public class VisualBERTOptions : FoundationalVLMOptions
         TextDim = 768;
         FusionDim = 768;
         NumFusionLayers = 12;
+        // VisualBERT Appendix A: downstream fine-tuning uses a maximum
+        // learning rate of 2e-5 for VQA (and VCR).
+        LearningRate = 2e-5;
     }
 }

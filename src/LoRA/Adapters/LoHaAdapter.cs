@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -51,7 +52,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// LoHa uses MORE parameters than LoRA but models element-wise weight interactions via Hadamard products.
 /// </para>
 /// </remarks>
-public class LoHaAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Low-rank matrices A with dimensions (rank, inputSize, outputSize).
@@ -122,7 +124,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Calculate scaling
         _scaling = NumOps.Divide(_loraLayer.Alpha, NumOps.FromDouble(rank));
@@ -157,25 +159,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize parameter vector
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromMatrices();
-    }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// LoHa has 2 * rank * inputSize * outputSize parameters (A and B matrices for each rank).
-    /// This is more than standard LoRA but still far less than full fine-tuning.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputShape()[0];
-            int lohaParams = 2 * Rank * inputSize * outputSize;
-            return _freezeBaseLayer ? lohaParams : (_baseLayer.ParameterCount + lohaParams);
-        }
     }
 
     /// <summary>
@@ -203,7 +186,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     /// This element-wise approach lets LoHa learn fine-grained adjustments to each weight independently.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 
@@ -239,7 +222,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     {
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix [batchSize, inputSize]
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -296,7 +279,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
         int batchSize = lastInput.Shape[0];
         int inputSize = lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert to matrices
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -403,166 +386,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromMatrices();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing all LoHa parameters (A and B matrices for all ranks).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all LoHa parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateMatricesFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current matrix values.
-    /// </summary>
-    private void UpdateParametersFromMatrices()
-    {
-        int idx = 0;
-
-        // Pack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack all A matrices
-        for (int r = 0; r < Rank; r++)
-        {
-            for (int i = 0; i < _matricesA[r].Rows; i++)
-            {
-                for (int j = 0; j < _matricesA[r].Columns; j++)
-                {
-                    Parameters[idx++] = _matricesA[r][i, j];
-                }
-            }
-        }
-
-        // Pack all B matrices
-        for (int r = 0; r < Rank; r++)
-        {
-            for (int i = 0; i < _matricesB[r].Rows; i++)
-            {
-                for (int j = 0; j < _matricesB[r].Columns; j++)
-                {
-                    Parameters[idx++] = _matricesB[r][i, j];
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the matrices from the parameter vector.
-    /// </summary>
-    private void UpdateMatricesFromParameters()
-    {
-        int idx = 0;
-
-        // Unpack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack all A matrices
-        for (int r = 0; r < Rank; r++)
-        {
-            for (int i = 0; i < _matricesA[r].Rows; i++)
-            {
-                for (int j = 0; j < _matricesA[r].Columns; j++)
-                {
-                    _matricesA[r][i, j] = Parameters[idx++];
-                }
-            }
-        }
-
-        // Unpack all B matrices
-        for (int r = 0; r < Rank; r++)
-        {
-            for (int i = 0; i < _matricesB[r].Rows; i++)
-            {
-                for (int j = 0; j < _matricesB[r].Columns; j++)
-                {
-                    _matricesB[r][i, j] = Parameters[idx++];
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the matrix gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromMatrices()
-    {
-        if (_matricesAGradient == null || _matricesBGradient == null)
-        {
-            return;
-        }
-
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack base layer gradients if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack all A matrix gradients
-        for (int r = 0; r < Rank; r++)
-        {
-            for (int i = 0; i < _matricesAGradient[r].Rows; i++)
-            {
-                for (int j = 0; j < _matricesAGradient[r].Columns; j++)
-                {
-                    ParameterGradients[idx++] = _matricesAGradient[r][i, j];
-                }
-            }
-        }
-
-        // Pack all B matrix gradients
-        for (int r = 0; r < Rank; r++)
-        {
-            for (int i = 0; i < _matricesBGradient[r].Rows; i++)
-            {
-                for (int j = 0; j < _matricesBGradient[r].Columns; j++)
-                {
-                    ParameterGradients[idx++] = _matricesBGradient[r][i, j];
-                }
-            }
-        }
     }
 
     /// <summary>
@@ -601,7 +424,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Compute LoHa weight delta: sum over rank of (A[r] ⊙ B[r]) * scaling
         Matrix<T> lohaDelta = new Matrix<T>(inputSize, outputSize);

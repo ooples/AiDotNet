@@ -1,4 +1,5 @@
 ﻿
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.Tensors.Engines;
@@ -29,7 +30,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations (typically float or double).</typeparam>
-public partial class FlashAttentionLayer<T> : LayerBase<T>
+// Tiled attention with the same result as standard attention: shape-preserving at rank 2
+// [Time, Features], the rank the discovery sweep probed.
+[AiDotNet.Attributes.TensorLayout(TensorAxis.Time, TensorAxis.Features,
+    Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+[AiDotNet.Attributes.TensorLayout(TensorAxis.Time, TensorAxis.Features,
+    Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -266,7 +274,7 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// - Uses online softmax for numerical stability
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
         var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);
@@ -380,86 +388,6 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         sequenceLength = 1;
         embeddingDimension = input.Shape[0];
         return Engine.Reshape(input, new[] { 1, 1, embeddingDimension });
-    }
-
-    /// <summary>
-    /// Legacy scalar-learning-rate parameter update. Tape-based training flows through
-    /// <see cref="SetParameters"/> after <c>GradientTape&lt;T&gt;</c> computes gradients and
-    /// the optimizer applies them, so this override is a no-op. The hand-rolled SPSA /
-    /// blame-on-step fallback that used private <c>_*Gradient</c> fields was deleted along
-    /// with those fields once the Forward path moved to <c>Engine.FlashAttention</c>.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No-op: weights are updated via SetParameters(Vector<T>) after the tape
-        // computes gradients through Engine.FlashAttention + FlashAttentionBackward.
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount => _queryWeights.Length * 4 + _outputBias.Length;
-
-    /// <summary>
-    /// Gets all layer parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        int weightLen = _queryWeights.Length; // embed × embed
-        int totalParams = weightLen * 4 + _outputBias.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Copy all weight tensors (flat span)
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            var span = tensor.AsSpan();
-            for (int i = 0; i < span.Length; i++)
-            {
-                parameters[index++] = span[i];
-            }
-        }
-
-        // Copy bias
-        var biasSpan = _outputBias.AsSpan();
-        for (int i = 0; i < biasSpan.Length; i++)
-        {
-            parameters[index++] = biasSpan[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets all layer parameters from a single vector. Writes in place so the
-    /// registered tensor references remain stable — important for tape-based
-    /// training where the gradient graph holds direct references to these
-    /// tensors. Re-assigning the field would leave the tape pointing at stale
-    /// objects.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int weightLen = _queryWeights.Length;
-        int expectedParams = weightLen * 4 + _outputBias.Length;
-        if (parameters.Length != expectedParams)
-        {
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights })
-        {
-            var span = tensor.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                span[i] = parameters[index++];
-            }
-        }
-
-        var biasSpan = _outputBias.Data.Span;
-        for (int i = 0; i < biasSpan.Length; i++)
-        {
-            biasSpan[i] = parameters[index++];
-        }
     }
 
     /// <summary>

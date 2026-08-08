@@ -31,8 +31,40 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
-public partial class CrossAttentionLayer<T> : LayerBase<T>
+// A DUAL-INPUT layer that is nonetheless safe to declare, and it is worth saying why: a contract
+// resolves against ONE input's axes, so a layer whose output size depends on its second input cannot be
+// declared at all. This one does not. ForwardCrossAttention returns "Output tensor with same shape as
+// query" - attention emits one row per QUERY position, and the context only sets how many keys each of
+// those rows attends over. The context's own length never reaches the output. The query is input 0 in
+// every entry point: ForwardTraced passes it as both query and context, ForwardTracedMany takes
+// inputs[0] as query, and ForwardTracedPorts takes it by the name "query".
+//
+// SHAPE-PRESERVING at each declared rank, from the restore block at the end of that method: rank 2 comes
+// back as [queryLen, _queryDim], rank 4 as [batch, _queryDim, height, width]. The feature axis looks
+// fixed but is genuinely Same, because the layer REJECTS a query whose feature width is not _queryDim
+// ("Query feature dimension ... must match expected") rather than reshaping it - so in and out always
+// agree, and matching layouts let the generator derive Same for every axis.
+//
+// Rank 4 is named [Batch, Channels, Height, Width] because that is what the method's own parameter doc
+// calls it ("[batch, channels, H, W]"); the layer folds H*W into the query length and unfolds it again.
+// Ranks above 4 are handled by collapsing the leading axes into batch, but those axes have no roles to
+// name, so they are not declared.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _sequenceLength;
     private readonly int _queryDim;
     private readonly int _contextDim;
     private readonly int _headCount;
@@ -93,21 +125,36 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _outputWeights.Length + _outputBias.Length;
-
     /// <summary>
     /// Creates a new cross-attention layer for conditioning.
     /// </summary>
     /// <param name="queryDim">Dimension of query features (spatial channels).</param>
     /// <param name="contextDim">Dimension of context features (text embedding).</param>
     /// <param name="headCount">Number of attention heads.</param>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Cross-attention emits one vector per QUERY position, so its output length is its input
+    /// length; only the feature width is fixed, at queryDim.
+    ///
+    /// The declared shape used to be [sequenceLength, queryDim], where sequenceLength is the
+    /// constructor's "maximum sequence length for queries" and defaults to 64. That is a
+    /// CAPACITY, not what the layer produces: a forward over 4 query positions still emits 4.
+    /// Every consumer reading the declaration believed the sequence was 64 long, and because
+    /// chain resolution seeds each layer from the previous layer's declaration, the wrong length
+    /// propagated into the attention and decoder layers downstream -- which then reported
+    /// [64, 32] and [4, 32] while producing [4, 32] and [2, 32].
+    /// </remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <param name="sequenceLength">Maximum sequence length for queries.</param>
-    public CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64)
-        : base(new[] { sequenceLength, queryDim }, new[] { sequenceLength, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
+    public CrossAttentionLayer(
+        [LayerState] int queryDim,
+        [LayerState] int contextDim,
+        [LayerState] int headCount,
+        [LayerState] int sequenceLength = 64)
+        : base(new[] { -1, queryDim }, new[] { -1, queryDim }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         _queryDim = queryDim;
         _contextDim = contextDim;
         _headCount = headCount;
@@ -198,7 +245,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Forward pass for self-attention (not typically used for cross-attention).
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // For single input, use it as both query and context (self-attention fallback)
         return ForwardCrossAttention(input, input);
@@ -207,7 +254,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass. Accepts "query" and optional "context" by name.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("query", out var query) || query == null)
@@ -230,7 +277,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Array of inputs: [query] or [query, context].</param>
     /// <returns>Output tensor with same shape as query.</returns>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1)
         {
@@ -802,41 +849,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
 
         // Permute NHWC to NCHW: [B, H, W, C] -> [B, C, H, W]
         return gpuEngine.PermuteGpu(nhwc, new[] { 0, 3, 1, 2 });
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()));
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int qLen = _queryWeights.Length;
-        int kLen = _keyWeights.Length;
-        int vLen = _valueWeights.Length;
-        int oLen = _outputWeights.Length;
-        int bLen = _outputBias.Length;
-
-        int index = 0;
-        CopyToTensor(parameters, index, _queryWeights); index += qLen;
-        CopyToTensor(parameters, index, _keyWeights); index += kLen;
-        CopyToTensor(parameters, index, _valueWeights); index += vLen;
-        CopyToTensor(parameters, index, _outputWeights); index += oLen;
-        CopyToTensor(parameters, index, _outputBias);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_queryWeights);
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     private void CopyToTensor(Vector<T> source, int offset, Tensor<T> dest)

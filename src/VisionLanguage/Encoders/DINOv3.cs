@@ -53,10 +53,10 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "DINOv3: Self-Supervised Vision at Scale",
-    "https://arxiv.org/abs/2503.08936",
+    "DINOv3",
+    "https://arxiv.org/abs/2508.10104",
     Year = 2025,
-    Authors = "Meta"
+    Authors = "Oriane Siméoni et al. (Meta AI Research)"
 )]
 public class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
@@ -169,7 +169,7 @@ public class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

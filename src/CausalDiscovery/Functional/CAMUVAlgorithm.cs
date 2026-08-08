@@ -35,7 +35,16 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ResearchPaper("Causal Additive Models with Unobserved Variables", "https://arxiv.org/abs/2005.09042", Year = 2021, Authors = "Takashi Nicholas Maeda, Shohei Shimizu")]
+// Citation URL corrected. arXiv 2005.09042 is "BLAZE: Blazing Fast Privacy-Preserving Machine
+// Learning", unrelated. This paper is UAI 2021 (PMLR v161, pp. 97-106); the title and authors were
+// already right, so the canonical proceedings URL replaces the invented preprint id. (A related
+// extended treatment exists as arXiv 2106.02234 under a different title, "Discovery of Causal Additive
+// Models in the Presence of Unobserved Variables" — deliberately not used here, since the recorded
+// title matches the UAI paper exactly.)
+[ResearchPaper("Causal Additive Models with Unobserved Variables",
+    "https://proceedings.mlr.press/v161/maeda21a.html",
+    Year = 2021,
+    Authors = "Takashi Nicholas Maeda, Shohei Shimizu")]
 public class CAMUVAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold = 0.1;

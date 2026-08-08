@@ -40,7 +40,25 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "8")]
-public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
+// 1-D waveform/feature data [B, C, T], exactly as the class summary states. Shape-preserving on BOTH
+// axes it names, and for two separate reasons worth keeping apart:
+//   - Channels: OnFirstForward resolves to ResolveShapes([_channels, -1], [_channels, -1]) - the same
+//     channel width in and out, which is also why every inner Conv1DLayer is built channels->channels.
+//   - Time: every inner conv is "same"-padded (the ctor comment on the Conv1DLayer construction says so
+//     explicitly), which is REQUIRED here rather than incidental - ForwardTraced does per-branch
+//     residual adds (Engine.TensorAdd(xk, xt)) and a cross-branch sum, and neither lines up unless T
+//     survives untouched. So the -1 in the declared shape is a genuinely dynamic time axis, not an
+//     unknown one, and Same(Time) is the honest relation.
+// Rank 3 only, and BatchOptional is deliberately NOT set: the block delegates to Conv1DLayer, which
+// works in [B, C, T]; nothing here has been shown to accept an unbatched [C, T].
+// Same rank, same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output,
+    Note = "MRF averages parallel residual branches; \"same\" padding keeps T constant so the adds line up.")]
+[AutoParameters]
+public partial class HiFiGANResBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int[] _kernelSizes;
@@ -54,7 +72,10 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
     /// <param name="channels">Channel width (constant; input == output).</param>
     /// <param name="kernelSizes">Residual-block kernel sizes (official v1: [3,7,11]).</param>
     /// <param name="dilations">Dilations applied within each residual block (official v1: [1,3,5]).</param>
-    public HiFiGANResBlockLayer(int channels, int[]? kernelSizes = null, int[]? dilations = null)
+    public HiFiGANResBlockLayer(
+        [LayerState] int channels,
+        int[]? kernelSizes = null,
+        int[]? dilations = null)
         : base(new[] { channels, -1 }, new[] { channels, -1 }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels));
@@ -95,11 +116,48 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override long ParameterCount => InnerConvs().Sum(c => c.ParameterCount);
+    /// <summary>
+    /// Channel width is fixed by the block; the time axis is carried through untouched, since every
+    /// inner conv is "same"-padded so the residual adds line up.
+    /// </summary>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.ChannelOnly;
+
+    /// <summary>
+    /// Resolves while KEEPING the time axis dynamic.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this the block never resolved at all. It declares <c>[channels, -1]</c>, and
+    /// <see cref="LayerBase{T}.IsShapeResolved"/> reads any -1 as "not resolved yet", so
+    /// <c>EnsureInitialized()</c> never ran -- and with it the generated
+    /// <c>EnsureSubLayersRegistered()</c> that hands the 18 inner convs to
+    /// <see cref="LayerBase{T}.GetSubLayers"/>. The block therefore looked like a leaf to every
+    /// structural walker for its entire lifetime: shape resolution, uninitialized-parameter
+    /// detection and introspection all saw nothing inside it.
+    /// </para>
+    /// <para>
+    /// Registering the convs in the constructor instead looks like the obvious fix and is not one.
+    /// It puts them in front of the pre-step buffer-view save/restore walk
+    /// (<c>NeuralNetworkBase.SaveOriginalParameters</c>) alongside the parent that already handles
+    /// them, and HiFiGAN then came out of training producing identical outputs for different
+    /// inputs. Resolving lets registration happen at the point the framework intends.
+    /// </para>
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        ResolveShapes(new[] { _channels, -1 }, new[] { _channels, -1 });
+    }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        // The block's own weights live in the inner convs, which self-initialize on their first
+        // Forward, so skipping this looked harmless and the outputs were always correct. What it
+        // actually skipped is EnsureInitialized(), and with it the generated
+        // EnsureSubLayersRegistered() -- so the 18 convs were never handed to GetSubLayers() and
+        // the block presented itself as a leaf to every structural walker for its whole lifetime.
+        EnsureInitializedFromInput(input);
+
         int numDil = _dilations.Length;
         Tensor<T>? sum = null;
 
@@ -129,33 +187,6 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         foreach (var c in InnerConvs()) c.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var c in InnerConvs())
-            all = Vector<T>.Concatenate(all, c.GetParameters());
-        return all;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var c in InnerConvs())
-        {
-            int len = (int)c.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            c.SetParameters(slice);
-            offset += len;
-        }
-        if (offset != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"Expected {offset} parameters for HiFiGANResBlockLayer, but got {parameters.Length}.");
-        }
     }
 
     /// <inheritdoc/>

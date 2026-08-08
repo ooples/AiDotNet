@@ -30,7 +30,26 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
-public partial class PreLNTransformerBlock<T> : LayerBase<T>
+// Roles from this block's own forward: "Self-attention sublayer expects [B, S, H] (or [S, H])", so one
+// declaration with BatchOptional covers both ranks. Time rather than Length because the block is built
+// for causal decoder stacks (T5 / LLaMA / Gemma / Qwen2), where the sequence axis IS temporal.
+//
+// No OutputAxesFor is written by hand, and that is the whole claim: the pre-LN residual form
+// x + Attn(RMSNorm(x)) then y + FFN(RMSNorm(y)) is a sum of terms that each carry x's shape, and the
+// forward's final Engine.Reshape(ffnDownOut, afterAttnShape) makes that explicit - the FFN result is
+// reshaped BACK to the post-attention shape before the second residual add. In and out are identical at
+// every axis, so the generated Same(role) per axis is exactly right.
+//
+// Deliberately NOT Fixed(_hiddenSize) on the feature axis. The width is pinned by the parameters, but
+// declaring it Fixed would say the block RESIZES the feature axis; it does not - it requires that width
+// and returns it. Same(Features) is what the arithmetic does. The sequence axis is likewise Same and not
+// pinned, matching OnFirstForward's own note that "the sequence axis stays dynamic".
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly RMSNormalizationLayer<T> _norm1;
     // Non-readonly so the inference optimizer can swap the attention sublayer in place (e.g.
@@ -135,8 +154,11 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
         _gated = gated;
 
-        _norm1 = new RMSNormalizationLayer<T>();
-        _norm2 = new RMSNormalizationLayer<T>();
+        // hiddenSize is known here, so these parameters must exist before the
+        // first GetParameters()/serialization call. Leaving them lazy made a
+        // pre-forward parameter vector shorter than the post-forward layout.
+        _norm1 = new RMSNormalizationLayer<T>(hiddenSize);
+        _norm2 = new RMSNormalizationLayer<T>(hiddenSize);
 
         // DenseLayer(outputSize, activation): lazy-resolves input dim on first forward
         // and (with no init strategy) zero-inits biases, matching the bias-free FFN
@@ -155,6 +177,14 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         }
 
         _ffnDown = new DenseLayer<T>(outputSize: hiddenSize, activationFunction: new IdentityActivation<T>());
+
+        // The FFN input widths are also constructor-known. Resolve only the
+        // sublayers—not this block's sequence dimension—so sequence length stays
+        // dynamic while parameter enumeration is complete and stable from birth.
+        if (_ffnGate is not null)
+            _ffnGate.ResolveFromShape(new[] { hiddenSize });
+        _ffnUp.ResolveFromShape(new[] { hiddenSize });
+        _ffnDown.ResolveFromShape(new[] { ffnDim });
 
         // Register every sublayer so TapeTrainingStep<T>.CollectParameters
         // recursively discovers their trainable tensors. Without this the
@@ -176,8 +206,14 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     /// Forward pass. Routes every shape op through <see cref="LayerBase{T}.Engine"/>
     /// so the gradient tape records the residual additions and sublayer outputs.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        // Resolve the sequence-preserving block contract from the real tensor when a
+        // static chain walk could only provide the feature width. Composite layers
+        // override Forward directly, so they must opt into LayerBase's lazy-shape hook
+        // explicitly just like the leaf layers do.
+        EnsureInitializedFromInput(input);
+
         // Self-attention sublayer expects [B, S, H] (or [S, H]).
         var normed1 = _norm1.Forward(input);
         var attnOut = _attention.Forward(normed1);
@@ -218,9 +254,15 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Resolves every sublayer's shape without a data-carrying forward. This block overrides
-    /// <see cref="Forward"/> directly (bypassing the base lazy-init hook), so this runs ONLY via
-    /// <see cref="LayerBase{T}.ResolveFromShape"/> — the deserialization / shape-oracle path. The norms and
+    /// The block fixes its feature width and preserves the sequence axis, per the pre-LN residual
+    /// definition: every term of <c>x + Attn(LN(x))</c> and <c>x + FFN(LN(x))</c> keeps S.
+    /// </summary>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.FeatureOnly;
+
+    /// <summary>
+    /// Resolves every sublayer's shape without a data-carrying forward. This runs both through
+    /// <see cref="LayerBase{T}.ResolveFromShape"/> (the deserialization / shape-oracle path) and from
+    /// the first real <see cref="Forward"/> when a static chain could not preserve the sequence axis. The norms and
     /// FFN DenseLayers are lazy (input dim resolved on first use), so without this the reconstructed block
     /// reported a too-small <see cref="ParameterCount"/> and <c>SetParameters</c> rejected the saved vector.
     /// Sublayers resolve in forward order so any RNG-based weight init consumes the stream exactly as a
@@ -237,8 +279,17 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         if (!_ffnUp.IsShapeResolved) _ffnUp.ResolveFromShape(hiddenShape);
         if (!_ffnDown.IsShapeResolved) _ffnDown.ResolveFromShape(new[] { 1, _ffnDim });
 
-        int seq = input.Shape.Length >= 2 ? input.Shape[input.Shape.Length - 2] : 1;
-        ResolveShapes(new[] { seq, hidden }, new[] { seq, hidden });
+        // The sequence axis stays dynamic, whatever this particular input carried. A pre-LN block
+        // is x + Attn(LN(x)) then x + FFN(LN(x)): every term preserves S exactly, and none of its
+        // parameters are sized by it, so S is not this block's to fix. Pinning whichever length
+        // arrived first made the block's own metadata contradict every later batch of a different
+        // length -- it declared [8, 16] while correctly producing [S, 16] for the real S -- which
+        // is the ordinary case for variable-length text, not an edge case.
+        //
+        // The rank-1 probe reaches here too: T5's embedding intentionally omits its data-dependent
+        // sequence axis, so the shape walk can arrive with just [hiddenSize]. Both paths now want
+        // the same declaration, so there is no longer a case to split on.
+        ResolveShapes(new[] { -1, hidden }, new[] { -1, hidden });
     }
 
     /// <summary>
@@ -255,40 +306,6 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
             yield return _ffnGate;
         yield return _ffnUp;
         yield return _ffnDown;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in OrderedSubLayers())
-                total += layer.ParameterCount;
-            return total;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var layer in OrderedSubLayers())
-            acc = Vector<T>.Concatenate(acc, layer.GetParameters());
-        return acc;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.");
-
-        int offset = 0;
-        foreach (var layer in OrderedSubLayers())
-            SetSubParams(layer, parameters, ref offset);
     }
 
     private static void SetSubParams(LayerBase<T> layer, Vector<T> source, ref int offset)

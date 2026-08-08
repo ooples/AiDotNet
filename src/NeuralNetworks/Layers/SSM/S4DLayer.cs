@@ -59,7 +59,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class S4DLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 {
     // Configuration
     private readonly int _modelDimension;
@@ -153,18 +160,6 @@ public partial class S4DLayer<T> : LayerBase<T>
     /// Gets the inner dimension used for the SSM computation.
     /// </summary>
     public int InnerDimension => _innerDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _aReal.Length + _aImag.Length +
-        _bReal.Length + _bImag.Length +
-        _cReal.Length + _cImag.Length +
-        _dParam.Length +
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length +
-        _logDelta.Length;
 
     /// <summary>
     /// Creates a new S4D (Diagonal State Space) layer.
@@ -360,7 +355,7 @@ public partial class S4DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -647,7 +642,12 @@ public partial class S4DLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, innerDim]
+            // RECORDED slice. A bare tensor.GetSliceAlongDimension is a non-owning VIEW and not a
+            // recorded graph op, so the fused compiled-training plan freezes it as a trace-time graph
+            // LEAF; on replay the parent is recomputed into the plan's own pre-allocated buffer while
+            // the frozen view still references abandoned storage, and the slice never joins the
+            // gradient tape. Same defect and fix as RealGatedLinearRecurrenceLayer / RWKVLayer (#1789).
+            var x_t = Engine.TensorSqueeze(Engine.TensorNarrow(x, 1, t, 1), axis: 1);  // [batch, innerDim]
             var x_t_3D = Engine.TensorExpandDims(x_t, 2);  // [batch, innerDim, 1]
 
             // State update: h = A_bar * h_prev + B_bar * x
@@ -1182,49 +1182,6 @@ public partial class S4DLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in new[]
-        {
-            _aReal, _aImag, _bReal, _bImag, _cReal, _cImag, _dParam,
-            _inputProjectionWeights, _inputProjectionBias,
-            _outputProjectionWeights, _outputProjectionBias,
-            _logDelta
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in new[]
-        {
-            _aReal, _aImag, _bReal, _bImag, _cReal, _cImag, _dParam,
-            _inputProjectionWeights, _inputProjectionBias,
-            _outputProjectionWeights, _outputProjectionBias,
-            _logDelta
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     public override Vector<T> GetParameterGradients()

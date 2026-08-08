@@ -235,7 +235,7 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -303,8 +303,12 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ForwardTacotron<T>(Architecture, mp, _options);
-        return new ForwardTacotron<T>(Architecture, _options);
+            return new ForwardTacotron<T>(Architecture, mp, new ForwardTacotronOptions(_options));
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
+            : null;
+        return new ForwardTacotron<T>(Architecture, new ForwardTacotronOptions(_options), cloneOptimizer);
     }
 
     private void ThrowIfDisposed()

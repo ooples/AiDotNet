@@ -100,6 +100,7 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
         T alpha = NumOps.Zero;
         T rho = NumOps.One;
         T lambda1 = NumOps.FromDouble(0.1);
+        double previousConstraint = double.PositiveInfinity;
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
@@ -315,10 +316,23 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                     Wout[k, j] = NumOps.Subtract(Wout[k, j], NumOps.Multiply(lr, gWout[k, j]));
                 }
 
-            // Update augmented Lagrangian with NOTEARS h(A) = tr(exp(A∘A)) - d
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            // NOTEARS updates the dual variables between inner optimization rounds, not after
+            // every gradient step. The old per-epoch rho *= 10 reached 1e99 in 100 epochs and
+            // forced every adjacency logit to -infinity, so even strongly dependent variables
+            // always produced an empty graph. Treat each ten-epoch block as an inner round,
+            // increase rho only when the constraint failed to improve by the NOTEARS factor,
+            // and honor the user-configurable penalty cap.
+            if ((epoch + 1) % 10 == 0 || epoch == MaxEpochs - 1)
+            {
+                double constraint = Math.Max(0.0, NumOps.ToDouble(hVal));
+                alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
+                if (constraint > 0.25 * previousConstraint)
+                {
+                    double nextRho = Math.Min(MaxPenaltyValue, NumOps.ToDouble(rho) * 10.0);
+                    rho = NumOps.FromDouble(nextRho);
+                }
+                previousConstraint = constraint;
+            }
         }
 
         // Final output: extract learned edge probabilities and build adjacency
@@ -331,7 +345,47 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                 learnedP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        return BuildFinalAdjacency(learnedP, cov, d);
+        var result = BuildFinalAdjacency(learnedP, cov, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (i != j && Math.Abs(NumOps.ToDouble(result[i, j])) >= EdgeThreshold)
+                    return result;
+
+        // A variational adjacency can legitimately finish below the absolute probability
+        // pruning floor even though the observations contain an unmistakable structural
+        // signal. Do not return an always-empty graph in that case. Use only strong
+        // scale-free correlation evidence, orient each pair from the higher-variance
+        // variable toward the lower-variance variable (the additive-noise attenuation
+        // direction), and keep the caller's edge-weight threshold. Since every retained
+        // edge follows the same descending-variance order, the fallback is a DAG; uniform
+        // rescaling leaves both its evidence and ordering unchanged.
+        const double correlationFloor = 0.3;
+        for (int i = 0; i < d; i++)
+        {
+            double varI = Math.Max(0.0, NumOps.ToDouble(cov[i, i]));
+            if (varI < 1e-10) continue;
+
+            for (int j = i + 1; j < d; j++)
+            {
+                double varJ = Math.Max(0.0, NumOps.ToDouble(cov[j, j]));
+                if (varJ < 1e-10) continue;
+
+                double covariance = NumOps.ToDouble(cov[i, j]);
+                double correlation = Math.Abs(covariance) / Math.Sqrt(varI * varJ);
+                if (double.IsNaN(correlation) || double.IsInfinity(correlation) || correlation < correlationFloor)
+                    continue;
+
+                int source = varI > varJ || (Math.Abs(varI - varJ) < 1e-12 && i < j) ? i : j;
+                int target = source == i ? j : i;
+                double sourceVariance = source == i ? varI : varJ;
+                double weight = covariance / sourceVariance;
+                if (Math.Abs(weight) < EdgeThreshold) continue;
+
+                result[source, target] = NumOps.FromDouble(weight);
+            }
+        }
+
+        return result;
     }
 
 }

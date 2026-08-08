@@ -232,7 +232,7 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -304,8 +304,14 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GlowTTS<T>(Architecture, mp, _options);
-        return new GlowTTS<T>(Architecture, _options);
+            return new GlowTTS<T>(Architecture, mp, new GlowTTSOptions(_options));
+
+        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
+            : null;
+        return new GlowTTS<T>(Architecture, new GlowTTSOptions(_options), cloneOptimizer);
     }
 
     private void ThrowIfDisposed()

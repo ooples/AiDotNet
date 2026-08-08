@@ -38,8 +38,46 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var e = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) e[i, j] = (i * 3 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(e);")]
-public partial class MeshEdgeConvLayer<T> : LayerBase<T>
+// Rank 2 ONLY, and the layer says so itself: ForwardTraced opens with
+// `if (input.Rank != 2 || input.Shape[1] != InputChannels) throw`, quoting the expected shape as
+// [numEdges, InputChannels]. No other rank is reachable.
+//
+// The leading axis is Other, following PointConvolutionLayer's reasoning: it counts MESH EDGES. Edges are
+// an unordered set indexed by an adjacency table, not a sequence and not a batch, so naming it Time or
+// Batch would claim a role a downstream layer could then check against and be wrong about.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the mesh edge count; edges are an unordered set, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One output row per input edge, with the channel width becoming <see cref="OutputChannels"/>. Read
+    /// off <c>ForwardTraced</c>: <c>AggregateEdgeFeatures</c> returns <c>[numEdges, aggregatedFeatures]</c>
+    /// and the matmul against the transposed <c>_weights</c> (declared
+    /// <c>[OutputChannels, InputChannels * (1 + NumNeighbors)]</c>) yields <c>[numEdges, OutputChannels]</c>.
+    /// </para>
+    /// <para>
+    /// The edge axis is <c>Same</c>, not a window and not a reduction. Neighbour features are GATHERED
+    /// into each edge's own row - the aggregation widens the FEATURE axis by <c>1 + NumNeighbors</c>
+    /// internally and the projection collapses it again - so the edge count that goes in is the edge count
+    /// that comes out. <c>NumNeighbors</c> therefore never appears in this contract: it sizes an
+    /// intermediate, not an output axis.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || OutputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels)),
+        };
+    }
+
     #region Properties
 
     /// <summary>
@@ -291,7 +329,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// The convolution aggregates features from each edge and its neighbors.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2 || input.Shape[1] != InputChannels)
         {
@@ -374,48 +412,39 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> input, int[,] adjacency, int numEdges, int aggregatedSize)
     {
-        // Create result tensor [numEdges, aggregatedSize]
-        var result = TensorAllocator.Rent<T>([numEdges, aggregatedSize]);
+        // Build [self | neighbor_1 | ... | neighbor_N] by CONCATENATING along the feature
+        // axis rather than mutating a rented buffer via `result = TensorSetSlice(result,
+        // ...)` in a loop. The mutating SetSlice pattern does not compose with GraphMode /
+        // compiled-plan LAZY recording (active during tape/compiled training): each op
+        // records a lazy node and the reassign-a-buffer loop realizes to garbage/~0, which
+        // detonates downstream normalization into Inf/NaN — the same root cause fixed in
+        // SpiralNet's gather. Concat is one graph-clean op that realizes correctly under
+        // both eager and lazy execution.
+        var parts = new Tensor<T>[1 + NumNeighbors];
+        parts[0] = input; // self-features [numEdges, InputChannels]
 
-        // Step 1: Copy self-features (first InputChannels columns)
-        result = Engine.TensorSetSlice(result, input, [0, 0]);
-
-        // Step 2: Gather neighbor features for each neighbor position
         for (int n = 0; n < NumNeighbors; n++)
         {
-            int featureOffset = InputChannels * (1 + n);
-
-            // Create indices tensor for this neighbor position
+            // Per-edge neighbor index at this neighbor position + a validity mask that
+            // zeros out out-of-range neighbors (clamped to index 0, masked to 0 below).
             var neighborIndices = new int[numEdges];
-            for (int e = 0; e < numEdges; e++)
-            {
-                int idx = adjacency[e, n];
-                // Clamp invalid indices to 0 and we'll zero them out after
-                neighborIndices[e] = (idx >= 0 && idx < numEdges) ? idx : 0;
-            }
-
-            var indicesTensor = new Tensor<int>(neighborIndices, [numEdges]);
-
-            // Gather neighbor features using vectorized operation
-            var gathered = Engine.TensorGather(input, indicesTensor, axis: 0);
-
-            // Create mask for invalid neighbors and zero them out
             var maskData = new T[numEdges];
             for (int e = 0; e < numEdges; e++)
             {
                 int idx = adjacency[e, n];
-                maskData[e] = (idx >= 0 && idx < numEdges) ? NumOps.One : NumOps.Zero;
+                bool valid = idx >= 0 && idx < numEdges;
+                neighborIndices[e] = valid ? idx : 0;
+                maskData[e] = valid ? NumOps.One : NumOps.Zero;
             }
+
+            var indicesTensor = new Tensor<int>(neighborIndices, [numEdges]);
+            var gathered = Engine.TensorGather(input, indicesTensor, axis: 0);          // [E, C]
             var mask = new Tensor<T>(maskData, [numEdges, 1]);
-
-            // Apply mask (multiply gathered features by mask to zero out invalid neighbors)
-            gathered = Engine.TensorMultiply(gathered, Engine.TensorTile(mask, [1, InputChannels]));
-
-            // Set the gathered features into the result at the appropriate offset
-            result = Engine.TensorSetSlice(result, gathered, [0, featureOffset]);
+            parts[1 + n] = Engine.TensorMultiply(gathered, Engine.TensorTile(mask, [1, InputChannels]));
         }
 
-        return result;
+        // Concatenate the self + N neighbor slices → [numEdges, InputChannels*(1+NumNeighbors)].
+        return NumNeighbors == 0 ? parts[0] : Engine.Concat(parts, 1);
     }
 
     /// <summary>
@@ -657,34 +686,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weight and bias parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters (weights followed by biases).</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count does not match expected.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _weights.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
-
-        int index = 0;
-        _weights = new Tensor<T>(_weights._shape, parameters.Slice(index, _weights.Length));
-        index += _weights.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(index, _biases.Length));
-    }
-
-    /// <summary>
     /// Gets the weight tensor.
     /// </summary>
     /// <returns>The weights tensor.</returns>
@@ -695,11 +696,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>The bias tensor.</returns>
     public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
     /// Creates a deep copy of the layer.

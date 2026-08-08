@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -43,8 +43,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// Rescales values using batch statistics; never resizes, at any rank.
+[ElementWiseShape(Note = "Normalises using batch statistics; every dimension is carried through.")]
+[AutoParameters]
+public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>Normalization rescales values; it never changes any axis.</remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Identity;
+
     /// <summary>
     /// A small constant added to the variance for numerical stability.
     /// </summary>
@@ -263,19 +270,66 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// Idempotent: tensors already at the right length are reused so the
     /// existing RegisterTrainableParameter registrations stay valid.
     /// </summary>
+    /// <summary>
+    /// Sizes gamma, beta and the running statistics from the resolved channel count, and registers
+    /// the running statistics as buffers.
+    /// </summary>
+    /// <remarks>
+    /// The tape swap rebinds gamma and beta directly, so a trained layer could reach serialization
+    /// with correctly-sized affine parameters and running statistics that had never been allocated
+    /// or registered — it wrote 48 values where a freshly constructed clone expected 96, and the
+    /// checkpoint would not load. Materializing here means whatever reads the parameter surface
+    /// sees the layer's full persistent state, affine and statistics alike.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        // Guarded: an unresolved layer still carries the -1 sentinel and would allocate against it.
+        if (IsShapeResolved && InputShape is { Length: > 0 } && InputShape[0] > 0)
+            InitializeNormalizationParameters();
+
+        base.EnsureInitialized();
+    }
+
     private void InitializeNormalizationParameters()
     {
         int channels = InputShape[0];
-        bool reinit = _gamma is null || _gamma.Length != channels;
-        if (reinit)
+
+        // The running statistics are sized and registered INDEPENDENTLY of gamma. They used to
+        // share gamma's reinit guard, which made them a casualty of the tape-buffer swap: that
+        // swap rebinds _gamma to a correctly-sized view, so the next call here saw gamma already
+        // at `channels`, took no branch, and left the running stats unallocated and unregistered.
+        // A trained model then serialized 48 values where the freshly-constructed clone expected
+        // 96, and the checkpoint would not load. Splitting the conditions removes the coupling;
+        // RegisterBuffer is name-keyed and idempotent, so registering on every call is free.
+        if (_gamma is null || _gamma.Length != channels)
         {
             _gamma = Tensor<T>.CreateDefault([channels], NumOps.One);
             _beta = Tensor<T>.CreateDefault([channels], NumOps.Zero);
-            _runningMean = Tensor<T>.CreateDefault([channels], NumOps.Zero);
-            _runningVariance = Tensor<T>.CreateDefault([channels], NumOps.One);
             RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
             RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
         }
+
+        if (_runningMean is null || _runningMean.Length != channels)
+        {
+            _runningMean = TensorAllocator.RentPinned<T>([channels]);
+            _runningMean.Fill(NumOps.Zero);
+            _runningVariance = TensorAllocator.RentPinned<T>([channels]);
+            _runningVariance.Fill(NumOps.One);
+        }
+
+        RegisterRunningStatisticBuffers();
+    }
+
+    /// <summary>
+    /// Registers BatchNorm's running statistics as persistent, non-trainable
+    /// buffers. Lazy initialization can occur inside a training arena, so leaving
+    /// these tensors unregistered allows arena/tape cleanup to recycle storage that
+    /// must survive into the subsequent inference-mode generator pass.
+    /// </summary>
+    private void RegisterRunningStatisticBuffers()
+    {
+        RegisterBuffer(_runningMean, "running_mean");
+        RegisterBuffer(_runningVariance, "running_variance");
     }
 
     /// <summary>
@@ -361,6 +415,17 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// - Running statistics (mean and variance) initialized to 0.0 and 1.0
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// How this layer should read a rank-3 input. <see cref="BatchNormDataLayout.Infer"/> by default,
+    /// which is the historical behaviour.
+    /// </summary>
+    /// <remarks>
+    /// Rank 3 is genuinely ambiguous -- [C, H, W] unbatched image versus [B, C, T] batched
+    /// channels-first sequence -- and the layer cannot tell them apart from the shape alone. Rather
+    /// than guess, callers that know say so. Opt-in: leaving this at Infer changes nothing.
+    /// </remarks>
+    public BatchNormDataLayout Layout { get; set; } = BatchNormDataLayout.Infer;
+
     public BatchNormalizationLayer(double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
         : base(new[] { -1 }, new[] { -1 })
     {
@@ -397,7 +462,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="numFeatures"/> is not positive.</exception>
-    public BatchNormalizationLayer(int numFeatures, double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
+    public BatchNormalizationLayer(
+        int numFeatures,
+        double epsilon = NumericalStabilityHelper.LargeEpsilon,
+        double momentum = 0.9)
         : base(new[] { numFeatures }, new[] { numFeatures })
     {
         if (numFeatures <= 0)
@@ -412,12 +480,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _gamma = new Tensor<T>([numFeatures]);
         _gamma.Fill(NumOps.One);
         _beta = new Tensor<T>([numFeatures]);
-        _runningMean = new Tensor<T>([numFeatures]);
-        _runningVariance = new Tensor<T>([numFeatures]);
+        _runningMean = TensorAllocator.RentPinned<T>([numFeatures]);
+        _runningVariance = TensorAllocator.RentPinned<T>([numFeatures]);
         _runningVariance.Fill(NumOps.One);
 
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        RegisterRunningStatisticBuffers();
     }
 
     /// <summary>
@@ -504,12 +573,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _gamma = AllocateLazyWeight([numFeatures]);
             _gamma.Fill(gammaInit);
             _beta = AllocateLazyWeight([numFeatures]);
-            _runningMean = AllocateLazyWeight([numFeatures]);
-            _runningVariance = AllocateLazyWeight([numFeatures]);
+            // Running statistics are persistent buffers, not scratch. Lazy
+            // initialization happens during the first training forward while a
+            // TensorArena is active, so use the pinned allocator explicitly;
+            // otherwise arena disposal can recycle these buffers before the GAN's
+            // subsequent eval-mode discriminator pass.
+            _runningMean = TensorAllocator.RentPinned<T>([numFeatures]);
+            _runningVariance = TensorAllocator.RentPinned<T>([numFeatures]);
             _runningVariance.Fill(NumOps.One);
 
             RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
             RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+            RegisterRunningStatisticBuffers();
         }
 
         // BatchNorm is SHAPE-PRESERVING (output shape == input shape). For image
@@ -588,7 +663,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// distribution for each feature.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 
@@ -620,7 +695,22 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         bool flattenedFeaturesLast = false;
         int[]? preFlattenShape = null;
         int featureSize = _gamma.Length;
-        if (input.Rank >= 3 && featureSize > 0 && input.Shape[^1] == featureSize)
+
+        // A caller that has DECLARED channels-first never takes the features-last flatten, even
+        // when the trailing axis happens to equal featureSize. That coincidence is not rare and it
+        // is not harmless: ContextNet's [1, 32, 32] activations have T == C exactly, so this branch
+        // fired and reshaped to [32, 32] with CHANNELS as rows and TIME as columns -- computing
+        // mean/variance across channels at each time index, indexing gamma/beta by time, and
+        // EMA-updating the running statistics from those transposed moments. Five BN layers of that
+        // drive the running variance toward zero; eval-mode then divides by sqrt(~0 + 1e-5), and
+        // MSE squares the result. That is the NaN.
+        //
+        // Rank alone cannot tell [B, C, T] from an unbatched [C, H, W] image, so the layer does not
+        // try to guess -- the caller declares it. Default is Infer, which is exactly today's
+        // behaviour, so nothing changes for any existing caller.
+        bool channelsFirstDeclared = Layout == BatchNormDataLayout.ChannelsFirst;
+
+        if (!channelsFirstDeclared && input.Rank >= 3 && featureSize > 0 && input.Shape[^1] == featureSize)
         {
             preFlattenShape = input._shape;
             int leadingBatch = 1;
@@ -697,13 +787,22 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // LazyTensorScope.RecordInPlace) so each replay re-applies
             // the mutation — EMA accumulates correctly under both eager
             // and compiled execution.
-            T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
-            Engine.TensorMultiplyScalarInPlace(_runningMean, _momentum);
-            var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
-            Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
-            Engine.TensorMultiplyScalarInPlace(_runningVariance, _momentum);
-            var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
-            Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
+            // Running statistics are persistent buffers, not trainable state. Keep
+            // their EMA update outside the autodiff graph, matching the semantics of
+            // PyTorch BatchNorm buffers. GraphMode still records the in-place
+            // mutations for compiled-plan replay; NoGradScope only suppresses tape
+            // recording. Without this boundary the batch-variance EMA can be retained
+            // as differentiable state and corrupted when the training tape is released.
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
+                Engine.TensorMultiplyScalarInPlace(_runningMean, _momentum);
+                var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
+                Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
+                Engine.TensorMultiplyScalarInPlace(_runningVariance, _momentum);
+                var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
+                Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
+            }
 
             // Invalidate cached inference scale/shift since running stats changed
             _inferenceScaleDirty = true;
@@ -830,7 +929,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // against input [C, H, W] — "Tensors with shapes [64, 32, 32] and [1, 64, 1] cannot
         // be broadcast" (surfaced by DenseNetNetwork.Predict on a [3, 32, 32] image).
         int rank = input.Shape.Length;
-        int channelAxis = rank == 1 || rank == 3 ? 0 : 1;
+        // Rank 3 is ambiguous: [C, H, W] (unbatched image, channels axis 0) or [B, C, T] (batched
+        // channels-first sequence, channels axis 1). A caller that declared ChannelsFirst gets
+        // axis 1; everyone else keeps the historical axis-0 reading. Guessing here is what
+        // broadcast the channel scale along ContextNet's BATCH axis.
+        int channelAxis = Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
+            ? 1
+            : (rank == 1 || rank == 3 ? 0 : 1);
 
         var broadcastShape = new int[rank];
         for (int d = 0; d < rank; d++)
@@ -895,6 +1000,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             momentumDouble,
             IsTrainingMode);
 
+        // GPU backends may replace the ref buffers when materializing device
+        // state. Refresh the name-based registration if their identity changed.
+        RegisterRunningStatisticBuffers();
+
         // Store saved values for backward pass (if training)
         if (IsTrainingMode && saveMean is not null && saveVar is not null)
         {
@@ -911,115 +1020,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         int total = 1;
         for (int i = 0; i < shape.Length; i++) total *= shape[i];
         return total;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the batch normalization layer.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (gamma and beta) concatenated together.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns a single vector containing all trainable parameters of the layer:
-    /// - First half: gamma (scale) parameters
-    /// - Second half: beta (shift) parameters
-    /// </para>
-    /// <para>
-    /// This is useful for optimization algorithms that need access to all parameters at once,
-    /// or for saving/loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable parameters as a single vector.
-    ///
-    /// Batch normalization has two sets of learnable parameters:
-    /// - Gamma (scale): Controls how much to stretch or compress the normalized data
-    /// - Beta (shift): Controls how much to move the normalized data up or down
-    ///
-    /// This method combines both sets into a single vector, with gamma values first,
-    /// followed by beta values. For example, with 3 features:
-    ///
-    /// [gamma1, gamma2, gamma3, beta1, beta2, beta3]
-    ///
-    /// This format is useful for:
-    /// - Saving and loading models
-    /// - Advanced optimization algorithms that work with all parameters at once
-    /// - Regularization techniques that need to access all parameters
-    ///
-    /// The total length of the returned vector is twice the number of features,
-    /// since there's one gamma and one beta parameter per feature.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _gamma.Length + _beta.Length;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // Production-grade: Use Vector.Concatenate instead of manual loops
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters of the batch normalization layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters (gamma and beta) concatenated together.</param>
-    /// <remarks>
-    /// <para>
-    /// This method expects a single vector containing all trainable parameters:
-    /// - First half: gamma (scale) parameters
-    /// - Second half: beta (shift) parameters
-    /// </para>
-    /// <para>
-    /// The length of the parameters vector must be exactly twice the feature size.
-    /// This method is useful for loading pre-trained weights or setting parameters
-    /// after optimization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads parameters into the layer from a single vector.
-    ///
-    /// This is the counterpart to GetParameters() - it takes a vector containing
-    /// all parameters and sets them in the layer. The vector must have the format:
-    ///
-    /// [gamma1, gamma2, ..., gammaN, beta1, beta2, ..., betaN]
-    ///
-    /// Where N is the number of features. The total length must be exactly 2*N.
-    ///
-    /// This method is commonly used for:
-    /// - Loading pre-trained models
-    /// - Setting parameters after external optimization
-    /// - Implementing transfer learning
-    /// - Testing different parameter configurations
-    ///
-    /// If the vector doesn't have the expected length, the method will throw an
-    /// exception to prevent incorrect parameter assignments.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when in lazy placeholder state.
-        // Layout: [gamma, beta] each featureSize long, so featureSize = length/2.
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            if (parameters.Length % 2 != 0 || parameters.Length == 0)
-                throw new ArgumentException(
-                    $"Cannot infer featureSize for BatchNormalizationLayer from {parameters.Length} parameters.");
-            int inferredFeatureSize = parameters.Length / 2;
-            ResolveFromShape(new[] { inferredFeatureSize });
-        }
-
-        int featureSize = InputShape[0];
-        if (parameters.Length != featureSize * 2)
-            throw new ArgumentException($"Expected {featureSize * 2} parameters, but got {parameters.Length}", nameof(parameters));
-
-        // Production-grade: Use Tensor.FromVector instead of manual loops
-        var gammaVec = parameters.Slice(0, featureSize);
-        var betaVec = parameters.Slice(featureSize, featureSize);
-
-        _gamma = Tensor<T>.FromVector(gammaVec, [featureSize]);
-        _beta = Tensor<T>.FromVector(betaVec, [featureSize]);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
-        _inferenceScaleDirty = true;
     }
 
     // --- ILayerSerializationExtras: running mean/variance are non-trainable state ---
@@ -1045,8 +1045,11 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         var meanVec = extraParameters.Slice(0, featureSize);
         var varVec = extraParameters.Slice(featureSize, featureSize);
 
-        _runningMean = Tensor<T>.FromVector(meanVec, [featureSize]);
-        _runningVariance = Tensor<T>.FromVector(varVec, [featureSize]);
+        _runningMean = TensorAllocator.RentPinned<T>([featureSize]);
+        meanVec.AsSpan().CopyTo(_runningMean.AsWritableSpan());
+        _runningVariance = TensorAllocator.RentPinned<T>([featureSize]);
+        varVec.AsSpan().CopyTo(_runningVariance.AsWritableSpan());
+        RegisterRunningStatisticBuffers();
         _inferenceScaleDirty = true;
     }
 

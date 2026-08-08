@@ -1,4 +1,7 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -27,10 +30,38 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DiffusionResBlock<T> : LayerBase<T>
+// Rank 4 [Batch, Channels, Height, Width] - the standard diffusion feature-map layout, matching the
+// _inChannels/_outChannels/_spatialSize the block is constructed with. OutputAxesFor below is
+// HAND-WRITTEN: the channel count is a constructor argument, so no probe could derive it.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _inChannels;
     private readonly int _outChannels;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A residual block projects the channel count to <see cref="_outChannels"/> - fixed at
+    /// construction - and leaves the spatial extent alone. Batch passes through. Computed rather than
+    /// generated because the channel count is a constructor argument, the same reason
+    /// <c>DenseLayer</c> returns <c>Fixed(_outputSize)</c>.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _outChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels)),
+            new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+            new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+        };
+    }
     private readonly int _spatialSize;
     private readonly int _timeEmbedDim;
 
@@ -74,13 +105,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _norm1.ParameterCount + _conv1.ParameterCount +
-        _timeMlp.ParameterCount +
-        _norm2.ParameterCount + _conv2.ParameterCount +
-        (_skipConv?.ParameterCount ?? 0);
 
     /// <summary>
     /// Creates a new diffusion residual block per the DDPM/Stable Diffusion paper.
@@ -240,7 +264,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// Named multi-input forward pass. Routes the dict-keyed inputs to the
     /// existing positional <c>Forward(input, timeEmbed)</c> implementation.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs is null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("input", out var input) || input is null)
@@ -255,7 +279,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <summary>
     /// Forward pass implementing the DDPM residual block.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
         // Only retain the per-layer backward-activation caches when an eager manual
@@ -505,33 +529,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 return g;
         }
         return 1;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        AddParams(parameters, _norm1);
-        AddParams(parameters, _conv1);
-        AddParams(parameters, _timeMlp);
-        AddParams(parameters, _norm2);
-        AddParams(parameters, _conv2);
-        if (_skipConv is not null)
-            AddParams(parameters, _skipConv);
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        SetParams(_norm1, parameters, ref idx);
-        SetParams(_conv1, parameters, ref idx);
-        SetParams(_timeMlp, parameters, ref idx);
-        SetParams(_norm2, parameters, ref idx);
-        SetParams(_conv2, parameters, ref idx);
-        if (_skipConv is not null)
-            SetParams(_skipConv, parameters, ref idx);
     }
 
     private static void AddParams(List<T> list, ILayer<T> layer)

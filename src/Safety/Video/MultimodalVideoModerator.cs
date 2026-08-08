@@ -40,15 +40,14 @@ namespace AiDotNet.Safety.Video;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("VideoGuard: Multimodal Video Safety with Reasoning-Based Instruction Hierarchy",
-    "https://arxiv.org/abs/2503.14298",
-    Year = 2025,
-    Authors = "Various")]
+[ResearchPaper("Harmful YouTube Video Detection: A Taxonomy of Online Harm and MLLMs as Alternative Annotators",
+    "https://arxiv.org/abs/2411.05854",
+    Year = 2024,
+    Authors = "Claire Wonjeong Jo, Miki Wesolowska, Magdalena Wojcieszak")]
 public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
 {
 
     private readonly CLIPImageSafetyClassifier<T> _imageClassifier;
-    private readonly double _samplingRate;
     private readonly double _deepfakeThreshold;
     private readonly double _sceneChangeThreshold;
 
@@ -58,58 +57,108 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
     /// <summary>
     /// Initializes a new multimodal video moderator.
     /// </summary>
-    /// <param name="samplingRate">Frames per second to sample for content classification. Default: 1.0.</param>
     /// <param name="deepfakeThreshold">Deepfake detection threshold (0-1). Default: 0.6.</param>
     /// <param name="sceneChangeThreshold">Scene change sensitivity (0-1). Default: 0.3.</param>
     /// <param name="nsfwThreshold">NSFW detection threshold for the image classifier. Default: 0.8.</param>
     /// <param name="violenceThreshold">Violence detection threshold for the image classifier. Default: 0.75.</param>
     public MultimodalVideoModerator(
-        double samplingRate = 1.0,
         double deepfakeThreshold = 0.6,
         double sceneChangeThreshold = 0.3,
         double nsfwThreshold = 0.8,
         double violenceThreshold = 0.75)
         : base(30.0)
     {
-        _samplingRate = Math.Max(0.1, samplingRate);
         _deepfakeThreshold = deepfakeThreshold;
         _sceneChangeThreshold = sceneChangeThreshold;
         _imageClassifier = new CLIPImageSafetyClassifier<T>(nsfwThreshold, violenceThreshold);
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// Number of image frames sampled per video, matching the paper's annotation budget: "14 image
+    /// frames, 1 thumbnail, and text metadata" were fed to the model for each of 19,422 videos.
+    /// </summary>
+    public const int TaxonomyFrameBudget = 14;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Samples the paper's fixed budget of <see cref="TaxonomyFrameBudget"/> frames plus a
+    /// thumbnail, gathers every signal those frames raise, folds the signals into the six-category
+    /// harm taxonomy via <see cref="HarmTaxonomyMap"/>, and emits ONE video-level finding per harm
+    /// category present. Categories are NON-MUTUALLY EXCLUSIVE, so a video may be reported under
+    /// several at once — the paper's second taxonomy principle, illustrated there by a video that
+    /// "narrates hate speech towards women while showing clips of women being punched" being both
+    /// hate and harassment and physical harm.
+    /// </para>
+    /// <para>
+    /// The forensic analyses below (temporal consistency, scene transitions, motion) are retained
+    /// and routed through the same taxonomy: manipulation signals evidence Information harm, which
+    /// is where the paper places deceptive content.
+    /// </para>
+    /// <para>
+    /// <b>Not implemented, deliberately:</b> the paper's annotator also consumes text metadata
+    /// (title, channel name, description, transcript) and audio. This interface receives frames
+    /// only, so the text and audio pathways of the taxonomy cannot be evaluated here and no attempt
+    /// is made to fake them. Its majority-of-three vote ("three API keys for GPT and three
+    /// crowdworkers, selecting the majority answer from each") is likewise absent: that exists to
+    /// control sampling randomness in an LLM annotator, and repeating a deterministic classifier
+    /// three times would produce three identical votes.
+    /// </para>
+    /// </remarks>
     public override IReadOnlyList<SafetyFinding> EvaluateVideo(IReadOnlyList<Tensor<T>> frames, double frameRate)
     {
         var findings = new List<SafetyFinding>();
+        if (frames is null || frames.Count == 0 || frameRate <= 0) return findings;
 
-        if (frames.Count == 0 || frameRate <= 0)
+        // Signals gathered from every modality this interface exposes, then folded into the taxonomy.
+        var signals = new List<SafetyFinding>();
+        signals.AddRange(AnalyzeFrameContent(frames, frameRate));
+        if (frames.Count >= 3) signals.AddRange(AnalyzeTemporalConsistency(frames, frameRate));
+        if (frames.Count >= 4) signals.AddRange(AnalyzeSceneTransitions(frames, frameRate));
+        if (frames.Count >= 5) signals.AddRange(AnalyzeMotionPatterns(frames, frameRate));
+
+        // Multi-label fold: one finding per harm category, carrying its strongest evidence.
+        var byHarm = new Dictionary<HarmCategory, (double Confidence, SafetyFinding Exemplar, int Count)>();
+        foreach (var signal in signals)
         {
-            return findings;
+            var harm = HarmTaxonomyMap.ToHarmCategory(signal.Category);
+            if (harm is null) continue;
+
+            if (byHarm.TryGetValue(harm.Value, out var existing))
+            {
+                byHarm[harm.Value] = signal.Confidence > existing.Confidence
+                    ? (signal.Confidence, signal, existing.Count + 1)
+                    : (existing.Confidence, existing.Exemplar, existing.Count + 1);
+            }
+            else
+            {
+                byHarm[harm.Value] = (signal.Confidence, signal, 1);
+            }
         }
 
-        // 1. Frame-level content classification
-        var contentFindings = AnalyzeFrameContent(frames, frameRate);
-        findings.AddRange(contentFindings);
-
-        // 2. Temporal consistency analysis (deepfake detection)
-        if (frames.Count >= 3)
+        double videoMilliseconds = frames.Count / frameRate * 1000.0;
+        // Enum.GetValues<T>() is .NET 5+. This library still targets net471, where only the
+        // non-generic overload exists, so the generic form compiles locally on net10.0 and breaks the
+        // net471 leg of CI (CS0308) — a failure invisible to a single-TFM local build.
+        foreach (HarmCategory harm in (HarmCategory[])Enum.GetValues(typeof(HarmCategory)))
         {
-            var temporalFindings = AnalyzeTemporalConsistency(frames, frameRate);
-            findings.AddRange(temporalFindings);
-        }
+            if (!byHarm.TryGetValue(harm, out var evidence)) continue;
 
-        // 3. Scene transition analysis (splice detection)
-        if (frames.Count >= 4)
-        {
-            var sceneFindings = AnalyzeSceneTransitions(frames, frameRate);
-            findings.AddRange(sceneFindings);
-        }
-
-        // 4. Motion analysis (unnatural movement detection)
-        if (frames.Count >= 5)
-        {
-            var motionFindings = AnalyzeMotionPatterns(frames, frameRate);
-            findings.AddRange(motionFindings);
+            findings.Add(new SafetyFinding
+            {
+                Category = evidence.Exemplar.Category,
+                Severity = evidence.Exemplar.Severity,
+                Confidence = evidence.Confidence,
+                Description =
+                    $"{harm} harm detected from {evidence.Count} signal(s) across " +
+                    $"{Math.Min(TaxonomyFrameBudget, frames.Count)} sampled frame(s) + thumbnail. " +
+                    evidence.Exemplar.Description,
+                RecommendedAction = evidence.Exemplar.RecommendedAction,
+                SourceModule = ModuleName,
+                SpanStart = 0,
+                SpanEnd = (int)videoMilliseconds,
+            });
         }
 
         return findings;
@@ -118,9 +167,19 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
     private IReadOnlyList<SafetyFinding> AnalyzeFrameContent(IReadOnlyList<Tensor<T>> frames, double frameRate)
     {
         var findings = new List<SafetyFinding>();
-        int frameInterval = Math.Max(1, (int)(frameRate / _samplingRate));
 
-        for (int i = 0; i < frames.Count; i += frameInterval)
+        // The paper's fixed annotation budget: 14 image frames plus 1 thumbnail per video, however
+        // long the video is. Index 0 stands in for the thumbnail, which on a video platform is a
+        // separate asset this interface does not receive; the remaining budget is spread evenly.
+        var sampled = new List<int> { 0 };
+        int budget = Math.Min(TaxonomyFrameBudget, frames.Count);
+        for (int k = 0; k < budget; k++)
+        {
+            int idx = (int)((long)k * frames.Count / budget);
+            if (!sampled.Contains(idx)) sampled.Add(idx);
+        }
+
+        foreach (int i in sampled)
         {
             var frameFindings = _imageClassifier.EvaluateImage(frames[i]);
 

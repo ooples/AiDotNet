@@ -20,7 +20,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// <code>
 ///   r_t = sigmoid(W_r * x_t + b_r)           // Recurrence gate
 ///   i_t = sigmoid(W_i * x_t + b_i)           // Input gate
-///   a_t = diag(r_t) * diag(exp(-softplus(c))) // Gated decay (c is a learned parameter)
+///   log(a_t) = -8 * softplus(Lambda) * r_t    // Paper's stable gated-decay form
 ///   h_t = a_t * h_{t-1} + sqrt(1 - a_t^2) * (i_t * (W_x * x_t))
 ///   y_t = h_t
 /// </code>
@@ -53,8 +53,29 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
+// Shape-preserving at every accepted rank, and read from this layer's own forward rather than assumed:
+// ForwardTraced takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is [Time, Features]
+// with NO batch axis - the same convention every layer in this folder follows. Its three exits confirm
+// the shape is untouched: [_modelDimension] at rank 1, [seqLen, _modelDimension] at rank 2, and the
+// original leading axes with [seqLen, _modelDimension] appended above that.
+//
+// The feature width is Same, not Fixed(_modelDimension), and the forward makes the distinction explicit:
+// it THROWS when modelDim != _modelDimension, so the width is a precondition the caller must already
+// satisfy, not something this layer sets. Rank 1 is accepted (seqLen defaults to 1) but not declared -
+// a single timestep with no time axis is a degenerate probe shape, not a form to route a stack through.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeContract
 {
+    // OutputAxesFor is GENERATED from the [TensorLayout] attributes above (ShapeContractGenerator).
+    // Nothing to write here: the layouts already state that every axis is carried through, and
+    // restating that in a hand-copied method is how a contract drifts from its own declaration.
+
     // Configuration
     private readonly int _modelDimension;
     private readonly int _recurrenceDimension;
@@ -140,17 +161,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     public int RecurrenceDimension => _recurrenceDimension;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _recurrenceGateWeights.Length + _recurrenceGateBias.Length +
-        _inputGateWeights.Length + _inputGateBias.Length +
-        _valueProjectionWeights.Length +
-        _decayParam.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
-
-    /// <summary>
     /// Creates a new Real-Gated Linear Recurrence Unit (RG-LRU) layer.
     /// </summary>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -171,8 +181,16 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(
-            [sequenceLength, modelDimension],
-            [sequenceLength, modelDimension],
+            // Sequence is a FREE axis: -1, not the configured maximum. sequenceLength is
+            // documented as a MAXIMUM and is used here for nothing but validation -- no weight and
+            // no buffer is sized against it, because the recurrence runs over whatever length it
+            // is handed. Publishing it as a concrete contract made the layer claim an output it
+            // does not produce for any other length, which VerifyReportedOutputShape reports as
+            // "[maxLen, D] declared but [B, actualLen, D] produced" and which anything sizing
+            // itself from the declaration -- parameter slicing, chain resolution, ONNX export --
+            // reads as fact. modelDimension IS structural and stays concrete.
+            [-1, modelDimension],
+            [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
@@ -207,9 +225,19 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _inputGateBias.Fill(NumOps.Zero);
         InitializeTensor(_valueProjectionWeights);
 
-        // Initialize decay ~ 0.9 per step (softplus(2.2) ≈ 2.3, exp(-2.3) ≈ 0.1 -> 1-0.1=0.9)
+        // Griffin, Section 2.4: c=8 and a^c is uniform in [0.9, 0.999]. The
+        // numerically-stable implementation in Appendix A parameterizes
+        // log(a) = -softplus(Lambda), so solve Lambda = log((1-a)/a) for each
+        // sampled a. The previous positive 2.2..2.7 initialization produced
+        // a≈0.06..0.10 and then multiplied it directly by r_t, erasing nearly
+        // all recurrent state in one step instead of initializing long memory.
+        const double recurrencePower = 8.0;
         for (int i = 0; i < _recurrenceDimension; i++)
-            _decayParam[i] = NumOps.FromDouble(2.2 + Random.NextDouble() * 0.5);
+        {
+            double aToC = 0.9 + Random.NextDouble() * 0.099;
+            double a = Math.Pow(aToC, 1.0 / recurrencePower);
+            _decayParam[i] = NumOps.FromDouble(Math.Log((1.0 - a) / a));
+        }
 
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
@@ -240,7 +268,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -310,7 +338,12 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var p_t = projected3D.GetSliceAlongDimension(t, 1);
+            // RECORDED slice (Engine.TensorNarrow), not a bare GetSliceAlongDimension view — see the
+            // detailed rationale at the gated-recurrence loop below. A bare view is captured by the
+            // fused compiled plan as a graph LEAF frozen at trace time, so on replay it reads the
+            // abandoned trace-time storage instead of the plan's live pre-allocated buffer.
+            var p_t = Engine.Reshape(Engine.TensorNarrow(projected3D, 1, t, 1),
+                new[] { batchSize, _recurrenceDimension });
 
             var rGate = Engine.Sigmoid(Engine.TensorBroadcastAdd(
                 Engine.TensorMatMul(p_t, _recurrenceGateWeights),
@@ -376,21 +409,20 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         int batchSize, int seqLen)
     {
         var hiddenList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
+        // Griffin and Hawk define h_0 as zero. TensorAllocator.Rent guarantees
+        // zero-initialized logical storage while retaining arena/pool reuse.
         var h = TensorAllocator.Rent<T>(new[] { batchSize, _recurrenceDimension });
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
-        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as a
-        // [recurrenceDim] tensor. The closed form is
-        //     exp(-softplus(c)) = exp(-log(1 + e^c)) = 1 / (1 + e^c) = sigmoid(-c),
-        // so a single tape-connected Engine.Sigmoid(Engine.TensorNegate(_decayParam))
-        // both (a) keeps _decayParam on the autodiff graph — the prior
-        // NumOps.ToDouble/Math.Exp scalar loop detached it, so the learned decay
-        // never received a gradient under tape-based training — and (b) stays
-        // numerically stable, since sigmoid saturates gracefully for large |c|.
-        // It is also a single SIMD-accelerated engine op rather than the
-        // (recDim × batchSize) NumOps virtual dispatches per timestep the loop cost.
-        var baseDecay = Engine.Sigmoid(Engine.TensorNegate(_decayParam));
+        // Griffin Appendix A, Eq. 6: log(a_t) = -c*softplus(Lambda)*r_t,
+        // with c=8. Keep the entire expression on the protected base Engine so
+        // Lambda and the recurrence gate both receive tape gradients. A shaped
+        // constant is used because TensorMultiplyScalar bypasses this tape.
+        var softplusDecay = Engine.Softplus(_decayParam);
+        var negativeC = Tensor<T>.CreateDefault(
+            new[] { _recurrenceDimension }, NumOps.FromDouble(-8.0));
+        var negativeCSoftplus = Engine.TensorMultiply(softplusDecay, negativeC);
 
         // A constant `ones` tensor for the tape-connected (1 - a²) computation.
         // Engine.TensorMultiplyScalar / TensorAddScalar do NOT propagate on the
@@ -398,24 +430,45 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         // so we use TensorSubtract against this constant instead.
         var onesForMagnitude = Tensor<T>.CreateDefault(
             new[] { batchSize, _recurrenceDimension }, NumOps.One);
+        var magnitudeFloor = Tensor<T>.CreateDefault(
+            new[] { batchSize, _recurrenceDimension }, NumOps.FromDouble(1e-7));
 
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = x.GetSliceAlongDimension(t, 1);
-            var r_t = recGate.GetSliceAlongDimension(t, 1);
-            var i_t = inpGate.GetSliceAlongDimension(t, 1);
+            // Take each per-timestep slice with the RECORDED engine op Engine.TensorNarrow (the same
+            // op the healthy RWKVLayer uses) instead of the bare tensor-level GetSliceAlongDimension.
+            //
+            // GetSliceAlongDimension returns a non-owning VIEW and is not a recorded graph op, so the
+            // fused compiled-training plan captures each view as a graph LEAF frozen at trace time.
+            // On replay the plan recomputes x / recGate / inpGate into its own PRE-ALLOCATED buffers,
+            // while the frozen views still reference the abandoned trace-time storage — so every
+            // timestep read stale memory. Measured on the #1789 Generated Q-S order audit: ops 5 and
+            // 7..23 (the per-timestep v_t = x_t @ W_v MatMuls) each reported
+            // `in0: producer=-1 len=256 max=0.000E+000` — an all-zero leaf produced by NO forward
+            // step — against a live weight of 0.125, while the parent feeding them measured 0.031.
+            // Once that abandoned storage is recycled for other tensors the same reads return garbage
+            // (magnitudes of 1e10..1e35 were observed), which squares past the float32 ceiling into
+            // Inf, NaNs the following LayerNorm, and turns every parameter gradient non-finite.
+            // TensorNarrow is a real recorded op, so the slice is recomputed from the live buffer on
+            // every replay. The math is identical — this only changes HOW the slice is taken.
+            var x_t = Engine.Reshape(Engine.TensorNarrow(x, 1, t, 1), new[] { batchSize, _recurrenceDimension });
+            var r_t = Engine.Reshape(Engine.TensorNarrow(recGate, 1, t, 1), new[] { batchSize, _recurrenceDimension });
+            var i_t = Engine.Reshape(Engine.TensorNarrow(inpGate, 1, t, 1), new[] { batchSize, _recurrenceDimension });
 
             // Value projection: v_t = x_t @ W_v   ([batch, recDim])
             var v_t = Engine.TensorMatMul(x_t, _valueProjectionWeights);
 
-            // Decay: a_t = r_t * baseDecay (broadcast [batch, recDim] × [recDim])
-            var a_t = Engine.TensorBroadcastMultiply(r_t, baseDecay);
+            // Decay: a_t = exp(-8 * softplus(Lambda) * r_t).
+            var logA_t = Engine.TensorBroadcastMultiply(r_t, negativeCSoftplus);
+            var a_t = Engine.TensorExp(logA_t);
 
             // Magnitude-preserving factor: sqrtFactor = sqrt(max(0, 1 - a²)),
             // composed from tape-connected element-wise tensor ops.
             var aSquared = Engine.TensorSquare(a_t);
             var oneMinusASquared = Engine.TensorSubtract(onesForMagnitude, aSquared);
-            var clamped = Engine.TensorReLU(oneMinusASquared);
+            // A finite positive floor avoids the sqrt derivative singularity at
+            // exactly zero if finite-precision exp rounds a_t to one.
+            var clamped = Engine.TensorMax(oneMinusASquared, magnitudeFloor);
             var sqrtFactor = Engine.TensorSqrt(clamped);
 
             // h_t = a_t · h_{t-1} + sqrtFactor · (i_t · v_t)
@@ -424,22 +477,10 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             var aHPrev = Engine.TensorMultiply(a_t, h);
             var hNext = Engine.TensorAdd(aHPrev, weighted);
 
-            // Update h in-place for next iteration. h is rented from the
-            // allocator and we want to keep using the same buffer; bulk-copy
-            // hNext's full storage into h via Engine.TensorCopy rather than
-            // reassigning the local (which would drop the rented reference).
-            // The previous element-wise write loop allocated 2 fresh int[]
-            // index arrays per (batch, recurrenceDim) pair — at seqLen=1024,
-            // batchSize=16, recurrenceDim=256 that's ~8 million per-call
-            // allocations and erodes the SIMD gains from the gate/output
-            // computation above. Engine.TensorCopy dispatches to the
-            // SIMD-aware bulk path used by ConvLSTMLayer / Bidirectional
-            // and friends.
-            // Keep the tape node as the running hidden state so the time recurrence
-            // stays on the autodiff graph. The previous Engine.TensorCopy into a
-            // rented buffer detached h from hNext, breaking gradient flow through the
-            // recurrence (and the SetSlice-assembled output) so the gate/value/decay
-            // weights never received a gradient.
+            // Keep hNext itself as the running state so recurrence history remains
+            // on the autodiff tape.
+            // Copying hNext into a separate buffer would detach the recurrence and
+            // prevent gate/value/decay gradients.
             h = hNext;
             hiddenList.Add(Engine.Reshape(h, new[] { batchSize, 1, _recurrenceDimension }));
 
@@ -476,36 +517,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     private Tensor<T>[] GetAllTensors() =>

@@ -536,7 +536,7 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
@@ -575,105 +575,6 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             if (count > 0 && idx + count <= parameters.Length)
             {
                 module.UpdateParameters(parameters.Slice(idx, count));
-                idx += count;
-            }
-        }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Includes the four off-<see cref="NeuralNetworkBase{T}.Layers"/> generation modules
-    /// so the flat parameter APIs agree on length.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in Layers)
-                total += layer.ParameterCount;
-            foreach (var module in GenerationModules())
-                total += module.ParameterCount;
-            return total;
-        }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Layout: [layer params in Layers order ...] [token-embedding] [codebook-projection]
-    /// [pixel-decoder-hidden] [pixel-decoder-out].
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var baseParams = base.GetParameters();
-        var moduleParams = new List<Vector<T>>();
-        int moduleTotal = 0;
-        foreach (var module in GenerationModules())
-        {
-            var p = module.GetParameters();
-            moduleParams.Add(p);
-            moduleTotal += p.Length;
-        }
-        if (moduleTotal == 0)
-            return baseParams;
-
-        var combined = new Vector<T>(baseParams.Length + moduleTotal);
-        int idx = 0;
-        for (int i = 0; i < baseParams.Length; i++)
-            combined[idx++] = baseParams[i];
-        foreach (var p in moduleParams)
-            for (int i = 0; i < p.Length; i++)
-                combined[idx++] = p[i];
-        return combined;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Accepts both the full layout produced by <see cref="GetParameters"/> (layers +
-    /// generation-module tail) and a layers-only vector (modules left untouched), so
-    /// older callers that sized their vector from the Layers sum keep working.
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int moduleTotal = 0;
-        foreach (var module in GenerationModules())
-            moduleTotal += (int)module.ParameterCount;
-
-        // Derive the layer-side size from the actual Layers walk, NOT from
-        // parameters.Length − moduleTotal. The subtraction form silently corrupts a
-        // layers-only vector (length == layerCount, no module params): it sized baseCount to
-        // layerCount − moduleTotal, dropping the TAIL of the regular layer weights, and then —
-        // because baseCount + moduleTotal == parameters.Length held — read the modules' params
-        // out of the layer region. Compute the true layer total and pick the matching layout
-        // explicitly (mirrors Helix.SetParameters).
-        int layerCount = 0;
-        foreach (var layer in Layers)
-            layerCount += (int)layer.ParameterCount;
-
-        if (parameters.Length != layerCount && parameters.Length != layerCount + moduleTotal)
-            throw new ArgumentException(
-                $"Expected {layerCount} (layers-only) or {layerCount + moduleTotal} "
-                    + $"(layers + generation modules) parameters, got {parameters.Length}.",
-                nameof(parameters)
-            );
-
-        var baseSlice = new Vector<T>(layerCount);
-        for (int i = 0; i < layerCount; i++)
-            baseSlice[i] = parameters[i];
-        base.SetParameters(baseSlice);
-
-        if (moduleTotal > 0 && parameters.Length == layerCount + moduleTotal)
-        {
-            int idx = layerCount;
-            foreach (var module in GenerationModules())
-            {
-                int count = (int)module.ParameterCount;
-                if (count == 0)
-                    continue;
-                var slice = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                    slice[i] = parameters[idx + i];
-                module.SetParameters(slice);
                 idx += count;
             }
         }

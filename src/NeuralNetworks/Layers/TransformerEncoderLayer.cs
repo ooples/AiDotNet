@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -35,7 +35,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
-public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// GENUINELY RANK-AGNOSTIC, which is why this gets the shorthand rather than a list of layouts.
+// ForwardTraced normalises whatever it is given to [batch, seq, embed] - rank 1 becomes [1, 1, F],
+// rank 2 becomes [1, S, F], rank > 3 folds its leading axes into batch - runs the encoder, and then
+// puts the ORIGINAL rank back on the way out ("Restore original tensor shape"). Every restore branch
+// reuses _originalInputShape's own leading dimensions, so no axis can change size.
+//
+// The feed-forward width never escapes either: _feedForward2 projects back to ffEmbed before the
+// residual add, so the embedding width out is the embedding width in. Naming axes here would invent
+// meanings the layer does not have - it does not care whether the leading axes are batch or frames.
+[ElementWiseShape(Note = "Self-attention and FFN are both residual; the original rank and every dimension are restored before returning.")]
+[AutoParameters]
+public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -311,46 +322,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         base.Deserialize(reader);
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!_isInitialized)
-        {
-            // Mirror the lazy-init contract on the read side (ParameterCount==0 and
-            // GetParameters().Length==0 until first Forward): accept an empty vector
-            // as a no-op so round-trip patterns like
-            //   newParams = parameters.Slice(offset, layer.GetParameters().Length); layer.SetParameters(newParams);
-            // in the host model don't blow up before any data has flowed.
-            if (parameters.Length == 0)
-            {
-                return;
-            }
-
-            // If the eager-ctor embedding size is known, resolve and construct
-            // sublayers now so callers that already have a non-empty parameter
-            // vector (e.g. deserialize → SetParameters) can proceed without a
-            // separate warmup forward.
-            if (_embeddingSize > 0)
-            {
-                EnsureInitialized();
-            }
-
-            if (!_isInitialized)
-            {
-                throw new InvalidOperationException(
-                    "TransformerEncoderLayer.SetParameters cannot run before sublayers are " +
-                    "constructed. Run a Forward pass first so _embeddingSize is resolved.");
-            }
-        }
-        int idx = 0;
-        void Set(ILayer<T> layer)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.SetParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        Set(_selfAttention); Set(_norm1); Set(_feedForward1); Set(_feedForward2); Set(_norm2);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         if (!_isInitialized) return new Vector<T>(0);
@@ -374,33 +345,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <remarks>
-    /// This returns the sum of all parameters from sublayers: self-attention, layer norms, and feed-forward layers.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Eager-dim ctor materializes sublayers at construction so this
-            // path always sees real counts. Lazy ctor (embeddingSize == -1)
-            // returns 0 until the first forward triggers EnsureInitialized
-            // — that's the historical contract for layers whose dimensions
-            // aren't known until input flows.
-            if (_isInitialized)
-            {
-                return _selfAttention.ParameterCount +
-                       _norm1.ParameterCount +
-                       _feedForward1.ParameterCount +
-                       _feedForward2.ParameterCount +
-                       _norm2.ParameterCount;
-            }
-            return 0;
-        }
-    }
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -449,7 +393,10 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Embedding dimension (must be divisible by <paramref name="numHeads"/>),
     /// or <c>-1</c> to defer resolution to first forward.
     /// </param>
-    public TransformerEncoderLayer(int numHeads, int feedForwardDim, int embeddingSize)
+    public TransformerEncoderLayer(
+        [LayerState] int numHeads,
+        [LayerState] int feedForwardDim,
+        [LayerState] int embeddingSize)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (numHeads <= 0)
@@ -542,16 +489,33 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (_embeddingSize < 0)
         {
-            _embeddingSize = input.Shape[input.Shape.Length - 1];
-            if (_embeddingSize % _numHeads != 0)
+            // Validate into a local and commit only on success. Assigning first and throwing after
+            // left the rejected value behind, and ResolveLazyLayerShapes swallows probe exceptions
+            // by design -- so a probe that was correctly refused still poisoned the layer. On the
+            // next, legitimate forward the `< 0` guard no longer held, the divisibility check was
+            // skipped entirely, and the bad size flowed into EnsureInitialized as
+            // _embeddingSize / _numHeads == 0. Nougat surfaced this as "headDimension must be
+            // positive, got 0" from deep inside MultiHeadAttentionLayer's constructor, six failures
+            // away from the readable message this method had already produced and discarded.
+            int probedEmbeddingSize = input.Shape[input.Shape.Length - 1];
+            if (probedEmbeddingSize % _numHeads != 0)
                 throw new ArgumentException(
-                    $"Resolved embeddingSize ({_embeddingSize}) must be evenly divisible by " +
-                    $"numHeads ({_numHeads}); got remainder {_embeddingSize % _numHeads}.");
+                    $"Resolved embeddingSize ({probedEmbeddingSize}) must be evenly divisible by " +
+                    $"numHeads ({_numHeads}); got remainder {probedEmbeddingSize % _numHeads}.");
+
+            _embeddingSize = probedEmbeddingSize;
         }
 
+        // The encoder preserves its input's sequence length instead of fixing one, so committing to
+        // whatever length happened to arrive first made it report [10, 16] and then produce
+        // [16, 16]. The model dimension is the only axis it actually fixes.
         var resolved = new int[input.Shape.Length];
         for (int i = 0; i < input.Shape.Length; i++) resolved[i] = input.Shape[i];
-        ResolveShapes(resolved, resolved);
+
+        var declaredOutput = new int[resolved.Length];
+        for (int i = 0; i < resolved.Length; i++) declaredOutput[i] = LayerShape.Dynamic;
+        declaredOutput[resolved.Length - 1] = _embeddingSize;
+        ResolveShapes(resolved, declaredOutput);
     }
 
     /// <summary>
@@ -583,6 +547,35 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             RegisterSubLayer(_feedForward1);
             RegisterSubLayer(_feedForward2);
             RegisterSubLayer(_norm2);
+
+            // Propagate a deterministic per-sublayer init seed derived from THIS layer's
+            // wired RandomSeed. The sublayers are constructed HERE, at first-forward — long
+            // after the model-construction LayerInitializationSeedScope (a ThreadStatic set
+            // during the constructor chain) has moved on, and often on a DIFFERENT thread
+            // (the fused/compiled training path traces the forward off the construction
+            // thread). Their own AssignInitializationSeedFromScope therefore finds no active
+            // scope, so their weight init falls back to the process-shared, order-dependent
+            // RandomHelper.ThreadSafeRandom — making the SAME architecture at the SAME
+            // architecture.RandomSeed produce DIFFERENT sublayer weights depending on how much
+            // unrelated work advanced that shared RNG first (e.g. a preceding training test's
+            // dropout-mask draws on the same xUnit worker). That silently breaks weight-init
+            // reproducibility and flips tight training-trajectory invariants purely on
+            // execution order (GLaMM LossStrictlyDecreasesOnMemorizationTask: passes in
+            // isolation, fails after any training test ran first). Seeding each sublayer from
+            // this layer's RandomSeed makes the lazy init deterministic and order-independent
+            // for every TransformerEncoderLayer-based model (ViT / SAM / DINO / BERT / VLMs).
+            // When RandomSeed is null (production default — no seed requested) the sublayers
+            // stay unseeded, preserving the existing "reproducible iff a seed was requested"
+            // contract.
+            if (RandomSeed.HasValue)
+            {
+                var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
+                _selfAttention.RandomSeed = subSeedRng.Next();
+                _norm1.RandomSeed = subSeedRng.Next();
+                _feedForward1.RandomSeed = subSeedRng.Next();
+                _feedForward2.RandomSeed = subSeedRng.Next();
+                _norm2.RandomSeed = subSeedRng.Next();
+            }
 
             // Eagerly resolve sub-layers using the known embedding size so their
             // ParameterCount reflects real weights immediately. Without this,
@@ -636,7 +629,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// that capture both the content of each element and its relationships to other elements.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor path: resolve _embeddingSize from input.Shape[^1] and construct
         // the inner attention / FFN / norm sublayers on first call.
@@ -883,55 +876,6 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _feedForward1.UpdateParametersGpu(config);
         _feedForward2.UpdateParametersGpu(config);
         _norm2.UpdateParametersGpu(config);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the transformer encoder layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters from all sublayers.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from all sublayers of the transformer encoder layer and combines
-    /// them into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from all parts of the encoder.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include weights from attention mechanisms, normalization layers, and the feed-forward network
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// A transformer encoder layer typically has millions of parameters, all of which
-    /// contribute to its ability to understand complex sequences.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Sublayers do not exist on a lazy encoder until first Forward.
-        if (!_isInitialized) return new Vector<T>(0);
-
-        // === Vectorized Parameter Concatenation (Phase B: US-GPU-015) ===
-        // Collect parameters from all sublayers and concatenate them
-        var selfAttentionParams = _selfAttention.GetParameters();
-        var norm1Params = _norm1.GetParameters();
-        var ff1Params = _feedForward1.GetParameters();
-        var ff2Params = _feedForward2.GetParameters();
-        var norm2Params = _norm2.GetParameters();
-
-        // Concatenate all parameter vectors at once
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(
-                    Vector<T>.Concatenate(selfAttentionParams, norm1Params),
-                    ff1Params),
-                ff2Params),
-            norm2Params);
     }
 
     /// <summary>

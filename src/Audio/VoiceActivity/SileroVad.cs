@@ -637,7 +637,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         // detach the tape and leave the convs/LSTM untrained).
         if (output.Rank == 3)
         {
-            output = Engine.TensorPermute(output, [0, 2, 1]);
+            output = Engine.TensorPermute(output, [0, 2, 1]).Contiguous();
         }
 
         // Pass through LSTM layers
@@ -692,12 +692,15 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         int resultSize = shape[0] * lastDim;
 
         // Extract last timestep values
+        // Write DIRECTLY into the tensor's storage. Tensor<T>.ToVector() materializes a COPY, not a
+        // view, so the previous `result.ToVector()[i] = ...` filled a throwaway vector and returned
+        // the freshly-allocated (all-zero) tensor — the extracted last timestep was always zeros.
         var result = new Tensor<T>([shape[0], lastDim]);
-        var resultVector = result.ToVector();
+        var resultSpan = result.Data.Span;
         int offset = data.Length - resultSize;
         for (int i = 0; i < resultSize && offset + i < data.Length; i++)
         {
-            resultVector[i] = data[offset + i];
+            resultSpan[i] = data[offset + i];
         }
 
         return result;
@@ -730,7 +733,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 
         if (current.Rank == 3)
         {
-            current = Engine.TensorPermute(current, [0, 2, 1]);
+            current = Engine.TensorPermute(current, [0, 2, 1]).Contiguous();
         }
 
         foreach (var layer in _lstmLayers)

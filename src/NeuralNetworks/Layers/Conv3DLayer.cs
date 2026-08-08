@@ -4,6 +4,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -40,8 +41,63 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
-public partial class Conv3DLayer<T> : LayerBase<T>
+// BOTH ranks are declared because OnFirstForward names both itself - "requires rank-4 [C,D,H,W] or
+// rank-5 [B,C,D,H,W] input" - and rejects everything else. The batched form is a separate declaration
+// rather than BatchOptional on one, so the unbatched form's leading axis is named Channels (what it
+// actually is) instead of a batch axis that is not there.
+//
+// ForwardTraced also tolerates rank > 5 by folding the leading axes into batch, but that is NOT
+// declared: those axes have no roles to name, and TensorAxis has no way to say "however many".
+[TensorLayout(TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off this layer's own arithmetic in <see cref="OnFirstForward"/>:
+    /// <c>outD = (d + 2*Padding - KernelSize) / Stride + 1</c>, and identically for H and W. That is
+    /// the sliding-window formula with dilation 1 - this layer exposes no dilation parameter - so
+    /// <c>Window(kernel: KernelSize, stride: Stride, padding: Padding)</c> reproduces it exactly.
+    /// </para>
+    /// <para>
+    /// All three spatial axes share one kernel/stride/padding here, which is why they get the same
+    /// window; that is a property of THIS layer's cubic-kernel API, not of 3-D convolution generally,
+    /// so the three are written out rather than collapsed.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputChannels <= 0 || KernelSize <= 0 || Stride <= 0 || Padding < 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels));
+        OutputAxisContract Spatial(TensorAxis a)
+            => new(a, AxisRelation.Window(a, KernelSize, Stride, Padding));
+
+        return inputRank switch
+        {
+            4 => new[]
+            {
+                channels,
+                Spatial(TensorAxis.Depth), Spatial(TensorAxis.Height), Spatial(TensorAxis.Width),
+            },
+            5 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels,
+                Spatial(TensorAxis.Depth), Spatial(TensorAxis.Height), Spatial(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     #region Properties
 
     /// <summary>
@@ -251,10 +307,10 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public Conv3DLayer(
-        int outputChannels,
-        int kernelSize,
-        int stride = 1,
-        int padding = 0,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride = 1,
+        [LayerState] int padding = 0,
         IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1, -1, -1, -1 }, new[] { outputChannels, -1, -1, -1 },
             activationFunction ?? new ReLUActivation<T>())
@@ -474,8 +530,24 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         // (Engine.TensorRandomUniformRangeInto<T>(_kernels, low, high))
         // would write directly into the registered tensor. Tracked in
         // the AiDotNet.Tensors repo, not blocking on this PR.
-        var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
-        randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
+        // Honour the layer-level deterministic seed: when LayerBase<T>.RandomSeed is set, fill the
+        // kernels from a seeded RNG so the He init is REPRODUCIBLE across process launches (mirrors
+        // DenseLayer.InitializeParameters). The ambient Engine.TensorRandomUniformRange RNG is NOT
+        // seeded, so without this a Conv3D-based model re-randomizes every run — non-reproducible init
+        // that intermittently lands on unstable seeds (the GRULayer/DenseLayer seeding bug pattern).
+        if (RandomSeed.HasValue)
+        {
+            var rng = RandomHelper.CreateSeededRandom(RandomSeed.Value);
+            double s = NumOps.ToDouble(scale);
+            var span = _kernels.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++)
+                span[i] = NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * s);
+        }
+        else
+        {
+            var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
+            randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
+        }
 
         Engine.TensorFill(_biases, NumOps.Zero);
     }
@@ -505,7 +577,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// 4. Apply activation function
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)
@@ -789,29 +861,60 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int colsPerRow = CI * K * K * K;
         int rowsTotal = B * OD * OH * OW;
 
-        // im2col data movement — produces a fresh tensor; this is NOT a
-        // tape-tracked op on its own (no Engine.* call). We bind it into
-        // the autodiff graph below via RegisterManualBackwardNode.
-        var im2colMatrix = new Tensor<T>(new[] { rowsTotal, colsPerRow });
-        Im2Col3DHelper.Im2Col3D(input5D, im2colMatrix, K, Stride, Padding);
-
-        // Tape entry: input5D --im2col--> im2colMatrix. Backward is col2im.
-        // Other downstream tape ops (MatMul, Reshape, Permute, ...) will
-        // contribute to ∂L/∂im2colMatrix automatically; this node converts
-        // that into ∂L/∂input5D via the col2im scatter.
+        // Im2col is manual data movement rather than an Engine operation.
+        // Bind it explicitly to whichever training graph is active below:
+        // a lazy graph node for compiled training, or a manual tape node
+        // for eager training.
         int kernelSizeCapture = K;
         int strideCapture = Stride;
         int paddingCapture = Padding;
         int[] inputShapeCapture = (int[])input5D.Shape.ToArray().Clone();
-        im2colMatrix = RegisterManualBackwardNode(
-            im2colMatrix,
-            new[] { input5D },
-            gradOutput =>
-            {
-                var gradInput = new Tensor<T>(inputShapeCapture);
-                Im2Col3DHelper.Col2Im3D(gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
-                return new Tensor<T>?[] { gradInput };
-            });
+
+        Tensor<T> im2colMatrix;
+        var graphScope = GraphMode.Current;
+        if (graphScope is not null)
+        {
+            // Compiled training traces with lazy tensors. Reading input5D
+            // eagerly here would consume the trace-time placeholder and bake
+            // a stale im2col matrix into every replay. Record im2col as a real
+            // graph node so it executes after its input producer on every
+            // step, and attach the matching col2im backward edge so gradients
+            // continue through stacked Conv3D layers.
+            graphScope.BindEngineIfUnset(Engine);
+            var graphInput = input5D;
+            im2colMatrix = graphScope.RecordUnary(
+                LazyNodeType.Custom,
+                "Im2Col3D",
+                graphInput,
+                new[] { rowsTotal, colsPerRow },
+                (_, output) => Im2Col3DHelper.Im2Col3D(
+                    graphInput, output, kernelSizeCapture, strideCapture, paddingCapture),
+                (gradOutput, inputs, _, _, engine, grads) =>
+                {
+                    var gradInput = new Tensor<T>(inputShapeCapture);
+                    Im2Col3DHelper.Col2Im3D(
+                        gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
+                    DifferentiableOps.AccumulateGrad(grads, inputs[0], gradInput, engine);
+                });
+        }
+        else
+        {
+            // Tape entry: input5D --im2col--> im2colMatrix. Other
+            // downstream tape ops contribute dL/d(im2colMatrix); this node
+            // converts it to dL/d(input5D) via col2im scatter-add.
+            im2colMatrix = new Tensor<T>(new[] { rowsTotal, colsPerRow });
+            Im2Col3DHelper.Im2Col3D(input5D, im2colMatrix, K, Stride, Padding);
+            im2colMatrix = RegisterManualBackwardNode(
+                im2colMatrix,
+                new[] { input5D },
+                gradOutput =>
+                {
+                    var gradInput = new Tensor<T>(inputShapeCapture);
+                    Im2Col3DHelper.Col2Im3D(
+                        gradOutput, gradInput, kernelSizeCapture, strideCapture, paddingCapture);
+                    return new Tensor<T>?[] { gradInput };
+                });
+        }
 
         // K_flat: kernel reshaped from [CO, CI, K, K, K] to [CO, CI·K³].
         var kFlat = Engine.Reshape(_kernels, new[] { OC, colsPerRow });
@@ -891,57 +994,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all kernel and bias parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_kernels.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters (kernels followed by biases).</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count does not match expected.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters: derive inputChannels from vector length.
-        // Layout: kernels [outputChannels, inputChannels, K, K, K] + biases [outputChannels].
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int kernelVol = OutputChannels * KernelSize * KernelSize * KernelSize;
-            if (OutputChannels <= 0 || kernelVol <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on deferred-shape Conv3DLayer before OutputChannels/KernelSize are known.");
-            int candidateInputChannels = (parameters.Length - OutputChannels) / kernelVol;
-            if (candidateInputChannels <= 0
-                || candidateInputChannels * kernelVol + OutputChannels != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputChannels for Conv3DLayer from {parameters.Length} parameters.");
-            // Use KernelSize for D/H/W dummy spatial dims so the
-            // OnFirstForward shape check (input dims >= kernel) passes.
-            ResolveFromShape(new[] { candidateInputChannels, KernelSize, KernelSize, KernelSize });
-        }
-
-        int expected = _kernels.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
-
-        int index = 0;
-        _kernels = new Tensor<T>(_kernels._shape, parameters.Slice(index, _kernels.Length));
-        index += _kernels.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(index, _biases.Length));
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
-    }
-
-    /// <summary>
     /// Gets the kernel weights tensor.
     /// </summary>
     /// <returns>The kernel tensor with shape [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize].</returns>
@@ -958,19 +1010,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>The kernel tensor.</returns>
     public Tensor<T> GetFilters() => _kernels;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The sum of the number of kernel weights and biases.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This equals: OutputChannels * InputChannels * KernelSize^3 + OutputChannels
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _kernels.Length + _biases.Length;
 
     /// <summary>
     /// Creates a deep copy of the layer with the same configuration and parameters.

@@ -69,6 +69,17 @@ namespace AiDotNet.Diffusion.VAE;
     [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114")]
 public class StandardVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Same layers, same order, as the previous GetParameters walked. The two preamble
+    /// calls are kept because an unresolved lazy layer contributes nothing, and the
+    /// old getter resolved shapes for exactly that reason.</remarks>
+    protected override void RegisterComponents()
+    {
+        EnsureLayersInitialized();
+        TriggerLazyShapeResolution();
+        foreach (var layer in EnumerateAllLayers()) RegisterParameterComponent(layer);
+    }
+
     /// <summary>
     /// Standard Stable Diffusion latent scale factor.
     /// </summary>
@@ -198,9 +209,6 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
-
-    /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -550,56 +558,10 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes so the count matches GetParameters().Length even
-        // pre-forward (lazy layers otherwise report their architectural count here
-        // but an empty GetParameters() vector — the count-equality failure source).
-        TriggerLazyShapeResolution();
-
-        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
-        // Must match GetParameters().Length exactly — earlier "approximate" formulas
-        // diverged from the real per-layer count and broke contract tests asserting
-        // ParameterCount == GetParameters().Length.
-        long count = 0;
-        AddLayerCount(ref count, _inputConv);
-        for (int i = 0; i < _encoderLayers.Count; i++) AddLayerCount(ref count, _encoderLayers[i]);
-        AddLayerCount(ref count, _meanConv);
-        AddLayerCount(ref count, _logVarConv);
-        AddLayerCount(ref count, _quantConv);
-        AddLayerCount(ref count, _postQuantConv);
-        for (int i = 0; i < _decoderLayers.Count; i++) AddLayerCount(ref count, _decoderLayers[i]);
-        AddLayerCount(ref count, _outputConv);
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
         if (layer != null) count += (int)layer.ParameterCount;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes so the vector matches ParameterCount even
-        // before the first real forward (lazy layers otherwise contribute 0).
-        TriggerLazyShapeResolution();
-
-        // Single-allocation concat over the same layers GetParameterChunks walks.
-        // The previous List<T> + per-element Add + ToArray triple-copied the whole
-        // parameter vector (~3x), OOM'ing the runner when a paper-scale VAE is
-        // materialised (e.g. during a foundation model's Clone). Vector<T>.Concatenate
-        // pre-sizes one result and vectorized-copies each layer's params in once.
-        var parts = new List<Vector<T>>();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            if (layer == null) continue;
-            parts.Add(layer.GetParameters());
-        }
-
-        return Vector<T>.Concatenate(parts.ToArray());
     }
 
     /// <inheritdoc />
@@ -649,38 +611,6 @@ public class StandardVAE<T> : VAEModelBase<T>
             foreach (var parameter in EnumerateMaterializedParameters(subLayer))
                 yield return parameter;
         }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes first so each layer's slice is sized to its
-        // real parameter count; otherwise lazy layers size to 0 and incoming
-        // values are silently dropped (the round-trip bug).
-        _preserveMaterializedParameters = true;
-        TriggerLazyShapeResolution();
-
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-
-        foreach (var layer in _encoderLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_meanConv, parameters, ref index);
-        SetLayerParameters(_logVarConv, parameters, ref index);
-        SetLayerParameters(_quantConv, parameters, ref index);
-        SetLayerParameters(_postQuantConv, parameters, ref index);
-
-        foreach (var layer in _decoderLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
     }
 
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)

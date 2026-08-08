@@ -49,6 +49,15 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ResearchPaper("Adversarial Diffusion Distillation", "https://arxiv.org/abs/2311.17042", Year = 2023, Authors = "Sauer et al.")]
 public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_vae);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const int SDXL_CONTEXT_DIM = 2048;
     private const double DEFAULT_GUIDANCE = 0.0;
@@ -67,7 +76,6 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new SDXL Turbo model.
@@ -109,49 +117,8 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
             numResBlocksPerLevel: 2, latentScaleFactor: 0.18215, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Materialize the UNet's top-level time-embedding DenseLayers (and any
-        // similarly-lazy sublayers of the VAE) before reading. The per-ResBlock
-        // probe-Forward in DiffusionResBlock's ctor materialises the weights
-        // INSIDE each block, but the top-level _timeEmbedMlp1/2 on the UNet
-        // are only resolved when PredictNoise runs. Without these triggers,
-        // GetParameters() returns a vector shorter than ParameterCount and
-        // SetParameters' length check throws on roundtrip (see
-        // SDXLTurboModel_GetSetParameters_RoundTrips). Both triggers are
-        // idempotent — first call resolves, subsequent calls are no-ops.
-        _predictor.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        var pp = _predictor.GetParameters();
-        var vp = _vae.GetParameters();
-        var combined = new Vector<T>(pp.Length + vp.Length);
-        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
-        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // See GetParameters: resolve lazy layers BEFORE reading ParameterCount
-        // so the length check compares apples-to-apples against the
-        // architecturally-derived parameter count (which already includes the
-        // top-level time-embedding MLPs).
-        _predictor.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        int pc = checked((int)_predictor.ParameterCount);
-        int vc = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)pc + vc;
-        if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
-        var pp = new Vector<T>(pc);
-        var vp = new Vector<T>(vc);
-        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
-        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
-        _predictor.SetParameters(pp);
-        _vae.SetParameters(vp);
-    }
+
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 

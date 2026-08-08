@@ -606,15 +606,18 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MedSynthGenerator_FitAndGenerate_ProducesValidOutput()
+    public async Task MedGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
-        var options = new MedSynthOptions<double>
+        var options = new MedGANOptions<double>
         {
             Seed = Seed,
-            LatentDimension = 16,
-            EncoderDimensions = [64, 64],
+            // Shrunk from the paper's 128 to keep this integration test inside its budget. The
+            // generator's shortcut connection is an addition, so the generator widths and the
+            // prior must track the embedding dimension exactly.
+            EmbeddingDimension = 16,
+            GeneratorDimensions = [16, 16],
             DiscriminatorDimensions = [64, 64],
             BatchSize = 50,
             VGMModes = 3,
@@ -623,13 +626,13 @@ public class SyntheticTabularGeneratorIntegrationTests
             ClipNorm = 1.0
         };
 
-        var generator = new MedSynthGenerator<double>(arch, options);
+        var generator = new MedGANGenerator<double>(arch, options);
         generator.Fit(data, columns, FewEpochs);
 
         Assert.True(generator.IsFitted);
 
         var generated = generator.Generate(GenSamples);
-        ValidateGeneratedData(generated, GenSamples, TotalCols, "MedSynth");
+        ValidateGeneratedData(generated, GenSamples, TotalCols, "medGAN");
     }
 
     #endregion

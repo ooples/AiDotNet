@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,8 +40,52 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class FullyConnectedLayer<T> : LayerBase<T>
+// ForwardTraced works in exactly two forms and says so: a rank-1 input is reshaped to [1, N] on the
+// way in and back to rank 1 on the way out ("Preserve original rank: if input was 1D, output should
+// be 1D"), and everything else goes through `Engine.TensorMatMul(input, weightsT)` under the comment
+// "[batch, input] * [input, output] -> [batch, output]". One BatchOptional declaration covers both,
+// which is exact rather than merely convenient here: the rank-1 case IS the batch axis being absent.
+//
+// Higher ranks are deliberately NOT declared. OnFirstForward accepts rank >= 1 and reads Shape[^1]
+// as the feature size, so a rank-3 tensor does reach the matmul - but nothing in this layer's own
+// shape code states what comes back out, and declaring a rank on a guess is the exact failure this
+// contract exists to prevent.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the output width is configuration, not input: it is the constructor's
+    /// <c>outputSize</c>, which every constructor forwards to the base as the output shape and which
+    /// OnFirstForward reads straight back as <c>int outputSize = OutputShape[0];</c> before allocating
+    /// <c>_weights</c> as <c>[outputSize, inputSize]</c>. Reading it off <c>OutputShape</c> rather than
+    /// restating a number keeps the relation true for whatever width the caller actually built.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        int outputSize = OutputShape.Length > 0 ? OutputShape[0] : -1;
+        if (outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.
     /// </summary>
@@ -374,10 +418,18 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         _biases = new Tensor<T>([outputSize]);
     }
 
-    /// <summary>
-    /// Gets the total number of trainable parameters (weights + biases).
-    /// </summary>
-    public override long ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0];
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
 
     /// <summary>
     /// Initializes the weights and biases with appropriate values for effective training.
@@ -440,7 +492,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// used as the final network output.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Auto-reshape 1D input to [1, N] for matmul compatibility
@@ -527,62 +579,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) of the layer as a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
-    /// 
-    /// The parameters include:
-    /// - All the weight values (the majority of the parameters)
-    /// - All the bias values (one per output neuron)
-    /// 
-    /// This combined list is useful for:
-    /// - Saving a trained model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need all parameters together
-    /// 
-    /// For example, a layer with 100 inputs and 10 outputs would have:
-    /// - 1,000 weight parameters (100 × 10)
-    /// - 10 bias parameters (one per output)
-    /// - Totaling 1,010 parameters in the returned vector
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Deferred-shape layers cloned/walked before first Forward have
-        // zero-length placeholder weights/biases — return empty so Clone
-        // / SetParameters / ParameterCount roundtrip. Real parameters
-        // are picked up on the next Collect after the first Forward.
-        if (!IsShapeResolved) return new Vector<T>(0);
-
-        // Flatten weight tensor and concatenate with biases
-        int weightCount = _weights.Shape[0] * _weights.Shape[1];
-        int biasCount = _biases.Shape[0];
-        var parameters = new Vector<T>(weightCount + biasCount);
-
-        int index = 0;
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                parameters[index++] = _weights[i, j];
-            }
-        }
-        for (int i = 0; i < biasCount; i++)
-        {
-            parameters[index++] = _biases[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
     /// Gets the gradients of all trainable parameters in this layer.
     /// </summary>
     public override Vector<T> GetParameterGradients()
@@ -610,83 +606,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         }
 
         return gradients;
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights and biases) of the layer from a single vector.
-    /// This is useful for loading saved model weights or for implementing optimization algorithms
-    /// that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the exact right length
-    /// - The values are distributed back to the weights and biases
-    /// - This allows loading previously trained weights
-    /// 
-    /// Use cases include:
-    /// - Restoring a saved model
-    /// - Using pre-trained weights
-    /// - Testing specific weight configurations
-    /// 
-    /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when the layer is still in lazy
-        // placeholder state. The vector length + known outputSize uniquely
-        // determines inputSize for the (inputSize × outputSize + outputSize)
-        // layout — fixes #1221 where serialize/deserialize round-trip silently
-        // dropped trained weights.
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int outputSize = OutputShape[0];
-            if (outputSize <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on a deferred-shape FullyConnectedLayer before outputSize is known.");
-            int candidateInput = (parameters.Length - outputSize) / outputSize;
-            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputSize for FullyConnectedLayer from {parameters.Length} parameters " +
-                    $"and outputSize={outputSize}.");
-            ResolveFromShape(new[] { candidateInput });
-        }
-
-        int weightCount = _weights.Shape[0] * _weights.Shape[1];
-        int biasCount = _biases.Shape[0];
-
-        if (parameters.Length != weightCount + biasCount)
-        {
-            throw new ArgumentException($"Expected {weightCount + biasCount} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        // Extract weights from flat vector
-        int index = 0;
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                _weights[i, j] = parameters[index++];
-            }
-        }
-
-        // Extract biases
-        for (int i = 0; i < biasCount; i++)
-        {
-            _biases[i] = parameters[index++];
-        }
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

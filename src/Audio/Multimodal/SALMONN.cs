@@ -93,9 +93,14 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
     /// <summary>
     /// Creates a SALMONN model in native training mode.
     /// </summary>
+    // SALMONN (Tang et al., "SALMONN: Towards Generic Hearing Abilities for Large Language Models",
+    // arXiv 2310.13289) trains its audio-text LLM with CROSS-ENTROPY over text tokens (window-level
+    // Q-Former + LoRA on a Vicuna backbone). AudioNeuralNetworkBase defaults to MeanSquaredErrorLoss,
+    // which this model silently inherited, so it was descending MSE on token LOGITS — an objective
+    // the paper never uses. The head emits raw logits, so use the fused log-softmax/NLL form.
     public SALMONN(NeuralNetworkArchitecture<T> architecture, SALMONNOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SALMONNOptions();
         _useNativeMode = true;
@@ -198,7 +203,7 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

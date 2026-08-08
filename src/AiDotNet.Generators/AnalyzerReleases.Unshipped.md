@@ -1,4 +1,4 @@
-### New Rules
+﻿### New Rules
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------
@@ -27,3 +27,29 @@ AIDN076 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, C
 AIDN060 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double field in generic <T> class
 AIDN061 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[] field in generic <T> class
 AIDN062 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[,]/double[][] field in generic <T> class
+ADN0050 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0051 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0052 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0053 | AiDotNet.Serialization | Error | LayerStateGenerator
+ADN0054 | AiDotNet.Serialization | Warning | LayerStateGenerator
+ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
+ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
+ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
+ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two tensor layouts accept the same rank with different axis names
+ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
+ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
+ADNSHAPE004 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing
+ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
+AIDN070 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Layer does not use automatic parameter discovery
+AIDN071 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Parameter surface is derived and should not be overridden
+AIDN072 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model parameter surface is derived and should not be overridden
+AIDN073 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Field holds weights the parameter generator cannot see
+AIDN080 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Layer does not use automatic parameter discovery
+AIDN081 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Parameter surface is derived and should not be overridden
+AIDN082 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model parameter surface is derived and should not be overridden
+AIDN083 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Field holds weights the parameter generator cannot see
+ADNGEN002 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, [ModelInput] contradicts the IFullModel<T,TIn,TOut> the model actually implements
+ADNPERF001 | AiDotNet.Performance | Error | ShapeAllocationValidationGenerator, Shape.ToArray() allocates a throwaway int[] for a read-only use
+ADNSHAPE005 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, [LayerProperty] shape metadata contradicts the declared [TensorLayout] ranks
+ADNSHAPE006 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer declares no shape contract, so nothing can reason about its output shape
+ADNTRACE001 | AiDotNet.Correctness | Error | ForwardRecursionValidationGenerator, base.Forward(...) inside a ForwardTraced override is infinite recursion

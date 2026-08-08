@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -169,7 +169,28 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _qTable.Count * _options.ActionSize;
+    /// <summary>
+    /// The number of Q-values actually stored: the sum of each state's action entries.
+    /// </summary>
+    /// <remarks>
+    /// NOT <c>_qTable.Count * ActionSize</c>, which is what ParameterCount, GetParameters and
+    /// SetParameters all used to compute. That product is only correct when every visited state has
+    /// explored every action, which is exactly what a tabular agent does not do — states are added
+    /// as they are seen and actions as they are tried. Meanwhile GetParameters' write loop always
+    /// wrote the REAL entry count, so the allocated length and the written length disagreed
+    /// whenever the table was ragged: trailing slots left as default, or an index overflow.
+    /// </remarks>
+    private long QTableEntryCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var state in _qTable) total += state.Value.Count;
+            return total;
+        }
+    }
+
+    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -204,7 +225,11 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     }
     public override Vector<T> GetParameters()
     {
-        int paramCount = _qTable.Count > 0 ? _qTable.Count * _options.ActionSize : 1;
+        // Length 0 when nothing has been learned yet, matching ParameterCount. The previous
+        // `: 1` invented a parameter the agent does not have, purely to satisfy a test that
+        // asserted a freshly constructed agent has parameters. That premise was wrong for
+        // tabular RL and the padding is what desynchronised the two APIs.
+        int paramCount = checked((int)QTableEntryCount);
         var v = new Vector<T>(paramCount);
         int idx = 0;
 
@@ -212,8 +237,6 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
             foreach (var a in s.Value)
                 v[idx++] = a.Value;
 
-        if (idx == 0)
-            v[0] = NumOps.Zero;
 
         return v;
     }

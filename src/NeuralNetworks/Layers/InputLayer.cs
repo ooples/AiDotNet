@@ -32,7 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Input)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, SupportsBackpropagation = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class InputLayer<T> : LayerBase<T>
+// ForwardTraced is literally `return input;` - the identity, at any rank.
+[ElementWiseShape(Note = "Identity passthrough marking the network's entry point.")]
+[AutoParameters]
+public partial class InputLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -86,7 +89,8 @@ public class InputLayer<T> : LayerBase<T>
     /// The layer is automatically set up to pass data through without changing it.
     /// </para>
     /// </remarks>
-    public InputLayer(int inputSize)
+    public InputLayer(
+        int inputSize)
         : base([inputSize], [inputSize], new IdentityActivation<T>() as IActivationFunction<T>)
     {
     }
@@ -159,59 +163,9 @@ public class InputLayer<T> : LayerBase<T>
     /// as its purpose is just to feed data into the network.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return input;
-    }
-
-    /// <summary>
-    /// Update parameters is a no-op for the input layer since it has no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused in this layer).</param>
-    /// <remarks>
-    /// <para>
-    /// This method is implemented as required by the LayerBase interface but does nothing for the InputLayer
-    /// since it has no parameters to update.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method exists but does nothing because there's nothing to update.
-    /// 
-    /// Since the input layer:
-    /// - Has no weights or biases
-    /// - Doesn't transform the data
-    /// - Doesn't learn from training
-    /// 
-    /// This method is included only because all layers must have this method,
-    /// but it doesn't actually do anything for the input layer.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Input layer has no parameters to update
-    }
-
-    /// <summary>
-    /// Returns an empty vector since the input layer has no trainable parameters.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector since the InputLayer has no trainable parameters.
-    /// It is implemented as required by the LayerBase interface.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because there are no parameters.
-    /// 
-    /// Since the input layer:
-    /// - Has no weights or biases
-    /// - Doesn't have any learnable values
-    /// 
-    /// This method returns an empty vector to indicate there are no parameters.
-    /// Other layers would return their weights and biases here.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // InputLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

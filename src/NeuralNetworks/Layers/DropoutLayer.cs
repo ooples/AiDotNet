@@ -38,7 +38,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4")]
-public class DropoutLayer<T> : LayerBase<T>
+// Value-only: zeroes elements, never resizes. Rank-agnostic, so naming axes would invent meanings it
+// does not have - OutputAxesFor is generated as the identity across every rank.
+[ElementWiseShape(Note = "Randomly zeroes elements during training; shape is untouched at any rank.")]
+[AutoParameters]
+public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The probability of dropping out (deactivating) a neuron during training.
@@ -177,6 +181,10 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    /// <remarks>Dropout masks elements in place, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DropoutLayer{T}"/> class.
     /// </summary>
@@ -216,7 +224,8 @@ public class DropoutLayer<T> : LayerBase<T>
     /// will throw an exception.
     /// </para>
     /// </remarks>
-    public DropoutLayer(double dropoutRate = 0.5)
+    public DropoutLayer(
+        [LayerState] double dropoutRate = 0.5)
         : base(Array.Empty<int>(), []) // Dropout layer doesn't change the shape of the input
     {
         if (dropoutRate < 0 || dropoutRate >= 1)
@@ -283,7 +292,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// forcing the network to be resilient and not depend too much on any single neuron.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
@@ -320,85 +329,35 @@ public class DropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
+    /// Refreshes the mask tensor captured by a fused compiled-training plan without
+    /// replacing the tensor reference embedded in that plan.
     /// </summary>
-    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
     /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the dropout layer has no
-    /// trainable parameters to update, so it performs no operation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method does nothing for dropout layers because they have no adjustable weights.
-    /// 
-    /// Unlike most layers (like convolutional or dense layers):
-    /// - Dropout layers don't have weights or biases to learn
-    /// - They just apply a random on/off pattern and scaling
-    /// - There's nothing to update during training
-    /// 
-    /// This method exists only to fulfill the requirements of the base layer class.
-    /// The dropout layer participates in training by modifying activations and gradients,
-    /// not by updating internal parameters.
-    /// </para>
+    /// A compiled plan traces <see cref="Forward"/> once and replays the resulting
+    /// graph. Replacing <see cref="_dropoutMask"/> on a later call cannot affect that
+    /// graph because it still owns the original tensor reference. Mutating the
+    /// captured tensor in place gives each replay a fresh deterministic mask while
+    /// preserving the compiled graph and its optimizer state.
     /// </remarks>
-    public override void UpdateParameters(T learningRate)
+    internal void RefreshCompiledTrainingMask()
     {
-        // Dropout layer has no parameters to update
-    }
+        if (!IsTrainingMode || _dropoutMask is null || _dropoutMask.Length == 0)
+            return;
 
-    /// <summary>
-    /// Gets the trainable parameters of the layer.
-    /// </summary>
-    /// <returns>
-    /// An empty vector since dropout layers have no trainable parameters.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the dropout layer has no
-    /// trainable parameters to retrieve, so it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because dropout layers have no learnable values.
-    /// 
-    /// Unlike layers with weights and biases:
-    /// - Dropout layers don't have any parameters that change during training
-    /// - The dropout rate and scale are fixed when the layer is created
-    /// - There are no values to save when storing a trained model
-    /// 
-    /// This method returns an empty vector (a vector of length zero),
-    /// indicating there are no parameters to collect.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Dropout layer has no trainable parameters
-        return new Vector<T>(0);
-    }
+        ulong counter = AdvanceSeedCounter();
+        int? perCallSeed = RandomSeed.HasValue
+            ? DeriveSeed32(RandomSeed.Value, counter)
+            : (int?)null;
 
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is not shown in the original code, but would typically be implemented to match
-    /// the GetParameters method. For a dropout layer, it would accept an empty vector since there
-    /// are no parameters to set.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would do nothing because dropout layers have no adjustable parameters.
-    /// 
-    /// Since dropout layers don't have learnable parameters:
-    /// - There's nothing to set or update
-    /// - The method would only verify that the input is an empty vector
-    /// 
-    /// This method would exist only to fulfill the contract of the base layer class.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Dropout layer has no parameters to set
-        if (parameters.Length != 0)
-        {
-            throw new ArgumentException($"Expected 0 parameters, but got {parameters.Length}");
-        }
+        using var refreshedMask = Engine.TensorDropoutMask<T>(
+            _dropoutMask._shape, _dropoutRate, _scale, perCallSeed);
+        if (refreshedMask.Length != _dropoutMask.Length)
+            throw new InvalidOperationException(
+                $"Compiled dropout mask length changed from {_dropoutMask.Length} to {refreshedMask.Length}.");
+
+        refreshedMask.AsSpan().CopyTo(_dropoutMask.AsWritableSpan());
+        _dropoutMask.IncrementVersion();
+        Engine.InvalidatePersistentTensor(_dropoutMask);
     }
 
     /// <summary>

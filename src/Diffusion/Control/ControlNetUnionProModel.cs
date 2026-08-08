@@ -53,6 +53,14 @@ namespace AiDotNet.Diffusion.Control;
     [ResearchPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987")]
 public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 7.5;
 
@@ -71,21 +79,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            // #1237: long accumulator. ControlNet Union Pro's encoder cache
-            // can grow unbounded (each input modality registers its own
-            // encoder); cumulative parameter count crosses int.MaxValue at
-            // foundation-scale base U-Nets + multi-modality encoders.
-            long count = _baseUNet.ParameterCount;
-            foreach (var enc in _encoderCache.Values)
-                count += enc.ParameterCount;
-            return count;
-        }
-    }
+
 
     /// <summary>
     /// Initializes a new ControlNet Union Pro model.
@@ -153,39 +147,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        var baseParams = _baseUNet.GetParameters();
-        for (int i = 0; i < baseParams.Length; i++) allParams.Add(baseParams[i]);
-        foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
-        {
-            var encParams = kvp.Value.GetParameters();
-            for (int i = 0; i < encParams.Length; i++) allParams.Add(encParams[i]);
-        }
-        return new Vector<T>(allParams.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        int baseCount = checked((int)_baseUNet.ParameterCount);
-        var baseParams = new T[baseCount];
-        for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
-        _baseUNet.SetParameters(new Vector<T>(baseParams));
-        offset += baseCount;
-
-        foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
-        {
-            int encCount = checked((int)kvp.Value.ParameterCount);
-            var encParams = new T[encCount];
-            for (int i = 0; i < encCount; i++) encParams[i] = parameters[offset + i];
-            kvp.Value.SetParameters(new Vector<T>(encParams));
-            offset += encCount;
-        }
-    }
 
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()

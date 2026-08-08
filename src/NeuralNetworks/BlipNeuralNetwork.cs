@@ -192,7 +192,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -288,7 +288,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         int embeddingDimension = 256,
         int maxSequenceLength = 35,
         int imageSize = 384,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         BlipOptions? options = null)
         : base(architecture,
@@ -404,7 +404,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         int numHeads = 12,
         int mlpDim = 3072,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         BlipOptions? options = null)
         : base(architecture,
@@ -1513,7 +1513,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, target, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, target, _optimizer);
         }
         finally
         {
@@ -1586,141 +1586,6 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     #endregion
 
     #region Parameter Management
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (!_useNativeMode) return 0;
-
-            int count = 0;
-
-            // CLS tokens and positional embeddings first
-            if (_visionClsToken is not null) count += _visionClsToken.Rows * _visionClsToken.Columns;
-            if (_textClsToken is not null) count += _textClsToken.Rows * _textClsToken.Columns;
-            if (_visionPositionalEmbeddings is not null) count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
-            if (_textPositionalEmbeddings is not null) count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
-
-            // Add layer parameters from all native layer lists
-            foreach (var layer in _visionEncoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _textEncoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _textDecoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _crossAttentionLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            return count;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-
-        if (!_useNativeMode) return parameters;
-
-        // CLS tokens and positional embeddings first
-        if (_visionClsToken is not null)
-        {
-            for (int i = 0; i < _visionClsToken.Rows; i++)
-            {
-                for (int j = 0; j < _visionClsToken.Columns; j++)
-                {
-                    parameters[index++] = _visionClsToken[i, j];
-                }
-            }
-        }
-
-        if (_textClsToken is not null)
-        {
-            for (int i = 0; i < _textClsToken.Rows; i++)
-            {
-                for (int j = 0; j < _textClsToken.Columns; j++)
-                {
-                    parameters[index++] = _textClsToken[i, j];
-                }
-            }
-        }
-
-        if (_visionPositionalEmbeddings is not null)
-        {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
-                {
-                    parameters[index++] = _visionPositionalEmbeddings[i, j];
-                }
-            }
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
-            {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
-                {
-                    parameters[index++] = _textPositionalEmbeddings[i, j];
-                }
-            }
-        }
-
-        // Layer parameters from all native layer lists
-        foreach (var layer in _visionEncoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        foreach (var layer in _textEncoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        foreach (var layer in _textDecoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        foreach (var layer in _crossAttentionLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[index++] = layerParams[i];
-            }
-        }
-
-        return parameters;
-    }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)

@@ -324,12 +324,12 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultGroundingDetectionLayers(
                     _options.VisionDim,
-                    768,
-                    _options.VisionDim,
-                    256,
+                    _options.TextEmbeddingDim,
+                    _options.DecoderDim,
+                    _options.DetectionDim,
                     _options.NumVisionLayers,
-                    6,
-                    6,
+                    _options.NumFusionLayers,
+                    _options.NumDecoderLayers,
                     _options.NumHeads,
                     _options.DropoutRate
                 )
@@ -340,8 +340,11 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb;
+        // Each vision block is one residual TransformerEncoderLayer (+ an optional DropoutLayer);
+        // the encoder prefix is the linear input projection (patch-embedding stand-in) and the
+        // trailing prefix is the final encoder LayerNorm — 2 non-block layers total.
+        int lpb = _options.DropoutRate > 0 ? 2 : 1;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -372,8 +375,14 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -445,9 +454,10 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new OWLv2Options(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new OWLv2<T>(Architecture, mp, _options);
-        return new OWLv2<T>(Architecture, _options);
+            return new OWLv2<T>(Architecture, mp, options);
+        return new OWLv2<T>(Architecture, options);
     }
 
     private void ThrowIfDisposed()

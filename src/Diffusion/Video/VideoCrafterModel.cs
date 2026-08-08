@@ -82,6 +82,15 @@ namespace AiDotNet.Diffusion.Video;
 [ResearchPaper("VideoCrafter1: Open Diffusion Models for High-Quality Video Generation", "https://arxiv.org/abs/2310.19512", Year = 2023, Authors = "Chen et al.")]
 public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_videoUNet);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     #region Constants
 
     /// <summary>
@@ -657,100 +666,9 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            var count = 0;
-            var unetParams = _videoUNet.GetParameters();
-            if (unetParams != null)
-            {
-                count += unetParams.Length;
-            }
 
-            var vaeParams = _temporalVAE.GetParameters();
-            if (vaeParams != null)
-            {
-                count += vaeParams.Length;
-            }
 
-            return count;
-        }
-    }
 
-    /// <summary>
-    /// Gets all parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _videoUNet.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
-
-        var totalLength = (unetParams?.Length ?? 0) + (vaeParams?.Length ?? 0);
-        var combined = new Vector<T>(totalLength);
-        var offset = 0;
-
-        if (unetParams != null)
-        {
-            for (int i = 0; i < unetParams.Length; i++)
-            {
-                combined[offset + i] = unetParams[i];
-            }
-            offset += unetParams.Length;
-        }
-
-        if (vaeParams != null)
-        {
-            for (int i = 0; i < vaeParams.Length; i++)
-            {
-                combined[offset + i] = vaeParams[i];
-            }
-        }
-
-        return combined;
-    }
-
-    /// <summary>
-    /// Sets all parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var unetParamCount = _videoUNet.GetParameters()?.Length ?? 0;
-        var vaeParamCount = _temporalVAE.GetParameters()?.Length ?? 0;
-
-        if (parameters.Length != unetParamCount + vaeParamCount)
-        {
-            throw new ArgumentException(
-                $"Expected {unetParamCount + vaeParamCount} parameters but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var offset = 0;
-
-        if (unetParamCount > 0)
-        {
-            var unetParams = new Vector<T>(unetParamCount);
-            for (int i = 0; i < unetParamCount; i++)
-            {
-                unetParams[i] = parameters[offset + i];
-            }
-            _videoUNet.SetParameters(unetParams);
-            offset += unetParamCount;
-        }
-
-        if (vaeParamCount > 0)
-        {
-            var vaeParams = new Vector<T>(vaeParamCount);
-            for (int i = 0; i < vaeParamCount; i++)
-            {
-                vaeParams[i] = parameters[offset + i];
-            }
-            _temporalVAE.SetParameters(vaeParams);
-        }
-    }
 
     #endregion
 

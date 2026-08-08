@@ -38,7 +38,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Reads from memory into the query stream: shape-preserving at rank 3 [Batch, Time, Features].
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "1, 4")] - a single query row of
+// 4 features, so [Batch, Features]. ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -209,32 +217,6 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T>? _outputBiasGradient;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because the MemoryReadLayer has trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that MemoryReadLayer can be trained through backpropagation. The layer
-    /// has trainable parameters (weights and biases) that are updated during training to optimize
-    /// the memory reading process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal values (weights and biases) that change during training
-    /// - It will improve its performance as it sees more data
-    /// - It learns to better focus attention on relevant parts of memory
-    /// 
-    /// During training, the layer learns:
-    /// - Which features in the input are important for querying memory
-    /// - How to transform retrieved memory information
-    /// - How to combine everything into a useful output
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -618,6 +600,45 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Engine.InvalidatePersistentTensor(_outputBias);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A memory read projects the query onto the memory and returns a vector of the width this layer
+    /// was constructed with - <c>outputDimension</c> - so the feature axis is <c>Fixed</c> at that
+    /// width, not carried through from the query. Leading axes pass straight through.
+    /// </para>
+    /// <para>
+    /// Written by hand to REPLACE the generated contract. The declared layouts name the same axes on
+    /// both sides at both ranks, from which the generator derived <c>Same(Features)</c>. That reads
+    /// the attributes correctly and describes the layer wrongly: fed [6,7], this returns [6,4] when
+    /// built with <c>outputDimension = 4</c> and [6,6] when built with 6. The width tracking the
+    /// constructor argument is exactly what the sweep's multiple construction profiles exist to
+    /// expose - one profile alone would have shown a constant and invited <c>Fixed(4)</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var declaredOutput = GetOutputShape();
+        int width = declaredOutput is { Length: > 0 } ? declaredOutput[^1] : 0;
+        if (width <= 0) return null;
+
+        return inputRank switch
+        {
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Declares named input ports for this multi-input layer.
     /// </summary>
@@ -630,7 +651,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("query", out var query) || query == null)
@@ -658,7 +679,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// quick tests or when a pipeline only supports a single input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Promote rank-1 [features] to rank-2 [1, features] so the downstream
         // TensorMatMul (which requires rank >= 2) works for the standalone
@@ -816,112 +837,6 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [batchSize, outputDim], GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the memory read layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. It concatenates
-    /// the key weights, value weights, output weights, and output bias into a single vector. This is useful
-    /// for optimization algorithms that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values in the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all the weights and biases from this layer
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The method carefully arranges all parameters in a specific order
-    /// so they can be correctly restored later.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector.Concatenate to efficiently combine all parameters
-        return Vector<T>.Concatenate(
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray())
-        );
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters for the memory read layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters of the layer from a single vector. It extracts the appropriate
-    /// portions of the input vector for each parameter (key weights, value weights, output weights, and output bias).
-    /// This is useful for loading saved model weights or for implementing optimization algorithms that operate
-    /// on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The method extracts portions for each weight matrix and bias vector
-    /// - It places each value in its correct position
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters,
-    /// ensuring that all matrices and vectors maintain their correct dimensions.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int keySize = _keyWeights.Shape[0] * _keyWeights.Shape[1];
-        int valueSize = _valueWeights.Shape[0] * _valueWeights.Shape[1];
-        int outputSize = _outputWeights.Shape[0] * _outputWeights.Shape[1];
-        int biasSize = _outputBias.Length;
-        int totalParams = keySize + valueSize + outputSize + biasSize;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        // Set key weights using Tensor.FromVector
-        var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights._shape);
-        index += keySize;
-
-        // Set value weights
-        var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights._shape);
-        index += valueSize;
-
-        // Set output weights
-        var outputParams = parameters.SubVector(index, outputSize);
-        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights._shape);
-        index += outputSize;
-
-        // Set output bias
-        var biasParams = parameters.SubVector(index, biasSize);
-        _outputBias = Tensor<T>.FromVector(biasParams);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_keyWeights);
-        Engine.InvalidatePersistentTensor(_valueWeights);
-        Engine.InvalidatePersistentTensor(_outputWeights);
-        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

@@ -131,6 +131,10 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     public int ProjectionDimension => _options.ProjectionDim;
     public T Temperature => NumOps.FromDouble(_options.Temperature);
 
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -191,7 +195,10 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
             return;
         }
 
-        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        // Respect the configured ViT patch size. Deriving it from ImageSize forced every
+        // configuration to produce a 16x16 token grid and made small/custom inputs much
+        // more expensive than requested (for example, ImageSize=16 became PatchSize=1).
+        int patchSize = Math.Max(1, _options.PatchSize);
         Layers.Add(
             new PatchEmbeddingLayer<T>(
                 patchSize,
@@ -317,13 +324,14 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var clonedOptions = new DeCLIPOptions(_options);
         if (
             !_useNativeMode
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new DeCLIP<T>(Architecture, mp, _options);
-        return new DeCLIP<T>(Architecture, _options);
+            return new DeCLIP<T>(Architecture, mp, clonedOptions);
+        return new DeCLIP<T>(Architecture, clonedOptions, optimizer: null);
     }
 
     private Tensor<T> TokenizeText(string text)

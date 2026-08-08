@@ -73,6 +73,15 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ResearchPaper("eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", "https://arxiv.org/abs/2211.01324", Year = 2022, Authors = "Balaji et al.")]
 public class EDiffIModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 1024;
@@ -106,20 +115,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            // Trigger lazy resolution on both sub-models so the count is arch-derived
-            // (includes the U-Net's _timeEmbedMlp1/2 and VAE's lazy projections),
-            // matching what SetParameters validates against. Same lazy-init fix
-            // pattern as SDXLTurboModel / DDPMModel / RealESRGANModel.
-            _unet.TriggerLazyShapeResolution();
-            _vae.TriggerLazyShapeResolution();
-            return _unet.ParameterCount + _vae.ParameterCount;
-        }
-    }
+
 
     /// <summary>
     /// Gets the number of expert denoisers in the ensemble.
@@ -210,48 +206,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Resolve lazy shape so the returned vector matches ParameterCount.
-        _unet.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
 
-        for (int i = 0; i < unetParams.Length; i++)
-            combined[i] = unetParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[unetParams.Length + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _unet.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != unetCount + vaeCount)
-            throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < unetCount; i++)
-            unetParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[unetCount + i];
-
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

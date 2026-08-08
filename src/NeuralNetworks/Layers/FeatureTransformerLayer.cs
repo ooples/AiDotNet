@@ -1,4 +1,7 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.NeuralNetworks.Tabular;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -34,8 +37,48 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class FeatureTransformerLayer<T> : LayerBase<T>
+// RANK 2 ONLY, and not by convention: ForwardTraced and ApplyGLU both index Shape[1] directly (the
+// GLU column split is `int fullDim = input.Shape[1]`), so a tensor of any other rank would either
+// throw or split the wrong axis. The roles come from this layer's own ForwardTraced doc - "input
+// tensor of shape [batch_size, input_dim]" / "output tensor of shape [batch_size, output_dim]".
+// Batch is not optional for the same reason: an unbatched [features] input has no Shape[1].
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The width is <c>Fixed(_outputDim)</c>, and the <c>_outputDim * 2</c> that appears everywhere in
+    /// construction is NOT part of it. Each block is a fully-connected layer built at
+    /// <c>hiddenDim = _outputDim * 2</c> followed by <c>ApplyGLU</c>, which halves it back
+    /// (<c>halfDim = fullDim / 2</c>, values times gates) - the doubling exists only so the GLU has a
+    /// gate half to consume. A contract carrying the factor of two would be wrong by exactly that.
+    /// </para>
+    /// <para>
+    /// Guarded on there being at least one block, because with <c>numSharedLayers</c> and
+    /// <c>numStepSpecificLayers</c> both zero <c>ForwardTraced</c> returns <c>current</c> - which is
+    /// still the input - and the layer is then an identity of the INPUT width, not <c>_outputDim</c>.
+    /// That configuration is degenerate rather than illegal, so it is declined instead of misstated.
+    /// </para>
+    /// <para>
+    /// The residual adds are shape-neutral: each is taken only <c>if (current.Shape[1] ==
+    /// gluOutput.Shape[1])</c>, so they can never change the width they are added to.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDim <= 0) return null;
+        if (_numSharedLayers <= 0 && _numStepSpecificLayers <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     private readonly int _inputDim;
     private readonly int _outputDim;
     private readonly int _numSharedLayers;
@@ -255,7 +298,7 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor of shape [batch_size, input_dim].</param>
     /// <returns>The transformed output tensor of shape [batch_size, output_dim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _inputCache = input;
         _intermediateOutputs.Clear();
@@ -302,87 +345,6 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         return current;
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        // Collect from shared layers
-        foreach (var fc in _sharedFCLayers)
-        {
-            var p = fc.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-        foreach (var bn in _sharedBNLayers)
-        {
-            var p = bn.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-
-        // Collect from step-specific layers
-        foreach (var fc in _stepFCLayers)
-        {
-            var p = fc.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-        foreach (var bn in _stepBNLayers)
-        {
-            var p = bn.GetParameters();
-            for (int i = 0; i < p.Length; i++) allParams.Add(p[i]);
-        }
-
-        var result = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            result[i] = allParams[i];
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of this layer.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        // Set shared layers
-        foreach (var fc in _sharedFCLayers)
-        {
-            int count = checked((int)fc.ParameterCount);
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            fc.SetParameters(p);
-            offset += count;
-        }
-        foreach (var bn in _sharedBNLayers)
-        {
-            int count = checked((int)bn.ParameterCount);
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            bn.SetParameters(p);
-            offset += count;
-        }
-
-        // Set step-specific layers
-        foreach (var fc in _stepFCLayers)
-        {
-            int count = checked((int)fc.ParameterCount);
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            fc.SetParameters(p);
-            offset += count;
-        }
-        foreach (var bn in _stepBNLayers)
-        {
-            int count = checked((int)bn.ParameterCount);
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            bn.SetParameters(p);
-            offset += count;
-        }
-    }
-
     /// <summary>
     /// Gets the parameter gradients from the last backward pass.
     /// </summary>
@@ -417,20 +379,6 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
             result[i] = allGrads[i];
         }
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var fc in _sharedFCLayers) count += (int)fc.ParameterCount;
-            foreach (var bn in _sharedBNLayers) count += (int)bn.ParameterCount;
-            foreach (var fc in _stepFCLayers) count += (int)fc.ParameterCount;
-            foreach (var bn in _stepBNLayers) count += (int)bn.ParameterCount;
-            return count;
-        }
     }
 
     /// <summary>

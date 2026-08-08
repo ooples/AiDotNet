@@ -57,6 +57,16 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2308.06721", Year = 2023, Authors = "Ye et al.")]
 public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_faceProjection);
+        RegisterParameterComponent(_imageProjection);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const int FACE_EMBED_DIM = 512;
     private const int IMAGE_EMBED_DIM = 1024;
@@ -78,7 +88,6 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _faceProjection.ParameterCount + _imageProjection.ParameterCount;
 
     /// <summary>
     /// Initializes a new IP-Adapter FaceID Plus model.
@@ -129,38 +138,7 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
         _imageProjection.ResolveFromShape(new[] { 1, IMAGE_EMBED_DIM });
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        AddParams(allParams, _baseUNet.GetParameters());
-        AddParams(allParams, _faceProjection.GetParameters());
-        AddParams(allParams, _imageProjection.GetParameters());
-        return new Vector<T>(allParams.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        int c1 = checked((int)_baseUNet.ParameterCount);
-        var a1 = new T[c1];
-        for (int i = 0; i < c1; i++) a1[i] = parameters[offset + i];
-        _baseUNet.SetParameters(new Vector<T>(a1));
-        offset += c1;
-
-        int c2 = checked((int)_faceProjection.ParameterCount);
-        var a2 = new T[c2];
-        for (int i = 0; i < c2; i++) a2[i] = parameters[offset + i];
-        _faceProjection.SetParameters(new Vector<T>(a2));
-        offset += c2;
-
-        int c3 = checked((int)_imageProjection.ParameterCount);
-        var a3 = new T[c3];
-        for (int i = 0; i < c3; i++) a3[i] = parameters[offset + i];
-        _imageProjection.SetParameters(new Vector<T>(a3));
-    }
 
     private static void AddParams(List<T> allParams, Vector<T> p)
     {

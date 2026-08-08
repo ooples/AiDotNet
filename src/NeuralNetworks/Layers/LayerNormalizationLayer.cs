@@ -40,7 +40,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public partial class LayerNormalizationLayer<T> : LayerBase<T>
+// Rescales values, never resizes. Rank-agnostic, so its axes carry no intrinsic meaning to name.
+[ElementWiseShape(Note = "Normalises over the feature axis; every dimension is carried through.")]
+[AutoParameters]
+public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// A small value added to the variance for numerical stability.
@@ -146,6 +149,10 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    /// <remarks>Normalization is elementwise over the feature axis, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
 
     /// <summary>
     /// Indicates whether this layer supports GPU-resident execution.
@@ -256,7 +263,9 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
-    public LayerNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon)
+    public LayerNormalizationLayer(
+        int featureSize,
+        double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { featureSize }, new[] { featureSize })
     {
         if (featureSize <= 0)
@@ -317,7 +326,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// This is much faster than doing it manually for each sample.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 
@@ -456,71 +465,6 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_gamma);
             Engine.InvalidatePersistentTensor(_beta);
         }
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (gamma and beta) and combines them into a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading
-    /// model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include gamma (scaling) and beta (shifting) values
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _gamma.Length + _beta.Length;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when the layer is still in lazy
-        // placeholder state. Vector layout is [gamma, beta] both of length
-        // featureSize, so featureSize = parameters.Length / 2.
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            if (parameters.Length % 2 != 0 || parameters.Length == 0)
-                throw new ArgumentException(
-                    $"Cannot infer featureSize for LayerNormalizationLayer from {parameters.Length} parameters " +
-                    "(expected even length for [gamma, beta]).");
-            int featureSize = parameters.Length / 2;
-            ResolveFromShape(new[] { featureSize });
-        }
-
-        int totalParams = _gamma.Length + _beta.Length;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Write in-place to preserve engine persistent tensor references
-        var gSpan = _gamma.Data.Span;
-        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
-        var bSpan = _beta.Data.Span;
-        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
     }
 
     /// <summary>

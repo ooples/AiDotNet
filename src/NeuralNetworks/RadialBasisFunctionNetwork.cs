@@ -203,7 +203,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         if (architecture.Layers != null && architecture.Layers.Count >= 2)
         {
             // Extract hidden size from the architecture's layers if available
-            hiddenSize = architecture.Layers[1].GetOutputShape()[0];
+            hiddenSize = architecture.Layers[1].GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0];
         }
         else
         {

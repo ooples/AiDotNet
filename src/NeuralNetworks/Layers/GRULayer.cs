@@ -41,8 +41,69 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class GRULayer<T> : LayerBase<T>
+// The accepted forms are the two the forward names: rank 3 "[batchSize, sequenceLength, inputSize]" and
+// rank 2 "[sequenceLength, inputSize] -> add batch dim". Rank 1 and rank > 3 are handled too but pad,
+// truncate or flatten leading axes into an anonymous batch, so nothing there can be named honestly.
+//
+// THE OUTPUT RANK DEPENDS ON returnSequences, which is why there are three output declarations rather
+// than one. That is not redundancy - a GRU that returns only its final state genuinely emits one fewer
+// axis than one returning the whole sequence, and OutputAxesFor picks between them from the field.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Unbatched final state: rank-2 input with returnSequences = false.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Batched final state: rank-3 input with returnSequences = false.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Full hidden-state sequence: returnSequences = true.")]
+[AutoParameters]
+public partial class GRULayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the RANK of the output, not merely a size, depends on configuration. Every
+    /// case below is read off the end of ForwardTraced:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>returnSequences — <c>Engine.Reshape(..., [batchSize, sequenceLength, _hiddenSize])</c>.</item>
+    /// <item>otherwise — <c>output = currentHiddenState</c>, which is <c>[batchSize, _hiddenSize]</c>.</item>
+    /// <item>rank-2 input, no sequences — <c>Engine.Reshape(output, [_hiddenSize])</c>, dropping the batch
+    /// axis the layer itself added.</item>
+    /// </list>
+    /// <para>
+    /// The one asymmetry is what the code does rather than a rounding of it: a rank-2 input WITH
+    /// returnSequences comes back at rank THREE, because the entry path sets <c>batchSize = 1</c> and the
+    /// restore branch fires only for <c>_originalInputShape.Length &gt; 3</c> or for the no-sequences
+    /// rank-2 case. Hence <c>Fixed(1)</c> on that batch axis — a real axis of extent one that this layer
+    /// manufactures, not the caller's batch carried through.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
+        var batch = new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch));
+        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
+
+        return inputRank switch
+        {
+            2 => _returnSequences
+                ? new[]
+                {
+                    new OutputAxisContract(TensorAxis.Batch, AxisRelation.Fixed(1)),
+                    time,
+                    features,
+                }
+                : new[] { features },
+            3 => _returnSequences
+                ? new[] { batch, time, features }
+                : new[] { batch, features },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The weight tensors for the update gate (z), reset gate (r), and candidate hidden state (h).
     /// </summary>
@@ -388,52 +449,6 @@ public partial class GRULayer<T> : LayerBase<T>
     #endregion
 
     /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>
-    /// The total number of weight and bias parameters in the GRU layer.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property calculates the total number of trainable parameters in the GRU layer, which includes
-    /// all the weights and biases for the gates and candidate hidden state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many numbers the layer needs to learn.
-    /// 
-    /// The formula counts:
-    /// - Weights connecting inputs to the GRU (Wz, Wr, Wh)
-    /// - Weights connecting the previous hidden state (Uz, Ur, Uh)
-    /// - Bias values for each gate and candidate state (bz, br, bh)
-    /// 
-    /// A higher parameter count means the model can capture more complex patterns
-    /// but requires more data and time to train effectively.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Match GetParameters()'s auto-resolution behaviour: when input
-            // size hasn't been pinned by a first Forward but hidden size is
-            // known, GetParameters resolves to the standard square default
-            // (inputSize == hiddenSize) and returns the full weight bank.
-            // Reporting 0 here while GetParameters returns the materialised
-            // vector causes NeuralNetworkBase.GetParameters to undersize the
-            // destination buffer and throw on the per-layer Slice copy
-            // (line 605 — the RelationalGCN smoke-test crash). Mirror the
-            // resolution rule so the two paths stay in sync.
-            int effectiveInputSize = _inputSize > 0
-                ? _inputSize
-                : (_hiddenSize > 0 ? _hiddenSize : 0);
-            if (effectiveInputSize <= 0)
-                return 0;
-            return _hiddenSize * effectiveInputSize * 3 +  // Wz, Wr, Wh
-                   _hiddenSize * _hiddenSize * 3 +         // Uz, Ur, Uh
-                   _hiddenSize * 3;                        // bz, br, bh
-        }
-    }
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -477,11 +492,12 @@ public partial class GRULayer<T> : LayerBase<T>
     /// <param name="returnSequences">If <c>true</c>, returns all hidden states.</param>
     /// <param name="activation">Candidate-hidden-state activation (default tanh).</param>
     /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
-    public GRULayer(int hiddenSize,
-                    bool returnSequences = false,
-                    IActivationFunction<T>? activation = null,
-                    IActivationFunction<T>? recurrentActivation = null,
-                    bool stateful = false)
+    public GRULayer(
+        int hiddenSize,
+        bool returnSequences = false,
+        IActivationFunction<T>? activation = null,
+        IActivationFunction<T>? recurrentActivation = null,
+        bool stateful = false)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)
@@ -556,13 +572,30 @@ public partial class GRULayer<T> : LayerBase<T>
         }
 
         var resolvedInput = new int[input.Shape.Length];
-        var resolvedOutput = new int[input.Shape.Length];
-        for (int i = 0; i < input.Shape.Length; i++)
+        for (int i = 0; i < input.Shape.Length; i++) resolvedInput[i] = input.Shape[i];
+
+        // THE DECLARED OUTPUT MUST HONOUR _returnSequences, which this ignored. It always kept the
+        // input rank and swapped the last axis for _hiddenSize, so a rank-2 [Time, Features] input
+        // declared [Time, _hiddenSize] - while ForwardTraced with returnSequences = false ends on
+        // Engine.Reshape(output, [_hiddenSize]), rank 1. The layer declared a sequence it does not
+        // return, and every layer sized from that declaration inherited the wrong rank.
+        //
+        // Matches the three declared output layouts on this class: full sequence keeps the rank; a
+        // final state drops the TIME axis, leaving [Features] unbatched or [Batch, Features] batched.
+        int[] resolvedOutput;
+        if (_returnSequences || input.Shape.Length < 2)
         {
-            resolvedInput[i] = input.Shape[i];
-            resolvedOutput[i] = input.Shape[i];
+            resolvedOutput = new int[input.Shape.Length];
+            for (int i = 0; i < input.Shape.Length; i++) resolvedOutput[i] = input.Shape[i];
+            resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
         }
-        resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+        else
+        {
+            // Drop the time axis, which is the second-from-last for both accepted ranks.
+            resolvedOutput = new int[input.Shape.Length - 1];
+            for (int i = 0; i < input.Shape.Length - 2; i++) resolvedOutput[i] = input.Shape[i];
+            resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+        }
 
         ResolveShapes(resolvedInput, resolvedOutput);
     }
@@ -700,7 +733,7 @@ public partial class GRULayer<T> : LayerBase<T>
     /// - If false: Returns only the final memory state
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
         // Idempotent — gated by _isInitialized.
@@ -912,8 +945,8 @@ public partial class GRULayer<T> : LayerBase<T>
         // another. That broke Clone-after-training parity (a freshly-cloned model
         // starts from zeros while the trained original carried leftover state) and
         // repeated-Predict determinism. Reset to a zero hidden state at the start of
-        // every pass (TensorAllocator.Rent returns zero-initialized, engine-managed
-        // storage — the same call the original first-pass init used).
+        // every pass. TensorAllocator.Rent returns pooled memory that is not
+        // zero-initialized, so the rented state must be cleared before t=0.
         //
         // When _stateful is set (Keras-style stateful=True), the hidden state is
         // instead carried over from the previous Forward call — reset only on the
@@ -924,6 +957,7 @@ public partial class GRULayer<T> : LayerBase<T>
             || _lastHiddenState.Shape[0] != batchSize)
         {
             _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
+            _lastHiddenState.Fill(NumOps.Zero);
         }
 
         // Initialize list to store all hidden states if returning sequences
@@ -1549,50 +1583,6 @@ public partial class GRULayer<T> : LayerBase<T>
                 ?? _recurrentActivation.GetType().FullName
                 ?? string.Empty;
         return metadata;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // A lazily-constructed GRU (hidden size given, input size deferred to the
-        // first forward) still has a well-defined parameter set once we adopt the
-        // standard square default (input size == hidden size, as in stacked recurrent
-        // stages). Resolve to that default when parameters are requested before any
-        // forward so they are materialized rather than reported as empty; a later
-        // forward with a different input width re-adapts via the input-adaptation path.
-        if (!IsShapeResolved && _hiddenSize > 0)
-        {
-            ResolveFromShape(new[] { _hiddenSize });
-        }
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_Wz.Data),
-            Vector<T>.FromMemory(_Wr.Data),
-            Vector<T>.FromMemory(_Wh.Data),
-            Vector<T>.FromMemory(_Uz.Data),
-            Vector<T>.FromMemory(_Ur.Data),
-            Vector<T>.FromMemory(_Uh.Data),
-            Vector<T>.FromMemory(_bz.Data),
-            Vector<T>.FromMemory(_br.Data),
-            Vector<T>.FromMemory(_bh.Data)
-        );
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        MaterializeParameterStorageFor(parameters.Length);
-
-        // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
-        int idx = 0;
-        parameters.Slice(idx, _Wz.Length).AsSpan().CopyTo(_Wz.Data.Span); idx += _Wz.Length;
-        parameters.Slice(idx, _Wr.Length).AsSpan().CopyTo(_Wr.Data.Span); idx += _Wr.Length;
-        parameters.Slice(idx, _Wh.Length).AsSpan().CopyTo(_Wh.Data.Span); idx += _Wh.Length;
-        parameters.Slice(idx, _Uz.Length).AsSpan().CopyTo(_Uz.Data.Span); idx += _Uz.Length;
-        parameters.Slice(idx, _Ur.Length).AsSpan().CopyTo(_Ur.Data.Span); idx += _Ur.Length;
-        parameters.Slice(idx, _Uh.Length).AsSpan().CopyTo(_Uh.Data.Span); idx += _Uh.Length;
-        parameters.Slice(idx, _bz.Length).AsSpan().CopyTo(_bz.Data.Span); idx += _bz.Length;
-        parameters.Slice(idx, _br.Length).AsSpan().CopyTo(_br.Data.Span); idx += _br.Length;
-        parameters.Slice(idx, _bh.Length).AsSpan().CopyTo(_bh.Data.Span);
     }
 
     private void MaterializeParameterStorageFor(int parameterLength)

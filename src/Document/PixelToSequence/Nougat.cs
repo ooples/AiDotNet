@@ -68,7 +68,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _hiddenDim;
     private int _numEncoderLayers;
     private int _numDecoderLayers;
@@ -131,7 +131,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 10,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -200,7 +200,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numDecoderLayers = 10,
         int numHeads = 16,
         int vocabSize = 50000,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -276,6 +276,26 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         InitializeLayers();
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();
+    }
+
+    // Native layers are materialized on first use, deliberately, to keep construction cheap for
+    // metadata and shape probes. But the introspection entry points below were not part of "first
+    // use", so a freshly constructed Nougat answered them from an EMPTY Layers list -- reporting a
+    // model with no learnable parameters and no activations. Route them through the same gate.
+    // Sibling MATCHA already does exactly this; Nougat, Pix2Struct, Dessurt, Donut and TrOCR do not.
+    //
+    // This is the half of the Nougat work that is safe to land. It does NOT address the model's
+    // real defect: Train() drives the flat Layers list, which is not the graph this model runs.
+    // Fixing that needs a teacher-forcing path, because the decoder's EmbeddingLayer expects token
+    // ids and the flat chain hands it continuous encoder features -- running the real forward
+    // end-to-end throws "Index -1 ... out of bounds for embedding table with vocabulary size
+    // 50000". See the task notes; do not try to solve it by re-wiring ForwardForTraining alone.
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return base.GetNamedLayerActivations(input);
     }
 
     #endregion
@@ -754,24 +774,48 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape is the ENTIRE training step: forward, backward, global-norm gradient
+            // clipping (NeuralNetworkBase.ApplyGradientClipping) and the optimizer update. The
+            // `UpdateParameters(CollectGradients())` that followed applied a SECOND, unclipped,
+            // hardcoded-1e-4 SGD step on top of it every call -- and threw before it could, because
+            // CollectGradients produced 1,055,424 values against GetParameters' 528,592
+            // ("Vector lengths must match"), taking six of Nougat's tests with it.
+            //
+            // Same redundant-second-step defect PSENet and DBNet already had removed.
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
         EnsureNativeInitialized();
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
+
+        // Contract (NeuralNetworkBase): the vector holds the NEW parameter VALUES, not gradients.
+        // This previously read the argument as gradients and applied `params -= grads * 1e-4`,
+        // which corrupts every caller that honours the real contract -- WithParameters, clone and
+        // serialize round-trips, and meta-optimizers -- because they hand it values and it
+        // subtracts them from the model. Distributed across the trainable layers exactly as the
+        // corrected sibling DBNet does.
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                layer.UpdateParameters(parameters.SubVector(startIndex, layerParameterCount));
+                startIndex += layerParameterCount;
+            }
+        }
     }
 
     private Vector<T> CollectGradients()

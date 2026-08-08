@@ -40,7 +40,38 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public partial class InstanceNormalizationLayer<T> : LayerBase<T>
+// Value-only: it rescales, never resizes. ForwardTraced flattens to 4-D purely so it can delegate to
+// Engine.GroupNorm, then undoes that with `return Engine.Reshape(output, _originalInputShape)` — the
+// output shape is literally the input shape, at every rank.
+// The axes are still NAMED rather than left to [ElementWiseShape], because axis 1 is not anonymous:
+// ForwardTraced reads `channels = input.Shape[1]` in every branch and throws unless it equals
+// _numChannels. A channels-second contract is the whole point of this layer, and a chain that hands it
+// a feature-last tensor is exactly the mistake worth catching.
+// The four ranks declared are the four the forward pass branches on by hand, with the roles taken from
+// its own comments ("2D [batch, channels]", "3D [batch, channels, length]", "4D [batch, channels,
+// height, width]", "5D [batch, channels, D, H, W]"). The length axis of the 3-D form is Time to match
+// Conv1DLayer, which declares [Batch, Channels, Time] and is what normally feeds it. Higher ranks run
+// through the ND branch but have no further distinct spatial role available, so they are not declared.
+// Same rank, same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Per-sample, per-channel normalization over the spatial axes; nothing is resized.")]
+[AutoParameters]
+public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly T _epsilon;
     private readonly int _numChannels;
@@ -164,7 +195,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
     /// - 5D [batch, channels, D, H, W] - normalizes over all spatial dimensions
     /// - ND - generalizes to any number of dimensions
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -372,52 +403,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_gamma);
         Engine.InvalidatePersistentTensor(_beta);
     }
-
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing gamma and beta parameters (if affine) or empty vector.</returns>
-    public override Vector<T> GetParameters()
-    {
-        if (!_affine)
-            return new Vector<T>(0);
-
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!_affine)
-        {
-            if (parameters.Length != 0)
-                throw new ArgumentException("Non-affine InstanceNorm has no parameters, but received " + parameters.Length);
-            return;
-        }
-
-        int totalParams = _gamma.Length + _beta.Length;
-
-        if (parameters.Length != totalParams)
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-
-        // Write in-place to preserve engine persistent tensor references
-        var gSpan = _gamma.Data.Span;
-        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
-        var bSpan = _beta.Data.Span;
-        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
-    }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _affine ? _numChannels * 2 : 0;
 
     /// <summary>
     /// Resets the internal state of the layer.

@@ -195,7 +195,7 @@ public class MedSegDiffV2Segmentation<T> : NeuralNetworkBase<T>, IMedicalSegment
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

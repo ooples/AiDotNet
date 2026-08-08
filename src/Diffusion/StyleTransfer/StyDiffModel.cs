@@ -42,9 +42,19 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("StyDiff: Diffusion-Based Style Transfer", "https://arxiv.org/abs/2308.07863")]
+// arXiv 2308.07863 is "StyleDiffusion"; "StyDiff" is this type's short name, not the paper's title.
+[ResearchPaper("StyleDiffusion: Controllable Disentangled Style Transfer via Diffusion Models", "https://arxiv.org/abs/2308.07863", Year = 2023, Authors = "Wang et al.")]
 public class StyDiffModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_vae);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 7.5;
 
@@ -56,13 +66,12 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
     public override IVAEModel<T> VAE => _vae;
     public override IConditioningModule<T>? Conditioner => _conditioner;
     public override int LatentChannels => LATENT_CHANNELS;
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public StyDiffModel(
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
-        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear, Seed = 42 },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
         _conditioner = conditioner;
@@ -80,49 +89,44 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var pp = _predictor.GetParameters();
-        var vp = _vae.GetParameters();
-        var combined = new Vector<T>(pp.Length + vp.Length);
-        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
-        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
-        return combined;
-    }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int pc = checked((int)_predictor.ParameterCount);
-        int vc = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)pc + vc;
-        if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
-        var pp = new Vector<T>(pc);
-        var vp = new Vector<T>(vc);
-        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
-        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
-        _predictor.SetParameters(pp);
-        _vae.SetParameters(vp);
-    }
+
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     public override IDiffusionModel<T> Clone()
     {
+        var optionsCopy = new DiffusionModelOptions<T>((DiffusionModelOptions<T>)Options);
+
         // Fast path: O(1) copy-on-write share when the default clone is structurally identical
         // (the common foundation-scale case the COW lever targets — no re-materialization/OOM).
-        var clone = new StyDiffModel<T>(conditioner: _conditioner, seed: null);
+        var clone = new StyDiffModel<T>(
+            architecture: Architecture,
+            options: optionsCopy,
+            scheduler: Scheduler,
+            conditioner: _conditioner,
+            seed: null);
         if (clone.TryShareParametersFrom(this)) return clone;
         // Structure mismatch ⇒ custom architecture/predictor/VAE the default clone can't reproduce;
         // rebuild faithfully from this instance's configuration so the clone is observationally
         // identical instead of throwing on a parameter-count mismatch.
-        return new StyDiffModel<T>(
+        var rebuilt = new StyDiffModel<T>(
             architecture: Architecture,
-            options: (DiffusionModelOptions<T>)Options,
+            options: new DiffusionModelOptions<T>((DiffusionModelOptions<T>)Options),
             scheduler: Scheduler,
             predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             seed: null);
+        // The cloned sub-models have the same materialized structure as the source. Bind the rebuilt
+        // model to the exact same Tensor objects through DiffusionModelBase's reference-counted COW
+        // path, rather than creating new CloneShared tensor wrappers. The wrappers preserve values but
+        // have independent tensor identity/version state, so the CPU packed-weight cache can take a
+        // different cold path in the clone; DDIM compounds that small first-step reduction difference
+        // across its denoising loop (the Linux CI failure was 3.43e-5). ShareWeightsFrom preserves both
+        // values and inference-cache identity while EnsureOwnWeights still detaches either model before
+        // training or SetParameters, keeping clone independence.
+        rebuilt.ShareWeightsFrom(this);
+        return rebuilt;
     }
 
     public override ModelMetadata<T> GetModelMetadata()

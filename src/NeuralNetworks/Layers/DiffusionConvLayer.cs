@@ -51,7 +51,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 4, 128, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
-public partial class DiffusionConvLayer<T> : LayerBase<T>
+// Roles from OnFirstForward, which names both accepted forms itself: "requires rank-2 [V,C] or
+// rank-3 [B,V,C] input". The vertex axis is Other, not Time - graph nodes are an unordered set
+// indexed by the Laplacian, the same call MeshPoolLayer makes for its edge axis - and BatchOptional
+// folds the two accepted ranks into one declaration because they run identical code.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Middle axis is the graph's vertex count; vertices are an unordered set, so no sequence role.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
 {
     #region Properties
 
@@ -393,6 +403,38 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
         ResolveShapes(new[] { v, c }, new[] { v, OutputChannels });
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off the <c>ResolveShapes</c> call directly above: <c>[v, c] -&gt; [v, OutputChannels]</c>.
+    /// The vertex count is carried through unchanged - diffusion propagates values ALONG the graph and
+    /// never coarsens it, which is what separates this from a pooling layer - and the feature width is
+    /// <c>Fixed</c> at the constructor's <c>OutputChannels</c>.
+    /// </para>
+    /// <para>
+    /// <c>NumTimeScales</c> deliberately does NOT appear. It multiplies the WEIGHT width
+    /// (<c>weightSize = c * NumTimeScales</c> a few lines up), not the output width: the diffusion
+    /// scales are concatenated inside the layer and projected back down to <c>OutputChannels</c>. A
+    /// contract that scaled the output by it would be wrong by exactly that factor.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 2 and 3 only - exactly the two OnFirstForward accepts before it throws.
+        if (inputRank is not (2 or 3)) return null;
+
+        var vertices = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels));
+
+        return inputRank == 2
+            ? new[] { vertices, channels }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                vertices, channels,
+            };
+    }
+
     #endregion
 
     #region Initialization
@@ -532,7 +574,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// [batch, numVertices, OutputChannels].
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when eigenbasis/laplacian is not set.</exception>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         if (_eigenvalues == null && _laplacian == null)
@@ -1627,39 +1669,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var timeParams = new Vector<T>(DiffusionTimes);
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()),
-            timeParams);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _weights.Length + _biases.Length + DiffusionTimes.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int idx = 0;
-        _weights = new Tensor<T>(_weights._shape, parameters.Slice(idx, _weights.Length));
-        idx += _weights.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(idx, _biases.Length));
-        idx += _biases.Length;
-
-        for (int i = 0; i < DiffusionTimes.Length; i++)
-        {
-            DiffusionTimes[i] = parameters[idx + i];
-        }
-    }
-
-    /// <summary>
     /// Gets the weight tensor.
     /// </summary>
     public override Tensor<T> GetWeights() => _weights;
@@ -1668,11 +1677,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// Gets the bias tensor.
     /// </summary>
     public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _weights.Length + _biases.Length + DiffusionTimes.Length;
 
     /// <summary>
     /// Creates a deep copy of this layer.

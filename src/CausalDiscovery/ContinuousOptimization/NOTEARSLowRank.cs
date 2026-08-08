@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -47,12 +48,11 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ResearchPaper("On Low-Rank Directed Acyclic Graphs and Causal Structure Learning", "https://arxiv.org/abs/2006.05691", Year = 2023, Authors = "Zhuangyan Fang, Shengyu Zhu, Jiji Zhang, Yue Liu, Zhitang Chen, Yangbo He")]
 public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 {
-    private readonly double _learningRateValue;
     private readonly int _maxRank;
     private readonly int _innerIterations;
     private readonly int? _seed;
-    private readonly double _initScale;
-    private double _rhoMax = 1e+16;
+    private readonly double? _initScale;
+    private readonly double _rhoMax;
 
     /// <inheritdoc/>
     public override string Name => "NOTEARS Low-Rank";
@@ -66,20 +66,28 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     public NOTEARSLowRank(CausalDiscoveryOptions? options = null)
     {
         ApplyOptions(options);
-        _learningRateValue = options?.LearningRate ?? 0.01;
+
+        // NOTEARS-Low-Rank is unregularized by default and uses the shorter
+        // dual-ascent schedule published with the reference implementation.
+        // Every value remains externally configurable through the shared options.
+        Lambda1 = options?.SparsityPenalty ?? 0.0;
+        MaxIterations = options?.MaxIterations ?? 15;
+        HTolerance = options?.AcyclicityTolerance ?? 1e-6;
         _maxRank = options?.MaxRank ?? 10;
-        _innerIterations = options?.InnerIterations ?? 20;
-        // Small init scale so W = A*B^T ≈ 0 (matching NOTEARS reference W=0 init).
-        // L-BFGS builds up edges from near-zero. User can adjust via InitScale.
-        _initScale = options?.InitScale ?? 0.01;
+        _innerIterations = options?.InnerIterations ?? 100;
+        _initScale = options?.InitScale;
         _seed = options?.Seed;
-        if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
+        _rhoMax = options?.MaxPenalty ?? 1e+20;
+
         if (_maxRank <= 0)
             throw new ArgumentException("MaxRank must be greater than 0.");
-        if (_learningRateValue <= 0 || double.IsNaN(_learningRateValue) || double.IsInfinity(_learningRateValue))
-            throw new ArgumentException("LearningRate must be positive and finite.");
         if (_innerIterations < 1)
             throw new ArgumentException("InnerIterations must be at least 1.");
+        if (_initScale is { } initScale
+            && (initScale <= 0 || double.IsNaN(initScale) || double.IsInfinity(initScale)))
+            throw new ArgumentException("InitScale must be positive and finite.");
+        if (_rhoMax <= 0 || double.IsNaN(_rhoMax) || double.IsInfinity(_rhoMax))
+            throw new ArgumentException("MaxPenalty must be positive and finite.");
     }
 
     /// <inheritdoc/>
@@ -90,57 +98,49 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
-        // Respect the configured learning rate without overriding
-        double effectiveLr = _learningRateValue;
-
+        // The reference evaluates standardized SEM observations. Normalize at
+        // the public API boundary so callers get the same numerical regime.
         var X = StandardizeData(data);
 
         // Choose rank
         int rank = Math.Min(d, _maxRank);
 
-        // Initialize low-rank factors using spectral initialization from OLS.
-        // Standard NOTEARS uses W=0, but for low-rank W=A*B^T, zero init creates
-        // a saddle point where gradients vanish (∂L/∂A = ∂L/∂W * B = 0 when B=0).
-        // Solution: A = I (identity, for r≤d), B = scale * OLS^T (transposed regression weights).
-        // This gives W = A*B^T = I * (scale * OLS^T)^T = scale * OLS, avoiding the saddle point
-        // while starting near a meaningful solution.
-        var cov = ComputeCovarianceMatrix(X);
         var A = new Matrix<T>(d, rank);
         var B = new Matrix<T>(d, rank);
-        T initScale = NumOps.FromDouble(_initScale);
-        var rng = _seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        if (_initScale is null)
+        {
+            // Fang et al., Appendix C.2: U0 and V0 are the first r columns
+            // of the d-by-d identity matrices.
+            for (int i = 0; i < d; i++)
+                for (int r = 0; r < rank; r++)
+                {
+                    T identityEntry = i == r ? NumOps.One : NumOps.Zero;
+                    A[i, r] = identityEntry;
+                    B[i, r] = identityEntry;
+                }
+        }
+        else
+        {
+            // Explicit InitScale opts into a randomized alternative while retaining
+            // the same low-rank parameterization. Seed makes that customization
+            // reproducible; the default remains the paper's identity factors.
+            var rng = _seed.HasValue
+                ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
+                : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+            var initialW = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    initialW[i, j] =
+                        NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * _initScale.Value);
 
-        for (int i = 0; i < d; i++)
-            for (int r = 0; r < rank; r++)
-            {
-                if (r < d)
+            var svd = new SvdDecomposition<T>(initialW);
+            for (int i = 0; i < d; i++)
+                for (int r = 0; r < rank; r++)
                 {
-                    // A: identity for first d components (preserves direction)
-                    A[i, r] = (r == i) ? NumOps.One : NumOps.Zero;
-                    // B: scaled OLS weights transposed (OLS[r,i] = cov[r,i]/var[r])
-                    if (r != i)
-                    {
-                        T varR = cov[r, r];
-                        T olsW = NumOps.GreaterThan(varR, NumOps.FromDouble(1e-10))
-                            ? NumOps.Multiply(NumOps.Divide(cov[r, i], varR), initScale)
-                            : NumOps.Zero;
-                        B[i, r] = olsW;
-                    }
-                    else
-                    {
-                        B[i, r] = NumOps.Zero; // No self-edge
-                    }
+                    A[i, r] = NumOps.Multiply(svd.U[i, r], svd.S[r]);
+                    B[i, r] = svd.Vt[r, i];
                 }
-                else
-                {
-                    // Extra rank components beyond d: small noise
-                    T noise = NumOps.FromDouble(0.001 * (rng.NextDouble() - 0.5));
-                    A[i, r] = noise;
-                    B[i, r] = noise;
-                }
-            }
+        }
 
         // Augmented Lagrangian with L-BFGS inner solver (per NOTEARS reference)
         T rhoT = NumOps.One;
@@ -193,7 +193,9 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                         || double.IsNaN(h) || double.IsInfinity(h))
                         return (NumOps.FromDouble(1e+30), new Vector<T>(paramLen));
                     T augCoeff = NumOps.Add(currentAlpha, NumOps.Multiply(currentRho, NumOps.FromDouble(h)));
-                    T obj = NumOps.FromDouble(loss + NumOps.ToDouble(currentAlpha) * h
+                    T obj = NumOps.FromDouble(loss
+                        + Lambda1 * ComputeL1Norm(W)
+                        + NumOps.ToDouble(currentAlpha) * h
                         + 0.5 * NumOps.ToDouble(currentRho) * h * h);
 
                     // Chain rule to parameter space: ∂L/∂A, ∂L/∂B
@@ -205,6 +207,13 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                             T gB = NumOps.Zero;
                             for (int j = 0; j < d; j++)
                             {
+                                // ReconstructW fixes W[j,j] to zero, so diagonal
+                                // entries are constants and have no factor derivative.
+                                // Including their loss gradients here makes the
+                                // supplied gradient inconsistent with the objective.
+                                if (j == i)
+                                    continue;
+
                                 // SafeSign: the augmented Lagrangian under aggressive rho schedules
                                 // (rho *= 10 every outer iteration that fails the constraint-decrease
                                 // gate) can drive `rho * h` to overflow, propagating NaN into W. The
@@ -240,12 +249,29 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                 _innerIterations,
                 NumOps.FromDouble(1e-5));
 
-            // Unflatten optimized parameters back to A, B
-            UnflattenVectorToAB(optimized, A, B, d, rank);
+            // A rejected L-BFGS line-search point can still contain finite
+            // parameters whose product overflows, or non-finite parameters if
+            // the search direction itself overflowed. Keep the last accepted
+            // factors unless both the vector and reconstructed adjacency are
+            // finite; otherwise the final threshold pass would surface Inf.
+            if (IsFiniteVector(optimized))
+            {
+                var candidateA = new Matrix<T>(d, rank);
+                var candidateB = new Matrix<T>(d, rank);
+                UnflattenVectorToAB(optimized, candidateA, candidateB, d, rank);
+                var candidateW = ReconstructW(candidateA, candidateB, d, rank);
+                if (IsFiniteMatrix(candidateW))
+                {
+                    A = candidateA;
+                    B = candidateB;
+                }
+            }
 
             // Outer: evaluate and update augmented Lagrangian
             var outerW = ReconstructW(A, B, d, rank);
             var (hVal, _) = ComputeNOTEARSConstraint(outerW);
+            if (double.IsNaN(hVal) || double.IsInfinity(hVal))
+                break;
             T hValT = NumOps.FromDouble(hVal);
 
             alphaLag = NumOps.Add(alphaLag, NumOps.Multiply(rhoT, hValT));
@@ -257,7 +283,10 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             }
             prevH = hValT;
 
-            if (hVal < HTolerance) break;
+            // The reference performs at least four dual-ascent updates before
+            // honoring h_tol, so a small initial h is not mistaken for a
+            // converged data-fit solution.
+            if (outerIter >= 3 && hVal < HTolerance) break;
             if (NumOps.ToDouble(rhoT) >= _rhoMax) break;
         }
 
@@ -311,5 +340,28 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                 W[i, j] = sum;
             }
         return W;
+    }
+
+    private bool IsFiniteVector(Vector<T> values)
+    {
+        for (int i = 0; i < values.Length; i++)
+        {
+            double value = NumOps.ToDouble(values[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                return false;
+        }
+        return true;
+    }
+
+    private bool IsFiniteMatrix(Matrix<T> values)
+    {
+        for (int i = 0; i < values.Rows; i++)
+            for (int j = 0; j < values.Columns; j++)
+            {
+                double value = NumOps.ToDouble(values[i, j]);
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    return false;
+            }
+        return true;
     }
 }

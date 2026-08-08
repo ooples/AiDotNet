@@ -40,8 +40,55 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "2, 4, 3")]
-public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Roles from this layer's own guard, quoted: OnFirstForward requires
+// "rank>=2 input [...,inputCapsules,inputDimension]". The capsule axis takes Other - it is neither a
+// sequence position nor a feature vector, it indexes ENTITIES, which is exactly what that escape hatch
+// is documented for - and the capsule's own vector width takes Features.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because BOTH trailing axes are set by configuration, which matching layouts cannot
+    /// express. From <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { inputCapsules, inputDimension }, new[] { _numCapsules, _capsuleDimension })</c>,
+    /// and <c>ForwardTraced</c> reconstructs exactly that at higher rank -
+    /// <c>newShape[^2] = _numCapsules; newShape[^1] = _capsuleDimension;</c> with every leading dimension
+    /// copied through.
+    /// </para>
+    /// <para>
+    /// Neither trailing axis is <c>Same</c>: dynamic routing agrees a NEW set of capsules, and the
+    /// transformation matrix is allocated as
+    /// <c>[inputCapsules, inputDimension, _numCapsules, _capsuleDimension]</c> precisely so the input
+    /// count and width are contracted away rather than carried.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 2 and 3 only. ForwardTraced also collapses higher ranks into the batch and restores them,
+        // but each extra leading axis would need a DISTINCT role to be named, and there is no second
+        // batch-like role to give it.
+        if (inputRank is not (2 or 3) || _numCapsules <= 0 || _capsuleDimension <= 0) return null;
+
+        var capsules = new OutputAxisContract(TensorAxis.Other, AxisRelation.Fixed(_numCapsules));
+        var dimension = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_capsuleDimension));
+
+        return inputRank == 2
+            ? new[] { capsules, dimension }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                capsules, dimension,
+            };
+    }
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (routing entropy regularization) should be used during training.
     /// </summary>
@@ -119,30 +166,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastPreSquash;
     private Tensor<T>? _lastCouplingCoefficients;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> as capsule layers have trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns true, indicating that the capsule layer can be trained through backpropagation.
-    /// Capsule layers contain trainable parameters (transformation matrices and biases) that are adjusted
-    /// during the training process to minimize the network's error.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer contains values (parameters) that will change during training
-    /// - It will improve its performance as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// Capsule layers always support training because they contain transformation matrices
-    /// and bias values that need to be learned from data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _transformationMatrix.Length + _bias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -482,7 +505,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// lower-level features into higher-level concepts.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Store original shape for any-rank tensor support
@@ -752,38 +775,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer and combines them into a single vector.
-    /// It flattens the transformation matrix and concatenates it with the bias vector. This is useful for
-    /// optimization algorithms that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The parameters:
-    /// - Include all values from the transformation matrix and bias
-    /// - Are combined into a single long list (vector)
-    /// - Represent everything this layer has learned
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector.Concatenate for production-grade parameter extraction
-        return Vector<T>.Concatenate(
-            new Vector<T>(_transformationMatrix.ToArray()),
-            new Vector<T>(_bias.ToArray())
-        );
-    }
-
-    /// <summary>
     /// Sets the trainable parameters for the layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -850,19 +841,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             if (!IsShapeResolved) ResolveFromShape(savedInput);
         }
         base.Deserialize(reader);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int matrixSize = _transformationMatrix.Length;
-        int biasSize = _bias.Length;
-
-        if (parameters.Length != matrixSize + biasSize)
-            throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
-
-        // Set parameters without hot-path conversions
-        _transformationMatrix = new Tensor<T>(_transformationMatrix._shape, parameters.Slice(0, matrixSize));
-        _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
     }
 
     /// <summary>

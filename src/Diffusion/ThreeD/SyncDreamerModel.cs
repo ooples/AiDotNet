@@ -96,6 +96,15 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ResearchPaper("SyncDreamer: Generating Multiview-consistent Images from a Single-view Image", "https://arxiv.org/abs/2309.03453", Year = 2024, Authors = "Liu et al.")]
 public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     private const int LATENT_CHANNELS = 4;
@@ -135,7 +144,6 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the number of synchronized views generated simultaneously.
@@ -204,31 +212,7 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-        for (int i = 0; i < unetParams.Length; i++) combined[i] = unetParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[unetParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var unetCount = checked((int)_unet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-        if (parameters.Length != unetCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
-        var unetParams = new Vector<T>(unetCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < unetCount; i++) unetParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[unetCount + i];
-        _unet.SetParameters(unetParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

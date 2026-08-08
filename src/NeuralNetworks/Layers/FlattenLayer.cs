@@ -43,8 +43,129 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 2, 2", TestConstructorArgs = "")]
-public class FlattenLayer<T> : LayerBase<T>
+// Roles and ranks come from ForwardTraced, which is explicit about the two cases it handles:
+// rank 1 returns the input untouched ("Already 1D: nothing to flatten"), and every rank >= 2
+// keeps Shape[0] as the batch and multiplies the remainder into one axis
+// (`Engine.Reshape(input, [batchSize, actualOutputSize])`). So the OUTPUT is always rank 1 or
+// rank 2 - one declaration with BatchOptional covers both - while the INPUT is declared once per
+// accepted rank because the axes being multiplied need distinct roles for Product to name them.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+// ONE BatchOptional declaration covers rank 4 (batched [B,C,H,W]) AND rank 3 (per-sample [C,H,W]),
+// which is what AxesForRank already does and what chain resolution already passes. Declaring rank 3
+// separately as [Batch, Height, Width] claimed the leading axis was a batch when in a per-sample chain
+// it is Channels - so the contract flattened two axes where the layer flattens three.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Batch is preserved and everything after it is collapsed into a single feature axis.")]
+[AutoParameters]
+public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the relation is a Product, which no generator can infer: the size of the
+    /// output feature axis is the product of every input axis after the batch. Read straight off
+    /// ForwardTraced's `for (int i = 1; i &lt; input.Shape.Length; i++) actualOutputSize *= input.Shape[i];`.
+    /// </para>
+    /// <para>
+    /// Rank 1 is a genuine identity - the method returns the input object itself - and rank 2 degenerates
+    /// to Same(Features), because a product over a single axis IS that axis. Both are stated explicitly
+    /// rather than folded into the general case so the contract says what the code does at each rank.
+    /// </para>
+    /// <para>
+    /// Ranks above four decline rather than guess: a fifth leading axis would need a fifth DISTINCT role
+    /// to be nameable, and two anonymous placeholders in one layout cannot be told apart.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => OutputAxesFor(inputRank, isBatched: true);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// THIS LAYER IS WHY THE isBatched FLAG EXISTS. It collapses everything AFTER the batch axis, so
+    /// the answer depends entirely on whether the leading axis is one. A rank-3 tensor <c>[3,8,9]</c>
+    /// handed to <c>Forward</c> is one batch and two feature axes, giving <c>[3,72]</c>. A rank-3
+    /// PER-SAMPLE shape <c>[32,7,7]</c> from chain resolution is <c>[Channels, Height, Width]</c> with
+    /// no batch at all, giving <c>[1568]</c>. Both are correct; rank alone cannot distinguish them, and
+    /// a contract forced to pick one was wrong for whichever caller it did not pick.
+    /// </para>
+    /// <para>
+    /// Un-batched: every axis collapses into one. Batched: the batch is carried and the rest collapse.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank, bool isBatched)
+    {
+        OutputAxisContract Batch() => new(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch));
+
+        if (!isBatched)
+        {
+            // No batch axis: the whole shape becomes one feature axis.
+            return inputRank switch
+            {
+                1 => new[]
+                {
+                    new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+                },
+                2 => new[]
+                {
+                    new OutputAxisContract(
+                        TensorAxis.Features,
+                        AxisRelation.Product(TensorAxis.Batch, TensorAxis.Features)),
+                },
+                3 => new[]
+                {
+                    new OutputAxisContract(
+                        TensorAxis.Features,
+                        AxisRelation.Product(
+                            TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width)),
+                },
+                _ => null,
+            };
+        }
+
+        return inputRank switch
+        {
+            1 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+            },
+            2 => new[]
+            {
+                Batch(),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+            },
+            // MATCHES ForwardTraced, which is what actually runs: it preserves axis 0 and multiplies
+            // the rest (`for (int i = 1; i < input.Shape.Length; i++)`), so a rank-3 tensor [3,8,9]
+            // comes back [3,72].
+            //
+            // THE LAYER DISAGREES WITH ITSELF AND THIS CONTRACT CANNOT FIX THAT. OnFirstForward
+            // multiplies from index 0 (`for (int i = 0; ...) _outputSize *= shape[i]`), so it declares
+            // [216] for the same rank-3 input. The two are reached by different paths - OnFirstForward
+            // via ResolveShapesOnly during chain resolution (per-sample shapes) AND via the first real
+            // forward (a batched tensor) - so it is applying one convention to both. The contract
+            // follows the FORWARD because that is the shape callers actually receive; the shadow
+            // comparison reports the residual disagreement rather than hiding it.
+            3 => new[]
+            {
+                Batch(),
+                new OutputAxisContract(
+                    TensorAxis.Features, AxisRelation.Product(TensorAxis.Height, TensorAxis.Width)),
+            },
+            4 => new[]
+            {
+                Batch(),
+                new OutputAxisContract(
+                    TensorAxis.Features,
+                    AxisRelation.Product(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width)),
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The shape of the input tensor.
     /// </summary>
@@ -225,7 +346,7 @@ public class FlattenLayer<T> : LayerBase<T>
     /// "unflattened" back to the original shape during backpropagation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
@@ -249,59 +370,6 @@ public class FlattenLayer<T> : LayerBase<T>
         }
         _outputSize = actualOutputSize;
         return Engine.Reshape(input, [batchSize, actualOutputSize]);
-    }
-
-    /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the flatten layer has no
-    /// trainable parameters to update, so it performs no operation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method does nothing for flatten layers because they have no adjustable weights.
-    /// 
-    /// Unlike most layers (like convolutional or fully connected layers):
-    /// - Flatten layers don't have weights or biases to learn
-    /// - They just rearrange the data without modifying it
-    /// - There's nothing to update during training
-    /// 
-    /// This method exists only to fulfill the requirements of the base layer class.
-    /// The flatten layer participates in training by reorganizing activations and gradients,
-    /// not by updating internal parameters.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // FlattenLayer has no parameters to update
-    }
-
-    /// <summary>
-    /// Gets the trainable parameters of the layer.
-    /// </summary>
-    /// <returns>
-    /// An empty vector since flatten layers have no trainable parameters.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is a required override from the base class, but the flatten layer has no
-    /// trainable parameters to retrieve, so it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because flatten layers have no learnable values.
-    /// 
-    /// Unlike layers with weights and biases:
-    /// - Flatten layers don't have any parameters that change during training
-    /// - They perform a fixed operation (reshaping) that doesn't involve learning
-    /// - There are no values to save when storing a trained model
-    /// 
-    /// This method returns an empty vector, indicating there are no parameters to collect.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // FlattenLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

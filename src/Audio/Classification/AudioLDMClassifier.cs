@@ -230,7 +230,7 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

@@ -36,7 +36,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
-internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
+// Rotates query/key pairs by position: shape-preserving at rank 2 [Time, Features]. Needs a real
+// sequence axis to rotate against, so it is not declared rank-agnostic.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 {
     private int _maxSequenceLength;
     private readonly int _headDimension;
@@ -46,12 +51,16 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// Pre-computed cosine values: cos_cache[pos, i] = cos(pos * freq_i).
     /// Shape: [maxSequenceLength, headDimension / 2].
     /// </summary>
+    // Memoised cos table for a deterministic function of position; recomputed on demand, never learned.
+    [Scratch]
     private Tensor<T> _cosCache;
 
     /// <summary>
     /// Pre-computed sine values: sin_cache[pos, i] = sin(pos * freq_i).
     /// Shape: [maxSequenceLength, headDimension / 2].
     /// </summary>
+    // Memoised sin table for a deterministic function of position; recomputed on demand, never learned.
+    [Scratch]
     private Tensor<T> _sinCache;
 
     private readonly object _cacheLock = new();
@@ -345,25 +354,13 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [..., seqLen, headDim].</param>
     /// <returns>Rotated tensor with the same shape.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : input.Shape[0];
         EnsureCacheLength(seqLen);
 
         return RotateTensor(input, 0);
-    }
-
-    /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     /// <inheritdoc />

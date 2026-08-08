@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
@@ -334,6 +334,155 @@ public abstract class LayerTestBase
     }
 
     // =========================================================================
+    // INVARIANT 1b: A layer either HANDLES a nearby input shape or REJECTS it
+    //               deliberately — it never crashes from the inside.
+    // =========================================================================
+
+    /// <summary>
+    /// Whether the shape-robustness sweep applies. Override to <c>false</c> ONLY for a layer whose input
+    /// shape is genuinely not perturbable, never to silence a crash.
+    /// </summary>
+    protected virtual bool ShapeRobustnessApplicable => true;
+
+    /// <summary>
+    /// Feeds the layer input shapes one step away from its declared one, and requires every outcome to be
+    /// either a real output or a deliberate rejection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE DISTINCTION IS THE WHOLE TEST. A layer is entitled to require a specific input shape — a patch
+    /// embedding needs its extent divisible by the patch size, and saying so is correct behaviour. What a
+    /// layer is not entitled to do is ASSUME a shape silently and then fail from inside a kernel with
+    /// <c>IndexOutOfRangeException</c> or <c>NullReferenceException</c>. Those name no constraint, point
+    /// at no caller mistake, and are indistinguishable from an engine defect; every one of them is a
+    /// hard-coded assumption that was never written down.
+    /// </para>
+    /// <para>
+    /// This is what makes shape support real rather than declared. A layer that works at 16x16 and
+    /// crashes at 17x16 passes every other invariant in this file, because they all run at exactly one
+    /// shape — which is precisely how such an assumption survives.
+    /// </para>
+    /// <para>
+    /// The recovered shape relation is reported alongside any failure, because "what did this layer
+    /// actually do to the shapes it accepted" is the first question after such a crash.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 60000)]
+    public async Task Forward_NearbyShapes_AreHandledOrDeliberatelyRejected()
+    {
+        await Task.Yield();
+        if (!ShapeRobustnessApplicable) return;
+        using var _arena = TensorArena.Create();
+
+        var probes = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.ProbeShapes(InputShape);
+        var observations = new List<(int[] Input, int[] Output)>();
+        var crashes = new List<string>();
+
+        foreach (var shape in probes)
+        {
+            try
+            {
+                var output = CreateLayer().Forward(CreateRandomTensor(shape));
+                var outShape = output.Shape.ToArray();
+
+                Assert.True(
+                    outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0),
+                    $"Input [{string.Join(",", shape)}] was accepted but produced the degenerate output "
+                    + $"shape [{string.Join(",", outShape)}]. Accepting a shape and then emitting nothing "
+                    + "is worse than rejecting it, because the caller gets no signal at all.");
+
+                observations.Add((shape, outShape));
+            }
+            catch (Xunit.Sdk.XunitException)
+            {
+                throw;
+            }
+            catch (System.Exception ex) when (IsResourceExhaustion(ex))
+            {
+                // NOT a shape assumption. Running out of memory says the probe was too big for this
+                // machine right now, which is a statement about the runner and not about the layer;
+                // recording it as a hard-coded-shape defect would send the reader hunting for an
+                // assumption that is not there. Rethrown so it surfaces as the resource failure it is.
+                throw;
+            }
+            catch (System.Exception ex) when (IsDeliberateShapeRejection(ex))
+            {
+                // A stated constraint. Correct behaviour, and the caller is told what is wrong.
+            }
+            catch (System.Exception ex)
+            {
+                crashes.Add(
+                    $"  input [{string.Join(",", shape)}] -> {ex.GetType().Name}: "
+                    + $"{ex.Message.Split('\n')[0]}");
+            }
+        }
+
+        if (crashes.Count > 0)
+        {
+            string relation = DescribeDiscoveredRelation(observations);
+            Assert.Fail(
+                $"{CreateLayer().GetType().Name} crashed from the INSIDE on input shapes one step away "
+                + $"from its declared [{string.Join(",", InputShape)}]:\n"
+                + string.Join("\n", crashes)
+                + "\n\nThese are not shape validations — they name no constraint and point at no caller "
+                + "mistake, so they read as engine defects. Either accept these shapes, or reject them "
+                + "with an ArgumentException that says what this layer requires.\n"
+                + $"Shape relation recovered from the shapes it DID accept: {relation}");
+        }
+    }
+
+    /// <summary>An exception that states a shape constraint, as opposed to one that leaks an assumption.</summary>
+    /// <remarks>
+    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
+    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
+    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
+    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
+    /// </remarks>
+    /// <summary>Environmental failure - the machine, not the layer.</summary>
+    private static bool IsResourceExhaustion(System.Exception ex)
+        => ex is System.OutOfMemoryException or System.InsufficientExecutionStackException
+            or System.OperationCanceledException;
+
+    private static bool IsDeliberateShapeRejection(System.Exception ex)
+        => ex is AiDotNet.Exceptions.TensorShapeMismatchException
+            or AiDotNet.Exceptions.TensorDimensionException
+            or AiDotNet.Exceptions.TensorRankException
+            or AiDotNet.Exceptions.InvalidInputDimensionException
+            or AiDotNet.Exceptions.VectorLengthMismatchException
+            or System.ArgumentException
+            or System.InvalidOperationException
+            or System.NotSupportedException
+            or System.NotImplementedException
+            or System.RankException;
+
+    /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
+    private static string DescribeDiscoveredRelation(List<(int[] Input, int[] Output)> observations)
+    {
+        if (observations.Count < 2) return "(too few accepted shapes to recover one)";
+
+        int inRank = observations[0].Input.Length;
+        int outRank = observations[0].Output.Length;
+        if (observations.Any(o => o.Input.Length != inRank || o.Output.Length != outRank))
+            return "(the accepted shapes do not share a rank, so no single relation describes them)";
+
+        // Positional placeholders: this sweep runs on layers that mostly carry no axis-role annotation,
+        // and inventing roles for them would be a claim the layer never made.
+        var inAxes = Enumerable.Range(0, inRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+        var outAxes = Enumerable.Range(0, outRank).Select(i => (AiDotNet.Enums.TensorAxis)i).ToArray();
+
+        try
+        {
+            var findings = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.Fit(inAxes, outAxes, observations);
+            return string.Join(
+                ", ", findings.Select((f, i) => $"out[{i}] = {f.Relation?.ToString() ?? "?"}"));
+        }
+        catch
+        {
+            return "(relation recovery failed)";
+        }
+    }
+
+    // =========================================================================
     // INVARIANT 2: Forward is deterministic (same input -> same output)
     // Unless the layer has stochastic behavior (dropout), two calls with the
     // same input must produce bit-identical output.
@@ -501,6 +650,182 @@ public abstract class LayerTestBase
             Assert.True(count > 0,
                 "Layer is expected to have trainable parameters but ParameterCount is 0.");
         }
+    }
+
+    // =========================================================================
+    // DIAGNOSTIC: is this layer's GetParameters() override redundant?
+    // Reports, never asserts. Output feeds the override-deletion work list.
+    // =========================================================================
+
+    /// <summary>
+    /// Records whether this layer's hand-written <c>GetParameters()</c> is value-for-value
+    /// identical to what <see cref="LayerBase{T}"/> now produces, and is therefore deletable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>GetParameters</c> used to be ABSTRACT, which forced all 710 layers to hand-write a walk of
+    /// their own tensors while <c>ParameterCount</c> stayed virtual with a registry-based default —
+    /// two independently written answers to one question, per layer, and the source of every
+    /// model-level count mismatch. The base implements it now, so most of those overrides are dead
+    /// weight. Most, not all: this reports which.
+    /// </para>
+    /// <para>
+    /// Equal LENGTH is not sufficient evidence to delete one. The base emits <c>Parameters</c>, then
+    /// registered tensors, then sub-layers in REGISTRATION order; a hand-written getter uses field
+    /// order. Where those differ the totals still match while the layout silently changes, which
+    /// invalidates saved checkpoints and mis-pairs <c>SetParameters</c> — worse than the bug this
+    /// work set out to fix, and invisible to a count-based test. Four layers really do differ this
+    /// way (ViTCoMerSegmentationLayer, VideoGigaGANGeneratorLayer, VocosGeneratorLayer, NBEATSBlock),
+    /// so the comparison is elementwise on VALUES.
+    /// </para>
+    /// <para>
+    /// It runs here, on <c>LayerTestBase</c>, rather than as a standalone sweep because the 254
+    /// generated layer classes construct their layer correctly and probe a Forward first. A sweep
+    /// driven by default constructors reached 35 layers and could only compare unresolved ones,
+    /// where both sides are empty and the comparison proves nothing either way.
+    /// </para>
+    /// <para>
+    /// Never asserts. A legitimately different override — weight tying that shares one tensor across
+    /// slots, a GAN reading frozen modules — is correct, not a defect.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 30000)]
+    public async Task Parameters_ReportOverrideRedundancy()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        var type = layer.GetType();
+
+        var gp = type.GetMethod("GetParameters",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+            null, Type.EmptyTypes, null);
+        // Nothing to report when the layer already relies on the base implementation.
+        if (gp is null || gp.DeclaringType is null
+            || gp.DeclaringType.Name.StartsWith("LayerBase", StringComparison.Ordinal))
+        {
+            Record(type, "INHERITS");
+            return;
+        }
+
+        ProbeForward(layer);
+
+        Vector<double> actual;
+        try { actual = layer.GetParameters(); }
+        catch { Record(type, "UNMEASURABLE"); return; }
+
+        List<double> expected;
+        try { expected = BaseOrderValues(layer); }
+        catch (Exception ex)
+        {
+            // Sparse-backed layers cannot be flattened generically: GetFlat throws on a sparse
+            // tensor, and SparseLinearLayer reads _weights.Values[nz] through a sparse-only API.
+            // Those layers must keep their override, so "cannot reconstruct" is a legitimate
+            // verdict here -- not a test failure. A diagnostic that breaks the suite it reports
+            // on is worse than no diagnostic.
+            Record(type, $"UNMEASURABLE {ex.GetType().Name}");
+            return;
+        }
+
+        if (actual.Length == 0 && expected.Count == 0) { Record(type, "UNRESOLVED"); return; }
+
+        bool same = expected.Count == actual.Length;
+        for (int i = 0; i < actual.Length && same; i++)
+            if (Math.Abs(actual[i] - expected[i]) > 1e-12) same = false;
+
+        // Distinguish the THREE ways an override can diverge, because they need opposite fixes:
+        //   UNREGISTERED - the override returns MORE than the registry holds, so the layer owns
+        //                  tensors it never declared via [TrainableParameter]/RegisterTrainable-
+        //                  Parameter. The base cannot see them. This is the automation gap: attribute
+        //                  the fields and the generator registers them, after which the override is
+        //                  removable. Deleting first silently drops those weights -- FinBERT went
+        //                  from 6,603 parameters to 819 exactly this way.
+        //   OVERCOUNT    - the registry holds more than the override returns; the override is hiding
+        //                  something the base would expose.
+        //   ORDER        - same length, different values: field order vs registration order. Keep
+        //                  the override, or realign registration deliberately.
+        string verdict =
+            same ? $"REDUNDANT {actual.Length}"
+            : expected.Count < actual.Length ? $"UNREGISTERED {actual.Length}/{expected.Count}"
+            : expected.Count > actual.Length ? $"OVERCOUNT {actual.Length}/{expected.Count}"
+            : $"ORDER {actual.Length}";
+        Record(type, verdict);
+    }
+
+    /// <summary>Reproduces LayerBase.GetParameters' order: Parameters, own tensors, then sub-layers.</summary>
+    private static List<double> BaseOrderValues(ILayer<double> layer)
+    {
+        var values = new List<double>();
+        var t = layer.GetType();
+
+        var pField = t.GetField("Parameters",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.FlattenHierarchy);
+        if (pField?.GetValue(layer) is Vector<double> own)
+            for (int i = 0; i < own.Length; i++) values.Add(own[i]);
+
+        // GetTrainableParameters is declared on LayerBase<T>, not on ILayer<T>.
+        if (t.GetMethod("GetTrainableParameters",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                ?.Invoke(layer, null) is System.Collections.IEnumerable tensors)
+        {
+            foreach (var obj in tensors)
+            {
+                if (obj is not Tensor<double> ten) continue;
+                // Mirror LayerBase exactly: a sparse tensor contributes its STORED entries read
+                // through DataVector, never a densified GetFlat walk. Reconstructing in any other
+                // order or extent would compare the override against something the base does not
+                // actually produce, which is worse than not measuring at all.
+                if (ten is SparseTensor<double> sp)
+                    for (int i = 0; i < sp.NonZeroCount; i++) values.Add(sp.DataVector[i]);
+                else
+                    for (int i = 0; i < ten.Length; i++) values.Add(ten.GetFlat(i));
+            }
+        }
+
+        foreach (var sub in layer.GetSubLayers())
+        {
+            if (sub is null) continue;
+            var sv = sub.GetParameters();
+            for (int i = 0; i < sv.Length; i++) values.Add(sv[i]);
+        }
+
+        return values;
+    }
+
+    private void ProbeForward(ILayer<double> layer)
+    {
+        using var probe = new Tensor<double>(InputShape);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.01 * (i + 1);
+        try { layer.Forward(probe); }
+        catch
+        {
+            try
+            {
+                layer.GetType().GetMethod("Forward", new[] { typeof(Tensor<double>[]) })
+                    ?.Invoke(layer, new object[] { new[] { probe, probe } });
+            }
+            catch { /* unprobeable; compare whatever state the ctor produced */ }
+        }
+    }
+
+    private static readonly object _redundancyLock = new();
+
+    private static void Record(Type layerType, string verdict)
+    {
+        // Appended to a shared file rather than ITestOutputHelper: the verdict is only useful
+        // aggregated across all 254 generated classes, and per-test output is not collectable
+        // that way. Best-effort — a diagnostic must never fail the suite it reports on.
+        try
+        {
+            lock (_redundancyLock)
+            {
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "override-redundancy.txt"),
+                    $"{verdict}\t{layerType.FullName}{Environment.NewLine}");
+            }
+        }
+        catch { }
     }
 
     // =========================================================================
@@ -772,26 +1097,74 @@ public abstract class LayerTestBase
 
         var rng = RandomHelper.CreateSeededRandom(7777);
 
+        // SPARSE parameters (SparseLinearLayer's SparseTensor<T> weights) mirror
+        // torch.autograd.gradcheck's "masked" semantics: it walks a sparse tensor's STORED (nnz)
+        // entries via indices()/values() and perturbs only those, never densifying. Two reasons
+        // this matters here rather than being a style choice:
+        //   1. Flat indexing a SparseTensor throws outright — "GetFlat is not supported on sparse
+        //      tensors. Use SparseTensor-specific APIs or call ToDense() first." — so the check
+        //      cannot even run against one.
+        //   2. Densifying would be WORSE than the crash: it would perturb STRUCTURAL ZEROS, which
+        //      are not trainable parameters and therefore have no analytical gradient, producing
+        //      false mismatches and an inflated parameter count. SparseLinearLayer's own
+        //      ParameterCount is NonZeroCount + OutputFeatures, confirming the stored values are
+        //      the trainable set.
+        // Dense parameters keep the exact previous behaviour (flat index over Length).
+        // Access the sparse payload through DataVector.AsSpan(), NOT through the Values property:
+        // `public T[] Values => DataVector.ToArray()` allocates a FRESH COPY on every access, so the
+        // earlier `sp.Values[i] = v` wrote into a throwaway array and never perturbed the parameter.
+        // Both finite-difference evaluations therefore saw identical weights, making the numerical
+        // gradient exactly 0 for every sparse entry while the analytical gradient was non-zero —
+        // which is what produced "disagrees ... on 5/12 sampled trainable scalars" (the entries that
+        // "agreed" were simply the ones whose analytical gradient was also ~0). Same copy-versus-view
+        // trap as Tensor<T>.ToVector(); AsSpan() is the documented zero-copy path.
+        static int TrainableScalarCount(Tensor<double> p) =>
+            p is SparseTensor<double> sp ? sp.NonZeroCount : p.Length;
+        static double ReadScalar(Tensor<double> p, int i) =>
+            p is SparseTensor<double> sp ? sp.DataVector[i] : p[i];
+        static void WriteScalar(Tensor<double> p, int i, double v)
+        {
+            if (p is SparseTensor<double> sp) sp.DataVector[i] = v;
+            else p[i] = v;
+        }
+        // The analytical gradient of a SPARSE parameter is not necessarily sparse. When it comes back
+        // DENSE, index i (a position in the sparse nnz payload) addresses a completely different
+        // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
+        // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
+        // payload layout, so it is read directly.
+        static double ReadAnalyticalScalar(Tensor<double> grad, Tensor<double> param, int i)
+        {
+            if (grad is SparseTensor<double> gsp) return gsp.DataVector[i];
+            if (param is SparseTensor<double> psp)
+            {
+                int cols = psp.Shape[psp.Shape.Length - 1];
+                int flat = psp.RowIndices[i] * cols + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? grad.DataVector[flat] : 0.0;
+            }
+            return grad[i];
+        }
+
         foreach (var param in trainableParams)
         {
-            if (param is null || param.Length == 0) continue;
+            if (param is null || TrainableScalarCount(param) == 0) continue;
             if (!analyticalGrads.TryGetValue(param, out var analyticalGrad) || analyticalGrad is null)
                 continue;
 
-            int sampleCount = Math.Min(MaxSampledPerParam, param.Length);
+            int trainableCount = TrainableScalarCount(param);
+            int sampleCount = Math.Min(MaxSampledPerParam, trainableCount);
             for (int s = 0; s < sampleCount; s++)
             {
-                int idx = rng.Next(0, param.Length);
+                int idx = rng.Next(0, trainableCount);
 
-                double original = param[idx];
-                param[idx] = original + Eps;
+                double original = ReadScalar(param, idx);
+                WriteScalar(param, idx, original + Eps);
                 var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original - Eps;
+                WriteScalar(param, idx, original - Eps);
                 var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                param[idx] = original;
+                WriteScalar(param, idx, original);
 
                 double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
-                double analytical = analyticalGrad[idx];
+                double analytical = ReadAnalyticalScalar(analyticalGrad, param, idx);
                 double absDiff = Math.Abs(numerical - analytical);
                 double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
 

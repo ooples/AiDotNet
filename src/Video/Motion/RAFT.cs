@@ -165,7 +165,8 @@ public class RAFT<T> : OpticalFlowBase<T>
         int correlationLevels = DefaultCorrelationLevels,
         int correlationRadius = DefaultCorrelationRadius,
         int numIterations = DefaultNumIterations,
-        RAFTOptions? options = null)
+        RAFTOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new RAFTOptions();
@@ -180,6 +181,15 @@ public class RAFT<T> : OpticalFlowBase<T>
 
         _featureEncoder = [];
         _contextEncoder = [];
+
+        // DEFAULT training optimizer (overridable — pass your own `optimizer`, or configure one via the
+        // builder). RAFT's correlation-pyramid + GRU-refinement gradients overshoot at the framework
+        // default 1e-3 Adam and drive the weights to NaN within a few steps (post-train outputs went NaN);
+        // 1e-4 is the standard small optical-flow fine-tune LR and keeps training finite. Gradient clipping
+        // is already on (OpticalFlowBase maxGradNorm = 1.0) but is a near-no-op under Adam, so the LR is the
+        // effective lever.
+        SetBaseTrainOptimizer(optimizer ?? new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 }));
 
         InitializeNativeLayers();
     }
@@ -203,8 +213,19 @@ public class RAFT<T> : OpticalFlowBase<T>
             frame2 = AddBatchDimension(frame2);
         }
 
-        var concatenated = ConcatenateChannels(frame1, frame2);
-        var result = Predict(concatenated);
+        // Run the iterative refinement graph DIRECTLY rather than going through Predict.
+        //
+        // Predict is the inference entry point: when the inference arena is enabled it copies its
+        // output out of the arena (DetachFromArena), which severs the autodiff tape at the boundary.
+        // Routing through it meant EstimateFlow produced a correct flow field that carried no gradient,
+        // so any loss differentiating flow with respect to the frames (a flow-consistency term) trained
+        // nothing while still reporting a plausible loss value.
+        //
+        // It was also wasteful: Predict's PredictCore immediately slices the pair back apart, so the
+        // concatenate-then-slice round trip did no work. ForwardIterative is the same graph both
+        // PredictCore and ForwardForTraining use, so inference results are unchanged.
+        var flowIterations = ForwardIterative(frame1, frame2);
+        var result = flowIterations[^1];
 
         if (!hasBatch)
         {
@@ -419,50 +440,73 @@ public class RAFT<T> : OpticalFlowBase<T>
         int height = fmap1.Shape[2];
         int width = fmap1.Shape[3];
 
-        int corrDim = _correlationLevels * (2 * _correlationRadius + 1) * (2 * _correlationRadius + 1);
-        var correlation = new Tensor<T>([batchSize, corrDim, height, width]);
+        // Flow-guided local correlation (Teed & Deng 2020, sec 3.2), tape-aware. The paper looks the flow
+        // up in a precomputed all-pairs cost volume; the mathematically-equivalent, cheap, differentiable
+        // formulation is: warp fmap2 by the CURRENT flow ONCE (a single GridSample), then take, for each
+        // (dh,dw) in the level-scaled window, the per-pixel dot product of fmap1 with the integer-shifted
+        // warped fmap2. Shifting is a pad + slice (both differentiable), so a forward costs a couple of
+        // GridSamples rather than one per window cell. The scalar loop this replaces severed the tape
+        // (starving both feature encoders of gradient); an earlier one-GridSample-per-cell version was
+        // correct but ~24 s/step. Gradients reach fmap1, fmap2 and the flow, exactly as the lookup does.
+        var warped = WarpByFlow(fmap2, flow); // [B,C,H,W] fmap2 resampled at the current flow
 
-        for (int b = 0; b < batchSize; b++)
+        int radius = _correlationRadius;
+        int maxScale = 1 << (_correlationLevels - 1);
+        int pad = radius * maxScale;
+        var padded = Engine.Pad(warped, pad, pad, pad, pad, NumOps.Zero); // [B,C,H+2p,W+2p]
+
+        var corrChannels = new List<Tensor<T>>();
+        for (int level = 0; level < _correlationLevels; level++)
         {
-            for (int h = 0; h < height; h++)
+            int scale = 1 << level;
+            for (int dh = -radius; dh <= radius; dh++)
             {
-                for (int w = 0; w < width; w++)
+                for (int dw = -radius; dw <= radius; dw++)
                 {
-                    double dx = Convert.ToDouble(flow[b, 0, h, w]);
-                    double dy = Convert.ToDouble(flow[b, 1, h, w]);
-
-                    int corrIdx = 0;
-                    for (int level = 0; level < _correlationLevels; level++)
-                    {
-                        int scale = 1 << level;
-                        for (int dh = -_correlationRadius; dh <= _correlationRadius; dh++)
-                        {
-                            for (int dw = -_correlationRadius; dw <= _correlationRadius; dw++)
-                            {
-                                int h2 = (int)Math.Round(h / (double)scale + dy / scale + dh);
-                                int w2 = (int)Math.Round(w / (double)scale + dx / scale + dw);
-
-                                h2 = Math.Max(0, Math.Min(h2, height / scale - 1));
-                                w2 = Math.Max(0, Math.Min(w2, width / scale - 1));
-
-                                T corr = NumOps.Zero;
-                                for (int c = 0; c < channels; c++)
-                                {
-                                    T v1 = fmap1[b, c, h, w];
-                                    T v2 = fmap2[b, c, h2 * scale, w2 * scale];
-                                    corr = NumOps.Add(corr, NumOps.Multiply(v1, v2));
-                                }
-
-                                correlation[b, corrIdx, h, w] = corr;
-                                corrIdx++;
-                            }
-                        }
-                    }
+                    // Window cell (dh,dw) at this pyramid level = the warped fmap2 shifted by (dh,dw)*scale
+                    // pixels, read out of the padded tensor as a plain (differentiable) slice.
+                    var shifted = Engine.TensorSlice(
+                        padded,
+                        new[] { 0, 0, pad + dh * scale, pad + dw * scale },
+                        new[] { batchSize, channels, height, width });
+                    var prod = Engine.TensorMultiply(fmap1, shifted);                     // [B,C,H,W]
+                    corrChannels.Add(Engine.ReduceSum(prod, new[] { 1 }, keepDims: true)); // [B,1,H,W]
                 }
             }
         }
 
-        return correlation;
+        return Engine.TensorConcatenate(corrChannels.ToArray(), axis: 1); // [B, corrDim, H, W]
+    }
+
+    private Tensor<T> WarpByFlow(Tensor<T> image, Tensor<T> flow)
+    {
+        // Differentiable backward warp: resample `image` [B,C,H,W] at each pixel displaced by `flow`
+        // [B,2,H,W] (x=dx, y=dy) via a normalized identity grid + flow offset + GridSample — the same
+        // construction RIFE/VFI use. Gradients flow to both `image` and `flow`.
+        int batchSize = image.Shape[0];
+        int height = image.Shape[2];
+        int width = image.Shape[3];
+
+        var identityTheta = new Tensor<T>([batchSize, 2, 3]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            identityTheta[b, 0, 0] = NumOps.One; // x scale
+            identityTheta[b, 1, 1] = NumOps.One; // y scale
+        }
+        var baseGrid = Engine.AffineGrid(identityTheta, height, width); // [B,H,W,2] identity sampling grid
+
+        // A dx-pixel shift is 2*dx/(W-1) in the normalized [-1,1] grid coordinates.
+        double sx = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double sy = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var flowNHWC = Engine.TensorPermute(flow, new[] { 0, 2, 3, 1 }); // [B,H,W,2] (x=dx, y=dy)
+        var normScale = new Tensor<T>([batchSize, height, width, 2]);
+        var nsSpan = normScale.Data.Span;
+        for (int i = 0; i + 1 < nsSpan.Length; i += 2) { nsSpan[i] = NumOps.FromDouble(sx); nsSpan[i + 1] = NumOps.FromDouble(sy); }
+        var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, normScale));
+
+        // Engine.GridSample is NCHW (PyTorch convention): image is already [B,C,H,W],
+        // pass it directly. The grid is [B,H,W,2] regardless of image layout.
+        return Engine.GridSample(image, grid);                            // [B,C,H,W]
     }
 
     private Tensor<T> GRUUpdate(Tensor<T> hiddenState, Tensor<T> gruInput)
@@ -475,7 +519,7 @@ public class RAFT<T> : OpticalFlowBase<T>
 
         var z = Engine.Sigmoid(gruConvZ.Forward(gruInput));
         var r = Engine.Sigmoid(gruConvR.Forward(gruInput));
-        var hNew = ApplyTanh(gruConvH.Forward(gruInput));
+        var hNew = Engine.Tanh(gruConvH.Forward(gruInput));
 
         var ones = Tensor<T>.CreateDefault(z._shape, NumOps.One);
         var oneMinusZ = Engine.TensorSubtract(ones, z);
@@ -483,15 +527,6 @@ public class RAFT<T> : OpticalFlowBase<T>
         var term2 = Engine.TensorMultiply(z, hNew);
 
         return Engine.TensorAdd(term1, term2);
-    }
-
-    private Tensor<T> ApplyTanh(Tensor<T> input)
-    {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            return NumOps.FromDouble(Math.Tanh(x));
-        });
     }
 
     private Tensor<T> UpsampleFlow(Tensor<T> flow, Tensor<T> features, int factor)
@@ -564,38 +599,6 @@ public class RAFT<T> : OpticalFlowBase<T>
         return Engine.PixelShuffle(stacked, factor);
     }
 
-    private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, int height, int width)
-    {
-        int h0 = (int)Math.Floor(h);
-        int w0 = (int)Math.Floor(w);
-        int h1 = h0 + 1;
-        int w1 = w0 + 1;
-
-        h0 = Math.Max(0, Math.Min(h0, height - 1));
-        h1 = Math.Max(0, Math.Min(h1, height - 1));
-        w0 = Math.Max(0, Math.Min(w0, width - 1));
-        w1 = Math.Max(0, Math.Min(w1, width - 1));
-
-        double hWeight = h - Math.Floor(h);
-        double wWeight = w - Math.Floor(w);
-
-        T v00 = tensor[b, c, h0, w0];
-        T v01 = tensor[b, c, h0, w1];
-        T v10 = tensor[b, c, h1, w0];
-        T v11 = tensor[b, c, h1, w1];
-
-        T top = NumOps.Add(
-            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-        T bottom = NumOps.Add(
-            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-
-        return NumOps.Add(
-            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-    }
-
     private Tensor<T> ConcatenateChannels(Tensor<T> t1, Tensor<T> t2)
     {
         return Engine.TensorConcatenate([t1, t2], axis: 1);
@@ -603,28 +606,14 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private Tensor<T> SliceChannels(Tensor<T> input, int startChannel, int endChannel)
     {
+        // Tape-aware channel slice (was a scalar copy loop that severed the tape). Input is [B, C, H, W].
         int batchSize = input.Shape[0];
         int numChannels = endChannel - startChannel;
         int height = input.Shape[2];
         int width = input.Shape[3];
-
-        var result = new Tensor<T>([batchSize, numChannels, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < numChannels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        result[b, c, h, w] = input[b, startChannel + c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
+        return Engine.TensorSlice(input,
+            new[] { 0, startChannel, 0, 0 },
+            new[] { batchSize, numChannels, height, width });
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -634,26 +623,31 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
-        // Convert [C, H, W] to [1, C, H, W]
+        // Convert [C, H, W] to [1, C, H, W].
+        //
+        // A recorded reshape, NOT a buffer copy. This previously allocated a new tensor and
+        // Data.Span.CopyTo'd into it, which is not a recorded operation: it severed the tape at the
+        // very entry of EstimateFlow, so no gradient could reach the input frames. Any loss that
+        // differentiates flow with respect to the frames (a flow-consistency term) therefore produced
+        // a loss value while training nothing. Adding a leading singleton axis does not move data, so
+        // a reshape is exactly equivalent and stays on the tape.
         int c = tensor.Shape[0];
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
 
-        var result = new Tensor<T>([1, c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, [1, c, h, w]);
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
-        // Convert [1, C, H, W] to [C, H, W]
+        // Convert [1, C, H, W] to [C, H, W] — a recorded reshape, for the same reason as
+        // AddBatchDimension. Dropping a singleton leading axis leaves element order unchanged, so the
+        // buffer copy this replaced bought nothing and cost the gradient path on the way back out.
         int c = tensor.Shape[1];
         int h = tensor.Shape[2];
         int w = tensor.Shape[3];
 
-        var result = new Tensor<T>([c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, [c, h, w]);
     }
 
     #endregion

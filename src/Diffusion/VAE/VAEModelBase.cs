@@ -80,13 +80,40 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// implementations should wrap their forward body with this helper.
     /// </summary>
     protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
-        _encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode);
+        DetachPlanOutput(_encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode));
 
     /// <summary>
     /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
     /// </summary>
     protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
-        _decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode);
+        DetachPlanOutput(_decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode));
+
+    /// <summary>
+    /// Returns a tensor the caller can safely RETAIN, copying when the compiled plan handed back its
+    /// own resident output buffer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A compiled plan is reused across calls: <c>CompiledModelHost.Predict</c> does
+    /// <c>SetInputs(...)</c> then returns <c>plan.Execute()</c>, and that result IS the plan's resident
+    /// output tensor, overwritten on the next call. For plumbing that consumes the result immediately —
+    /// a diffusion denoiser's per-step forward — that is exactly right and a copy would be pure waste.
+    /// </para>
+    /// <para>
+    /// Encode and Decode are different: they are public API returning a tensor the caller keeps. Without
+    /// this copy, two decodes hand back THE SAME OBJECT, so a caller holding both holds one buffer twice.
+    /// Measured before this fix: <c>ReferenceEquals(Decode(a), Decode(b))</c> was true and two latents
+    /// differing by maxAbs 1.116 produced byte-identical images. That silently defeats any test that
+    /// decodes more than once, which is why an untrained VAE round trip appeared to be
+    /// information-free — it was aliasing, not the tanh saturation it was first attributed to.
+    /// </para>
+    /// <para>
+    /// The copy is taken at THIS boundary rather than inside <c>CompiledModelHost</c> deliberately, so
+    /// the per-step denoiser hot path keeps its zero-copy contract. Other
+    /// <c>CompiledModelHost.Predict</c> consumers that retain their result need the same treatment.
+    /// </para>
+    /// </remarks>
+    private static Tensor<T> DetachPlanOutput(Tensor<T> planOutput) => planOutput.Clone();
 
     /// <summary>
     /// Async overload of <see cref="EncodeCompiled"/>.
@@ -135,8 +162,57 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public abstract double LatentScaleFactor { get; }
 
+    /// <summary>Components whose parameters belong to this VAE, in registration order.</summary>
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
+
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declare this VAE's components here with <see cref="RegisterParameterComponent"/>.
+    /// </summary>
+    /// <remarks>
+    /// Same contract as <c>DiffusionModelBase.RegisterComponents</c>: a hook rather than
+    /// constructor code, so a component created late is still seen and field-initialisation order
+    /// stops being something the author has to reason about.
+    /// </remarks>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    private void EnsureComponentsRegistered()
+    {
+        if (_componentsRegistered) return;
+        _componentsRegistered = true;
+        RegisterComponents();
+    }
+
+    /// <summary>Declares a child component as part of this VAE's parameter surface.</summary>
+    /// <remarks>Identity-based and idempotent; null is ignored.</remarks>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+    }
+
     /// <inheritdoc />
-    public abstract long ParameterCount { get; }
+    /// <remarks>
+    /// Derived from the registered components in the order <see cref="GetParameters"/> emits them,
+    /// so the count cannot disagree with the vector it describes.
+    /// </remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            EnsureComponentsRegistered();
+            long total = 0;
+            for (int i = 0; i < _parameterComponents.Count; i++) total += _parameterComponents[i].ParameterCount;
+            return total;
+        }
+    }
 
     /// <summary>
     /// Streams the VAE's trainable weight tensors per-tensor without
@@ -324,10 +400,69 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     #region IParameterizable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
-    public abstract Vector<T> GetParameters();
+    /// <remarks>Concatenates the registered components in registration order.</remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        EnsureComponentsRegistered();
+        if (_parameterComponents.Count == 0) return new Vector<T>(0);
+
+        // Sized from the components' own vectors, never from the virtual ParameterCount: a
+        // subclass overriding the count inconsistently would otherwise overflow this buffer.
+        var parts = new Vector<T>[_parameterComponents.Count];
+        int total = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            parts[i] = _parameterComponents[i].GetParameters();
+            total += parts[i].Length;
+        }
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            for (int j = 0; j < parts[i].Length; j++) result[offset++] = parts[i][j];
+        }
+        return result;
+    }
 
     /// <inheritdoc />
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <remarks>The exact inverse of <see cref="GetParameters"/>, slicing by each component's own
+    /// vector length rather than by its count.</remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureComponentsRegistered();
+        if (_parameterComponents.Count == 0)
+        {
+            if (parameters.Length == 0) return;
+            throw new ArgumentException(
+                $"{GetType().Name} has no registered parameter components, but was given " +
+                $"{parameters.Length} parameters.", nameof(parameters));
+        }
+
+        var widths = new int[_parameterComponents.Count];
+        int expected = 0;
+        for (int i = 0; i < widths.Length; i++)
+        {
+            widths[i] = _parameterComponents[i].GetParameters().Length;
+            expected += widths[i];
+        }
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, but got {parameters.Length} " +
+                $"(model {GetType().Name}, {_parameterComponents.Count} components).",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+        for (int i = 0; i < widths.Length; i++)
+        {
+            if (widths[i] == 0) continue;
+            var slice = new Vector<T>(widths[i]);
+            for (int j = 0; j < widths[i]; j++) slice[j] = parameters[offset++];
+            _parameterComponents[i].SetParameters(slice);
+        }
+    }
 
     /// <summary>
     /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -27,7 +27,20 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16, 8", TestConstructorArgs = "8")]
-public class SwinPatchMergingLayer<T> : LayerBase<T>
+// Roles straight from ForwardTraced, which reads batch = Shape[0], seqLen = Shape[1], dim = Shape[2]
+// and from the summary on that method - "[batch, seqLen, dim] where seqLen = H*W". The sequence axis is
+// Time rather than Height/Width because that is how the tensor is actually laid out here: the 2D patch
+// grid has already been flattened into one token axis, and this layer re-derives h and w from seqLen
+// (FindSpatialDimensions) rather than receiving them as separate axes.
+//
+// Rank 3 only, and batch is NOT optional: the three Shape[...] reads above are unconditional, so a
+// rank-2 input would throw rather than be treated as unbatched.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -50,9 +63,6 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _reduction.ParameterCount + _norm.ParameterCount;
 
     /// <summary>
     /// Creates a new Swin patch merging layer.
@@ -78,13 +88,44 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         RegisterSubLayer(_norm);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the sequence axis shrinks. From <c>ForwardTraced</c>:
+    /// <c>newH = h / 2</c>, <c>newW = w / 2</c>, <c>newSeqLen = newH * newW</c>, and the final
+    /// <c>Engine.Reshape(flatOut, [batch, newSeqLen, _outputDim])</c>. Since <c>h * w == seqLen</c> and
+    /// <c>FindSpatialDimensions</c> only returns a factorization in which BOTH are even - it throws
+    /// otherwise - <c>newSeqLen</c> is exactly <c>seqLen / 4</c> for every input this layer accepts.
+    /// That makes <c>Scaled(Time, 1, 4)</c> exact rather than approximate, and its refusal to divide
+    /// unevenly mirrors the layer's own "spatial dimensions must be even" guard.
+    /// </para>
+    /// <para>
+    /// The feature axis is <c>Fixed(_outputDim)</c>, not <c>Scaled(Features, 2)</c>, even though
+    /// <c>_outputDim == _inputDim * 2</c> by construction. The width is produced by
+    /// <c>_reduction</c>, a <c>DenseLayer&lt;T&gt;(_outputDim)</c>, which projects to that size
+    /// whatever the incoming width happens to be - so the constant is the real claim, and the
+    /// doubling is only how that constant was chosen.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Scaled(TensorAxis.Time, 1, 4)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     /// <summary>
     /// Performs the forward pass, merging 2x2 patches.
     /// </summary>
     /// <param name="input">Input tensor of shape [batch, seqLen, dim] where seqLen = H*W.</param>
     /// <returns>Output tensor of shape [batch, seqLen/4, dim*2].</returns>
     /// <exception cref="InvalidOperationException">Thrown if spatial dimensions are not even.</exception>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int batch = input.Shape[0];
         int seqLen = input.Shape[1];
@@ -109,34 +150,34 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         int newW = w / 2;
         int newSeqLen = newH * newW;
 
-        // Reshape to spatial and concatenate 2x2 patches
-        var merged = new Tensor<T>([batch, newSeqLen, dim * 4]);
-
-        for (int b = 0; b < batch; b++)
+        // Gather the four interleaved spatial grids and concatenate their
+        // channels. TensorGather/TensorConcatenate are tape-tracked; a manual
+        // element copy here would detach the reduction branch in compiled
+        // training and prevent gradients from reaching the preceding stage.
+        var topLeft = new Tensor<int>([newSeqLen]);
+        var topRight = new Tensor<int>([newSeqLen]);
+        var bottomLeft = new Tensor<int>([newSeqLen]);
+        var bottomRight = new Tensor<int>([newSeqLen]);
+        for (int i = 0; i < newH; i++)
         {
-            for (int i = 0; i < newH; i++)
+            for (int j = 0; j < newW; j++)
             {
-                for (int j = 0; j < newW; j++)
-                {
-                    int newIdx = i * newW + j;
-
-                    // Get 4 patch indices from original grid
-                    int idx0 = (2 * i) * w + (2 * j);         // Top-left
-                    int idx1 = (2 * i) * w + (2 * j + 1);     // Top-right
-                    int idx2 = (2 * i + 1) * w + (2 * j);     // Bottom-left
-                    int idx3 = (2 * i + 1) * w + (2 * j + 1); // Bottom-right
-
-                    // Concatenate channels from 4 patches
-                    for (int d = 0; d < dim; d++)
-                    {
-                        merged[b, newIdx, d] = input[b, idx0, d];
-                        merged[b, newIdx, dim + d] = input[b, idx1, d];
-                        merged[b, newIdx, 2 * dim + d] = input[b, idx2, d];
-                        merged[b, newIdx, 3 * dim + d] = input[b, idx3, d];
-                    }
-                }
+                int newIdx = i * newW + j;
+                topLeft[newIdx] = (2 * i) * w + (2 * j);
+                topRight[newIdx] = (2 * i) * w + (2 * j + 1);
+                bottomLeft[newIdx] = (2 * i + 1) * w + (2 * j);
+                bottomRight[newIdx] = (2 * i + 1) * w + (2 * j + 1);
             }
         }
+
+        var merged = Engine.TensorConcatenate(
+            [
+                Engine.TensorGather(input, topLeft, axis: 1),
+                Engine.TensorGather(input, topRight, axis: 1),
+                Engine.TensorGather(input, bottomLeft, axis: 1),
+                Engine.TensorGather(input, bottomRight, axis: 1)
+            ],
+            axis: 2);
 
         // Apply layer normalization
         var normalized = _norm.Forward(merged);
@@ -178,42 +219,6 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         throw new InvalidOperationException(
             $"Cannot find valid spatial dimensions from sequence length {seqLen}. " +
             "Sequence length must be factorizable into two even integers for patch merging.");
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var normParams = _norm.GetParameters();
-        var reductionParams = _reduction.GetParameters();
-
-        var result = new T[normParams.Length + reductionParams.Length];
-        normParams.AsSpan().CopyTo(result.AsSpan(0, normParams.Length));
-        reductionParams.AsSpan().CopyTo(result.AsSpan(normParams.Length, reductionParams.Length));
-
-        return new Vector<T>(result);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: sublayers may be in placeholder shape state. Resolve from
-        // known constants — _norm sees the concatenated 4×inputDim features and
-        // _reduction projects 4×inputDim → 2×inputDim.
-        int concatDim = _inputDim * 4;
-        if (!_norm.IsShapeResolved) _norm.ResolveFromShape(new[] { concatDim });
-        if (!_reduction.IsShapeResolved) _reduction.ResolveFromShape(new[] { concatDim });
-
-        int normCount = checked((int)_norm.ParameterCount);
-        int reductionCount = checked((int)_reduction.ParameterCount);
-
-        var normParams = new T[normCount];
-        var reductionParams = new T[reductionCount];
-
-        parameters.AsSpan().Slice(0, normCount).CopyTo(normParams);
-        parameters.AsSpan().Slice(normCount, reductionCount).CopyTo(reductionParams);
-
-        _norm.SetParameters(new Vector<T>(normParams));
-        _reduction.SetParameters(new Vector<T>(reductionParams));
     }
 
     /// <inheritdoc/>

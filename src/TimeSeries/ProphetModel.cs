@@ -75,8 +75,35 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// For example, if you're tracking sales over many years, this captures whether sales are generally
     /// increasing, decreasing, or staying flat over the long term, ignoring seasonal ups and downs.
     /// </para>
+    /// <para>
+    /// The trend follows the paper's piecewise-linear growth model
+    /// <c>g(t) = (k + a(t)·delta)·t + (m + a(t)·gamma)</c> with <c>gamma_j = -s_j·delta_j</c>, which is
+    /// equivalent to the continuous hinge form <c>g(t) = m + k·t + Σ_j delta_j·max(0, t - s_j)</c>.
+    /// </para>
     /// </remarks>
-    private T _trend;
+    private T _k;
+
+    /// <summary>The trend offset (intercept) <c>m</c> in <c>g(t) = m + k·t + Σ_j delta_j·max(0, t - s_j)</c>.</summary>
+    private T _m;
+
+    /// <summary>
+    /// The per-changepoint rate adjustments <c>delta</c>. Each entry is the change in slope applied from the
+    /// corresponding changepoint time onward, giving the trend its piecewise-linear (time-varying) shape.
+    /// </summary>
+    private Vector<T> _delta;
+
+    /// <summary>
+    /// The changepoint locations <c>s_j</c> (in the same units as the time feature). These are fixed during
+    /// fitting (placed uniformly over the first 80% of the training range, or taken from the options) and the
+    /// magnitude of each trend change is learned into <see cref="_delta"/>.
+    /// </summary>
+    private Vector<T> _changepointTimes;
+
+    /// <summary>
+    /// The seasonal periods actually used by the fit (in time-feature units), captured at training time so
+    /// prediction and serialization index <see cref="_seasonalComponents"/> in exactly the same order.
+    /// </summary>
+    private double[] _effectiveSeasonalPeriods;
 
     /// <summary>
     /// Stores the coefficients for all seasonal components.
@@ -109,22 +136,6 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </para>
     /// </remarks>
     private Vector<T> _holidayComponents;
-
-    /// <summary>
-    /// Represents the coefficient for the changepoint component.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The changepoint component models abrupt changes in the trend of the time series.
-    /// This coefficient determines the magnitude of the effect of each changepoint.
-    /// </para>
-    /// <para><b>For Beginners:</b> This captures sudden changes in your data's overall pattern.
-    /// For example, if a company launched a new product and saw a sudden increase in sales,
-    /// or if a policy change caused a sharp drop in some measurement, this helps the model
-    /// account for these unexpected shifts instead of treating them as noise.
-    /// </para>
-    /// </remarks>
-    private T _changepoint;
 
     /// <summary>
     /// Stores the coefficients for additional regressor variables.
@@ -183,12 +194,15 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     {
         _prophetOptions = options ?? new ProphetOptions<T, TInput, TOutput>();
 
-        // Initialize model components
-        _trend = NumOps.FromDouble(_prophetOptions.InitialTrendValue);
-        _seasonalComponents = new Vector<T>(_prophetOptions.SeasonalPeriods.Sum());
+        // Initialize model components (piecewise-linear trend g(t) = m + k*t + sum_j delta_j*max(0, t - s_j))
+        _m = NumOps.FromDouble(_prophetOptions.InitialTrendValue);
+        _k = NumOps.Zero;
+        _delta = new Vector<T>(0);
+        _changepointTimes = new Vector<T>(0);
+        _effectiveSeasonalPeriods = Array.Empty<double>();
+        _seasonalComponents = new Vector<T>(0);
         _holidayComponents = new Vector<T>(_prophetOptions.Holidays.Count);
-        _changepoint = NumOps.FromDouble(_prophetOptions.InitialChangepointValue);
-        _regressors = new Vector<T>(_prophetOptions.RegressorCount);
+        _regressors = new Vector<T>(Math.Max(0, _prophetOptions.RegressorCount));
 
         // Initialize anomaly detection components
         _anomalyThreshold = NumOps.Zero;
@@ -197,260 +211,251 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Initializes the components of the Prophet model based on the input data.
+    /// Fits every component of the decomposable Prophet model to the training data by (ridge-regularized)
+    /// least squares / MAP estimation.
     /// </summary>
-    /// <param name="x">The input matrix containing features.</param>
-    /// <param name="y">The target vector containing the values to be predicted.</param>
+    /// <param name="x">The input matrix. Column 0 is the time feature; columns 1.. are optional regressors.</param>
+    /// <param name="y">The observed target values.</param>
     /// <remarks>
     /// <para>
-    /// This method sets initial values for the trend, seasonal components, holiday effects, 
-    /// changepoint, and regressors based on the provided data.
+    /// The additive Prophet model is <c>y(t) = g(t) + s(t) + h(t) + epsilon</c> (Taylor &amp; Letham 2018):
     /// </para>
-    /// <para><b>For Beginners:</b> This is like giving the model a starting point. It looks at your data 
-    /// and makes initial guesses about things like the overall direction of your data (trend), 
-    /// repeating patterns (seasonal components), effects of holidays, points where the data behavior 
-    /// changes suddenly (changepoint), and how other factors might be influencing your data (regressors). 
-    /// These initial guesses help the model start its learning process from a reasonable position.
-    /// </para>
-    /// </remarks>
-    private void InitializeComponents(Matrix<T> x, Vector<T> y)
-    {
-        // Initialize trend
-        _trend = EstimateInitialTrend(y);
-
-        // Initialize seasonal components
-        InitializeSeasonalComponents(x, y);
-
-        // Initialize holiday components
-        InitializeHolidayComponents(x, y);
-
-        // Initialize changepoint
-        _changepoint = EstimateInitialChangepoint(y);
-
-        // Initialize regressors
-        InitializeRegressors(x, y);
-    }
-
-    /// <summary>
-    /// Estimates the initial trend of the time series data.
-    /// </summary>
-    /// <param name="y">The target vector containing the values to be predicted.</param>
-    /// <returns>The estimated initial trend value.</returns>
-    /// <remarks>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <b>Trend g(t)</b> — piecewise-linear growth with changepoints:
+    /// <c>g(t) = (k + a(t)·delta)·t + (m + a(t)·gamma)</c> with <c>gamma_j = -s_j·delta_j</c> (which keeps
+    /// g continuous). This is equivalent to the hinge form <c>g(t) = m + k·t + Σ_j delta_j·max(0, t - s_j)</c>,
+    /// which is linear in the parameters <c>[m, k, delta_1..delta_S]</c>.
+    /// </description></item>
+    /// <item><description>
+    /// <b>Seasonality s(t)</b> — a Fourier series per period P:
+    /// <c>Σ_{n=1}^{N} (a_n·cos(2πnt/P) + b_n·sin(2πnt/P))</c>, linear in the coefficients <c>a_n, b_n</c>.
+    /// </description></item>
+    /// <item><description><b>Holidays h(t)</b> and <b>extra regressors</b> — additive indicator/linear terms.</description></item>
+    /// </list>
     /// <para>
-    /// This method performs a simple linear regression on the first few points of the time series 
-    /// to estimate the initial trend.
+    /// Because every component is linear in its parameters, the whole model is a single linear regression over
+    /// the design matrix <c>[1, t, max(0,t-s_j) …, cos/sin … , holidays … , regressors …]</c>. We solve the
+    /// ridge (Tikhonov) normal equations, leaving the offset <c>m</c> and base rate <c>k</c> unregularized (so
+    /// the fit is exactly translation- and scale-equivariant in the targets) while shrinking the changepoint,
+    /// seasonal, holiday and regressor coefficients toward zero — the least-squares analogue of Prophet's
+    /// Laplace/Normal priors, governed by the corresponding <c>*PriorScale</c> options.
     /// </para>
-    /// <para><b>For Beginners:</b> This is like looking at the start of your data and figuring out 
-    /// if it's generally going up or down. The method takes a quick look at the first few data points 
-    /// and draws a straight line through them. The slope of this line gives us an idea of the initial 
-    /// direction and speed of change in your data.
-    /// </para>
+    /// <para><b>For Beginners:</b> this is the step where the model actually learns from your data. It writes
+    /// the forecast as a sum of simple building blocks (a sloped line that can bend at a few points, repeating
+    /// seasonal waves, holiday bumps) and then solves one big "line of best fit" that picks the best strength
+    /// for every block at once.</para>
     /// </remarks>
-    private T EstimateInitialTrend(Vector<T> y)
-    {
-        // Simple linear regression on the first few points
-        int n = Math.Min(y.Length, 10);
-        Vector<T> x = Vector<T>.CreateDefault(n, NumOps.One);
-        for (int i = 0; i < n; i++)
-        {
-            x[i] = NumOps.FromDouble(i);
-        }
-
-        return SimpleLinearRegression(x, y.Subvector(0, n));
-    }
-
-    /// <summary>
-    /// Initializes the seasonal components of the Prophet model.
-    /// </summary>
-    /// <param name="x">The input matrix containing features.</param>
-    /// <param name="y">The target vector containing the values to be predicted.</param>
-    /// <remarks>
-    /// <para>
-    /// This method sets up the initial values for seasonal patterns in the data, using Fourier series 
-    /// to represent different seasonal periods.
-    /// </para>
-    /// <para><b>For Beginners:</b> Seasons in data are like repeating patterns. This method looks for 
-    /// patterns that repeat over different time periods (like daily, weekly, or yearly patterns). 
-    /// It uses a mathematical technique called Fourier series, which is a way to represent these 
-    /// repeating patterns using simple wave-like functions. By doing this, the model can understand 
-    /// and predict seasonal effects in your data.
-    /// </para>
-    /// </remarks>
-    private void InitializeSeasonalComponents(Matrix<T> x, Vector<T> y)
+    private void FitLeastSquares(Matrix<T> x, Vector<T> y)
     {
         int n = y.Length;
-        int index = 0;
 
-        foreach (int period in _prophetOptions.SeasonalPeriods)
+        // --- Time range (used only to place changepoints) ---
+        double tMin = double.MaxValue, tMax = double.MinValue;
+        for (int i = 0; i < n; i++)
         {
-            int numHarmonics = Math.Min(period / 2, 10); // Use up to 10 harmonics or period/2, whichever is smaller
+            double ti = Convert.ToDouble(x[i, 0]);
+            if (ti < tMin) tMin = ti;
+            if (ti > tMax) tMax = ti;
+        }
+        if (!(tMax > tMin)) tMax = tMin + 1.0;
 
-            for (int h = 1; h <= numHarmonics; h++)
+        // --- Fixed structure of the model (changepoint locations, seasonal periods) ---
+        _changepointTimes = BuildChangepointTimes(n, tMin, tMax);
+        int changepointCount = _changepointTimes.Length;
+
+        _effectiveSeasonalPeriods = ComputeEffectiveSeasonalPeriods(n);
+        int order = Math.Max(1, _prophetOptions.FourierOrder);
+        int[] harmonicsPerPeriod = new int[_effectiveSeasonalPeriods.Length];
+        int seasonalLen = 0;
+        for (int pi = 0; pi < _effectiveSeasonalPeriods.Length; pi++)
+        {
+            harmonicsPerPeriod[pi] = Math.Min(order, Math.Max(1, (int)Math.Floor(_effectiveSeasonalPeriods[pi] / 2.0)));
+            seasonalLen += 2 * harmonicsPerPeriod[pi];
+        }
+
+        int holidayCount = _prophetOptions.Holidays?.Count ?? 0;
+        int regressorCount = Math.Max(0, _prophetOptions.RegressorCount);
+
+        // --- Column layout: [m | k | delta(S) | seasonal | holidays | regressors] ---
+        int p = 2 + changepointCount + seasonalLen + holidayCount + regressorCount;
+        var design = new Matrix<T>(n, p);
+        var ridge = new double[p];
+
+        // Ridge weights: larger prior scale => more flexibility => less shrinkage (Prophet semantics).
+        // m and k stay unregularized so translation/scaling equivariance in the targets is exact.
+        double changepointRidge = 1.0 / Math.Max(1e-8, _prophetOptions.ChangePointPriorScale);
+        double seasonalRidge = 1.0 / Math.Max(1e-8, _prophetOptions.SeasonalityPriorScale);
+        double holidayRidge = 1.0 / Math.Max(1e-8, _prophetOptions.HolidayPriorScale);
+        const double regressorRidge = 1e-6; // stabilizes a constant/collinear regressor column
+
+        for (int i = 0; i < n; i++)
+        {
+            T ti = x[i, 0];
+            int col = 0;
+
+            // Offset m and base rate k (unregularized).
+            design[i, col] = NumOps.One; ridge[col] = 0.0; col++;
+            design[i, col] = ti; ridge[col] = 0.0; col++;
+
+            // Changepoint hinges: max(0, t - s_j) — turns k*t into a piecewise-linear trend.
+            for (int j = 0; j < changepointCount; j++)
             {
-                Vector<T> sinComponent = new Vector<T>(n);
-                Vector<T> cosComponent = new Vector<T>(n);
+                T diff = NumOps.Subtract(ti, _changepointTimes[j]);
+                design[i, col] = NumOps.GreaterThan(diff, NumOps.Zero) ? diff : NumOps.Zero;
+                ridge[col] = changepointRidge;
+                col++;
+            }
 
-                for (int i = 0; i < n; i++)
+            // Fourier seasonality: cos then sin for each harmonic of each period.
+            for (int pi = 0; pi < _effectiveSeasonalPeriods.Length; pi++)
+            {
+                double period = _effectiveSeasonalPeriods[pi];
+                for (int h = 1; h <= harmonicsPerPeriod[pi]; h++)
                 {
-                    T t = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(period));
-                    T angle = NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * h), t);
-                    sinComponent[i] = MathHelper.Sin(angle);
-                    cosComponent[i] = MathHelper.Cos(angle);
+                    T angle = NumOps.Multiply(NumOps.FromDouble(2.0 * Math.PI * h / period), ti);
+                    design[i, col] = MathHelper.Cos(angle); ridge[col] = seasonalRidge; col++;
+                    design[i, col] = MathHelper.Sin(angle); ridge[col] = seasonalRidge; col++;
                 }
-
-                // Perform simple linear regression to get initial estimates
-                T sinCoefficient = SimpleLinearRegression(sinComponent, y);
-                T cosCoefficient = SimpleLinearRegression(cosComponent, y);
-
-                _seasonalComponents[index++] = sinCoefficient;
-                _seasonalComponents[index++] = cosCoefficient;
             }
-        }
-    }
 
-    /// <summary>
-    /// Performs a simple linear regression to find the relationship between two variables.
-    /// </summary>
-    /// <param name="x">The input vector.</param>
-    /// <param name="y">The target vector.</param>
-    /// <returns>The slope of the regression line.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the best-fitting straight line through a set of points.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like finding the best straight line that fits through 
-    /// a bunch of points on a graph. It helps us understand how one thing (x) relates to another (y). 
-    /// The result tells us how much y tends to change when x changes by a certain amount.
-    /// </para>
-    /// </remarks>
-    private T SimpleLinearRegression(Vector<T> x, Vector<T> y)
-    {
-        T sumX = x.Sum();
-        T sumY = y.Sum();
-        T sumXY = x.DotProduct(y);
-        T sumXSquared = x.DotProduct(x);
-        int n = x.Length;
-
-        T numerator = NumOps.Subtract(
-            NumOps.Multiply(NumOps.FromDouble(n), sumXY),
-            NumOps.Multiply(sumX, sumY)
-        );
-        T denominator = NumOps.Subtract(
-            NumOps.Multiply(NumOps.FromDouble(n), sumXSquared),
-            NumOps.Multiply(sumX, sumX)
-        );
-
-        return NumOps.Divide(numerator, denominator);
-    }
-
-    /// <summary>
-    /// Initializes the holiday components of the model.
-    /// </summary>
-    /// <param name="x">The input matrix.</param>
-    /// <param name="y">The output vector.</param>
-    /// <remarks>
-    /// <para>
-    /// This method initializes all holiday components to zero. It's typically called during the model setup phase.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method sets up the initial effect of holidays on our predictions.
-    /// We start by assuming holidays have no effect (zero), and the model will learn the actual effects during training.
-    /// </para>
-    /// </remarks>
-    private void InitializeHolidayComponents(Matrix<T> x, Vector<T> y)
-    {
-        // Initialize holiday components to zero
-        for (int i = 0; i < _holidayComponents.Length; i++)
-        {
-            _holidayComponents[i] = NumOps.Zero;
-        }
-    }
-
-    /// <summary>
-    /// Estimates the initial changepoint value based on the input data.
-    /// </summary>
-    /// <param name="y">The input vector of time series values.</param>
-    /// <returns>The estimated initial changepoint value.</returns>
-    /// <exception cref="ArgumentException">Thrown when the input vector has fewer than two elements.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the median of the first differences of the input vector, excluding zero differences.
-    /// It's used to initialize the changepoint parameter of the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method tries to find a good starting point for detecting changes in our data.
-    /// It looks at how much our data changes from one point to the next and picks a typical value for these changes.
-    /// This helps our model start with a reasonable guess about when important shifts in the data might occur.
-    /// </para>
-    /// </remarks>
-    private T EstimateInitialChangepoint(Vector<T> y)
-    {
-        if (y == null || y.Length < 2)
-        {
-            throw new ArgumentException("Input vector must have at least two elements.", nameof(y));
-        }
-
-        // Calculate first differences
-        Vector<T> y_shifted = y.Slice(0, y.Length - 1);
-        Vector<T> y_current = y.Slice(1, y.Length - 1);
-        Vector<T> diffs = (Vector<T>)Engine.Subtract(y_current, y_shifted);
-
-        // Remove zero differences to avoid issues with median calculation
-        List<T> nonZeroDiffs = new List<T>();
-        for (int i = 0; i < diffs.Length; i++)
-        {
-            if (!NumOps.Equals(diffs[i], NumOps.Zero))
+            // Holiday indicators.
+            for (int hc = 0; hc < holidayCount; hc++)
             {
-                nonZeroDiffs.Add(diffs[i]);
+                design[i, col] = IsHoliday(ti, hc) ? NumOps.One : NumOps.Zero;
+                ridge[col] = holidayRidge;
+                col++;
+            }
+
+            // Extra regressors (columns 1.. of the input).
+            for (int r = 0; r < regressorCount; r++)
+            {
+                design[i, col] = (1 + r) < x.Columns ? x[i, 1 + r] : NumOps.Zero;
+                ridge[col] = regressorRidge;
+                col++;
             }
         }
 
-        if (nonZeroDiffs.Count == 0)
+        // Solve (DᵀD + Λ) β = Dᵀy.
+        Matrix<T> normal = design.Transpose().Multiply(design);
+        for (int d = 0; d < p; d++)
         {
-            // If all differences are zero, return zero as the changepoint
-            return NumOps.Zero;
+            normal[d, d] = NumOps.Add(normal[d, d], NumOps.FromDouble(ridge[d]));
+        }
+        Vector<T> rhs = design.Transpose().Multiply(y);
+
+        Vector<T> beta;
+        try
+        {
+            // Cholesky is fast and stable for the (regularized, PD) normal matrix.
+            beta = new CholeskyDecomposition<T>(normal).Solve(rhs);
+        }
+        catch (Exception)
+        {
+            // Fall back to SVD if the matrix is ill-conditioned.
+            beta = new SvdDecomposition<T>(normal).Solve(rhs);
         }
 
-        // Calculate median of non-zero differences
-        nonZeroDiffs.Sort();
-        int middleIndex = nonZeroDiffs.Count / 2;
+        // Unpack the solution back into the model components.
+        int idx = 0;
+        _m = beta[idx++];
+        _k = beta[idx++];
 
-        if (nonZeroDiffs.Count % 2 == 0)
+        _delta = new Vector<T>(changepointCount);
+        for (int j = 0; j < changepointCount; j++) _delta[j] = beta[idx++];
+
+        _seasonalComponents = new Vector<T>(seasonalLen);
+        for (int s = 0; s < seasonalLen; s++) _seasonalComponents[s] = beta[idx++];
+
+        _holidayComponents = new Vector<T>(holidayCount);
+        for (int hc = 0; hc < holidayCount; hc++) _holidayComponents[hc] = beta[idx++];
+
+        _regressors = new Vector<T>(regressorCount);
+        for (int r = 0; r < regressorCount; r++) _regressors[r] = beta[idx++];
+    }
+
+    /// <summary>
+    /// Builds the fixed changepoint locations <c>s_j</c>. Uses the user-supplied changepoints when provided,
+    /// otherwise places up to 25 of them uniformly over the first 80% of the training time range (the Prophet
+    /// default), so the model can bend its trend but not overfit the very end of the series.
+    /// </summary>
+    private Vector<T> BuildChangepointTimes(int n, double tMin, double tMax)
+    {
+        var configured = _prophetOptions.Changepoints;
+        if (configured != null && configured.Count > 0)
         {
-            // Even number of elements, average the two middle values
-            T middle1 = nonZeroDiffs[middleIndex - 1];
-            T middle2 = nonZeroDiffs[middleIndex];
-            return NumOps.Divide(NumOps.Add(middle1, middle2), NumOps.FromDouble(2.0));
+            var explicitCps = new Vector<T>(configured.Count);
+            for (int i = 0; i < configured.Count; i++) explicitCps[i] = configured[i];
+            return explicitCps;
+        }
+
+        int count = Math.Min(25, Math.Max(0, n - 2));
+        if (count <= 0) return new Vector<T>(0);
+
+        double span = 0.8 * (tMax - tMin);
+        var times = new Vector<T>(count);
+        for (int j = 1; j <= count; j++)
+        {
+            times[j - 1] = NumOps.FromDouble(tMin + span * ((double)j / count));
+        }
+        return times;
+    }
+
+    /// <summary>
+    /// Determines which seasonal periods to model. Uses the explicit <see cref="ProphetOptions{T, TInput, TOutput}.SeasonalPeriods"/>
+    /// when supplied; otherwise falls back to the enabled standard seasonalities (weekly/yearly/daily), keeping
+    /// only periods the training window actually covers (at least two full cycles) so seasonality is identifiable.
+    /// </summary>
+    private double[] ComputeEffectiveSeasonalPeriods(int n)
+    {
+        var periods = new List<double>();
+        var configured = _prophetOptions.SeasonalPeriods;
+        if (configured != null && configured.Count > 0)
+        {
+            foreach (int period in configured)
+            {
+                if (period >= 2 && period <= n) periods.Add(period);
+            }
         }
         else
         {
-            // Odd number of elements, return the middle value
-            return nonZeroDiffs[middleIndex];
+            if (_prophetOptions.WeeklySeasonality && 2 * 7 <= n) periods.Add(7.0);
+            if (_prophetOptions.YearlySeasonality && 2 * 365.25 <= n) periods.Add(365.25);
+            if (_prophetOptions.DailySeasonality && 2 * 24 <= n) periods.Add(24.0);
+        }
+        return periods.ToArray();
+    }
+
+    /// <summary>Returns whether the time value <paramref name="t"/> falls on the holiday at index <paramref name="holidayIndex"/>.</summary>
+    private bool IsHoliday(T t, int holidayIndex)
+    {
+        try
+        {
+            DateTime date = DateTime.FromOADate(Convert.ToDouble(t));
+            return date.Date == _prophetOptions.Holidays[holidayIndex].Date;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
     /// <summary>
-    /// Initializes the regressor components of the model.
+    /// Evaluates the piecewise-linear trend <c>g(t) = m + k·t + Σ_j delta_j·max(0, t - s_j)</c> at a single time.
     /// </summary>
-    /// <param name="x">The input matrix.</param>
-    /// <param name="y">The output vector.</param>
-    /// <remarks>
-    /// <para>
-    /// This method initializes the regressor components using Ordinary Least Squares (OLS) regression.
-    /// It's only performed if there are regressors specified in the model options.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method sets up the initial relationships between our extra input factors
-    /// (regressors) and our output. It uses a simple form of regression to guess how each factor might influence
-    /// our predictions before we start the main training process.
-    /// </para>
-    /// </remarks>
-    private void InitializeRegressors(Matrix<T> x, Vector<T> y)
+    private T GetTrendComponent(T t)
     {
-        // Initialize regressors using OLS
-        if (_prophetOptions.RegressorCount > 0)
+        T trend = NumOps.Add(_m, NumOps.Multiply(_k, t));
+        int count = Math.Min(_delta.Length, _changepointTimes.Length);
+        for (int j = 0; j < count; j++)
         {
-            Matrix<T> regressorMatrix = x.Submatrix(0, x.Columns - _prophetOptions.RegressorCount, x.Rows, _prophetOptions.RegressorCount);
-            _regressors = SimpleMultipleRegression(regressorMatrix, y);
+            T diff = NumOps.Subtract(t, _changepointTimes[j]);
+            if (NumOps.GreaterThan(diff, NumOps.Zero))
+            {
+                trend = NumOps.Add(trend, NumOps.Multiply(_delta[j], diff));
+            }
         }
+        return trend;
     }
 
     /// <summary>
@@ -554,10 +559,11 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private T PredictSingleInternal(Vector<T> x)
     {
-        T prediction = _trend;
+        // y(t) = g(t) + s(t) + h(t) + regressors. The trend g(t) already includes the changepoint
+        // (piecewise-linear) effect, so there is no separate changepoint term to add here.
+        T prediction = GetTrendComponent(x[0]);
         prediction = NumOps.Add(prediction, GetSeasonalComponent(x));
         prediction = NumOps.Add(prediction, GetHolidayComponent(x));
-        prediction = NumOps.Add(prediction, GetChangepointEffect(x));
         prediction = NumOps.Add(prediction, GetRegressorEffect(x));
 
         return prediction;
@@ -580,23 +586,32 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private T GetSeasonalComponent(Vector<T> x)
     {
-        T _seasonalComponent = NumOps.Zero;
-        int _timeIndex = 0; // Assume the time index is the first element of x
-
-        foreach (var _period in _prophetOptions.SeasonalPeriods)
+        T seasonal = NumOps.Zero;
+        if (_effectiveSeasonalPeriods == null || _seasonalComponents == null || _seasonalComponents.Length == 0)
         {
-            T _t = NumOps.Divide(NumOps.FromDouble(_timeIndex), NumOps.FromDouble(_period));
-            for (int _j = 0; _j < _prophetOptions.FourierOrder; _j++)
+            return seasonal;
+        }
+
+        T t = x[0]; // The time value is the first element of x.
+        int order = Math.Max(1, _prophetOptions.FourierOrder);
+        int idx = 0;
+
+        for (int pi = 0; pi < _effectiveSeasonalPeriods.Length; pi++)
+        {
+            double period = _effectiveSeasonalPeriods[pi];
+            int harmonics = Math.Min(order, Math.Max(1, (int)Math.Floor(period / 2.0)));
+            for (int h = 1; h <= harmonics; h++)
             {
-                int _idx = _j * 2;
-                T _cos_t = MathHelper.Cos(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * (_j + 1)), _t));
-                T _sin_t = MathHelper.Sin(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI * (_j + 1)), _t));
-                _seasonalComponent = NumOps.Add(_seasonalComponent, NumOps.Multiply(_seasonalComponents[_idx], _cos_t));
-                _seasonalComponent = NumOps.Add(_seasonalComponent, NumOps.Multiply(_seasonalComponents[_idx + 1], _sin_t));
+                if (idx + 1 >= _seasonalComponents.Length) return seasonal;
+                T angle = NumOps.Multiply(NumOps.FromDouble(2.0 * Math.PI * h / period), t);
+                seasonal = NumOps.Add(seasonal, NumOps.Multiply(_seasonalComponents[idx], MathHelper.Cos(angle)));
+                idx++;
+                seasonal = NumOps.Add(seasonal, NumOps.Multiply(_seasonalComponents[idx], MathHelper.Sin(angle)));
+                idx++;
             }
         }
 
-        return _seasonalComponent;
+        return seasonal;
     }
 
     /// <summary>
@@ -628,38 +643,6 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         }
 
         return _holidayComponent;
-    }
-
-    /// <summary>
-    /// Calculates the changepoint effect of the time series for a given input vector.
-    /// </summary>
-    /// <param name="x">The input vector containing the time information.</param>
-    /// <returns>The calculated changepoint effect.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the cumulative effect of all changepoints up to the current time point.
-    /// Changepoints represent sudden changes in the trend of the time series.
-    /// </para>
-    /// <para><b>For Beginners:</b> Changepoints are moments when the overall trend of your data suddenly shifts.
-    /// This method calculates how much these shifts affect the prediction at the current time point.
-    /// For example, a changepoint might occur when a company releases a new product, causing a sudden increase in sales.
-    /// </para>
-    /// </remarks>
-    private T GetChangepointEffect(Vector<T> x)
-    {
-        T _changepointEffect = NumOps.Zero;
-        T _t = x[0]; // Assume the time is the first element of x
-
-        for (int _i = 0; _i < _prophetOptions.Changepoints.Count; _i++)
-        {
-            if (NumOps.GreaterThan(_t, _prophetOptions.Changepoints[_i]))
-            {
-                T _delta = NumOps.Subtract(_t, _prophetOptions.Changepoints[_i]);
-                _changepointEffect = NumOps.Add(_changepointEffect, NumOps.Multiply(_changepoint, _delta));
-            }
-        }
-
-        return _changepointEffect;
     }
 
     /// <summary>
@@ -705,7 +688,8 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private int GetStateSize()
     {
-        return 1 + _seasonalComponents.Length + _holidayComponents.Length + 1 + _regressors.Length;
+        // [m, k] + delta(changepoints) + seasonal + holiday + regressors
+        return 2 + _delta.Length + _seasonalComponents.Length + _holidayComponents.Length + _regressors.Length;
     }
 
     /// <summary>
@@ -728,7 +712,12 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         Vector<T> _currentState = new Vector<T>(_stateSize);
         int _index = 0;
 
-        _currentState[_index++] = _trend;
+        _currentState[_index++] = _m;
+        _currentState[_index++] = _k;
+        for (int _i = 0; _i < _delta.Length; _i++)
+        {
+            _currentState[_index++] = _delta[_i];
+        }
         for (int _i = 0; _i < _seasonalComponents.Length; _i++)
         {
             _currentState[_index++] = _seasonalComponents[_i];
@@ -737,67 +726,12 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             _currentState[_index++] = _holidayComponents[_i];
         }
-        _currentState[_index++] = _changepoint;
         for (int _i = 0; _i < _regressors.Length; _i++)
         {
             _currentState[_index++] = _regressors[_i];
         }
 
         return _currentState;
-    }
-
-    /// <summary>
-    /// Performs simple multiple linear regression.
-    /// </summary>
-    /// <param name="x">The input matrix of regressor values.</param>
-    /// <param name="y">The output vector of target values.</param>
-    /// <returns>A vector of regression coefficients.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs multiple linear regression using either Cholesky decomposition or Singular Value Decomposition (SVD).
-    /// It first attempts to use Cholesky decomposition for efficiency, and falls back to SVD if Cholesky fails.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method finds the best way to combine different pieces of information (regressors)
-    /// to predict an outcome. It's like finding the perfect recipe that tells you how much of each ingredient to use.
-    /// The method tries a fast approach first (Cholesky decomposition), but if that doesn't work, it uses a more reliable
-    /// but slower method (SVD). The result tells you how important each piece of information is for making predictions.
-    /// </para>
-    /// </remarks>
-    private Vector<T> SimpleMultipleRegression(Matrix<T> x, Vector<T> y)
-    {
-        // Add a column of ones to X for the intercept term
-        Matrix<T> _xWithIntercept = new Matrix<T>(x.Rows, x.Columns + 1);
-        for (int _i = 0; _i < x.Rows; _i++)
-        {
-            _xWithIntercept[_i, 0] = NumOps.One;
-            for (int _j = 0; _j < x.Columns; _j++)
-            {
-                _xWithIntercept[_i, _j + 1] = x[_i, _j];
-            }
-        }
-
-        // Calculate (X^T * X)
-        Matrix<T> _xTx = _xWithIntercept.Transpose().Multiply(_xWithIntercept);
-
-        // Calculate (X^T * y)
-        Vector<T> _xTy = _xWithIntercept.Transpose().Multiply(y);
-
-        // Solve the normal equations: (X^T * X) * beta = (X^T * y)
-        Vector<T> _beta;
-        try
-        {
-            // Try Cholesky decomposition first (faster and more stable for well-conditioned matrices)
-            var _cholesky = new CholeskyDecomposition<T>(_xTx);
-            _beta = _cholesky.Solve(_xTy);
-        }
-        catch (Exception)
-        {
-            // If Cholesky fails, fall back to SVD (more robust but slower)
-            var _svd = new SvdDecomposition<T>(_xTx);
-            _beta = _svd.Solve(_xTy);
-        }
-
-        return _beta;
     }
 
     /// <summary>
@@ -861,19 +795,41 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void SerializeCore(BinaryWriter writer)
     {
-        // Write model parameters
-        writer.Write(Convert.ToDouble(_trend));
+        // Piecewise-linear trend: offset m, base rate k, changepoint rate-adjustments (delta) and their fixed locations.
+        writer.Write(Convert.ToDouble(_m));
+        writer.Write(Convert.ToDouble(_k));
+        writer.Write(_delta.Length);
+        for (int i = 0; i < _delta.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_delta[i]));
+        }
+        writer.Write(_changepointTimes.Length);
+        for (int i = 0; i < _changepointTimes.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_changepointTimes[i]));
+        }
+
+        // Seasonal periods actually used (so prediction indexes the Fourier coefficients identically) + Fourier order.
+        writer.Write(_effectiveSeasonalPeriods.Length);
+        for (int i = 0; i < _effectiveSeasonalPeriods.Length; i++)
+        {
+            writer.Write(_effectiveSeasonalPeriods[i]);
+        }
+        writer.Write(_prophetOptions.FourierOrder);
+
+        // Seasonal Fourier coefficients.
         writer.Write(_seasonalComponents.Length);
         for (int i = 0; i < _seasonalComponents.Length; i++)
         {
             writer.Write(Convert.ToDouble(_seasonalComponents[i]));
         }
+
+        // Holiday and regressor coefficients.
         writer.Write(_holidayComponents.Length);
         for (int i = 0; i < _holidayComponents.Length; i++)
         {
             writer.Write(Convert.ToDouble(_holidayComponents[i]));
         }
-        writer.Write(Convert.ToDouble(_changepoint));
         writer.Write(_regressors.Length);
         for (int i = 0; i < _regressors.Length; i++)
         {
@@ -910,21 +866,46 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
-        // Read model parameters
-        _trend = NumOps.FromDouble(reader.ReadDouble());
+        // Piecewise-linear trend.
+        _m = NumOps.FromDouble(reader.ReadDouble());
+        _k = NumOps.FromDouble(reader.ReadDouble());
+        int deltaLength = reader.ReadInt32();
+        _delta = new Vector<T>(deltaLength);
+        for (int i = 0; i < deltaLength; i++)
+        {
+            _delta[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        int changepointLength = reader.ReadInt32();
+        _changepointTimes = new Vector<T>(changepointLength);
+        for (int i = 0; i < changepointLength; i++)
+        {
+            _changepointTimes[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Effective seasonal periods + Fourier order.
+        int effectivePeriodCount = reader.ReadInt32();
+        _effectiveSeasonalPeriods = new double[effectivePeriodCount];
+        for (int i = 0; i < effectivePeriodCount; i++)
+        {
+            _effectiveSeasonalPeriods[i] = reader.ReadDouble();
+        }
+        int fourierOrder = reader.ReadInt32();
+
+        // Seasonal Fourier coefficients.
         int seasonalLength = reader.ReadInt32();
         _seasonalComponents = new Vector<T>(seasonalLength);
         for (int i = 0; i < seasonalLength; i++)
         {
             _seasonalComponents[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+
+        // Holiday and regressor coefficients.
         int holidayLength = reader.ReadInt32();
         _holidayComponents = new Vector<T>(holidayLength);
         for (int i = 0; i < holidayLength; i++)
         {
             _holidayComponents[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _changepoint = NumOps.FromDouble(reader.ReadDouble());
         int regressorLength = reader.ReadInt32();
         _regressors = new Vector<T>(regressorLength);
         for (int i = 0; i < regressorLength; i++)
@@ -933,7 +914,10 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         }
 
         // Read options
-        _prophetOptions = new ProphetOptions<T, TInput, TOutput>();
+        _prophetOptions = new ProphetOptions<T, TInput, TOutput>
+        {
+            FourierOrder = fourierOrder
+        };
         int seasonalPeriodsCount = reader.ReadInt32();
         for (int i = 0; i < seasonalPeriodsCount; i++)
         {
@@ -993,12 +977,12 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             throw new ArgumentException("Cannot train on empty dataset");
         }
 
-        // Initialize model state vector
+        // Fit every component (piecewise-linear trend, Fourier seasonality, holidays, regressors)
+        // to the (t, y) training pairs by ridge-regularized least squares / MAP estimation.
+        FitLeastSquares(x, y);
+
         int n = y.Length;
         Matrix<T> states = new Matrix<T>(n, GetStateSize());
-
-        // Initialize components (trend, seasonal, holiday, changepoint, regressors)
-        InitializeComponents(x, y);
 
         SyncModelParametersFromState();
 
@@ -1115,8 +1099,15 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}.", nameof(parameters));
         }
 
+        // Layout must match GetCurrentState: [m, k, delta(changepoints), seasonal, holiday, regressors].
         int index = 0;
-        _trend = parameters[index++];
+        _m = parameters[index++];
+        _k = parameters[index++];
+
+        for (int i = 0; i < _delta.Length; i++)
+        {
+            _delta[i] = parameters[index++];
+        }
 
         for (int i = 0; i < _seasonalComponents.Length; i++)
         {
@@ -1127,8 +1118,6 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             _holidayComponents[i] = parameters[index++];
         }
-
-        _changepoint = parameters[index++];
 
         for (int i = 0; i < _regressors.Length; i++)
         {
@@ -1224,8 +1213,9 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         metadata.AdditionalInfo["ModelName"] = "Prophet Time Series Model";
         metadata.AdditionalInfo["Version"] = "1.0";
 
-        // Add trend information
-        metadata.AdditionalInfo["TrendValue"] = Convert.ToDouble(_trend);
+        // Add trend information (piecewise-linear: offset m, base rate k)
+        metadata.AdditionalInfo["TrendOffset"] = Convert.ToDouble(_m);
+        metadata.AdditionalInfo["TrendRate"] = Convert.ToDouble(_k);
 
         // Add seasonal information
         metadata.AdditionalInfo["SeasonalPeriodCount"] = _prophetOptions.SeasonalPeriods.Count;
@@ -1240,9 +1230,8 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         metadata.AdditionalInfo["HolidayCount"] = _prophetOptions.Holidays.Count;
         metadata.AdditionalInfo["HolidayComponentsCount"] = _holidayComponents.Length;
 
-        // Add changepoint information
-        metadata.AdditionalInfo["ChangepointValue"] = Convert.ToDouble(_changepoint);
-        metadata.AdditionalInfo["ChangepointCount"] = _prophetOptions.Changepoints.Count;
+        // Add changepoint information (number of trend rate-adjustments fitted)
+        metadata.AdditionalInfo["ChangepointCount"] = _delta.Length;
 
         // Add regressor information
         metadata.AdditionalInfo["RegressorCount"] = _prophetOptions.RegressorCount;
@@ -1358,9 +1347,18 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </summary>
     private T ComputeAverageChangepointEffect()
     {
-        // For JIT, we approximate using the trend changepoint value
-        // This represents the cumulative effect of changepoints at an average time
-        return NumOps.Multiply(_changepoint, NumOps.FromDouble(0.5));
+        // For JIT, approximate the cumulative changepoint (piecewise-linear) effect at an average time
+        // as half the sum of the fitted per-changepoint rate adjustments.
+        if (_delta == null || _delta.Length == 0)
+            return NumOps.Zero;
+
+        T sum = NumOps.Zero;
+        for (int i = 0; i < _delta.Length; i++)
+        {
+            sum = NumOps.Add(sum, _delta[i]);
+        }
+
+        return NumOps.Multiply(sum, NumOps.FromDouble(0.5));
     }
 
     /// <summary>

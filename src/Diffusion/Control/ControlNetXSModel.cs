@@ -69,9 +69,19 @@ namespace AiDotNet.Diffusion.Control;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("ControlNet-XS: Designing an Efficient and Effective Architecture for Controlling Text-to-Image Diffusion Models", "https://arxiv.org/abs/2312.06573", Year = 2024, Authors = "Zavadski et al.")]
+[ResearchPaper("ControlNet-XS: Rethinking the Control of Text-to-Image Diffusion Models as Feedback-Control Systems", "https://arxiv.org/abs/2312.06573", Year = 2024, Authors = "Zavadski et al.")]
 public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_controlEncoder);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 512;
@@ -101,19 +111,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     public override IConditioningModule<T>? Conditioner => _conditioner;
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            // Lazy-init fix pattern (SDXLTurbo/DDPM/RealESRGAN/EDiffI/DiffEdit/SUPIR).
-            // ControlNetXS has 3 sub-models (UNet + control encoder + VAE); resolve all.
-            _unet.TriggerLazyShapeResolution();
-            _controlEncoder.TriggerLazyShapeResolution();
-            _vae.TriggerLazyShapeResolution();
-            return _unet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
-        }
-    }
+
 
     /// <summary>Gets the lightweight control encoder.</summary>
     public UNetNoisePredictor<T> ControlEncoder => _controlEncoder;
@@ -192,40 +190,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Lazy-init fix pattern (see ParameterCount comment).
-        _unet.TriggerLazyShapeResolution();
-        _controlEncoder.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        var up = _unet.GetParameters();
-        var cp = _controlEncoder.GetParameters();
-        var vp = _vae.GetParameters();
-        var combined = new Vector<T>(up.Length + cp.Length + vp.Length);
-        int offset = 0;
-        for (int i = 0; i < up.Length; i++) combined[offset + i] = up[i]; offset += up.Length;
-        for (int i = 0; i < cp.Length; i++) combined[offset + i] = cp[i]; offset += cp.Length;
-        for (int i = 0; i < vp.Length; i++) combined[offset + i] = vp[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _unet.TriggerLazyShapeResolution();
-        _controlEncoder.TriggerLazyShapeResolution();
-        _vae.TriggerLazyShapeResolution();
-        int uc = checked((int)_unet.ParameterCount), cc = checked((int)_controlEncoder.ParameterCount), vc = checked((int)_vae.ParameterCount);
-        if (parameters.Length != uc + cc + vc)
-            throw new ArgumentException($"Expected {uc + cc + vc}, got {parameters.Length}.", nameof(parameters));
-
-        var up = new Vector<T>(uc); var cp = new Vector<T>(cc); var vp = new Vector<T>(vc);
-        for (int i = 0; i < uc; i++) up[i] = parameters[i];
-        for (int i = 0; i < cc; i++) cp[i] = parameters[uc + i];
-        for (int i = 0; i < vc; i++) vp[i] = parameters[uc + cc + i];
-        _unet.SetParameters(up); _controlEncoder.SetParameters(cp); _vae.SetParameters(vp);
-    }
 
     #endregion
 

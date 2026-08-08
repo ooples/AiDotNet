@@ -65,7 +65,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+// Roles from this layer's own guard - "requires at least 2D tensor [nodes, features]" - so the node
+// axis is Other (an unordered vertex set indexed by the adjacency matrix, not a sequence) and the
+// trailing axis is Features, the name the layer itself uses (_inputFeatures / _outputFeatures).
+//
+// ONLY ranks 2 and 3 are declared even though ForwardTraced accepts higher ranks, and that is the
+// point: for rank > 3 it flattens every leading axis into one batch and NEVER restores them - the
+// tail of the method restores the original shape for rank 2 and rank 1 only - so a rank-4 input
+// leaves as rank 3. Declaring rank 4 would claim a rank-preserving layer that this is not.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Middle axis is the graph's node count; nodes are an unordered set, so no sequence role.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -178,8 +192,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T>? _gateWeightsGradient;
     private Tensor<T>? _gateBiasGradient;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -368,8 +380,40 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         return Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Derived from the tail of <c>ForwardTraced</c>: the final combination is
+    /// <c>gatedCombined @ _combinationWeights</c> producing <c>_outputFeatures</c> columns, and the
+    /// method then reshapes to <c>[numNodes, _outputFeatures]</c> for a rank-2 input. So the node
+    /// count is carried through - this layer aggregates ALONG the graph and never coarsens it - and
+    /// the feature width is <c>Fixed</c> at the constructor's <c>_outputFeatures</c>.
+    /// </para>
+    /// <para>
+    /// The intermediate <c>3 * _outputFeatures</c> width (incoming, outgoing and self features
+    /// concatenated) is deliberately absent: Step 6 projects it back down before returning, so a
+    /// contract carrying the factor of three would be wrong by exactly that.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 2 and 3 only - higher ranks are flattened into one batch axis and not restored.
+        if (inputRank is not (2 or 3)) return null;
+
+        var nodes = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures));
+
+        return inputRank == 2
+            ? new[] { nodes, features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                nodes, features,
+            };
+    }
+
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_adjacencyMatrix == null)
         {
@@ -1113,33 +1157,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        // Add all weight matrices
-        paramsList.AddRange(_incomingWeights.ToArray());
-        paramsList.AddRange(_outgoingWeights.ToArray());
-        paramsList.AddRange(_selfWeights.ToArray());
-        paramsList.AddRange(_combinationWeights.ToArray());
-
-        // Add all bias vectors
-        paramsList.AddRange(_incomingBias.ToArray());
-        paramsList.AddRange(_outgoingBias.ToArray());
-        paramsList.AddRange(_selfBias.ToArray());
-        paramsList.AddRange(_combinationBias.ToArray());
-
-        // Add gating parameters if enabled
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            paramsList.AddRange(_gateWeights.ToArray());
-            paramsList.AddRange(_gateBias.ToArray());
-        }
-
-        return new Vector<T>(paramsList.ToArray());
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         var gIncomingWeights = _incomingWeightsGradient != null ? new Vector<T>(_incomingWeightsGradient.ToArray()) : new Vector<T>(_incomingWeights.Length);
@@ -1175,71 +1192,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         _combinationBiasGradient = null;
         _gateWeightsGradient = null;
         _gateBiasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedSize = _incomingWeights.Length + _outgoingWeights.Length + _selfWeights.Length +
-                          _combinationWeights.Length + _incomingBias.Length + _outgoingBias.Length +
-                          _selfBias.Length + _combinationBias.Length;
-
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            expectedSize += _gateWeights.Length + _gateBias.Length;
-        }
-
-        if (parameters.Length != expectedSize)
-        {
-            throw new ArgumentException($"Expected {expectedSize} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        // Set weight matrices
-        var incomingWeightsParams = parameters.SubVector(index, _incomingWeights.Length);
-        _incomingWeights = Tensor<T>.FromVector(incomingWeightsParams).Reshape(_incomingWeights._shape);
-        index += _incomingWeights.Length;
-
-        var outgoingWeightsParams = parameters.SubVector(index, _outgoingWeights.Length);
-        _outgoingWeights = Tensor<T>.FromVector(outgoingWeightsParams).Reshape(_outgoingWeights._shape);
-        index += _outgoingWeights.Length;
-
-        var selfWeightsParams = parameters.SubVector(index, _selfWeights.Length);
-        _selfWeights = Tensor<T>.FromVector(selfWeightsParams).Reshape(_selfWeights._shape);
-        index += _selfWeights.Length;
-
-        var combinationWeightsParams = parameters.SubVector(index, _combinationWeights.Length);
-        _combinationWeights = Tensor<T>.FromVector(combinationWeightsParams).Reshape(_combinationWeights._shape);
-        index += _combinationWeights.Length;
-
-        // Set bias vectors
-        var incomingBiasParams = parameters.SubVector(index, _incomingBias.Length);
-        _incomingBias = Tensor<T>.FromVector(incomingBiasParams);
-        index += _incomingBias.Length;
-
-        var outgoingBiasParams = parameters.SubVector(index, _outgoingBias.Length);
-        _outgoingBias = Tensor<T>.FromVector(outgoingBiasParams);
-        index += _outgoingBias.Length;
-
-        var selfBiasParams = parameters.SubVector(index, _selfBias.Length);
-        _selfBias = Tensor<T>.FromVector(selfBiasParams);
-        index += _selfBias.Length;
-
-        var combinationBiasParams = parameters.SubVector(index, _combinationBias.Length);
-        _combinationBias = Tensor<T>.FromVector(combinationBiasParams);
-        index += _combinationBias.Length;
-
-        // Set gating parameters if enabled
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            var gateWeightsParams = parameters.SubVector(index, _gateWeights.Length);
-            _gateWeights = Tensor<T>.FromVector(gateWeightsParams).Reshape(_gateWeights._shape);
-            index += _gateWeights.Length;
-
-            var gateBiasParams = parameters.SubVector(index, _gateBias.Length);
-            _gateBias = Tensor<T>.FromVector(gateBiasParams);
-        }
     }
 
     /// <inheritdoc/>

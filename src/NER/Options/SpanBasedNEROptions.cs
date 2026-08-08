@@ -118,6 +118,32 @@ public class SpanBasedNEROptions
     /// the number of candidate spans that need to be evaluated. A value of 10 covers
     /// ~99% of entities in most NER datasets.
     /// </remarks>
+    /// <summary>
+    /// Number of layers in each boundary FFNN that produces the span start/end representations.
+    /// </summary>
+    /// <remarks>
+    /// Yu et al.'s released configuration (juntaoy/biaffine-ner, experiments.conf) sets
+    /// <c>ffnn_depth = 2</c> alongside <c>ffnn_size = 150</c>. A single layer halves the depth of
+    /// the transformation that separates a token's start role from its end role, which is the
+    /// distinction the two separate FFNNs exist to draw.
+    /// </remarks>
+    public int FfnnDepth { get; set; } = 2;
+
+    /// <summary>
+    /// Multiplicative learning-rate decay applied every <see cref="DecayFrequency"/> steps.
+    /// </summary>
+    /// <remarks>
+    /// Yu et al.'s released configuration (juntaoy/biaffine-ner, experiments.conf) sets
+    /// <c>decay_rate = 0.999</c>. The paper itself does not mention a schedule.
+    /// </remarks>
+    public double DecayRate { get; set; } = 0.999;
+
+    /// <summary>
+    /// How many optimizer steps between applications of <see cref="DecayRate"/>.
+    /// </summary>
+    /// <remarks>The reference configuration uses <c>decay_frequency = 100</c>.</remarks>
+    public int DecayFrequency { get; set; } = 100;
+
     public int MaxSpanLength
     {
         get => _maxSpanLength;
@@ -186,6 +212,22 @@ public class SpanBasedNEROptions
     }
 
     /// <summary>
+    /// Gets or sets whether negative spans are sub-sampled during training.
+    /// </summary>
+    /// <value>Defaults to <c>true</c>, matching SpERT's recipe.</value>
+    /// <remarks>
+    /// <para>Span-based NER models differ on this point, so it cannot be expressed by
+    /// <see cref="NegativeSpanSampleRatio"/> alone. SpERT (Eberts &amp; Ulges) draws a fixed number
+    /// of negative spans per sentence, which is what the ratio controls. Biaffine-NER
+    /// (Yu et al., ACL 2020) instead enumerates EVERY span with start &lt;= end and classifies it,
+    /// using a dedicated non-entity category rather than sampling.</para>
+    /// <para>Set to <c>false</c> to enumerate all spans; <see cref="NegativeSpanSampleRatio"/> is
+    /// then unused. It is a separate flag rather than a zero ratio because the ratio validates
+    /// as &gt;= 1.</para>
+    /// </remarks>
+    public bool UseNegativeSampling { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the NER model variant.
     /// </summary>
     public NERModelVariant Variant { get; set; } = NERModelVariant.Base;
@@ -235,6 +277,7 @@ public class SpanBasedNEROptions
         _dropoutRate = other._dropoutRate;
         _learningRate = other._learningRate;
         _negativeSpanSampleRatio = other._negativeSpanSampleRatio;
+        UseNegativeSampling = other.UseNegativeSampling;
         Variant = other.Variant;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);

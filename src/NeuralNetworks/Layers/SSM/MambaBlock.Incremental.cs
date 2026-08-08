@@ -25,7 +25,7 @@ internal sealed class MambaStepState<T>
     internal Tensor<T>? HiddenState { get; set; }
 }
 
-internal partial class MambaBlock<T>
+public partial class MambaBlock<T>
 {
     /// <summary>
     /// Creates a fresh per-token decoding state for this block.

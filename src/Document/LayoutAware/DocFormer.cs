@@ -67,7 +67,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -154,7 +154,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int numHeads = 12,
         int vocabSize = 30522,
         int spatialDim = 128,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocFormerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -176,8 +176,18 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
+        // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
+        // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
+        // optimizer injectable so callers can fully customize the training recipe.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 2.5e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -224,7 +234,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int numHeads = 12,
         int vocabSize = 30522,
         int spatialDim = 128,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DocFormerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -239,8 +249,18 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _spatialDim = spatialDim;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4, UseAMSGrad = true });
+        // DocFormer fine-tuning uses AdamW at 2.5e-5 with no warm-up and a 1.0
+        // gradient-norm cap (Appalaraju et al., ICCV 2021, Table 1). Keep the
+        // optimizer injectable so callers can fully customize the training recipe.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 2.5e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -704,7 +724,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -46,8 +46,100 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8")]
-public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// A fully-connected layer maps the LAST axis and treats everything before it as independent positions.
+// It therefore genuinely accepts two forms — [Batch, Features] and [Batch, Time, Features] — which is the
+// case that makes multiple declarations necessary rather than convenient.
+//
+// BATCH IS OPTIONAL ONLY ON THE TWO-AXIS FORM, and that is not an oversight. Marking it optional on the
+// three-axis form too would make that declaration also accept rank 2, as [Time, Features] — which is
+// indistinguishable from the [Batch, Features] the other declaration already accepts at that rank. Two
+// declarations claiming the same rank with DIFFERENT axis names is a genuine ambiguity: a resolver cannot
+// tell whether the leading axis of a rank-2 input is Batch or Time, so it cannot name the output axes
+// either, and shape inference has to decline for a case that is in fact completely ordinary. Dropping the
+// flag costs nothing, because an unbatched [Time, Features] input is already covered — this layer carries
+// every leading axis through untouched, so which name it goes by does not change what it computes.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: the leading axes are carried through untouched.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+// Rank 1 and rank 4 are declared because this layer ACCEPTS them - measured, not assumed:
+// [12] -> [5] and [1,4,6,6] -> [1,4,6,5]. Leaving them undeclared made shape inference decline
+// on cases the layer handles, and a contract that declines on working input is one callers learn
+// to route around. The rank-4 axes are named [Batch, Channels, Height, Features] rather than with
+// anonymous placeholders because that is precisely the convolution hand-off - and it makes the
+// consequence legible: fed a feature map, this layer maps WIDTH as the feature axis.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// FEATURE-LAST, and that is the whole content of the declaration. This layer fixes the TRAILING
+    /// axis and passes every leading axis through untouched — the mirror image of a convolution, which
+    /// fixes the leading channel axis. Reading one with the other's rule inverts which axis is a real
+    /// claim by the layer and which was merely carried along.
+    /// </para>
+    /// <para>
+    /// The sequence length is never this layer's to fix. Its parameters are sized by the feature width
+    /// alone, so the same layer is meant to accept any number of time steps; a declaration that pinned
+    /// one would turn a correct layer into one that appears to reject valid inputs.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0 || inputRank < 1) return null;
+
+        // RANK-POLYMORPHIC, and measured rather than assumed. This layer maps the LAST axis and passes
+        // every leading axis through untouched, at any rank:
+        //
+        //     [12]        -> [5]
+        //     [4,12]      -> [4,5]
+        //     [2,7,12]    -> [2,7,5]
+        //     [1,4,6,6]   -> [1,4,6,5]
+        //
+        // Enumerating rank 2 and rank 3 by hand, as the [TensorLayout] declarations above still do, was
+        // therefore incomplete: it made shape inference decline for ranks this layer handles perfectly
+        // well, and a contract that declines on a working case is a contract callers learn to ignore.
+        // Expressing it as code rather than as attributes is the point - an attribute cannot enumerate
+        // every rank, and "the last axis, whatever the rank" is the actual rule.
+        //
+        // NOTE for chain validation: feeding a convolution's [Batch, Channels, Height, Width] straight
+        // in yields [Batch, Channels, Height, outputSize] - it maps WIDTH as the feature axis. That is
+        // rarely what an author means; it is why conv -> dense normally needs an explicit flatten, and
+        // why this layer accepting it silently is worth flagging rather than celebrating.
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        // Enumerated rather than generated, because every leading axis needs a DISTINCT role: axis roles
+        // are how a relation refers to its input, so two anonymous placeholders in one layout cannot be
+        // told apart and the whole naming is refused. Ranks beyond four decline honestly.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), Pass(TensorAxis.Channels), Pass(TensorAxis.Height), features,
+            },
+            _ => null,
+        };
+    }
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
     /// </summary>
@@ -337,21 +429,18 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 100 × 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
     /// </para>
     /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // For lazy initialization, compute from InputShape/OutputShape if not yet initialized
-            if (!_isInitialized)
-            {
-                return (InputShape[0] * OutputShape[0]) + OutputShape[0];
-            }
-            // Half-resident: _weights is a freed placeholder, _weightsHalf holds the real shape.
-            if (_weightsHalf is not null)
-                return (_weightsHalf.Shape[0] * _weightsHalf.Shape[1]) + _biases.Shape[0];
-            return (_weights.Shape[0] * _weights.Shape[1]) + _biases.Shape[0];
-        }
-    }
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -407,10 +496,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// starting values that help with training.
     /// </para>
     /// </remarks>
-    public DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
+    public DenseLayer(
+        [LayerState] int outputSize,
+        IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -478,6 +570,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { outputSize }, vectorActivation)
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -987,7 +1080,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return new Tensor<T>(shape);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <remarks>
+    /// Overrides ForwardTraced rather than Forward so this layer is visible to graph tracing: the
+    /// base's Forward records which tensor this call consumed and produced, which is how a model's
+    /// real dataflow is recovered without the model declaring it. A layer that overrides Forward
+    /// directly bypasses that recording and becomes a hole in the traced graph.
+    /// </remarks>
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Shape-inference mode: resolve dims + return a placeholder, no weight allocation.
         if (IsInferringShapes) return ShapeInferenceOutput(input);
@@ -1401,6 +1500,17 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
+        // Move the engine's persistent-tensor registration onto the new tensor, in place. Training
+        // itself already follows the resize — the generated GetTrainableParameters() reads the
+        // _weights FIELD — but _registeredTensors is a separate list, and leaving it on the dead
+        // tensor means a GPU engine keeps a persistent handle on weights no forward reads while the
+        // live ones are never marked persistent, disposal unregisters the wrong tensor, and the old
+        // matrix stays reachable for the layer's lifetime. Positional replace, not
+        // unregister+register: the latter appends, and SetTrainableParameters pairs by index against
+        // GetTrainableParameters()' (weights, biases) order, so reordering would hand a clone its
+        // biases as weights.
+        ReplaceTrainableParameter(_weights, resizedWeights, PersistentTensorRole.Weights);
+
         _weights = resizedWeights;
         _weightsGradient = null;
         UpdateInputShape([actualInputSize]);
@@ -1497,54 +1607,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts all trainable parameters (weights and biases) from the layer
-    /// and returns them as a single vector. This is useful for optimization algorithms that operate
-    /// on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
-    ///
-    /// The parameters include:
-    /// - All weight values (connections between inputs and outputs)
-    /// - All bias values (base values for each output)
-    ///
-    /// These are combined into a single long list (vector), which can be used for:
-    /// - Saving the model
-    /// - Sharing parameters between layers
-    /// - Advanced optimization techniques
-    ///
-    /// This provides access to all the "knowledge" the layer has learned.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Deferred-shape layers that haven't seen their first Forward
-        // (e.g., a conditioning branch only activated by text embeddings)
-        // have InputShape[0] == -1 and EnsureInitialized would overflow on
-        // TensorAllocator.Rent. Return an empty vector — Clone /
-        // SetParameters / ParameterCount semantically have nothing to copy
-        // and pick up the real values once the first Forward materialises
-        // them.
-        if (!IsShapeResolved) return new Vector<T>(0);
-
-        EnsureInitialized();
-        // fp16-resident (#1764): _weights is a transient shared upcast scratch (overwritten every forward,
-        // and shared across same-shape layers), not the authoritative store. Read the resident half master
-        // — GetWeights() upcasts it — so the round-trip returns THIS layer's weights rather than whatever
-        // last occupied the scratch. Otherwise clone/serialize silently copies wrong (or another layer's)
-        // values at foundation scale.
-        var weightsView = _weightsHalf is not null ? GetWeights() : _weights;
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(weightsView.Data),
-            Vector<T>.FromMemory(_biases.Data));
-    }
-
-    /// <summary>
     /// Gets the gradients of all trainable parameters in this layer.
     /// </summary>
     public override Vector<T> GetParameterGradients()
@@ -1558,91 +1620,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weightsGradient.Data),
             Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights and biases) of the layer from a single
-    /// vector. The vector must have the exact length required for all parameters of the layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
-    ///
-    /// When setting parameters:
-    /// - The vector must have exactly the right number of values
-    /// - The values are assigned to the weights and biases in a specific order
-    ///
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Copying parameters from another model
-    /// - Setting parameters that were optimized externally
-    ///
-    /// It's like replacing all the "knowledge" in the layer with new information.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when the layer is still in lazy
-        // placeholder state (Clone / DeepCopy / Save+Load before first Forward).
-        // The parameter vector's length + the known outputSize uniquely determines
-        // inputSize for the (inputSize × outputSize + outputSize) layout, so we
-        // can resolve from the parameter vector alone — fixes #1221's "trained
-        // weights silently dropped on serialize/deserialize round-trip".
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int outputSize = OutputShape[0];
-            if (outputSize <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on a deferred-shape DenseLayer before " +
-                    "outputSize is known.");
-            int candidateInput = (parameters.Length - outputSize) / outputSize;
-            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputSize for DenseLayer from {parameters.Length} parameters " +
-                    $"and outputSize={outputSize}: not consistent with weights[{candidateInput},{outputSize}] + biases[{outputSize}].");
-            ResolveFromShape(new[] { candidateInput });
-        }
-
-        EnsureInitialized();
-
-        // fp16-resident path (#1764): when LowPrecisionResident engaged, _weightsHalf is the authoritative
-        // weight store and _weights is a transient, shared upcast scratch that every forward overwrites
-        // from _weightsHalf. Writing the incoming weights into _weights would therefore be silently
-        // discarded on the next forward (the clone/deserialize would keep whatever the resident master
-        // held — e.g. a clone's random probe-init — diverging from the source). Downcast the incoming
-        // weights straight into the resident half master instead. Biases stay full precision.
-        if (_weightsHalf is not null)
-        {
-            int wLenHalf = _weightsHalf.Length;
-            int expectedHalf = wLenHalf + _biases.Length;
-            if (parameters.Length != expectedHalf)
-            {
-                throw new ArgumentException($"Expected {expectedHalf} parameters, but got {parameters.Length}");
-            }
-            NumOps.ToHalfSpan(parameters.AsSpan().Slice(0, wLenHalf), _weightsHalf.AsWritableSpan());
-            parameters.AsSpan().Slice(wLenHalf, _biases.Length).CopyTo(_biases.Data.Span);
-            Engine.InvalidatePersistentTensor(_biases);
-            return;
-        }
-
-        int expected = _weights.Length + _biases.Length;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
-        }
-
-        // Bulk copy via Span to preserve engine's persistent tensor references
-        parameters.AsSpan().Slice(0, _weights.Length).CopyTo(_weights.Data.Span);
-        parameters.AsSpan().Slice(_weights.Length, _biases.Length).CopyTo(_biases.Data.Span);
-
-        // Notify engine that data changed (for GPU re-upload)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     public override void Serialize(BinaryWriter writer)

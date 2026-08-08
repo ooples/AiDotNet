@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 
@@ -39,7 +39,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 1, 0.25")]
-public class PReLULayer<T> : LayerBase<T>
+// Value-only at every rank: OnFirstForward ends in ResolveShapes(shape, shape) with the SAME array on
+// both sides. A learnable α does not make this a resizing layer - α is broadcast into the input's own
+// shape (_alphaBroadcastShape is all ones except at _channelAxis), so the output is elementwise.
+// Naming axes would invent roles this layer does not have; only _channelAxis is meaningful to it, and
+// which role that axis plays is the CALLER's choice, not something this layer can declare.
+[ElementWiseShape(Note = "Learnable per-channel leak applied elementwise; shape is untouched at any rank.")]
+[AutoParameters]
+public partial class PReLULayer<T> : LayerBase<T>
 {
     private readonly int _numParameters;
     private readonly int _channelAxis;
@@ -54,11 +61,6 @@ public class PReLULayer<T> : LayerBase<T>
     /// Gets a value indicating that this layer has trainable parameters (α).
     /// </summary>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (the length of α).
-    /// </summary>
-    public override long ParameterCount => _alpha.Length;
 
     /// <summary>
     /// Gets the current α tensor. Shape is <c>[numParameters]</c>.
@@ -145,7 +147,7 @@ public class PReLULayer<T> : LayerBase<T>
     /// <summary>
     /// Performs the forward pass: <c>ReLU(x) - α · ReLU(-x)</c>, all ops on the gradient tape.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // #1668: also clear a previously-cached activation when caching is off (don't leave it pinned).
@@ -169,34 +171,6 @@ public class PReLULayer<T> : LayerBase<T>
         }
 
         return Engine.TensorSubtract(positivePart, scaledNegative);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _alpha.ToVector();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _alpha.Length)
-            throw new ArgumentException(
-                $"Expected {_alpha.Length} parameters, but got {parameters.Length}");
-
-        var span = _alpha.Data.Span;
-        for (int i = 0; i < _alpha.Length; i++)
-            span[i] = parameters[i];
-
-        Engine.InvalidatePersistentTensor(_alpha);
-    }
-
-    /// <summary>
-    /// Legacy scalar-learning-rate parameter update. Tape-based training uses
-    /// <see cref="SetParameters"/> after computing gradients via <c>GradientTape&lt;T&gt;</c>,
-    /// so this override is a no-op.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape-based training flows through SetParameters after the optimizer applies the update.
-        // The scalar-LR path is not used for this layer.
     }
 
     /// <inheritdoc/>

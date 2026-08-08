@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -57,7 +58,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// we capture most of the adaptation capability with minimal parameters.
 /// </para>
 /// </remarks>
-public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared trainable matrix A (inputSize × rank) used by all Tied-LoRA adapters.
@@ -127,37 +129,6 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _lastIntermediate;
 
     /// <summary>
-    /// Flag indicating whether this adapter instance has completed initialization.
-    /// </summary>
-    private bool _isInitialized;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// Tied-LoRA only trains a single scaling factor per layer (plus the base layer if not frozen).
-    /// The shared matrices contribute to the parameter count only once across all layers.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Guard against being called during base class construction before initialization
-            if (!_isInitialized)
-            {
-                // During construction, delegate to base which computes full parameter count
-                return base.ParameterCount;
-            }
-
-            // long throughout — base layer can be > int.MaxValue on
-            // foundation models. Closes #1271.7Bnn.
-            long tiedLoraParams = 1L; // Single scaling factor
-            long baseParams = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
-            return baseParams + tiedLoraParams;
-        }
-    }
-
-    /// <summary>
     /// Gets the layer-specific scaling factor.
     /// </summary>
     public double LayerScaling => Convert.ToDouble(_layerScaling);
@@ -209,7 +180,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         _layerIndex = layerIndex;
 
@@ -253,14 +224,9 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         _layerScaling = NumOps.One;
         _layerScalingGradient = NumOps.Zero;
 
-        // Mark as initialized so ParameterCount returns the reduced count
-        _isInitialized = true;
-
         // Reallocate Parameters to the reduced size (just scaling factor + base if not frozen)
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
-        // Update parameter vector with the scaling factor
-        UpdateParametersFromScaling();
     }
 
     /// <summary>
@@ -430,7 +396,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         // Tied-LoRA doesn't use a standard LoRA layer, but we need to satisfy the base class
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 
@@ -454,7 +420,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// but each layer only has one trainable parameter (layerScaling) to control the strength!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 
@@ -471,7 +437,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             // Tied-LoRA forward: layerScaling * (B_shared * A_shared * input) * (alpha/rank)
             int batchSize = input.Shape[0];
             int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-            int outputSize = GetOutputShape()[0];
+            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
             // Convert input to matrix [batchSize, inputSize]
             Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -554,98 +520,6 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromScaling();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters (layer scaling factor only, or base + scaling if base not frozen).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateScalingFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current scaling factor value.
-    /// </summary>
-    private void UpdateParametersFromScaling()
-    {
-        int idx = 0;
-
-        // Pack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack layer scaling factor
-        Parameters[idx] = _layerScaling;
-    }
-
-    /// <summary>
-    /// Updates the scaling factor from the parameter vector.
-    /// </summary>
-    private void UpdateScalingFromParameters()
-    {
-        int idx = 0;
-
-        // Unpack base layer parameters if not frozen
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack layer scaling factor
-        _layerScaling = Parameters[idx];
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the scaling factor gradient.
-    /// </summary>
-    private void UpdateParameterGradientsFromScaling()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack base layer gradients if not frozen
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack layer scaling gradient
-        ParameterGradients[idx] = _layerScalingGradient;
     }
 
     /// <summary>
@@ -685,7 +559,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             }
 
             int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputShape()[0];
+            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
             // Compute Tied-LoRA weight contribution: layerScaling * (B_shared * A_shared) * (alpha/rank)
             T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
