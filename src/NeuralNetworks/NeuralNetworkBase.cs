@@ -6576,14 +6576,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     // Hoisting RegisterComponents to this class LOOKS like the convergence, and it is not sufficient.
     // IParameterSource<T> is flat-vector only - ParameterCount / GetParameters / SetParameters - so a
     // registered component can be counted, saved and loaded, but CANNOT flow through the six sites
-    // that need Tensor<T> to register gradients and streaming handles. A component would be persisted
-    // and never trained, silently. That is why the diffusion bases fold components separately rather
-    // than through these hooks, and the same gap presumably applies to what they register today.
+    // here that need Tensor<T> to register gradients and streaming handles.
     //
-    // The convergence therefore needs a decision first: either IParameterSource gains a tensor-level
-    // view so components can train, or components are explicitly save/load-only and the training paths
-    // keep using GetExtraTrainable*. Until that is settled, adding the registry here would be a
-    // mechanism nothing consumes.
+    // MEASURED, and it corrects an earlier note that guessed the diffusion side had the same gap:
+    // it does not, because it does not use these hooks at all. DiffusionModelBase is NOT a
+    // NeuralNetworkBase (it implements IDiffusionModel directly) and its tape training calls
+    // CollectTrainableParameters, a cached reflective walk of the whole object graph that gathers
+    // every ITrainableLayer<T>'s tensors. A registered component therefore DOES train there, so long
+    // as its parameters live inside layers.
+    //
+    // The real hole in that walk is a BARE Tensor<T>: it returns early on `obj is Tensor<T>` and skips
+    // fields declared as Tensor<T>, so a raw learned scalar or embedding held directly by a component
+    // is saved and never trained. On this side that is exactly what GetExtraTrainableTensors exists to
+    // carry - see CLAPModel's _logTemperature.
+    //
+    // So the convergence still needs a decision, but a narrower one than first stated: either
+    // IParameterSource gains a tensor-level view, or components are explicitly save/load-only and the
+    // training paths keep using GetExtraTrainable* plus the diffusion walk. Until that is settled,
+    // adding the registry here would be a mechanism nothing on this side consumes.
 
     /// <summary>
     /// Returns the registered module roots used by copy-on-write cloning.
