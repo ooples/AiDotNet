@@ -103,6 +103,16 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     /// <summary>Guards <see cref="ResolveLazyLayerShapes"/> so the one-shot warm forward runs at most once.</summary>
     private bool _lazyShapesWarmed;
 
+    /// <summary>
+    /// The exception from the lazy shape warm-up, if it failed. Null when it succeeded or has not run.
+    /// </summary>
+    /// <remarks>
+    /// The warm-up is best-effort by design, so its failure must not propagate -- but discarding the
+    /// exception entirely makes the first and cleanest occurrence invisible. This retains it so a
+    /// later diagnosis has something to work from.
+    /// </remarks>
+    private Exception? _shapeWarmupFailure;
+
     #endregion
 
     #region Properties
@@ -335,7 +345,16 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try { _ = Forward(dummy); }
-        catch { /* best-effort; a real forward failure surfaces on the actual Train/Predict */ }
+        catch (Exception ex)
+        {
+            // KEPT, NOT DISCARDED. The warm-up is genuinely best-effort -- a real forward failure
+            // surfaces again on the actual Train/Predict -- but an empty catch makes the FIRST
+            // occurrence invisible, and that run has the cleanest stack of any: a bare dummy input
+            // with no user data in it. AiDotNet is a library and carries no logger, so the
+            // exception is retained on the instance, where a debugger, a test, or a later
+            // diagnosis can reach it, rather than dropped on the floor.
+            _shapeWarmupFailure = ex;
+        }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 
