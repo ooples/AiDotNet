@@ -265,14 +265,6 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     }
 
     /// <summary>
-    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pair (i, j):
-    /// a positive value means <c>i → j</c> (variable i is the cause), a negative value means
-    /// <c>j → i</c>. Both variables are standardized; the regression residuals in each direction
-    /// are r_{i|j} = x_i − ρ·x_j and r_{j|i} = x_j − ρ·x_i (ρ = correlation), and the measure is
-    /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
-    /// <see cref="DifferentialEntropy(double[], int)"/>.
-    /// </summary>
-    /// <summary>
     /// Scale-free confounding ratio for <paramref name="candidate"/> against the other variables in
     /// <paramref name="remaining"/>: <c>Σⱼ min(0, DiffMI(candidate, j))² / Σⱼ DiffMI(candidate, j)²</c>
     /// — the fraction of the candidate's squared direction-evidence (DirectLiNGAM entropy criterion)
@@ -304,6 +296,14 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
         return totalEvidence > 1e-12 ? effectEvidence / totalEvidence : double.NaN;
     }
 
+    /// <summary>
+    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pair (i, j):
+    /// a positive value means <c>i → j</c> (variable i is the cause), a negative value means
+    /// <c>j → i</c>. Both variables are standardized; the regression residuals in each direction
+    /// are r_{i|j} = x_i − ρ·x_j and r_{j|i} = x_j − ρ·x_i (ρ = correlation), and the measure is
+    /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
+    /// <see cref="DifferentialEntropy(double[], int)"/>.
+    /// </summary>
     private static double DiffMutualInfo(double[,] data, int n, int i, int j)
     {
         double meanI = 0, meanJ = 0;

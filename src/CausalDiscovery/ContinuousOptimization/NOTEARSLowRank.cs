@@ -48,6 +48,22 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ResearchPaper("On Low-Rank Directed Acyclic Graphs and Causal Structure Learning", "https://arxiv.org/abs/2006.05691", Year = 2023, Authors = "Zhuangyan Fang, Shengyu Zhu, Jiji Zhang, Yue Liu, Zhitang Chen, Yangbo He")]
 public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 {
+    /// <summary>
+    /// How many dual-ascent updates must complete before <c>HTolerance</c> is allowed to stop the
+    /// outer loop.
+    /// </summary>
+    /// <remarks>
+    /// Fang et al. 2023 (arXiv:2006.05691), Algorithm 1: the augmented-Lagrangian loop runs four
+    /// dual-ascent updates of (rho, alpha) before the acyclicity residual is trusted as a stopping
+    /// signal. h starts small for any near-zero initialization, so testing it earlier stops on an
+    /// initialization artefact rather than on a converged data fit. The gate is expressed as
+    /// <c>outerIter &gt;= MinimumDualAscentUpdates - 1</c> because outerIter is zero-based.
+    ///
+    /// A caller who sets MaxIterations below this value gets a solver whose tolerance check never
+    /// runs and which stops only on the rho ceiling.
+    /// </remarks>
+    private const int MinimumDualAscentUpdates = 4;
+
     private readonly int _maxRank;
     private readonly int _innerIterations;
     private readonly int? _seed;
@@ -282,11 +298,9 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                 rhoT = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
             }
             prevH = hValT;
-
-            // The reference performs at least four dual-ascent updates before
-            // honoring h_tol, so a small initial h is not mistaken for a
-            // converged data-fit solution.
-            if (outerIter >= 3 && hVal < HTolerance) break;
+            // Do not trust the acyclicity residual until the reference's dual-ascent updates have
+            // run; see MinimumDualAscentUpdates.
+            if (outerIter >= MinimumDualAscentUpdates - 1 && hVal < HTolerance) break;
             if (NumOps.ToDouble(rhoT) >= _rhoMax) break;
         }
 

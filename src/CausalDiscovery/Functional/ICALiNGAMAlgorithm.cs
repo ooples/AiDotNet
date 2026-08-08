@@ -354,14 +354,25 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         for (; next < initiallyPruned; next++)
             pruned[entries[next].Row, entries[next].Column] = 0.0;
 
-        while (true)
+        // Zero the smallest-magnitude entries one at a time until what remains admits a causal order.
+        while (next < entries.Count)
         {
             int[]? order = TryFindCausalOrder(pruned, d);
             if (order is not null) return order;
-            if (next >= entries.Count) return Enumerable.Range(0, d).ToArray();
+
             pruned[entries[next].Row, entries[next].Column] = 0.0;
             next++;
         }
+
+        // Exhaustion is a real terminal state, but not a failure: every entry is now zero, and an
+        // edgeless matrix has no incoming edge for any variable, so this call returns a complete
+        // order. The previous code returned the natural order here instead, which read as a safety
+        // net for a case that cannot arise. If it ever does, that is a broken invariant in
+        // TryFindCausalOrder, and inventing an order would hide it behind a plausible-looking graph.
+        return TryFindCausalOrder(pruned, d)
+            ?? throw new InvalidOperationException(
+                $"{nameof(FindCausalOrder)}: no causal order was found for an all-zero matrix of "
+                + $"{d} variables, which has no edges to order around.");
     }
 
     private static int[]? TryFindCausalOrder(double[,] B, int d)

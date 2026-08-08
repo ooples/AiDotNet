@@ -522,13 +522,19 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
         };
 
 
-    /// <summary>Lifts each scalar band value to the model width through the lift layer.</summary>
     /// <summary>Projects the D input factors to the model width, through the lift layer.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The lift layer has not been built yet. It is created in the layer-construction pass, so a call
+    /// that reaches here first is a wiring bug rather than a user error.
+    /// </exception>
     private Tensor<T> Lift(Tensor<T> band, int assets, int time, int featureCount)
     {
+        var lift = _lift ?? throw new InvalidOperationException(
+            $"{nameof(Stockformer<T>)}: the lift layer is not built. Construct the layers before a forward pass.");
+
         var flat = Engine.Reshape(band, new[] { assets * time, featureCount });
         return Engine.Reshape(
-            _lift!.Forward(flat), new[] { assets, time, _options.HiddenDimension });
+            lift.Forward(flat), new[] { assets, time, _options.HiddenDimension });
     }
 
     /// <summary>
