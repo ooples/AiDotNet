@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = true)]
-public class SpectralNormalizationLayer<T> : LayerBase<T>
+public partial class SpectralNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The underlying layer whose weights will be normalized.
@@ -230,7 +230,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Performs the forward pass through the layer with spectrally normalized weights.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 

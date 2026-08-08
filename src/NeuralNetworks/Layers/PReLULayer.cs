@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 1, 0.25")]
-public class PReLULayer<T> : LayerBase<T>
+public partial class PReLULayer<T> : LayerBase<T>
 {
     private readonly int _numParameters;
     private readonly int _channelAxis;
@@ -145,7 +145,7 @@ public class PReLULayer<T> : LayerBase<T>
     /// <summary>
     /// Performs the forward pass: <c>ReLU(x) - α · ReLU(-x)</c>, all ops on the gradient tape.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // #1668: also clear a previously-cached activation when caching is off (don't leave it pinned).

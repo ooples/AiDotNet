@@ -220,7 +220,13 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// which is ideal for representing the probability of an entity being present.
     /// </para>
     /// </remarks>
-    public PrimaryCapsuleLayer(int inputChannels, int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IActivationFunction<T>? scalarActivation = null)
+    public PrimaryCapsuleLayer(
+        [LayerState] int inputChannels,
+        [LayerState] int capsuleChannels,
+        [LayerState] int capsuleDimension,
+        [LayerState] int kernelSize,
+        [LayerState] int stride,
+        IActivationFunction<T>? scalarActivation = null)
         : base([inputChannels], [capsuleChannels * capsuleDimension], scalarActivation ?? new SquashActivation<T>())
     {
         _inputChannels = inputChannels;
@@ -519,7 +525,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// the properties of what they detect.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputChannels = -1; resolve from
         // input.Shape on first call. Eager-ctor instances are already

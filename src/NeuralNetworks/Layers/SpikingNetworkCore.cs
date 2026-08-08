@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = false, ChangesShape = true, UsesSurrogateGradient = true, ExpectedInputRank = 2, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 6")]
-internal class SpikingNetworkCore<T> : LayerBase<T>
+public partial class SpikingNetworkCore<T> : LayerBase<T>
 {
     private readonly int _inputSize;
     private readonly int[] _hiddenSizes;
@@ -160,7 +160,7 @@ internal class SpikingNetworkCore<T> : LayerBase<T>
     /// Forward pass: input current(s) <c>[B, inputSize]</c> (or <c>[inputSize]</c>)
     /// → time-averaged readout membrane <c>[B, outputSize]</c>.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var x = input.Rank == 1 ? Engine.Reshape(input, [1, input.Length]) : input;
         int batch = x.Shape[0];

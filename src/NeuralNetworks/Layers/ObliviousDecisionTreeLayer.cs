@@ -233,7 +233,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input features [batchSize, inputDim].</param>
     /// <returns>Tree output [batchSize, outputDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputDim = -1; resolve from
         // input.Shape on first call, then materialize parameter tensors.

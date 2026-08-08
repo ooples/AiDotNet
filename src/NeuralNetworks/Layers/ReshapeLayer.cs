@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 2, 2 }")]
-public class ReshapeLayer<T> : LayerBase<T>
+public partial class ReshapeLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The shape of the input tensor, excluding the batch dimension.
@@ -200,7 +200,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// the amount of water stays the same, but it takes the shape of the new container.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
