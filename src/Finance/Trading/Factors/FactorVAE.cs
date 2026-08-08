@@ -390,11 +390,25 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 
         // Prediction uses the PRIOR branch: the future returns the posterior needs are, by definition,
         // unavailable here. The prior's mean is used rather than a sample, so predictions are
-        // deterministic — sampling at inference would make the same input give different answers.
-        var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
-        var prior = RunSpan(features, PriorSpanStart, PriorSpanEnd);
-        var (priorMean, _) = SplitMeanAndLogVariance(prior);
-        return DecodeReturns(priorMean, features);
+        // deterministic -- sampling at inference would make the same input give different answers.
+        //
+        // Inference mode is set for the SAME reason PredictNative sets it: the default native stack
+        // contains BatchNormalizationLayer and DropoutLayer, and this span path walks Layers directly
+        // via RunSpan. Without this, a prediction taken after a training step applied batch
+        // statistics and dropout. Restored afterwards so a caller who was mid-training keeps its mode.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
+            var prior = RunSpan(features, PriorSpanStart, PriorSpanEnd);
+            var (priorMean, _) = SplitMeanAndLogVariance(prior);
+            return DecodeReturns(priorMean, features);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     #endregion
@@ -802,6 +816,15 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         writer.Write(_beta);
         writer.Write(_gamma);
         writer.Write(_dropoutRate);
+
+        // The three options CreateNewInstance already copies. Without them, a model saved after
+        // training and reloaded into an instance built from defaults got a different KL weight and a
+        // different sampling seed, so the reloaded model did not behave like the saved one. Seed is
+        // nullable, so a presence flag precedes it.
+        writer.Write(_options.KlWeight);
+        writer.Write(_options.UseAMSGrad);
+        writer.Write(_options.Seed.HasValue);
+        if (_options.Seed.HasValue) writer.Write(_options.Seed.Value);
     }
 
     /// <summary>
@@ -825,6 +848,11 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         _beta = reader.ReadDouble();
         _gamma = reader.ReadDouble();
         _dropoutRate = reader.ReadDouble();
+
+        // Read back in the order SerializeNetworkSpecificData wrote them.
+        _options.KlWeight = reader.ReadDouble();
+        _options.UseAMSGrad = reader.ReadBoolean();
+        _options.Seed = reader.ReadBoolean() ? reader.ReadInt32() : (int?)null;
     }
 
     #endregion
