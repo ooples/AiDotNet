@@ -64,6 +64,18 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
+/// <example>
+/// <code>
+/// var options = new SparseMAMLOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;
+/// {
+///     MetaModel = model,
+///     InitialGateLogit = 1.0,   // start with every gate open; sparsity is learned, not imposed
+///     GateLearningRate = 1e-2,
+/// };
+/// var sparseMaml = new SparseMAMLAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+/// double metaLoss = Convert.ToDouble(sparseMaml.MetaTrain(taskBatch));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

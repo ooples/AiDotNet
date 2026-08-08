@@ -33,6 +33,16 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
+/// <example>
+/// <code>
+/// // Produced by MbPAAlgorithm.Adapt rather than constructed directly: the returned model
+/// // carries the episodic memory and the locally adapted output head for one task.
+/// var mbpa = new MbPAAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+/// mbpa.MetaTrain(taskBatch);
+/// var adapted = mbpa.Adapt(task);          // an MbPAAdaptedModel
+/// var prediction = adapted.Predict(task.QueryInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelTask(ModelTask.Classification)]
