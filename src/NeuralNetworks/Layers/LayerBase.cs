@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Graph;
 using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -1591,7 +1592,52 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// This is where the actual data processing happens during both training and prediction.
     /// </para>
     /// </remarks>
-    public abstract Tensor<T> Forward(Tensor<T> input);
+    /// <remarks>
+    /// <para>
+    /// NOT ABSTRACT ANY MORE, and not the method a layer implements. This is the single point every
+    /// forward call passes through, which is what makes graph TRACING possible: with an observer
+    /// attached it records which layer produced the tensor that becomes which layer's input, and the
+    /// model's real dataflow falls out of one forward pass. The topology was always expressed - in each
+    /// model's forward method, in imperative C# - it just was not readable by anything. Now it is.
+    /// </para>
+    /// <para>
+    /// The split mirrors PyTorch's <c>__call__</c> / <c>forward</c> separation and exists for the same
+    /// reason: a framework needs one place to stand between the caller and the computation. Layers
+    /// override <see cref="ForwardTraced"/>; nothing should override this.
+    /// </para>
+    /// <para>
+    /// MIGRATION: it stays virtual only until every layer moves to ForwardTraced. A layer that still
+    /// overrides Forward keeps working and is simply invisible to tracing - a coverage hole, not a
+    /// correctness one. Sealing it is the last step, once no layer overrides Forward.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> Forward(Tensor<T> input)
+    {
+        var observer = LayerForwardObserver<T>.Current;
+        if (observer is null) return ForwardTraced(input);
+
+        var output = ForwardTraced(input);
+        observer.Record(this, input, output);
+        return output;
+    }
+
+    /// <summary>
+    /// The layer's actual computation. Override THIS, not <see cref="Forward"/>.
+    /// </summary>
+    /// <param name="input">Input tensor.</param>
+    /// <returns>The transformed tensor.</returns>
+    /// <remarks>
+    /// Virtual rather than abstract purely so the migration off <see cref="Forward"/> can proceed one
+    /// layer at a time without a broken build in between. The default throws, because a layer that
+    /// implements neither has no computation at all - that is a bug, not a default worth inventing.
+    /// <see cref="NotSupportedException"/> rather than <see cref="NotImplementedException"/>: the type
+    /// does not support this call at all, and never will without an override; NotImplementedException
+    /// promises a later implementation that is not coming.
+    /// </remarks>
+    protected virtual Tensor<T> ForwardTraced(Tensor<T> input)
+        => throw new NotSupportedException(
+            $"{GetType().Name} implements neither Forward nor ForwardTraced. Layers must override "
+            + "ForwardTraced with their computation.");
 
     #region Mixed Precision Support
 
