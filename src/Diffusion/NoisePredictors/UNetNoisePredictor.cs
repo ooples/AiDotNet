@@ -199,7 +199,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         get
         {
             EnsureLayersInitialized();
-            ResolveShapesViaForward();
+            // Same resolution the WRITE side uses. TriggerLazyShapeResolution runs a real dummy
+            // forward and allocates every lazy layer; ResolveShapesViaForward is shape-only and
+            // allocates nothing, so a lazy layer read 0 here while SetParameters -- which does
+            // resolve for real -- gave it a full slice. That is why restoring a DDPM model grew it
+            // from 3,146,496 to 5,006,595: the read side and the write side resolved differently.
+            // TriggerLazyShapeResolution's own comment says it exists so GetParameters,
+            // SetParameters and ParameterCount agree; calling it from only one of the three is the
+            // defect. It is idempotent, cached, and resolves at the minimum spatial extent, so the
+            // weight tensors are identical and the compute is trivial.
+            TriggerLazyShapeResolution();
             long total = 0;
             foreach (var layer in EnumerateAllLayers())
             {
@@ -1243,7 +1252,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // no materialisation) so the returned vector's length matches ParameterCount
         // exactly. Each layer.GetParameters() below then materialises just that layer's
         // weights on demand.
-        ResolveShapesViaForward();
+        // Same resolution the WRITE side uses. TriggerLazyShapeResolution runs a real dummy
+        // forward and allocates every lazy layer; ResolveShapesViaForward is shape-only and
+        // allocates nothing, so a lazy layer read 0 here while SetParameters -- which does
+        // resolve for real -- gave it a full slice. That is why restoring a DDPM model grew it
+        // from 3,146,496 to 5,006,595: the read side and the write side resolved differently.
+        // TriggerLazyShapeResolution's own comment says it exists so GetParameters,
+        // SetParameters and ParameterCount agree; calling it from only one of the three is the
+        // defect. It is idempotent, cached, and resolves at the minimum spatial extent, so the
+        // weight tensors are identical and the compute is trivial.
+        TriggerLazyShapeResolution();
 
         // Collect all sublayer parameter vectors first (each layer allocates its own)
         var layerParams = new List<Vector<T>>();
@@ -1306,7 +1324,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         EnsureLayersInitialized();
         // Resolve shapes exactly as GetParameters does (shape-only, no weight materialization) so each
         // layer's chunk is sized identically to its slice of the flat vector.
-        ResolveShapesViaForward();
+        // Same resolution the WRITE side uses. TriggerLazyShapeResolution runs a real dummy
+        // forward and allocates every lazy layer; ResolveShapesViaForward is shape-only and
+        // allocates nothing, so a lazy layer read 0 here while SetParameters -- which does
+        // resolve for real -- gave it a full slice. That is why restoring a DDPM model grew it
+        // from 3,146,496 to 5,006,595: the read side and the write side resolved differently.
+        // TriggerLazyShapeResolution's own comment says it exists so GetParameters,
+        // SetParameters and ParameterCount agree; calling it from only one of the three is the
+        // defect. It is idempotent, cached, and resolves at the minimum spatial extent, so the
+        // weight tensors are identical and the compute is trivial.
+        TriggerLazyShapeResolution();
         foreach (var (_, p) in EnumerateParameterizedLayers())
             yield return new Tensor<T>(new[] { p.Length }, p);
     }
