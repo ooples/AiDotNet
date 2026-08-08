@@ -44,9 +44,37 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Rank 2 only, and that is measured from the forward rather than assumed: ForwardTraced runs both paths
+// through `input.MatrixMultiply(...)` against a [outputDimension, inputDimension] weight, which is a
+// matrix product, not a batched one. OnFirstForward's guard nominally admits rank >= 1, but nothing in
+// this layer states what a rank-1 or rank-3 input produces, and [LayerProperty(TestInputShape = "1, 4")]
+// is the only shape it is exercised at.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GatedLinearUnitLayer<T> : LayerBase<T>
+public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the emitted width is configuration: the linear and gate projections are both
+    /// allocated as <c>[_outputDimension, inputDimension]</c> and combined elementwise
+    /// (<c>Engine.TensorMultiply(linOut, gateOut)</c>), so gating scales the values but cannot change the
+    /// width. OnFirstForward states the same thing directly:
+    /// <c>ResolveShapes(new[] { inputDimension }, new[] { _outputDimension })</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDimension <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDimension)),
+        };
+    }
+
     /// <summary>
     /// The weight tensor for the linear transformation path.
     /// </summary>

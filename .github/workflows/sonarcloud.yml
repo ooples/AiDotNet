@@ -1055,6 +1055,16 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.ComponentTests|FullyQualifiedName~AiDotNet.Tests.AdversarialRobustness|FullyQualifiedName~AiDotNet.Tests.EndToEndTests)'
+          # The shape-contract gate. AiDotNet.Tests.NeuralNetworks matched NO shard filter until now,
+          # so LayerShapeDiscoverySweepTests, ShapeContractConformanceTests, TracedChainValidationTests
+          # and LayerGraphTests had never run in CI at all - the suite that verifies all 317 layer
+          # shape contracts against real forward passes was not gating anything. It is seconds of work
+          # (the conformance sweep is ~15 s) and it is the only thing standing between a wrong contract
+          # and production, so it belongs in a gating shard rather than a nightly report.
+          - name: TopLevel - NeuralNetworks (shape contracts)
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.NeuralNetworks'
           # =====================================================================
           # SERVING TESTS
           # =====================================================================
@@ -1481,6 +1491,12 @@ jobs:
           - ParameterCountContractTests
           - ParameterChunkParityTests
           - ParameterEnumerationParityTests
+          # Derives each model's shape relation by probing Predict under several construction
+          # profiles. Same shape as the sweeps above - constructs every candidate, long by nature,
+          # Category=Sweep so no shard filter picks it up - so it belongs on this job's runner
+          # rather than in a gating shard. Measured ~14 s per model locally, which is why it is
+          # here under a 60-minute budget and not anywhere near the 45 gating shards.
+          - ModelShapeDiscoveryProbeTests
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4

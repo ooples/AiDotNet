@@ -26,8 +26,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+// Tabular MLP: a flat [Batch, Features] table in, one prediction row per sample out. Roles taken from
+// ForwardTraced, which reads the feature width off the LAST axis and reshapes to [batch, _numFeatures].
+//
+// Rank 2 only, and batch is NOT optional even though a rank-1 input runs. The rank-1 path sets
+// batch = 1 and still returns a rank-2 [1, outputDim] - so it is a rank-CHANGING case, not the
+// batch-elided form BatchOptional describes, and folding it in would have the contract promise a
+// rank-1 output this layer never produces.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TabMEnsembleLayer<T> : LayerBase<T>
+public partial class TabMEnsembleLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int[] _hiddenDimensions;
     private readonly int _outputDim;
@@ -64,6 +73,39 @@ public partial class TabMEnsembleLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the feature width is replaced rather than carried. From
+    /// <c>BuildComponents</c>: the MLP widths are <c>[numFeatures, hidden..., _outputDim]</c> and it
+    /// resolves <c>ResolveShapes(new[] { numFeatures }, new[] { _outputDim })</c>; <c>ForwardTraced</c>
+    /// then returns <c>AverageMembers(current)</c>, the per-member predictions collapsed to a single
+    /// <c>[batch, outputDim]</c> row block, as the type's own summary states.
+    /// </para>
+    /// <para>
+    /// The ensemble's member axis never appears in the contract, and that is correct rather than an
+    /// omission: the k members are tiled INTO the batch axis by the first
+    /// <c>BatchEnsembleLayer&lt;T&gt;</c> and averaged back out by the last, so the expansion to
+    /// <c>[batch * k, .]</c> lives entirely inside this layer's forward and is invisible at its edges.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputDim)</c> is read off the constructor argument, and it survives the rebuild path:
+    /// <c>BuildComponents</c> re-derives every width when the fed input width changes, but
+    /// <c>_outputDim</c> is readonly and is re-used unchanged. The input width is the only thing that
+    /// adapts.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
 
     private void BuildComponents(int numFeatures)
     {

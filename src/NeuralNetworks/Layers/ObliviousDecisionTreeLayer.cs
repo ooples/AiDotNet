@@ -25,9 +25,46 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+// Rank 2 EXACTLY, and this layer says so twice in its own words. OnFirstForward throws for any other
+// rank - "requires rank-2 input [batch, features]" - and ForwardTraced re-checks the same thing on every
+// call rather than only on the first, because "ODT Forward indexes the tensor as a flat [batch,
+// _inputDim] matrix [...] rank-1 input would alias batch onto the feature axis and silently produce
+// garbage". So BatchOptional is not merely unnecessary here, it would declare the precise form the layer
+// was hardened to reject.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Unbatched or higher-rank data must be reshaped to [batch, features] upstream.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
+public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the feature axis keeps its role but changes size, which a generated
+    /// <c>Same(Features)</c> would misstate. The base constructors declare it directly -
+    /// <c>base([inputDim], [outputDim])</c> and <c>base([-1], [outputDim])</c> - and
+    /// <c>OnFirstForward</c> preserves it when it resolves the lazy form:
+    /// <c>ResolveShapes(new[] { inputDim }, OutputShape)</c> re-uses the ALREADY-declared
+    /// <c>OutputShape</c>, so resolving the input width never moves the output width.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputDim)</c> rather than anything derived from the input, because an oblivious tree
+    /// routes each sample to one of <c>2^depth</c> leaves and emits that leaf's value vector: the leaf
+    /// table is <c>_leafValues</c>, allocated <c>[numLeaves, _outputDim]</c>. The number of input
+    /// features decides which leaf is chosen, not how wide the answer is.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     // Non-readonly: lazy ctor leaves _inputDim = -1 until OnFirstForward
     // resolves it from input.Shape[^1]. Eager ctor sets it at construction.
     private int _inputDim;

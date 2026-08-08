@@ -41,9 +41,61 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "16", TestConstructorArgs = "16, 4, new int[] { 4, 8 }")]
+// A SUMMARIZER, not a tokenizer, despite the name: each path pools over its own patches
+// (`Engine.ReduceMean(embedded, new[] { 1 }, keepDims: false)`), so the patch axis is gone by the time
+// the router combines the paths and the result is one [B, hiddenDim] vector per input. The class
+// summary says as much - "outputs a single summarized [B, hiddenDim] tensor per input" - and it is the
+// thing a caller most needs the contract to state, because the patch count never appears in the output
+// at all.
+// Ranks are taken from the three cases ForwardTraced handles by hand:
+//   rank 1 [contextLength]           - a batch axis is added and stripped again on the way out
+//   rank 2 [B, contextLength]        - passes straight through
+//   rank 3 [B, lookback, channels]   - COLLAPSED to [B, contextLength] before anything else runs
+//                                      (`Engine.Reshape(input, new[] { b, input.Length / b })`)
+// so rank 3 comes out at rank 2. One output declaration with BatchOptional covers every case, exactly
+// as it does for FlattenLayer. The leading data axis is Time rather than Features because it is a
+// look-back window - the router is Dense(contextLength -> N) over it, but that is how the layer READS
+// the axis, not what the axis is.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Foundation-forecaster form; the trailing axes are flattened into the context length.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Mixture-of-Size pooling collapses the patch sequence, so one hiddenDim vector comes out.")]
 [AutoParameters]
-public partial class KairosMultiSizePatchLayer<T> : LayerBase<T>
+public partial class KairosMultiSizePatchLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Hand-written on two counts: the trailing axis changes size, and a rank-3 input comes out at
+    /// rank 2. Both are read off <see cref="ForwardTraced"/> — every path ends at
+    /// <c>[B, hiddenDim]</c> after the mean-pool, the weighted combine only sums those, and the rank-1
+    /// case is restored by <c>Engine.Reshape(output, new[] { _hiddenDim })</c>.
+    /// <c>Fixed(_hiddenDim)</c> reads the constructor argument the base class already publishes as this
+    /// layer's output shape (<c>base(new[] { contextLength }, new[] { hiddenDim })</c>).
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenDim <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenDim));
+
+        // Ranks above three are reshaped by the same `input.Rank > 2` branch, but naming their extra
+        // axes would need roles that do not exist, so they decline rather than guess.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 or 3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     private readonly int _contextLength;
     private readonly int _hiddenDim;
     private readonly int[] _patchSizes;

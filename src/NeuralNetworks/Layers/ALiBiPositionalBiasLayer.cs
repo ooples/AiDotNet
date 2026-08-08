@@ -38,8 +38,28 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "2, 4, 4", TestConstructorArgs = "2, 4", ProducesNonFiniteOutput = true)]
+// Ranks 3 and 4 ONLY, and that is the layer's own rule, not a guess: ForwardTraced names
+// "3D [heads, qLen, kLen] or 4D [batch, heads, qLen, kLen]" and throws for every other rank.
+//
+// This operates on an ATTENTION SCORE MATRIX, so it has two sequence axes rather than one, and roles in
+// a single layout must be distinct (ADNSHAPE002). Query positions take Time - they are the axis causal
+// masking is defined over, and ComputeBias rejects queryLen > keyLen for exactly that reason - and key
+// positions take Length. Naming them apart is what lets a relation refer to one without the other; here
+// every relation is Same(role) anyway, since the forward rents an output of `input._shape` and only adds
+// a bias, so the choice cannot change a resolved size.
+//
+// Two separate declarations rather than one with BatchOptional, because the derived contract is keyed on
+// the declared axis count: a batch-optional layout would leave the unbatched rank resolving to nothing.
+[TensorLayout(TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Heads, TensorAxis.Time, TensorAxis.Length,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
+public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numHeads;
     private readonly int _maxSequenceLength;

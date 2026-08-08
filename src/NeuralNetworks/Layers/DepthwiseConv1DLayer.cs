@@ -32,9 +32,49 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = false, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 3")]
+// Rank 3 ONLY, enforced rather than assumed: ForwardTraced throws
+// "requires rank-3 [B, C, T] input" for anything else, and the axis names are its own.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
+public partial class DepthwiseConv1DLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From this layer's own arithmetic in <see cref="ForwardTraced"/>:
+    /// <c>tOut = (tIn + 2*_padding - _kernelSize) / _stride + 1</c> - the sliding-window formula at
+    /// dilation 1, which this layer does not parameterize.
+    /// </para>
+    /// <para>
+    /// The channel relation is <c>Fixed</c> rather than <c>Scaled</c> by the multiplier, and the
+    /// difference is not cosmetic. A depthwise convolution's channel count is fixed AT CONSTRUCTION -
+    /// ForwardTraced rejects any other input width outright ("holds one filter per input channel, so
+    /// the channel count is fixed at construction"), so the output width is <c>_channels *
+    /// _multiplier</c> for every input this layer accepts, never a function of the one it was given.
+    /// <c>Scaled(Channels, _multiplier)</c> would be numerically identical on accepted input and wrong
+    /// about why, implying the layer would follow a wider input it would in fact refuse.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _channels <= 0 || _multiplier <= 0
+            || _kernelSize <= 0 || _stride <= 0 || _padding < 0)
+        {
+            return null;
+        }
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_channels * _multiplier)),
+            new OutputAxisContract(
+                TensorAxis.Time, AxisRelation.Window(TensorAxis.Time, _kernelSize, _stride, _padding)),
+        };
+    }
+
     private readonly int _channels;
     private readonly int _multiplier;
     private readonly int _kernelSize;

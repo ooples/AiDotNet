@@ -38,8 +38,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Reads from memory into the query stream: shape-preserving at rank 3 [Batch, Time, Features].
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "1, 4")] - a single query row of
+// 4 features, so [Batch, Features]. ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -593,6 +600,45 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Engine.InvalidatePersistentTensor(_outputBias);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A memory read projects the query onto the memory and returns a vector of the width this layer
+    /// was constructed with - <c>outputDimension</c> - so the feature axis is <c>Fixed</c> at that
+    /// width, not carried through from the query. Leading axes pass straight through.
+    /// </para>
+    /// <para>
+    /// Written by hand to REPLACE the generated contract. The declared layouts name the same axes on
+    /// both sides at both ranks, from which the generator derived <c>Same(Features)</c>. That reads
+    /// the attributes correctly and describes the layer wrongly: fed [6,7], this returns [6,4] when
+    /// built with <c>outputDimension = 4</c> and [6,6] when built with 6. The width tracking the
+    /// constructor argument is exactly what the sweep's multiple construction profiles exist to
+    /// expose - one profile alone would have shown a constant and invited <c>Fixed(4)</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var declaredOutput = GetOutputShape();
+        int width = declaredOutput is { Length: > 0 } ? declaredOutput[^1] : 0;
+        if (width <= 0) return null;
+
+        return inputRank switch
+        {
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Declares named input ports for this multi-input layer.
     /// </summary>
@@ -605,7 +651,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("query", out var query) || query == null)

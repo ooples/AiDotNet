@@ -38,9 +38,46 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var e = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) e[i, j] = (i * 3 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(e);")]
+// Rank 2 ONLY, and the layer says so itself: ForwardTraced opens with
+// `if (input.Rank != 2 || input.Shape[1] != InputChannels) throw`, quoting the expected shape as
+// [numEdges, InputChannels]. No other rank is reachable.
+//
+// The leading axis is Other, following PointConvolutionLayer's reasoning: it counts MESH EDGES. Edges are
+// an unordered set indexed by an adjacency table, not a sequence and not a batch, so naming it Time or
+// Batch would claim a role a downstream layer could then check against and be wrong about.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the mesh edge count; edges are an unordered set, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class MeshEdgeConvLayer<T> : LayerBase<T>
+public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One output row per input edge, with the channel width becoming <see cref="OutputChannels"/>. Read
+    /// off <c>ForwardTraced</c>: <c>AggregateEdgeFeatures</c> returns <c>[numEdges, aggregatedFeatures]</c>
+    /// and the matmul against the transposed <c>_weights</c> (declared
+    /// <c>[OutputChannels, InputChannels * (1 + NumNeighbors)]</c>) yields <c>[numEdges, OutputChannels]</c>.
+    /// </para>
+    /// <para>
+    /// The edge axis is <c>Same</c>, not a window and not a reduction. Neighbour features are GATHERED
+    /// into each edge's own row - the aggregation widens the FEATURE axis by <c>1 + NumNeighbors</c>
+    /// internally and the projection collapses it again - so the edge count that goes in is the edge count
+    /// that comes out. <c>NumNeighbors</c> therefore never appears in this contract: it sizes an
+    /// intermediate, not an output axis.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || OutputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels)),
+        };
+    }
+
     #region Properties
 
     /// <summary>

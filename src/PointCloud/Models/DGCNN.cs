@@ -665,9 +665,48 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 /// - Later layers: Neighbors are semantically similar points
 /// - Graph structure adapts as features evolve
 /// </remarks>
+// Rank 2 [points, channels] - the shape the base constructor declares, `[0, inputChannels]` in and
+// `[0, outputChannels]` out, and the shape ForwardTraced threads end to end (its own comments track
+// it: [P*k, 2C] -> [P*k, outC] -> [P, outC]).
+//
+// The leading axis is Other for the same reason PointConvolutionLayer gives it that role: it counts
+// POINTS of an unordered set, so naming it Length or Time would claim a sequence position the data
+// does not have. It survives here despite the k-NN graph because the aggregation is a max over the
+// neighbour axis alone, which is exactly DGCNN's permutation invariance.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the point count; a point cloud is unordered, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the emitted width is configuration. The k neighbours are materialised and
+    /// then removed again inside a single forward: <c>ComputeEdgeFeatures</c> expands to
+    /// <c>[P*k, 2C]</c>, the shared MLP maps that to <c>[P*k, _outputChannels]</c>, and
+    /// <c>AggregateEdgeFeatures</c> reshapes to <c>[P, k, _outputChannels]</c> and reduces the
+    /// neighbour axis away with <c>Engine.ReduceMax(..., new[] { 1 }, keepDims: false)</c>. So <c>k</c>
+    /// appears nowhere in the result and needs no relation - a contract that carried it would describe
+    /// an intermediate, not the output.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputChannels)</c> reads the field rather than a literal, and it is the right source
+    /// rather than the MLP's width by coincidence: <c>AggregateEdgeFeatures</c> reshapes against
+    /// <c>_outputChannels</c> directly, so that field is what the output is literally shaped by.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+        };
+    }
+
     private readonly int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _k; // Number of nearest neighbors

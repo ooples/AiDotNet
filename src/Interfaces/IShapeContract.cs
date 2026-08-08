@@ -44,11 +44,47 @@ public sealed class AxisRelation
         /// <summary>The product of several input axes, i.e. a flatten.</summary>
         Product,
 
+        /// <summary>
+        /// The product of several DERIVED relations, i.e. a flatten over axes that were themselves
+        /// transformed first.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="Product"/> multiplies RAW input axes, which is not enough for the common
+        /// patch-embedding shape: <c>numPatches = (H / patch) * (W / patch)</c> windows each spatial
+        /// axis and only then multiplies. Two independent layers - SwinPatchEmbeddingLayer and
+        /// STCConnectorLayer - were left undeclared for exactly this, so the vocabulary was extended
+        /// rather than the layers documented as inexpressible.
+        /// </remarks>
+        ProductOfRelations,
+
+        /// <summary>An axis of a SPECIFIC input port, for layers with more than one input.</summary>
+        /// <remarks>
+        /// Every other form reads input port 0, which is all a single-input layer has. A concatenation
+        /// sizes its output from the second and later inputs too, and without a way to name them the
+        /// relation is not merely hard to write - it is unsayable.
+        /// </remarks>
+        PortAxis,
+
+        /// <summary>The sum of several relations — what a concatenation does to its joined axis.</summary>
+        SumOfRelations,
+
+        /// <summary>A DERIVED relation scaled by a ratio — the counterpart of <see cref="Scaled"/>.</summary>
+        /// <remarks>
+        /// <see cref="Scaled"/> takes one raw input axis, so it cannot scale something already computed.
+        /// A layer that flattens its input and re-batches by a fixed width needs exactly that:
+        /// <c>batch = (all input axes multiplied) / featureWidth</c>. With this and
+        /// <see cref="ProductOfRelations"/>, relations compose in both directions.
+        /// </remarks>
+        ScaledRelation,
+
         /// <summary>Genuinely not derivable from the input shape.</summary>
         Unknown,
     }
 
     private readonly TensorAxis[] _sources;
+
+    /// <summary>Factors, for <see cref="Form.ProductOfRelations"/>. Null for every other form.</summary>
+    private readonly AxisRelation[]? _factors;
 
     private AxisRelation(
         Form kind,
@@ -64,6 +100,7 @@ public sealed class AxisRelation
     {
         Kind = kind;
         _sources = sources;
+        _factors = null;
         Value = value;
         Numerator = numerator;
         Denominator = denominator;
@@ -153,6 +190,164 @@ public sealed class AxisRelation
     }
 
     /// <summary>
+    /// This output axis is the product of several DERIVED relations — a flatten over axes that are
+    /// each transformed first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The patch-embedding shape needs this and nothing simpler can state it:
+    /// <c>numPatches = (H / patch) * (W / patch)</c> is a <see cref="Window"/> on each spatial axis and
+    /// only THEN a product. <see cref="Product"/> multiplies raw input axes, so it cannot express the
+    /// windowing; <see cref="Scaled"/> takes one source, so it cannot express the product.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> a "patch embedding" chops an image into equal tiles and treats each tile as
+    /// one token. A 224x224 image with 16x16 patches becomes 14 x 14 = 196 tokens. The 14s come from
+    /// dividing each side by the patch size, and the 196 from multiplying them — two different kinds of
+    /// step, which is why this relation composes rather than doing it in one.
+    /// </para>
+    /// <para>
+    /// Factors compose freely, so a product of products is legal and resolves depth-first. A factor that
+    /// cannot resolve makes the whole product decline, which is the correct behaviour: half a product is
+    /// not a size.
+    /// </para>
+    /// </remarks>
+    public static AxisRelation ProductOf(params AxisRelation[] factors)
+    {
+        if (factors is null) throw new ArgumentNullException(nameof(factors));
+        if (factors.Length == 0)
+            throw new ArgumentException("A product needs at least one factor.", nameof(factors));
+        foreach (var factor in factors)
+        {
+            if (factor is null)
+                throw new ArgumentException("A product factor cannot be null.", nameof(factors));
+        }
+
+        // Sources are flattened up from the factors so callers that inspect Sources - the discovery
+        // fitter and the diagnostics - still see which input axes this output depends on.
+        var sources = new List<TensorAxis>();
+        foreach (var factor in factors)
+        {
+            foreach (var source in factor.Sources)
+            {
+                if (!sources.Contains(source)) sources.Add(source);
+            }
+        }
+
+        return new AxisRelation(sources.ToArray(), (AxisRelation[])factors.Clone());
+    }
+
+    /// <summary>
+    /// This output axis is another RELATION scaled by <paramref name="numerator"/>/<paramref name="denominator"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The counterpart of <see cref="Scaled"/>, which only takes a raw input axis. A decoder that
+    /// flattens whatever arrives and re-batches it by a fixed feature width computes
+    /// <c>batch = (every input axis multiplied) / featureWidth</c> — a product first, a division second.
+    /// </para>
+    /// <para>
+    /// Division is exact, matching <see cref="Scaled"/>: a ratio that does not divide evenly declines
+    /// rather than rounding, because a rounded shape is a wrong shape stated confidently.
+    /// </para>
+    /// </remarks>
+    public static AxisRelation ScaledBy(AxisRelation source, int numerator, int denominator = 1)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (numerator <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numerator), numerator, "Scale numerator must be positive.");
+        if (denominator <= 0)
+            throw new ArgumentOutOfRangeException(nameof(denominator), denominator, "Scale denominator must be positive.");
+
+        var sources = new TensorAxis[source.Sources.Count];
+        for (int i = 0; i < sources.Length; i++) sources[i] = source.Sources[i];
+
+        return new AxisRelation(Form.ScaledRelation, sources, new[] { source }, numerator, denominator);
+    }
+
+    /// <summary>
+    /// This output axis copies an axis of a SPECIFIC input port.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Same"/> and friends all read input port 0 — the only input a single-input layer has.
+    /// A layer with several inputs needs to name the others, and until it could, a concatenation's
+    /// joined axis was not expressible at all: <c>OutputAxesFor</c> saw one rank and no second shape.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> "port" is just which input slot a tensor arrives on. A layer that joins two
+    /// tensors has port 0 and port 1, and its output size along the joined axis is the two input sizes
+    /// added together — so the relation has to be able to point at each one separately.
+    /// </para>
+    /// </remarks>
+    public static AxisRelation FromPort(int port, TensorAxis axis)
+    {
+        if (port < 0) throw new ArgumentOutOfRangeException(nameof(port), port, "A port index cannot be negative.");
+        return new AxisRelation(Form.PortAxis, new[] { axis }, value: port);
+    }
+
+    /// <summary>
+    /// This output axis is the SUM of several relations — what a concatenation does to its joined axis.
+    /// </summary>
+    /// <remarks>
+    /// Concatenating <c>[B, 8, D]</c> and <c>[B, 5, D]</c> along the middle axis gives <c>[B, 13, D]</c>.
+    /// Every other composed form multiplies or scales; joining adds, and nothing else in the vocabulary
+    /// could say so.
+    /// </remarks>
+    public static AxisRelation SumOf(params AxisRelation[] terms)
+    {
+        if (terms is null) throw new ArgumentNullException(nameof(terms));
+        if (terms.Length == 0) throw new ArgumentException("A sum needs at least one term.", nameof(terms));
+        foreach (var term in terms)
+        {
+            if (term is null) throw new ArgumentException("A sum term cannot be null.", nameof(terms));
+        }
+
+        var sources = new List<TensorAxis>();
+        foreach (var term in terms)
+        {
+            foreach (var source in term.Sources)
+            {
+                if (!sources.Contains(source)) sources.Add(source);
+            }
+        }
+
+        return new AxisRelation(Form.SumOfRelations, sources.ToArray(), (AxisRelation[])terms.Clone(), 1, 1);
+    }
+
+    /// <summary>Builds the composed forms — the only ones carrying sub-relations.</summary>
+    private AxisRelation(
+        TensorAxis[] sources,
+        AxisRelation[] factors)
+        : this(Form.ProductOfRelations, sources, factors, 1, 1)
+    {
+    }
+
+    private AxisRelation(
+        Form kind,
+        TensorAxis[] sources,
+        AxisRelation[] factors,
+        int numerator,
+        int denominator)
+    {
+        Kind = kind;
+        _sources = sources;
+        _factors = factors;
+        Value = 0;
+        Numerator = numerator;
+        Denominator = denominator;
+        Kernel = 1;
+        Stride = 1;
+        Padding = 0;
+        Dilation = 1;
+        Reason = null;
+    }
+
+    /// <summary>The factors, for <see cref="Form.ProductOfRelations"/>; empty for every other form.</summary>
+    public IReadOnlyList<AxisRelation> Factors
+        => _factors ?? (IReadOnlyList<AxisRelation>)Array.Empty<AxisRelation>();
+
+    /// <summary>
     /// This output axis genuinely cannot be derived from the input shape.
     /// </summary>
     /// <remarks>
@@ -177,7 +372,52 @@ public sealed class AxisRelation
     public bool TryResolve(IReadOnlyDictionary<TensorAxis, int> inputAxes, out int size)
     {
         if (inputAxes is null) throw new ArgumentNullException(nameof(inputAxes));
+        return TryResolve(new[] { inputAxes }, out size);
+    }
+
+    /// <summary>
+    /// Computes this axis's size from SEVERAL input ports' axis sizes.
+    /// </summary>
+    /// <param name="ports">One axis-role-to-size map per input port, in port order.</param>
+    /// <param name="size">The resolved size.</param>
+    /// <returns><c>false</c> when a source axis or port is absent, or the relation is unknown.</returns>
+    /// <remarks>
+    /// The single-port overload delegates here, so there is exactly one resolution implementation and a
+    /// multi-input relation cannot drift from the single-input one it generalises.
+    /// </remarks>
+    public bool TryResolve(IReadOnlyList<IReadOnlyDictionary<TensorAxis, int>> ports, out int size)
+    {
+        if (ports is null) throw new ArgumentNullException(nameof(ports));
         size = 0;
+        if (ports.Count == 0) return false;
+
+        // Every form except PortAxis reads port 0 - the only input a single-input layer has.
+        var inputAxes = ports[0];
+        if (inputAxes is null) return false;
+
+        switch (Kind)
+        {
+            case Form.PortAxis:
+            {
+                if (Value < 0 || Value >= ports.Count) return false;
+                var port = ports[Value];
+                return port is not null && port.TryGetValue(_sources[0], out size) && size > 0;
+            }
+
+            case Form.SumOfRelations:
+            {
+                if (_factors is null || _factors.Length == 0) return false;
+                long total = 0;
+                foreach (var term in _factors)
+                {
+                    if (!term.TryResolve(ports, out int from) || from <= 0) return false;
+                    total += from;
+                    if (total > int.MaxValue) return false;
+                }
+                size = (int)total;
+                return size > 0;
+            }
+        }
 
         switch (Kind)
         {
@@ -221,6 +461,34 @@ public sealed class AxisRelation
                 return true;
             }
 
+            case Form.ScaledRelation:
+            {
+                if (_factors is null || _factors.Length != 1) return false;
+                // ports, not inputAxes: a scaled relation may wrap one that reads a later port.
+                if (!_factors[0].TryResolve(ports, out int from) || from <= 0) return false;
+                // Exact division, as Form.Scaled: an uneven ratio is a declaration error, not a rounding.
+                if ((long)from * Numerator % Denominator != 0) return false;
+                size = (int)((long)from * Numerator / Denominator);
+                return size > 0;
+            }
+
+            case Form.ProductOfRelations:
+            {
+                if (_factors is null || _factors.Length == 0) return false;
+                long product = 1;
+                foreach (var factor in _factors)
+                {
+                    // Depth-first, and over ALL ports: a factor may itself be a product, or may read a
+                    // later port. One that declines makes the whole product decline rather than
+                    // resolving to a partial size.
+                    if (!factor.TryResolve(ports, out int from) || from <= 0) return false;
+                    product *= from;
+                    if (product > int.MaxValue) return false;
+                }
+                size = (int)product;
+                return true;
+            }
+
             default:
                 return false;
         }
@@ -236,6 +504,14 @@ public sealed class AxisRelation
             : $"{Numerator} * in.{_sources[0]} / {Denominator}",
         Form.Window => $"floor((in.{_sources[0]} + 2*{Padding} - {Dilation}*({Kernel}-1) - 1) / {Stride}) + 1",
         Form.Product => string.Join(" * ", Array.ConvertAll(_sources, a => $"in.{a}")),
+        Form.ProductOfRelations => "(" + string.Join(") * (",
+            Array.ConvertAll(_factors ?? Array.Empty<AxisRelation>(), f => f.ToString())) + ")",
+        Form.PortAxis => $"in[{Value}].{_sources[0]}",
+        Form.SumOfRelations => string.Join(" + ",
+            Array.ConvertAll(_factors ?? Array.Empty<AxisRelation>(), f => f.ToString())),
+        Form.ScaledRelation => Denominator == 1
+            ? $"({_factors?[0]}) * {Numerator}"
+            : $"({_factors?[0]}) * {Numerator} / {Denominator}",
         _ => $"unknown ({Reason})",
     };
 }
@@ -284,6 +560,93 @@ public interface IShapeContract
     /// </para>
     /// </remarks>
     IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank);
+
+    /// <summary>
+    /// One entry per output axis, for an input of the given rank, saying whether that rank INCLUDES a
+    /// batch axis.
+    /// </summary>
+    /// <param name="inputRank">Rank of the incoming shape.</param>
+    /// <param name="isBatched">
+    /// <c>true</c> when the leading axis is a batch - a real tensor handed to <c>Forward</c>;
+    /// <c>false</c> for a PER-SAMPLE shape, which is what chain resolution propagates.
+    /// </param>
+    /// <returns>The output axes and their relations, or <c>null</c> if this case is not accepted.</returns>
+    /// <remarks>
+    /// <para>
+    /// Defaults to the rank-only form, so every existing contract answers exactly as before and only a
+    /// layer that genuinely needs the distinction has to override.
+    /// </para>
+    /// <para>
+    /// WHY RANK ALONE IS NOT ENOUGH. The same rank means different things to different callers.
+    /// <c>Forward</c> receives a batched tensor, so a rank-3 <c>[3,8,9]</c> is one batch axis and two
+    /// feature axes. Chain resolution propagates PER-SAMPLE shapes, so a rank-3 <c>[32,7,7]</c> is
+    /// <c>[Channels, Height, Width]</c> with no batch at all. FlattenLayer collapses everything after
+    /// the batch, so it answers <c>[3,72]</c> for the first and <c>[1568]</c> for the second - both
+    /// correct, and unreachable through a signature that cannot tell them apart. Whichever reading such
+    /// a contract picked, the other caller saw a wrong shape.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> a "batch" is a stack of samples processed together. Some shapes include
+    /// that stacking axis and some describe a single sample, and the numbers alone do not say which -
+    /// so the caller has to.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank, bool isBatched)
+        => OutputAxesFor(inputRank);
+
+    /// <summary>
+    /// One entry per output axis, for a layer fed SEVERAL inputs of the given ranks.
+    /// </summary>
+    /// <param name="inputRanks">Rank of each incoming tensor, in port order.</param>
+    /// <returns>The output axes and their relations, or <c>null</c> if this combination is not accepted.</returns>
+    /// <remarks>
+    /// <para>
+    /// Defaults to the single-input form, so the 290-odd existing contracts need no change: a layer
+    /// with one input answers exactly as before, and one with several declines unless it overrides.
+    /// </para>
+    /// <para>
+    /// WHY THIS EXISTS. <see cref="OutputAxesFor(int)"/> is handed one rank and can consult one shape,
+    /// which is genuinely enough for almost every layer. It is not enough for a join: concatenating
+    /// <c>[B,8,D]</c> and <c>[B,5,D]</c> gives <c>[B,13,D]</c>, and 13 is not a function of either
+    /// input alone. Layers like ConcatenateLayer were previously skipped as "inexpressible" when the
+    /// truth was narrower - the relation was fine, the interface could not ask the question. Use
+    /// <see cref="AxisRelation.FromPort"/> to name a later input's axis and
+    /// <see cref="AxisRelation.SumOf"/> to add them.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<OutputAxisContract>? OutputAxesForPorts(IReadOnlyList<int> inputRanks)
+        => inputRanks is { Count: 1 } ? OutputAxesFor(inputRanks[0]) : null;
+
+    /// <summary>
+    /// One axis list per OUTPUT tensor, for a layer that returns more than one.
+    /// </summary>
+    /// <param name="inputRanks">Rank of each incoming tensor, in port order.</param>
+    /// <returns>One entry per output tensor, or <c>null</c> if this combination is not accepted.</returns>
+    /// <remarks>
+    /// <para>
+    /// Defaults to wrapping the single-output form, so every existing contract answers exactly as
+    /// before and nothing needs changing to adopt this.
+    /// </para>
+    /// <para>
+    /// WHY THIS EXISTS. Both forms above describe ONE output tensor, which is all almost every layer
+    /// produces. Autoformer's series decomposition does not: its encoder consumes and returns a
+    /// <c>(seasonal, trend)</c> PAIR. Those layers papered over it by declaring an output width of
+    /// <c>embeddingDim * 2</c> - a packed placeholder that NO code produces, while the real forward
+    /// lives in the model and their own <c>ForwardTraced</c> throws. Declaring that number as a shape
+    /// would have been describing a tensor that does not exist, which is worse than declaring nothing.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> most layers take tensors in and give one tensor back. A few give back
+    /// several - a decomposition that separates a signal into a trend and a seasonal part hands you
+    /// both. This lets such a layer describe the shape of each one, instead of pretending they are a
+    /// single wider tensor.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<IReadOnlyList<OutputAxisContract>>? OutputsFor(IReadOnlyList<int> inputRanks)
+    {
+        var single = OutputAxesForPorts(inputRanks);
+        return single is null ? null : new[] { single };
+    }
 }
 
 /// <summary>One output axis, and the relation that sizes it.</summary>

@@ -47,9 +47,65 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// TIME-MAJOR, not batch-major, and the declaration has to say so or every reader will assume the usual
+// order. ForwardTraced's rank-3 branch is explicit: "Standard 3D: [sequenceLength, batchSize, inputSize]"
+// - sequence is the LEADING axis and batch sits in the middle. The rank-2 branch drops batch rather than
+// time ("2D: [sequenceLength, inputSize] -> add batch dim"), which is why Batch is not marked optional
+// here: it is not the leading axis, and an optional axis in the middle cannot be resolved by rank.
+//
+// Rank 1 is declared because the layer accepts it - "1D: [inputSize] -> treat as single timestep, single
+// batch" - and returns [hiddenSize]. Rank 4+ also runs, collapsing the middle axes into batch, but each
+// collapsed axis would need its own role to be named and there is no second batch-like role to give it.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Time-major: [sequenceLength, batchSize, inputSize].")]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class RecurrentLayer<T> : LayerBase<T>
+public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One axis changes and it is always the last one. <c>ForwardTraced</c> stacks the per-step hidden
+    /// states into <c>[sequenceLength, batchSize, hiddenSize]</c> and then restores the caller's rank -
+    /// <c>Reshape(output, new[] { sequenceLength, hiddenSize })</c> for rank 2 and
+    /// <c>Reshape(output, new[] { hiddenSize })</c> for rank 1. So the trailing feature axis becomes
+    /// <c>Fixed(_hiddenSize)</c> and everything before it is carried.
+    /// </para>
+    /// <para>
+    /// The sequence length is never fixed by this layer. The recurrence runs one step per timestep and
+    /// its parameters are sized by <c>_hiddenSize</c> and the input width alone, so pinning Time would
+    /// make a correct layer look as though it rejected sequences of any other length.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and hidden neurons.
     /// </summary>

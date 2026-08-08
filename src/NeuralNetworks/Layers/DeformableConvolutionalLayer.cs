@@ -38,9 +38,55 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "2, 3")]
+// Both ranks come from OnFirstForward naming them itself - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and rejecting everything else.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
+public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From this layer's own arithmetic in <see cref="OnFirstForward"/>:
+    /// <c>outputHeight = (inH + 2*_padding - _kernelSize) / _stride + 1</c>, and the same for width -
+    /// the sliding-window formula at dilation 1, which this layer does not parameterize.
+    /// </para>
+    /// <para>
+    /// DEFORMABLE CHANGES WHERE IT SAMPLES, NOT HOW MANY OUTPUTS IT PRODUCES, and that is the whole
+    /// reason the ordinary convolution window is the right relation here. The learned offsets move each
+    /// sampling point to a fractional location and bilinear interpolation reads it, but the output grid
+    /// is still one position per window step. The offset and modulation-mask branches predict extra
+    /// CHANNELS (<c>2 * k * k * deformGroups</c> and <c>k * k * deformGroups</c>) that are consumed
+    /// internally and never appear in the output, so they do not enter the contract either.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputChannels <= 0 || _kernelSize <= 0 || _stride <= 0 || _padding < 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels));
+        OutputAxisContract Spatial(TensorAxis a)
+            => new(a, AxisRelation.Window(a, _kernelSize, _stride, _padding));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, Spatial(TensorAxis.Height), Spatial(TensorAxis.Width) },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, Spatial(TensorAxis.Height), Spatial(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     #region Fields
 
     private readonly IEngine _engine;

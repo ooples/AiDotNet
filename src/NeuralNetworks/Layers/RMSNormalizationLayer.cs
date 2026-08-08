@@ -40,8 +40,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
+// Rescales values, never resizes. Rank-agnostic, so its axes carry no intrinsic meaning to name.
+[ElementWiseShape(Note = "Root-mean-square normalisation; every dimension is carried through.")]
 [AutoParameters]
-public partial class RMSNormalizationLayer<T> : LayerBase<T>
+public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly T _epsilon;
 

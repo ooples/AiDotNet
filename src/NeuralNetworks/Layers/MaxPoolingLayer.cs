@@ -28,8 +28,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
+// Roles from this layer's own guard - "requires at least 3D tensor [C, H, W]" - and its
+// [LayerProperty(ExpectedInputRank = 3)]. OutputAxesFor below is HAND-WRITTEN, not generated: the
+// window depends on PoolSize/Stride, which the probe cannot know.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class MaxPoolingLayer<T> : LayerBase<T>
+public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Gets the size of the pooling window.
@@ -49,6 +56,42 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>
     /// which reduces the output size to half of the input size (assuming pool size is also 2).
     /// </remarks>
     public int Stride { get; private set; }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Computed from <see cref="PoolSize"/> and <see cref="Stride"/> rather than generated, because a
+    /// pooling window is precisely a caller-chosen relation - the same reason <c>DenseLayer</c> returns
+    /// <c>Fixed(_outputSize)</c> from its own field. The generator yields to any type that declares
+    /// this method.
+    /// </para>
+    /// <para>
+    /// THE DISCOVERY SWEEP GOT THIS WRONG, which is why it is written by hand. Probed with the
+    /// synthesized kernel=3/stride=1/padding=1 - a configuration that happens to preserve spatial dims -
+    /// it fitted every axis as <c>Same</c> and would have declared a POOLING layer shape-preserving.
+    /// It also reported the leading axis as a constant 1, an artifact of its own probe. Neither
+    /// survives contact with this layer's actual arithmetic.
+    /// </para>
+    /// <para>
+    /// Rank 3 is <c>[Channels, Height, Width]</c> per this layer's own
+    /// <c>[LayerProperty(ExpectedInputRank = 3, TestInputShape = "1, 4, 4")]</c> and its guard
+    /// "requires at least 3D tensor [C, H, W]". Channels pass through; the two spatial axes take the
+    /// window. Padding is 0 - this layer exposes no padding parameter.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || PoolSize <= 0 || Stride <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+            new OutputAxisContract(
+                TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, PoolSize, Stride, padding: 0)),
+            new OutputAxisContract(
+                TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, PoolSize, Stride, padding: 0)),
+        };
+    }
 
     /// <summary>
     /// Indicates whether this layer supports training operations.

@@ -1119,8 +1119,20 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
 /// Now uses Tensor<T> and proper backpropagation.
 /// </summary>
+// Rank 1, in equals out - a pre-norm transformer block is shape-preserving by construction, and the
+// code says so twice. Both constructors declare the same width on each side
+// (`base(new[] { embeddingDim }, new[] { embeddingDim })`), and Forward ends on
+// `AddResidual(_cachedResidual1, ffnOutput)`: a residual add can only return the shape it was added
+// to, so attention and the 4x FFN expansion both come back to _embeddingDim before the layer exits.
+// The single-tensor ForwardTraced wraps its argument as a one-position sequence and returns that
+// sequence's last element, so the same relation holds on the traced path.
+//
+// No hand-written OutputAxesFor: with matching layouts the generator derives Same(Features), which
+// is exactly the relation above.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
     private int _embeddingDim;
     private int _numHeads;

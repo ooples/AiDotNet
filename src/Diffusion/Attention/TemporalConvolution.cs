@@ -1,5 +1,5 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -25,8 +25,11 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Optionally causal (only looking at past frames) for streaming generation
 /// </para>
 /// </remarks>
+// Shape-preserving at rank 3 [Batch, Time, Features]; only that rank was probed, so only it is declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TemporalConvolution<T> : LayerBase<T>
+public partial class TemporalConvolution<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _kernelSize;

@@ -47,7 +47,51 @@ namespace AiDotNet.Generators;
 public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
 {
     private const string LayoutAttributeName = "AiDotNet.Attributes.TensorLayoutAttribute";
+    private const string ElementWiseAttributeName = "AiDotNet.Attributes.ElementWiseShapeAttribute";
+    private const string LayerPropertyAttributeName = "AiDotNet.Attributes.LayerPropertyAttribute";
     private const string ShapeContractName = "AiDotNet.Interfaces.IShapeContract";
+
+    private static readonly DiagnosticDescriptor LayerWithoutShapeContractDescriptor = new(
+        id: "ADNSHAPE006",
+        title: "Layer declares no shape contract, so nothing can reason about its output shape",
+        messageFormat: "'{0}' derives from LayerBase but declares neither [TensorLayout] + "
+                       + "IShapeContract nor [ElementWiseShape]. Shape inference, chain validation and "
+                       + "graph resolution all decline on it silently - it is not failing, it simply "
+                       + "cannot be reasoned about. If it preserves shape at any rank use "
+                       + "[ElementWiseShape]; otherwise declare its axis layouts and implement "
+                       + "OutputAxesFor (compute the relation from the layer's own fields where it "
+                       + "depends on a constructor argument, as DenseLayer and MaxPoolingLayer do).",
+        category: "AiDotNet.Shapes",
+        // THE BACKLOG HAS CLEARED AND THIS IS NOW AN ERROR. It entered as a Warning at 85 of ~270
+        // layers declared, on the same ladder as ADNSHAPE004 and ADNGEN001, because erroring
+        // immediately would have reddened the build against work that was unfinished rather than
+        // wrong. It stayed in <WarningsNotAsErrors> - deliberately not NoWarn - so the remaining count
+        // could be read off any build, and that count reached 0: every concrete LayerBase subclass now
+        // declares [TensorLayout] + IShapeContract or [ElementWiseShape].
+        //
+        // The severity below is what the compiler uses; removing the ADNSHAPE006 entry from
+        // src/AiDotNet.csproj's <WarningsNotAsErrors> is what actually made it fail the build. Both
+        // are done. The flip was always the point: a permanent warning is exactly what let 244 layers
+        // sit undeclared while the shape system was assumed to cover them.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor LayerPropertyContradictsLayoutDescriptor = new(
+        id: "ADNSHAPE005",
+        title: "[LayerProperty] shape metadata contradicts the declared [TensorLayout] ranks",
+        messageFormat: "'{0}' declares {1}, but its [TensorLayout(Direction = Input)] attributes cover "
+                       + "only rank(s) [{2}]. Two declarations of the same fact have drifted, and shape "
+                       + "inference trusts the layouts - so the rank the layer is actually exercised at "
+                       + "resolves to nothing. Add a layout for that rank, or correct whichever "
+                       + "declaration is wrong.",
+        category: "AiDotNet.Shapes",
+        // ERROR: this fires only where two declarations on the SAME type disagree, so there is no
+        // backlog to work through and no judgement call - one of them is simply wrong. It exists
+        // because the layouts added during the shape rollout were derived from a probe, while
+        // TestInputShape was written by whoever built the layer; where they disagree the author wins,
+        // and five layers were annotated at the wrong rank before this caught them.
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor AmbiguousRankDescriptor = new(
         id: "ADNSHAPE001",
@@ -124,9 +168,88 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 .Where(l => l.Axes.Count > 0)
                 .ToList();
 
+            // INHERITED layouts count. TensorLayoutAttribute is [AttributeUsage(Inherited = true)] and
+            // ShapeInference.LayoutsFor reads them with inherit: true, so a layout declared on a base
+            // class really does resolve for every subclass at runtime. GetAttributes() returns only
+            // DIRECTLY applied attributes, so checking it alone contradicts the resolver: declaring the
+            // family contract once on LoRAAdapterBase - which is the whole point of an inherited
+            // attribute - made all 34 derived adapters report ADNSHAPE003 for a layout they demonstrably
+            // have. An analyzer that disagrees with the runtime it guards is worse than no analyzer.
+            bool hasInheritedInputLayout = false;
+            for (var ancestor = type.BaseType; ancestor is not null; ancestor = ancestor.BaseType)
+            {
+                if (ancestor.GetAttributes().Any(a =>
+                        a.AttributeClass?.ToDisplayString() == LayoutAttributeName
+                        && Parse(a).IsInput && Parse(a).Axes.Count > 0))
+                {
+                    hasInheritedInputLayout = true;
+                    break;
+                }
+            }
+
             bool hasContract = type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName);
 
-            if (hasContract && !layouts.Any(l => l.IsInput))
+            // [ElementWiseShape] declares "any rank, every axis carried through", which is a COMPLETE
+            // contract expressed without naming axes - a dropout layer has no Height. Demanding an
+            // input layout from it would force exactly the invented axis names the attribute exists to
+            // avoid, so the absence here is by design rather than an omission.
+            bool isElementWise = type.GetAttributes()
+                .Any(a => a.AttributeClass?.ToDisplayString() == ElementWiseAttributeName);
+
+            // ADNSHAPE005 - cross-check the layouts against the layer's OWN [LayerProperty] shape
+            // metadata. [TensorLayout] and TestInputShape/ExpectedInputRank both describe the rank a
+            // layer accepts, so they can drift; where they do, the layer is exercised at a rank its
+            // contract does not cover and inference silently declines on the working case.
+            if (!isElementWise && layouts.Any(l => l.IsInput))
+            {
+                // AcceptedRanks(), not Axes.Count: a BatchOptional layout accepts the leading axis being
+                // absent too, which is exactly what TensorLayoutAttribute.AxesForRank does at runtime.
+                // Counting only the declared length made AdaptiveAveragePoolingLayer - correctly declared
+                // [Batch?, Channels, Height, Width] and tested at rank 3 - report that its layouts "cover
+                // only rank 4". Second time this analyzer family has contradicted the resolver it guards
+                // (ADNSHAPE003 did it with inherited attributes); both were the analyzer being wrong.
+                var declaredRanks = layouts.Where(l => l.IsInput)
+                    .SelectMany(l => l.AcceptedRanks())
+                    .Distinct()
+                    .ToList();
+
+                var layerProperty = type.GetAttributes().FirstOrDefault(
+                    a => a.AttributeClass?.ToDisplayString() == LayerPropertyAttributeName);
+
+                if (layerProperty is not null)
+                {
+                    var claims = new List<string>();
+
+                    foreach (var named in layerProperty.NamedArguments)
+                    {
+                        if (named.Key == "ExpectedInputRank" && named.Value.Value is int rank && rank > 0
+                            && !declaredRanks.Contains(rank))
+                        {
+                            claims.Add($"ExpectedInputRank = {rank}");
+                        }
+
+                        if (named.Key == "TestInputShape" && named.Value.Value is string shape
+                            && shape.Length > 0)
+                        {
+                            int testRank = shape.Split(',').Length;
+                            if (!declaredRanks.Contains(testRank))
+                                claims.Add($"TestInputShape = \"{shape}\" (rank {testRank})");
+                        }
+                    }
+
+                    if (claims.Count > 0)
+                    {
+                        spc.ReportDiagnostic(Diagnostic.Create(
+                            LayerPropertyContradictsLayoutDescriptor,
+                            type.Locations.FirstOrDefault(),
+                            type.Name,
+                            string.Join(" and ", claims),
+                            string.Join(", ", declaredRanks.OrderBy(r => r))));
+                    }
+                }
+            }
+
+            if (hasContract && !isElementWise && !layouts.Any(l => l.IsInput) && !hasInheritedInputLayout)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(
                     ContractWithoutInputLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
@@ -140,6 +263,15 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             // Plenty of types declare a Forward(Tensor<T>) that overrides some OTHER base - TabNetClassifier
             // and ~30 model classes among them - and they are not layers, are not traced, and reporting
             // them would be 60 false errors telling people to rename methods that are already correct.
+            // ADNSHAPE006 - a layer with NO shape declaration at all. Reported only for concrete
+            // layers: an abstract base legitimately leaves the contract to its subclasses, and a
+            // partial's other halves would double-report.
+            if (DerivesFromLayerBase(type) && !type.IsAbstract && !hasContract && !isElementWise)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    LayerWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(), type.Name));
+            }
+
             if (DerivesFromLayerBase(type))
             {
             foreach (var member in type.GetMembers("Forward").OfType<IMethodSymbol>())

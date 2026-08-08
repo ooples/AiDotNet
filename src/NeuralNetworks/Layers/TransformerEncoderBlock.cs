@@ -44,8 +44,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 2, 16, 0.0")]
+// SHAPE-PRESERVING. Both Pre-LN sublayers close with a residual add against the stream they were
+// given - `TensorAdd(input, attnOut)` and `TensorAdd(afterAttn, ffnReshaped)` - and the FFN detour
+// through the 2-D DenseLayers restores the stream's own dimensions with
+// `Engine.Reshape(ffnDownOut, afterAttn._shape)`. The feed-forward width is therefore internal: it is
+// projected back to hiddenSize before the add, so it never reaches the output.
+//
+// Rank 3 is declared rather than [ElementWiseShape], which would claim every rank down to 1: the
+// self-attention sublayer needs a sequence axis as well as a feature axis, so rank 1 is not this
+// layer's to accept. Matching layouts let the generator derive Same(role) per axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TransformerEncoderBlock<T> : LayerBase<T>
+public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _hiddenSize;
     private readonly int _numHeads;

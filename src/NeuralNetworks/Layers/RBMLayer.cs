@@ -33,9 +33,53 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Ranks 1 and 2. ForwardTraced reshapes a rank-1 input to [1, _visibleUnits] and strips the batch axis
+// again on the way out (return result.Reshape([_hiddenUnits])), so one BatchOptional declaration covers
+// both. Higher ranks also round-trip - their leading axes are flattened for the matmul and restored from
+// _originalInputShape - but an RBM is a flat visible/hidden model with nothing to say about what a third
+// axis would mean, so naming one would be invention rather than description.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class RBMLayer<T> : LayerBase<T>
+public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Visible units in, hidden units out: <c>ForwardTraced</c> sets the trailing axis to
+    /// <c>_hiddenUnits</c> on every exit - directly for rank 1
+    /// (<c>result.Reshape([_hiddenUnits])</c>), and via <c>outputShape[rank - 1] = _hiddenUnits</c> for
+    /// higher ranks. The width comes from
+    /// <c>Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, ...)</c> against <c>_weights</c> of
+    /// <c>[_hiddenUnits, _visibleUnits]</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_hiddenUnits)</c> is safe for the LAZY constructor too. That constructor defers only the
+    /// VISIBLE width (<c>_visibleUnits = -1</c> until <c>OnFirstForward</c> reads
+    /// <c>input.Shape[^1]</c>); the hidden count is a required argument on both constructors, so this
+    /// contract is answerable before the first forward rather than only after it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenUnits <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenUnits));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets the number of units in the visible layer.
     /// </summary>

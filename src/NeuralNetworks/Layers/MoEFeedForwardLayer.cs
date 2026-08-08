@@ -24,8 +24,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.FeedForward)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Sparse routing changes WHICH weights a token sees, never how many numbers come back. The last line of
+// ForwardTraced is `Engine.Reshape(output, input._shape)` - the caller's exact shape, at any rank - and
+// the accumulator it reshapes is [n, _hidden], so the trailing width is preserved too (the input's own
+// width must already be _hidden for the expert projections to type). _ffnDim, _numExperts and _topK all
+// size intermediates and never reach an output axis.
+[ElementWiseShape(Note = "Top-k expert routing per token; every token keeps its slot and its width.")]
 [AutoParameters]
-public partial class MoEFeedForwardLayer<T> : LayerBase<T>
+public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 

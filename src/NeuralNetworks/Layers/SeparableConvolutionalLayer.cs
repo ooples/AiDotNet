@@ -37,9 +37,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// CHANNELS-LAST (NHWC), not the channels-first form the other convolutions in this folder use. That is
+// this layer's own reading, taken verbatim from OnFirstForward: rank 4 unpacks as
+// b = Shape[0], h = Shape[1], w = Shape[2], c = Shape[3], and rank 3 as h = Shape[0], w = Shape[1],
+// c = Shape[2] with b = 1 - the guard message spells it out, "requires rank-3 [H,W,C] or rank-4
+// [B,H,W,C] input". Batch is marked optional rather than declared as a second layout precisely because
+// the rank-3 branch is the SAME code path with b pinned to 1, not a differently shaped operation.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
+public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the spatial relation is a caller-chosen window. Derived from
+    /// <c>OnFirstForward</c>, which computes <c>outH = (h - _kernelSize + 2 * _padding) / _stride + 1</c>
+    /// (and the same for width) and then resolves
+    /// <c>ResolveShapes(new[] { b, h, w, c }, new[] { b, outH, outW, _outputDepth })</c>. That is exactly
+    /// <c>Window</c> on both spatial axes with dilation 1 - this layer exposes no dilation parameter.
+    /// </para>
+    /// <para>
+    /// The channel axis is <c>Fixed(_outputDepth)</c> and NOT <c>Same</c>: the depthwise stage preserves
+    /// the channel count, but the pointwise stage that follows it projects <c>_inputDepth</c> onto
+    /// <c>_outputDepth</c> (see the <c>_pointwiseKernels</c> allocation, shaped
+    /// <c>[_inputDepth, 1, 1, _outputDepth]</c>). Separability is about how the work is factored, not
+    /// about the shape it produces.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 3 and 4 only - OnFirstForward throws for anything else.
+        if (inputRank is not (3 or 4) || _kernelSize <= 0 || _stride <= 0 || _outputDepth <= 0) return null;
+
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, _kernelSize, _stride, _padding));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, _kernelSize, _stride, _padding));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputDepth));
+
+        return inputRank == 3
+            ? new[] { height, width, channels }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                height, width, channels,
+            };
+    }
+
     /// <summary>
     /// Kernels for the depthwise convolution operation.
     /// </summary>

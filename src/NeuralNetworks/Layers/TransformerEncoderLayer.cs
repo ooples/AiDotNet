@@ -35,8 +35,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
+// GENUINELY RANK-AGNOSTIC, which is why this gets the shorthand rather than a list of layouts.
+// ForwardTraced normalises whatever it is given to [batch, seq, embed] - rank 1 becomes [1, 1, F],
+// rank 2 becomes [1, S, F], rank > 3 folds its leading axes into batch - runs the encoder, and then
+// puts the ORIGINAL rank back on the way out ("Restore original tensor shape"). Every restore branch
+// reuses _originalInputShape's own leading dimensions, so no axis can change size.
+//
+// The feed-forward width never escapes either: _feedForward2 projects back to ffEmbed before the
+// residual add, so the embedding width out is the embedding width in. Naming axes here would invent
+// meanings the layer does not have - it does not care whether the leading axes are batch or frames.
+[ElementWiseShape(Note = "Self-attention and FFN are both residual; the original rank and every dimension are restored before returning.")]
 [AutoParameters]
-public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.

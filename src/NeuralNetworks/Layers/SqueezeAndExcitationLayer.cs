@@ -37,6 +37,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// SHAPE-PRESERVING AT EVERY RANK, which is worth stating because the interior does change shape twice.
+// The squeeze pools the spatial axes away to [B, C] and the excitation runs a bottleneck through
+// _reducedChannels - but ForwardTraced ends at TensorBroadcastMultiply(input, excitationReshaped),
+// where excitationReshaped is deliberately reshaped to broadcast against the ORIGINAL input at each of
+// the rank-1/2/3/4/higher branches. The result is always the input's own shape.
+//
+// The shorthand is used rather than enumerated layouts because the rank really is open-ended here: the
+// final branch handles arbitrary [B, D1, ..., C] by pooling axes 1..rank-2, so no fixed list of layouts
+// would cover what this layer accepts. _reducedChannels is interior and rightly absent.
+[ElementWiseShape(Note = "Channel-wise rescale: pools, excites, then broadcasts back over the input's own shape.")]
 [AutoParameters]
 public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {

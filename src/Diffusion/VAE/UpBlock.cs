@@ -1,5 +1,7 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -46,9 +48,62 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
+// [C,H,W] with an optional leading batch axis - the shape the constructor declares through
+// CalculateInputShape/CalculateOutputShape, which build unbatched three-axis shapes, and the
+// [B, C_in, H, W] the class remarks draw.
+//
+// OutputAxesFor below is HAND-WRITTEN because both of this block's relations depend on constructor
+// arguments: the channel count is replaced outright, and whether the spatial axes double is the
+// _hasUpsample flag.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class UpBlock<T> : LayerBase<T>
+public partial class UpBlock<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The spatial factor is EXACTLY two, not approximately: the upsampler is a
+    /// <c>DeconvolutionalLayer</c> built with <c>kernelSize: 4, stride: 2, padding: 1</c>, and the
+    /// constructor spells the arithmetic out beside it - "output_size = (input_size - 1) * 2 - 2*1 + 4
+    /// = 2*input_size". <c>CalculateOutputShape</c> then re-states the same thing as
+    /// <c>hasUpsample ? inputSpatialSize * 2 : inputSpatialSize</c>. Because it is an exact doubling
+    /// rather than a windowed reduction, <c>Scaled</c> is the honest relation.
+    /// </para>
+    /// <para>
+    /// When <c>_hasUpsample</c> is false - the first decoder block, which keeps resolution - the
+    /// spatial axes are carried through instead, and the channel change is taken over by the first
+    /// ResBlock. The channel relation is <c>Fixed</c> either way: every path through the constructor
+    /// ends with the ResBlocks producing <c>_outChannels</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outChannels <= 0 || inputRank is not (3 or 4)) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels));
+        var height = new OutputAxisContract(
+            TensorAxis.Height,
+            _hasUpsample
+                ? AxisRelation.Scaled(TensorAxis.Height, 2, 1)
+                : AxisRelation.Same(TensorAxis.Height));
+        var width = new OutputAxisContract(
+            TensorAxis.Width,
+            _hasUpsample
+                ? AxisRelation.Scaled(TensorAxis.Width, 2, 1)
+                : AxisRelation.Same(TensorAxis.Width));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     /// <summary>
     /// Transposed convolution for upsampling.
     /// </summary>

@@ -37,9 +37,49 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 1", TestConstructorArgs = "8, 16")]
+// Two INPUT forms, both handled explicitly by ForwardTraced: a bare vector of timesteps [batch]
+// (`input.Rank == 1 ? input : ...`) and the column form [batch, 1] which it reshapes to [batch].
+// The second axis of the rank-2 form is the scalar timestep itself, so it is a Features axis of
+// width 1 rather than a sequence.
+//
+// The OUTPUT is rank 2 in BOTH cases - nothing reshapes it back - so a rank-1 input produces a
+// rank-2 output. That is why OutputAxesFor below is hand-written: the generator derives axes by
+// matching input roles at the SAME rank, which cannot express a rank change.
+[TensorLayout(TensorAxis.Batch, Direction = TensorLayoutDirection.Input,
+    Note = "Bare timestep vector; ForwardTraced takes the input.Rank == 1 branch.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Column form [batch, 1]; the trailing axis is the scalar timestep.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TimeEmbeddingLayer<T> : LayerBase<T>
+public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The embedding width is the layer's own <c>_outputDim</c> constructor argument, and the forward
+    /// pass enforces it rather than merely passing it along: the MLP allocates
+    /// <c>new Tensor&lt;T&gt;([batch, _outputDim])</c> and the second linear projection is
+    /// <c>[outputDim, outputDim]</c>, so no input width can survive to the output.
+    /// </para>
+    /// <para>
+    /// The sinusoidal encoding's <c>_embeddingDim</c> is deliberately NOT in this contract. It sizes an
+    /// intermediate only - sin/cos are concatenated to <c>_embeddingDim</c> features and then consumed
+    /// by <c>_linear1Weights: [embeddingDim, outputDim]</c> - so it is invisible from outside the layer.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDim <= 0 || inputRank is not (1 or 2)) return null;
+
+        // Identical for both accepted input ranks, because both funnel through the same
+        // [batch] -> sinusoidal -> MLP path and neither restores the original rank.
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     /// <summary>
     /// The dimension of the sinusoidal embedding before MLP projection.
     /// </summary>

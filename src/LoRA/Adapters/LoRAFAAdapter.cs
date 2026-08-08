@@ -110,8 +110,12 @@ public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward pass is identical to standard LoRA
-        // Frozen matrix A still participates in computation
-        return base.Forward(input);
+        // Frozen matrix A still participates in computation.
+        // ForwardTraced, NOT Forward: LayerBase.Forward is the non-virtual recording wrapper that
+        // dispatches to ForwardTraced, so base.Forward(input) would come straight back here and
+        // recurse until the stack overflows. LoRAAdapterBase overrides ForwardTraced, so this is the
+        // base implementation that call was always meant to reach.
+        return base.ForwardTraced(input);
     }
 
     /// <summary>

@@ -907,7 +907,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // an independent int[] so we don't couple to Tensor<T>'s internal backing
         // field (which could be refactored) or share mutable shape storage with
         // the source tensor.
-        var shape = video.Shape.ToArray();
+        var shape = video._shape;
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];

@@ -40,9 +40,53 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj }); var ef = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 10, 2 }); ef.Fill(1.0); var m2 = layer.GetType().GetMethod(\"SetEdgeFeatures\"); if (m2 != null) m2.Invoke(layer, new object[] { ef });")]
+// Roles from ForwardTraced's own comments - "Graph layer expects 3D: [batchSize, numNodes,
+// features]" and "2D [nodes, features]". The node axis is Other (an unordered vertex set indexed by
+// the adjacency matrix, not a sequence); BatchOptional folds the two into one declaration.
+//
+// The EDGE FEATURES this layer is named for are a second input, set through SetEdgeFeatures, and
+// they do NOT enter the contract: they modulate the values flowing along each edge, while the output
+// shape stays [nodes, _outputFeatures] regardless of how many edges or edge features there are.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Middle axis is the graph's node count; nodes are an unordered set, so no sequence role.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off the tail of <c>ForwardTraced</c>, which reshapes a rank-2 input's result to
+    /// <c>[numNodes, _outputFeatures]</c>. The node count is carried through - edge-conditioned
+    /// convolution aggregates ALONG the graph and never coarsens it - and the feature width is
+    /// <c>Fixed</c> at the constructor's <c>_outputFeatures</c>, the width both
+    /// <c>BatchedMatMul3Dx2D</c> calls project to.
+    /// </para>
+    /// <para>
+    /// Ranks 2 and 3 only. The method does handle higher ranks, and correctly, restoring every
+    /// leading axis with only the last replaced - but nothing in this file says what a fourth axis on
+    /// a graph tensor would MEAN, and naming a role on no evidence is the one thing a contract must
+    /// not do.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (2 or 3) || _outputFeatures <= 0) return null;
+
+        var nodes = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures));
+
+        return inputRank == 2
+            ? new[] { nodes, features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                nodes, features,
+            };
+    }
+
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly int _edgeFeaturesCount;

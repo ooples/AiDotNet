@@ -44,9 +44,70 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
+// FEATURE-LAST, exactly as DenseLayer: OnFirstForward reads the trailing axis and nothing else
+// ("Resolves input feature size from input.Shape[^1]", then
+// ResolveShapes(new[] { inputSize }, new[] { _outputSize })), and ForwardTraced re-checks the same
+// axis (`int actualInputSize = input.Shape[^1]`). Every leading axis is carried through untouched.
+//
+// Batch is optional on the two-axis form only, and that is the same deliberate asymmetry DenseLayer
+// documents: marking it optional on the three-axis form too would make that declaration ALSO accept
+// rank 2, as [Time, Features], which a resolver cannot tell apart from the [Batch, Features] the
+// other declaration already claims - two names for one rank is a real ambiguity, and it costs
+// nothing to drop, since an unbatched [Time, Features] is covered either way.
+//
+// Rank 4 is deliberately NOT declared. DenseLayer declares it because it was measured; nothing in
+// this file establishes what a rank-4 input's middle axes would be, and naming them on no evidence
+// is the one thing a contract must not do.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: the leading axes are carried through untouched.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class FeedForwardLayer<T> : LayerBase<T>
+public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <c>Fixed(_outputSize)</c> on the trailing axis, read off
+    /// <c>ResolveShapes(new[] { inputSize }, new[] { _outputSize })</c> in <c>OnFirstForward</c>. It
+    /// is the ONE dimension this layer decides: the weight matrix is <c>[inputSize, _outputSize]</c>
+    /// and <c>EnsureWeightShapeForInput</c> resizes only its FIRST axis when a caller's feature width
+    /// disagrees, so the output width survives that adaptation unchanged.
+    /// </para>
+    /// <para>
+    /// The sequence length is never this layer's to fix - its parameters are sized by the feature
+    /// width alone, so the same layer is meant to accept any number of time steps, and a declaration
+    /// that pinned one would turn a correct layer into one that appears to reject valid input.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (1 or 2 or 3) || _outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+        };
+    }
+
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.
     /// </summary>

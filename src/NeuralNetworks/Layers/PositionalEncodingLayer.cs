@@ -38,8 +38,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
+// Adds position signals to a sequence: shape-preserving, but NOT rank-agnostic - it needs a real
+// sequence axis, so it declares [Batch, Time, Features] rather than claiming any rank.
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "16, 8")] - 16 positions of an
+// 8-wide embedding, so [Time, Features]. ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class PositionalEncodingLayer<T> : LayerBase<T>
+public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The maximum sequence length that this layer can handle.

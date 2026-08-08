@@ -42,9 +42,61 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1")]
+// Exactly the two ranks this block's own guard admits - OnFirstForward: "requires rank-3 [C,H,W] or
+// rank-4 [B,C,H,W] input" - declared separately rather than as one BatchOptional layout, because a
+// derived contract keys on the declared axis count and would leave the unbatched rank resolving to
+// nothing. OutputAxesFor is hand-written: both spatial extents depend on the constructor's stride.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Taken from this block's own resolution, not from the residual add: <c>OnFirstForward</c> computes
+    /// <c>outH = (inputHeight - 1) / _stride + 1</c> and resolves
+    /// <c>ResolveShapes(new[] { _inChannels, inputHeight, inputWidth }, new[] { _outChannels, outH, outW })</c>.
+    /// </para>
+    /// <para>
+    /// That expression IS the sliding window for the 3x3 / pad=1 main path, which is why it is declared as
+    /// <c>Window(kernel: 3, stride: _stride, padding: 1)</c> rather than as a division:
+    /// <c>floor((in + 2*1 - (3-1) - 1) / stride) + 1</c> reduces to <c>(in - 1) / stride + 1</c> exactly.
+    /// The layer's own comment flags the alternative as a real defect - plain <c>in / stride</c> gives 3
+    /// for in=7, stride=2 where the convolution produces 4, and the mismatch reaches the downsample
+    /// branch's BatchNorm shape and breaks the residual add.
+    /// </para>
+    /// <para>
+    /// Channels are <c>Fixed(_outChannels)</c> and not <c>Same</c>: the shortcut is 1x1-convolved and
+    /// re-normalised precisely when <c>_stride != 1 || _inChannels != _outChannels</c>, so the block
+    /// widens its input rather than carrying the channel count through.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4) || _outChannels <= 0 || _stride <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, kernel: 3, stride: _stride, padding: 1));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, kernel: 3, stride: _stride, padding: 1));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     /// <summary>
     /// The expansion factor for BasicBlock. BasicBlock does not expand channels.
     /// </summary>

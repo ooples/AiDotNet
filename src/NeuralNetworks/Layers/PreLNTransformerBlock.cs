@@ -30,8 +30,26 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Roles from this block's own forward: "Self-attention sublayer expects [B, S, H] (or [S, H])", so one
+// declaration with BatchOptional covers both ranks. Time rather than Length because the block is built
+// for causal decoder stacks (T5 / LLaMA / Gemma / Qwen2), where the sequence axis IS temporal.
+//
+// No OutputAxesFor is written by hand, and that is the whole claim: the pre-LN residual form
+// x + Attn(RMSNorm(x)) then y + FFN(RMSNorm(y)) is a sum of terms that each carry x's shape, and the
+// forward's final Engine.Reshape(ffnDownOut, afterAttnShape) makes that explicit - the FFN result is
+// reshaped BACK to the post-attention shape before the second residual add. In and out are identical at
+// every axis, so the generated Same(role) per axis is exactly right.
+//
+// Deliberately NOT Fixed(_hiddenSize) on the feature axis. The width is pinned by the parameters, but
+// declaring it Fixed would say the block RESIZES the feature axis; it does not - it requires that width
+// and returns it. Same(Features) is what the arithmetic does. The sequence axis is likewise Same and not
+// pinned, matching OnFirstForward's own note that "the sequence axis stays dynamic".
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class PreLNTransformerBlock<T> : LayerBase<T>
+public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly RMSNormalizationLayer<T> _norm1;
     // Non-readonly so the inference optimizer can swap the attention sublayer in place (e.g.

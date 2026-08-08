@@ -41,8 +41,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Roles read straight off OnFirstForward, which accepts BOTH forms explicitly: "rank == 4" is
+// [B,C,H,W] and "rank == 3" is [C,H,W], anything else throws. One declaration with
+// BatchOptional = true is therefore exactly the layer's own guard - and it has to cover both,
+// because this layer's [LayerProperty] names rank 3 while its TestInputShape is rank 4.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DeconvolutionalLayer<T> : LayerBase<T>
+public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The collection of filter kernels used for the deconvolution operation.
@@ -403,6 +411,54 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         }
 
         ResolveShapes(new[] { c, h, w }, new[] { OutputDepth, outH, outW });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written from the two lines directly above: <c>outH = (h - 1) * Stride - 2 * Padding +
+    /// KernelSize</c>, and the same for width. That is the INVERSE of a sliding window, so
+    /// <c>Window</c> cannot carry it - a transposed convolution grows its spatial axes by roughly
+    /// <c>Stride</c>, where <c>Window</c> only ever shrinks them.
+    /// </para>
+    /// <para>
+    /// Regrouping as <c>outH = h * Stride + (KernelSize - Stride - 2 * Padding)</c> isolates the one
+    /// case the vocabulary does cover: when that constant is zero the layer is exactly
+    /// <c>Scaled(Height, Stride)</c>. That is the standard "exact upsampling" configuration
+    /// (<c>KernelSize = Stride</c> with no padding, or <c>KernelSize = Stride + 2*Padding</c>), which
+    /// is what generators and decoders are built from, so those stacks resolve precisely. Any other
+    /// configuration leaves an affine offset that no relation expresses, and it is declared Unknown
+    /// with the offset named rather than approximated by a nearby scale.
+    /// </para>
+    /// <para>
+    /// The channel axis is <c>Fixed(OutputDepth)</c> - the constructor argument <c>ResolveShapes</c>
+    /// publishes as the first output dimension. It is independent of the input depth, which this
+    /// layer instead absorbs into the kernel it allocates on first forward.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 3 and 4 only - exactly the two OnFirstForward accepts before it throws.
+        if (inputRank is not (3 or 4) || KernelSize <= 0 || Stride <= 0) return null;
+
+        int offset = KernelSize - Stride - 2 * Padding;
+        AxisRelation Spatial(TensorAxis axis) => offset == 0
+            ? AxisRelation.Scaled(axis, Stride)
+            : AxisRelation.Unknown(
+                $"Transposed-convolution extent is in*{Stride} + {offset}; an affine offset on a "
+                + "scaled axis is not in the relation vocabulary.");
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputDepth));
+        var height = new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
     }
 
     /// <summary>

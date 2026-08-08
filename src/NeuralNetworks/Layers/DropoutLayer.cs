@@ -38,8 +38,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4")]
+// Value-only: zeroes elements, never resizes. Rank-agnostic, so naming axes would invent meanings it
+// does not have - OutputAxesFor is generated as the identity across every rank.
+[ElementWiseShape(Note = "Randomly zeroes elements during training; shape is untouched at any rank.")]
 [AutoParameters]
-public partial class DropoutLayer<T> : LayerBase<T>
+public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The probability of dropping out (deactivating) a neuron during training.

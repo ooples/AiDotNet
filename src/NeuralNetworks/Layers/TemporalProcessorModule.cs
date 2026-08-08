@@ -1,5 +1,5 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -53,8 +53,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// whose features would actively pull the first frame towards black.
 /// </para>
 /// </remarks>
+// Processes a sequence in place: shape-preserving at rank 3 [Batch, Time, Features].
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TemporalProcessorModule<T> : LayerBase<T>
+public partial class TemporalProcessorModule<T> : LayerBase<T>, IShapeContract
 {
     #region Fields
 

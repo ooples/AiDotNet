@@ -56,9 +56,44 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
+// SHAPE-PRESERVING at every level: the three inner ResidualDenseBlocks each preserve shape, and
+// ForwardTraced closes with the global residual "AddResidual(x, input, _residualScale)", which requires
+// the stack's output to still match the input exactly. OnFirstForward states it outright -
+// "ResolveShapes(new[] { _numFeatures, inH, inW }, new[] { _numFeatures, inH, inW })".
+//
+// Ranks and roles from this layer's own guard, which rejects everything else: "requires rank-3 [C,H,W]
+// or rank-4 [B,C,H,W] input". BatchOptional carries both, including the rank 3 that its
+// [LayerProperty(ExpectedInputRank = 3)] is exercised at.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class RRDBLayer<T> : LayerBase<T>
+public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Written by hand even though every axis is <c>Same</c>, because the generator keys its arms on the
+    /// DECLARED layout length and does not expand <c>BatchOptional</c> - it would cover rank 4 and return
+    /// null for the rank 3 this layer is actually tested at.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4)) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     #region Fields
 
     /// <summary>

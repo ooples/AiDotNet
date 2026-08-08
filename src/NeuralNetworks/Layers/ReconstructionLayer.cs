@@ -37,9 +37,57 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// A three-stage MLP decoder. FlattenToFeatureMatrix normalises whatever arrives to
+// [length / featureWidth, featureWidth] and the last sub-layer is a FullyConnectedLayer sized to
+// _outputDimension, so the layer both consumes and produces a plain feature matrix.
+//
+// RANK 2 ONLY. Higher ranks do run - the flatten accepts any rank - but they collapse to rank 2 on the
+// way out, and the batch that comes back is input.Length / featureWidth: a PRODUCT of every input axis
+// divided by a width, which no relation in this vocabulary states. Declaring a rank-3 form would have to
+// invent an answer for the axis that disappears, so it is left undeclared rather than guessed.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ReconstructionLayer<T> : LayerBase<T>
+public partial class ReconstructionLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the output width is configuration, not input: <c>ForwardTraced</c> ends at
+    /// <c>_fc3.Forward(x)</c> and <c>_fc3</c> is built as
+    /// <c>new FullyConnectedLayer&lt;T&gt;(outputDimension, ...)</c>, so the trailing axis is
+    /// <c>Fixed(_outputDimension)</c> whatever came in. The two hidden widths never surface - they are
+    /// interior to the stack.
+    /// </para>
+    /// <para>
+    /// THE BATCH AXIS IS NOT <c>Same</c>. <c>FlattenToFeatureMatrix</c> reshapes to
+    /// <c>[input.Length / _inputDimension, _inputDimension]</c>, so the batch that comes out is the
+    /// TOTAL element count divided by the declared feature width - not the batch that went in. The two
+    /// coincide exactly when the input's width already equals <c>_inputDimension</c>, and diverge
+    /// otherwise: fed <c>[6, 7]</c> by a layer built for width 6, this returns <c>[7, 6]</c>, because
+    /// 42 elements regroup into 7 rows of 6. <c>Same(Batch)</c> was right for well-formed inputs and
+    /// silently wrong for every other one, which the conformance sweep caught.
+    /// </para>
+    /// <para>
+    /// Stated properly it is a product of every input axis, then a division:
+    /// <see cref="AxisRelation.ScaledBy"/> over <see cref="AxisRelation.Product"/>. The division is
+    /// exact, so a total that does not regroup evenly declines instead of rounding - which is correct,
+    /// since such an input is one this layer cannot reshape.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDimension <= 0 || _inputDimension <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Batch,
+                AxisRelation.ScaledBy(
+                    AxisRelation.Product(TensorAxis.Batch, TensorAxis.Features), 1, _inputDimension)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDimension)),
+        };
+    }
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _outputDimension;

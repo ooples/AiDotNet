@@ -62,14 +62,62 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+// SEQUENCE IS A FREE AXIS, and the constructor already says why at length: sequenceLength is a MAXIMUM
+// used for validation only, no weight is sized against it, and publishing it as a concrete contract made
+// the layer claim an output it does not produce for any other length. So Time is carried, never pinned -
+// ForwardTraced writes "outputShape[rank - 2] = seqLen", the length it was handed.
+//
+// BatchOptional covers both accepted forms from one declaration: rank 2 is the [Time, Features] the
+// layer's own [LayerProperty(TestInputShape = "4, 256")] exercises, rank 3 the batched form. Rank 1 is
+// NOT declared, and that is a real limit rather than caution: at rank 1 the tail of ForwardTraced
+// indexes outputShape[rank - 2], i.e. outputShape[-1]. Rank 4+ runs and carries its leading axes, but
+// each would need a distinct role to be named and there is no second batch-like role to give it.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 // [AutoParameters]: every non-nullable tensor field here is a trainable parameter unless it opts
 // out. Before this, the layer registered its 8 weight matrices and silently omitted 10 more
 // LEARNED tensors -- _timeMixR/K/V and _channelMixR/K (the mixing coefficients RWKV is named
 // for), _bonus, and both LayerNorm affine pairs. The optimizer never updated them, so the layer
 // only partly trained and nothing reported it.
 [AutoParameters]
-public partial class RWKVLayer<T> : LayerBase<T>
+public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written for two reasons. The generator keys its arms on the declared layout length and does
+    /// not expand <c>BatchOptional</c>, so it would cover rank 3 and decline the rank 2 this layer is
+    /// tested at; and the trailing axis is <c>Fixed</c>, not <c>Same</c>, which the generator cannot
+    /// derive from roles alone.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_modelDimension)</c> is what the code actually does - <c>ForwardTraced</c> writes
+    /// <c>outputShape[rank - 1] = _modelDimension</c>, the field, not <c>input.Shape[rank - 1]</c>. The
+    /// two coincide for any input the layer accepts, because both residual adds
+    /// (<c>TensorAdd(input3D, timeMixOut)</c> and <c>TensorAdd(afterTimeMix, channelMixOut)</c>) require
+    /// the incoming width to equal the model dimension. Declaring the field is the stronger and more
+    /// honest of the two readings: it says the width is a property of the LAYER, which is what makes a
+    /// mismatched input a shape error rather than something inference should propagate.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (2 or 3) || _modelDimension <= 0) return null;
+
+        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_modelDimension));
+
+        return inputRank == 2
+            ? new[] { time, features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                time, features,
+            };
+    }
+
     // Configuration
     private readonly int _modelDimension;
     private readonly int _numHeads;

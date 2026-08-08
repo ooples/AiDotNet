@@ -39,8 +39,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Writes into memory and passes the stream on: shape-preserving at rank 3 [Batch, Time, Features].
+// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "1, 4")] - a single row of 4
+// features, so [Batch, Features]. ADNSHAPE005 caught the rank-3-only declaration.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -733,7 +740,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("input", out var input) || input == null)

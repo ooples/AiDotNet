@@ -39,6 +39,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 1, 0.25")]
+// Value-only at every rank: OnFirstForward ends in ResolveShapes(shape, shape) with the SAME array on
+// both sides. A learnable α does not make this a resizing layer - α is broadcast into the input's own
+// shape (_alphaBroadcastShape is all ones except at _channelAxis), so the output is elementwise.
+// Naming axes would invent roles this layer does not have; only _channelAxis is meaningful to it, and
+// which role that axis plays is the CALLER's choice, not something this layer can declare.
+[ElementWiseShape(Note = "Learnable per-channel leak applied elementwise; shape is untouched at any rank.")]
 [AutoParameters]
 public partial class PReLULayer<T> : LayerBase<T>
 {

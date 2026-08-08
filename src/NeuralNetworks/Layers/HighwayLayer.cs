@@ -37,8 +37,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Width-preserving by CONSTRUCTION, not by convention. Both constructors call
+// base([inputDimension], [inputDimension]) - one dimension, used for both sides - and ForwardTraced
+// finishes with Engine.TensorAdd(gatedDiff, input): the bypass lane adds the untouched input back in,
+// so the output can only ever have the input's feature width. That is what makes Same(Features)
+// a claim about the layer rather than about one configuration; a Fixed(...) here would be wrong even
+// though the width happens to be a constructor argument, because the residual add - not the field -
+// is what pins it.
+// Rank 2 only. The declared shapes carry a single feature axis and both weight tensors are
+// [inputDimension, inputDimension], so [Batch, Features] is the form the layer is written for and the
+// form it is tested at; nothing here demonstrates an unbatched or sequence-shaped input, so neither is
+// declared. Same rank and same roles both ways, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "output = gate * transform + (1 - gate) * input; the bypass lane forces width to be preserved.")]
 [AutoParameters]
-public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.

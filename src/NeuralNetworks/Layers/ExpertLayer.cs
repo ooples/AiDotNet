@@ -38,9 +38,87 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
+// A CONTAINER decorator: ForwardTraced runs "foreach (var layer in _layers) output = layer.Forward(output)"
+// and then ApplyActivation, which is element-wise. So this layer's output shape is the LAST sub-layer's
+// output shape - which is exactly what OnFirstForward publishes too, walking the chain and taking the
+// final "runningShape = layer.GetOutputShape()" as the outer output shape.
+//
+// The layouts name this layer's INPUT axes. The declared form is the one every construction site builds:
+// MixtureOfExpertsBuilder, TimeMoEBlockLayer and the class's own example all fill _layers with dense
+// projections over a feature vector, so the input is [Batch, Features] - or the unbatched [Features],
+// hence BatchOptional, which OnFirstForward's "stripBatch = inputRank > 1" also allows for.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Feature vector in; the chain of sub-layers projects the trailing axis.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ExpertLayer<T> : LayerBase<T>
+public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Delegated to the LAST sub-layer, because that is what produces this layer's result:
+    /// <c>ForwardTraced</c> threads the input through <c>_layers</c> in order and returns the final
+    /// output (the expert's own activation is element-wise and moves nothing).
+    /// </para>
+    /// <para>
+    /// GUARDED, though, and the guard is the whole subtlety. The relations the last sub-layer hands back
+    /// are resolved against THIS layer's input - the START of the chain - while that sub-layer actually
+    /// sees the chain's intermediate result. The two agree only when the chain did not change what
+    /// those relations read, so a delegated contract is accepted in exactly two situations:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>every relation reads nothing but <c>Batch</c> (or is <c>Fixed</c>, reading nothing at all) -
+    /// the canonical dense expert, whose last layer reports <c>[Same(Batch), Fixed(outputDim)]</c>. Batch
+    /// is not part of the per-sample shape the chain rewrites, so it arrives untouched; and</item>
+    /// <item>the chain is provably extent-preserving up to the last layer, i.e. this layer's resolved
+    /// input shape and the last sub-layer's resolved input shape are equal element by element. Then
+    /// every axis reaches the last layer unchanged and any relation it returns is safe.</item>
+    /// </list>
+    /// <para>
+    /// Anything else declines. An expert whose last layer reports <c>Same(Time)</c> would have that Time
+    /// resolved against the ORIGINAL input, and if a layer in between resized it the answer is
+    /// confidently wrong - worse than no answer at all.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_layers.Count == 0) return null;
+
+        var last = _layers[_layers.Count - 1];
+        var axes = (last as IShapeContract)?.OutputAxesFor(inputRank);
+        if (axes is null || axes.Count == 0) return null;
+
+        var expertInput = GetInputShape();
+        var lastInput = last.GetInputShape();
+        if (expertInput is null || expertInput.Length == 0) return null;
+        if (lastInput is null || lastInput.Length != expertInput.Length) return null;
+
+        bool chainPreservesEveryExtent = true;
+        for (int i = 0; i < expertInput.Length; i++)
+        {
+            if (expertInput[i] != lastInput[i]) { chainPreservesEveryExtent = false; break; }
+        }
+
+        if (!chainPreservesEveryExtent)
+        {
+            foreach (var axis in axes)
+            {
+                foreach (var source in axis.Relation.Sources)
+                {
+                    // Batch survives the chain by construction - it is not in the per-sample shape the
+                    // sub-layers were resolved against. Every other role may have been resized upstream,
+                    // and resolving it against the original extent would be a wrong shape stated with
+                    // confidence.
+                    if (source != TensorAxis.Batch) return null;
+                }
+            }
+        }
+
+        return axes;
+    }
+
     /// <summary>
     /// The sequence of layers that make up this expert.
     /// </summary>

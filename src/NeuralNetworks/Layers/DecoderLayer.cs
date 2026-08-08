@@ -30,8 +30,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Transformer decoder block over a sequence: shape-preserving at rank 3 [Batch, Time, Features].
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DecoderLayer<T> : LayerBase<T>
+public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
 {
 
     /// <summary>
@@ -384,7 +387,7 @@ public partial class DecoderLayer<T> : LayerBase<T>
     /// The method combines these inputs, processes them through the layer, and returns the final output.
     /// The attention mask, if provided, helps control which parts of the input sequence the layer should focus on.</para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2 || inputs.Length > 3)
             throw new ArgumentException("DecoderLayer requires two or three input tensors: decoder input, encoder output, and optionally an attention mask.");
@@ -732,7 +735,7 @@ public partial class DecoderLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)

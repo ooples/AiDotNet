@@ -40,9 +40,41 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+// Rank 2 only: ForwardTraced reads `input.Shape[0]` as the batch and reshapes straight to
+// [batchSize, 1, _inputDim], so the feature axis must be the second and last one.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class BatchEnsembleLayer<T> : LayerBase<T>
+public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because THE BATCH AXIS GROWS, which is unusual enough that a generated
+    /// <c>Same(Batch)</c> would be quietly wrong for every caller downstream. <c>ForwardTraced</c> tiles
+    /// each sample once per ensemble member -
+    /// <c>expandedBatchSize = batchSize * _numMembers</c> - and returns
+    /// <c>[expandedBatchSize, _outputDim]</c>, which its own docs restate: "The output has
+    /// batchSize x numMembers rows, with consecutive numMembers rows belonging to the same input sample."
+    /// </para>
+    /// <para>
+    /// <c>Scaled</c> rather than <c>Window</c> because this is an exact multiplication with no boundary
+    /// case - every sample is tiled the same number of times - and the feature axis is
+    /// <c>Fixed(_outputDim)</c>, the width of the shared weight matrix the constructor allocates as
+    /// <c>[inputDim, outputDim]</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _numMembers <= 0 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Scaled(TensorAxis.Batch, _numMembers, 1)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
+
     private readonly int _inputDim;
     private readonly int _outputDim;
     private readonly int _numMembers;

@@ -911,9 +911,76 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// The spectral convolution is key: it's a global operation that couples
     /// all spatial points, allowing the network to capture long-range dependencies.
     /// </remarks>
+    // SHAPE-PRESERVING, taken from ForwardTraced rather than from the FFT's reputation. The spectral
+    // branch truncates to _modeSizes in frequency space, but must come back full-size: the very next
+    // line is `Engine.TensorAdd(spectral, local)` against the pointwise branch, which is input-sized,
+    // and the activation after it is elementwise. The channel axis survives because _pointwiseWeights
+    // is [_width, _width] and ForwardTraced rejects any input whose Shape[1] is not _width.
+    //
+    // Three ranks are declared because the RANK is configuration here - ForwardTraced computes
+    // `expectedRank = _spatialDimensions.Length + 2` and throws on anything else - so the type accepts
+    // rank 3, 4 or 5 for 1-D, 2-D and 3-D problems respectively. OutputAxesFor below narrows that back
+    // to the single rank THIS instance accepts; the attributes cannot, being per-type.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Input,
+        Note = "1-D problem: [batch, channels, x].")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Output)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Input,
+        Note = "2-D problem: the fused Engine.FFT2D fast path.")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Output)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Input,
+        Note = "3-D problem: the separable 1-D Engine.FFT loop.")]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Output)]
     [AutoParameters]
-    public partial class FourierLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+    public partial class FourierLayer<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
     {
+        /// <inheritdoc />
+        /// <remarks>
+        /// <para>
+        /// Every relation is <c>Same</c>, so this looks like a case the generator could have covered
+        /// from the layouts alone. It is written by hand for the RANK GUARD, not for the relations: a
+        /// generated body would answer for all three declared ranks, while a given instance accepts
+        /// exactly one - <c>_spatialDimensions.Length + 2</c>, which is the condition ForwardTraced
+        /// throws on. Answering for a rank this instance rejects is the same defect as declaring one.
+        /// </para>
+        /// </remarks>
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        {
+            if (inputRank != _spatialDimensions.Length + 2) return null;
+
+            // Spatial axes, outermost first, matching the layouts above: 1-D names its single axis
+            // Width, 2-D adds Height ahead of it, 3-D adds Depth ahead of that.
+            TensorAxis[] spatial = _spatialDimensions.Length switch
+            {
+                1 => new[] { TensorAxis.Width },
+                2 => new[] { TensorAxis.Height, TensorAxis.Width },
+                3 => new[] { TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width },
+                // Higher-dimensional problems run fine through the separable FFT loop, but this
+                // contract has no roles left to name their axes with. Declining is honest.
+                _ => Array.Empty<TensorAxis>(),
+            };
+
+            if (spatial.Length == 0) return null;
+
+            var axes = new List<OutputAxisContract>
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+            };
+
+            foreach (var axis in spatial)
+            {
+                axes.Add(new OutputAxisContract(axis, AxisRelation.Same(axis)));
+            }
+
+            return axes;
+        }
+
         private readonly INumericOperations<T> _numOps;
         private readonly int _width;
         private readonly int _modes;

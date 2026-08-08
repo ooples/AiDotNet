@@ -30,8 +30,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16, 4, 2")]
+// SHAPE-PRESERVING, and ForwardTraced proves it rather than the architecture implying it: both
+// sublayers land in `Engine.TensorAdd(input, attn)` and `Engine.TensorAdd(x, moe)`, and a residual
+// add is only defined when the two operands already agree, so the output shape is the input shape.
+// Nothing else to write - matching input/output layouts make the generator derive Same(role) per axis.
+//
+// Deliberately NOT [ElementWiseShape]: that shorthand claims EVERY rank down to 1, and the
+// self-attention sublayer needs a sequence axis as well as a feature axis. SetParameters says so in
+// its own words - "MHA requires rank>=2 (sequence + features)" - so rank 1 is not this layer's to
+// accept. Rank 3 is declared because the class remarks describe the MoE routing "each row of the
+// flattened [B*numPatches, hiddenDim] tensor", i.e. a batched sequence.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TimeMoEBlockLayer<T> : LayerBase<T>
+public partial class TimeMoEBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _hiddenDim;
     private readonly int _numHeads;

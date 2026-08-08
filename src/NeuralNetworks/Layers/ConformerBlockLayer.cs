@@ -63,8 +63,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, Cost = ComputeCost.High,
     TestInputShape = "4, 16", TestConstructorArgs = "16, 2, 2, 3")]
+// Roles are the block's own documented layout, quoted from the remarks above: "Input/output layout is
+// [..., time, dim] (time-major, matching the rest of the ASR stack)". Batch is optional because that
+// "..." is genuinely empty at the rank the block is tested at ([LayerProperty(TestInputShape = "4, 16")]
+// is [time, dim]) and genuinely one axis deep above it; ConvolutionModule folds every leading axis into
+// one ("for (int i = 0; i < rank - 2; i++) batch *= input.Shape[i];") so both run the same code.
+//
+// SHAPE-PRESERVING, and structurally so rather than by arithmetic coincidence: Equation 1 is four
+// pre-norm RESIDUAL adds against the running activation, and a residual add cannot resize its operand.
+// The convolution module is the only sub-module that changes layout at all, and it explicitly restores
+// the caller's shape on the way out ("Engine.Reshape(outTd, input.Shape.ToArray())") -- its 2*D channel
+// expansion is halved again by the GLU before that point, so even the interior width comes back to D.
+// The closing LayerNorm rescales values only.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ConformerBlockLayer<T> : LayerBase<T>
+public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>

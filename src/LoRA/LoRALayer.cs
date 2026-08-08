@@ -1,7 +1,10 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
+
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 
 namespace AiDotNet.LoRA;
 
@@ -34,9 +37,70 @@ namespace AiDotNet.LoRA;
 /// requires 8x1000 + 8x1000 = 16,000 parameters (98.4% reduction!).
 /// </para>
 /// </remarks>
+// The same two forms LoRAAdapterBase declares, and for the same reason: this is a linear projection, so
+// it sees [Batch, Features] for the classic dense case and [Batch, Time, Features] when it wraps an
+// attention or FFN sublayer. ForwardTraced states this itself - "Features live on the LAST axis; every
+// leading axis is batch-like" - and its tail explicitly restores the leading axes so a rank-3 input comes
+// back as [batch, seq, out].
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class LoRALayer<T> : LayerBase<T>
+public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Feature-last, leading axes untouched - the same rule as <c>DenseLayer</c>, which is what LoRA is a
+    /// low-rank stand-in for. The output width is <c>_loraB.Shape[1]</c>, the <c>outputSize</c> constructor
+    /// argument: <c>ForwardTraced</c> computes <c>(input @ A) @ B</c>, so the trailing dim of the result
+    /// is B's column count by construction, not by convention.
+    /// </para>
+    /// <para>
+    /// The rank (r) never appears here. It is an INTERNAL bottleneck - <c>input @ A</c> is
+    /// <c>[.., r]</c> - and B expands straight back out, so no externally visible axis is ever sized by
+    /// it. Declaring the sequence length would be the other mistake: the matrices are sized by the
+    /// feature width alone, so any number of time steps is valid and pinning one would make a correct
+    /// layer look like it rejects valid input.
+    /// </para>
+    /// <para>
+    /// RANK 1 IS DELIBERATELY NOT DECLARED, and that is a defect of the layer rather than of the
+    /// contract. A rank-1 <c>[features]</c> input is reshaped to <c>[1, features]</c> for the matmul, but
+    /// the restore step is guarded by <c>if (input.Shape.Length &gt; 2)</c> - so it returns rank-2
+    /// <c>[1, out]</c>, changing the rank. Declaring rank 1 here would have to claim either the rank it
+    /// takes or the rank it returns; neither is true of both ends.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // _loraB is built as [rank, outputSize], so the trailing axis IS the output width. This reads
+        // Shape[1] rather than a Matrix-style .Columns because the parameter-automation refactor on
+        // this branch moved the LoRA factors from Matrix<T> to Tensor<T>.
+        int outputSize = _loraB.Shape[1];
+        if (outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputSize));
+
+        return inputRank switch
+        {
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Low-rank matrix A with dimensions (inputSize × rank).
     /// </summary>

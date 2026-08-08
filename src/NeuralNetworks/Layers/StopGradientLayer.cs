@@ -22,8 +22,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = -1, Cost = ComputeCost.Low, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Passes values straight through and blocks the gradient; shape is never touched, at any rank.
+[ElementWiseShape(Note = "Identity forward, gradient barrier backward. Shape untouched at any rank.")]
 [AutoParameters]
-public partial class StopGradientLayer<T> : LayerBase<T>
+public partial class StopGradientLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc/>
     public override bool SupportsTraining => false;

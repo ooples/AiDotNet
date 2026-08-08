@@ -36,9 +36,54 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4")]
+// A COLUMN-ACTIVATION VECTOR IN, A CELL-ACTIVATION VECTOR OUT - and the output is always rank 1,
+// whatever the input rank. The constructor states the pair outright:
+// base([columnCount], [columnCount * cellsPerColumn]).
+//
+// The input is declared batch-optional because the layer is tested at rank 2
+// ([LayerProperty(TestInputShape = "1, 4")]) and defined at rank 1: ForwardTraced opens with
+// Engine.Reshape(input, [ColumnCount]), which flattens either form into the same vector. That reshape
+// is also why the leading axis is only ever a singleton here - it must be, or the element count would
+// not match ColumnCount - so the rank-2 form is a batch of one, not a batch this layer processes.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Always rank 1: the columns-by-cells grid leaves flattened into one activation vector.")]
 [AutoParameters]
-public partial class TemporalMemoryLayer<T> : LayerBase<T>
+public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the output rank does not follow the input rank. From <c>ForwardTraced</c>:
+    /// the cell grid is flattened with <c>Engine.Reshape(CellStates, [ColumnCount * CellsPerColumn])</c>,
+    /// the input is expanded to match with
+    /// <c>Engine.TensorRepeatElements(inputFlat, CellsPerColumn, axis: 0)</c>, and the returned value is
+    /// their element-wise product - so a rank-2 <c>[1, ColumnCount]</c> input yields a rank-1 result,
+    /// which no generated <c>Same</c>-per-axis derivation could express.
+    /// </para>
+    /// <para>
+    /// <c>Fixed</c> rather than <c>Scaled(Features, CellsPerColumn)</c>, even though the two agree
+    /// numerically whenever the input is the width this layer was built for. The size comes from the
+    /// layer's OWN cell grid, allocated once in the constructor as
+    /// <c>new Tensor&lt;T&gt;([columnCount, cellsPerColumn])</c> and never resized; the input does not
+    /// get a say in it, and the constructor's declared output shape,
+    /// <c>[columnCount * cellsPerColumn]</c>, is that same constant.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 1 and 2 only - the reshape to [ColumnCount] is what any accepted input must satisfy,
+        // and a rank-3+ input would have to be a genuine batch, which this layer has no notion of.
+        if (inputRank is not (1 or 2) || ColumnCount <= 0 || CellsPerColumn <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Features, AxisRelation.Fixed(ColumnCount * CellsPerColumn)),
+        };
+    }
+
     /// <summary>
     /// The number of columns in the temporal memory layer.
     /// </summary>

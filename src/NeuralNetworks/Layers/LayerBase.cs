@@ -2026,7 +2026,46 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     /// <param name="inputs">Named input tensors matching <see cref="InputPorts"/>.</param>
     /// <returns>Output tensor.</returns>
-    public virtual Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    public Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        var observer = LayerForwardObserver<T>.Current;
+        if (observer is null) return ForwardTracedPorts(inputs);
+
+        var output = ForwardTracedPorts(inputs);
+
+        // Record EVERY input against the one output. ResolveProducers() scans backward for the
+        // nearest producer of each recorded input, so N records for one layer become N parent
+        // edges - which is the whole point: these are the layers that CREATE branching, and
+        // until now they were the ones tracing could not see.
+        foreach (var input in inputs.Values)
+        {
+            if (input is not null) observer.Record(this, input, output);
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Named multi-port computation. Multi-port layers override THIS, not <see cref="Forward(IReadOnlyDictionary{string, Tensor{T}})"/>.
+    /// </summary>
+    /// <param name="inputs">Input tensors keyed by port name.</param>
+    /// <returns>The layer's output.</returns>
+    /// <remarks>
+    /// <para>
+    /// The multi-input counterpart of <see cref="ForwardTraced(Tensor{T})"/>, and it exists for a
+    /// reason the single-input split did not have to argue for: a layer with several inputs is
+    /// exactly a layer where the graph BRANCHES. Leaving this surface unrecorded meant tracing
+    /// reconstructed topology perfectly for the straight-line stretches and silently lost every
+    /// join - Add, Concatenate, Multiply, cross-attention, memory read/write. A tracer blind to
+    /// joins is not recovering a graph, it is recovering a list.
+    /// </para>
+    /// <para>
+    /// Named rather than an overload of <c>ForwardTraced</c> because C# overload resolution would
+    /// make a single-tensor call ambiguous for layers that implement both, and a layer picking the
+    /// wrong one would be a silent behaviour change rather than a compile error.
+    /// </para>
+    /// </remarks>
+    protected virtual Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         // Only use single-tensor shortcut for true single-port layers.
         // Multi-port layers must override this method to handle all their inputs.
@@ -2882,7 +2921,39 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Specialized layers can override this to combine inputs in different ways.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> Forward(params Tensor<T>[] inputs)
+    public Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        var observer = LayerForwardObserver<T>.Current;
+        if (observer is null) return ForwardTracedMany(inputs);
+
+        var output = ForwardTracedMany(inputs);
+
+        // One record per input, same as the named-port path - N records become N parent edges.
+        // Guarded on Length > 1: a single-element call delegates to Forward(Tensor<T>) below,
+        // which records it itself, and recording here too would duplicate the edge.
+        if (inputs is not null && inputs.Length > 1)
+        {
+            foreach (var input in inputs)
+            {
+                if (input is not null) observer.Record(this, input, output);
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Positional multi-input computation. Multi-input layers override THIS, not
+    /// <see cref="Forward(Tensor{T}[])"/>.
+    /// </summary>
+    /// <param name="inputs">Input tensors in port order.</param>
+    /// <returns>The layer's output.</returns>
+    /// <remarks>
+    /// The positional counterpart of <see cref="ForwardTracedPorts"/>. Both exist because the
+    /// codebase already had both calling conventions; unifying them would be a wide, behaviour-
+    /// changing refactor of every multi-input layer, whereas making each one traceable is not.
+    /// </remarks>
+    protected virtual Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
         {

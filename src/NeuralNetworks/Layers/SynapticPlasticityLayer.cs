@@ -35,8 +35,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+// Modulates synaptic weights and returns a same-length activation vector.
+// Rank comes from this layer's OWN [LayerProperty(TestInputShape = "1, 4")] - rank 2 [Batch, Features] -
+// not from the discovery sweep, which reported rank 1 only because its [12] fallback probe happened to
+// forward. Where a layer already states its shape, that statement wins over a probe.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class SynapticPlasticityLayer<T> : LayerBase<T>
+public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The input tensor from the last forward pass.

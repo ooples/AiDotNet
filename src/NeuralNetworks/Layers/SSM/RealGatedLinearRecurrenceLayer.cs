@@ -53,9 +53,29 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+// Shape-preserving at every accepted rank, and read from this layer's own forward rather than assumed:
+// ForwardTraced takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is [Time, Features]
+// with NO batch axis - the same convention every layer in this folder follows. Its three exits confirm
+// the shape is untouched: [_modelDimension] at rank 1, [seqLen, _modelDimension] at rank 2, and the
+// original leading axes with [seqLen, _modelDimension] appended above that.
+//
+// The feature width is Same, not Fixed(_modelDimension), and the forward makes the distinction explicit:
+// it THROWS when modelDim != _modelDimension, so the width is a precondition the caller must already
+// satisfy, not something this layer sets. Rank 1 is accepted (seqLen defaults to 1) but not declared -
+// a single timestep with no time axis is a degenerate probe shape, not a form to route a stack through.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
+public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeContract
 {
+    // OutputAxesFor is GENERATED from the [TensorLayout] attributes above (ShapeContractGenerator).
+    // Nothing to write here: the layouts already state that every axis is carried through, and
+    // restating that in a hand-copied method is how a contract drifts from its own declaration.
+
     // Configuration
     private readonly int _modelDimension;
     private readonly int _recurrenceDimension;

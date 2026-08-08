@@ -25,8 +25,22 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 4, 2", TestConstructorArgs = "4, 2, 4")]
+// A recurrent cell: it consumes a SEQUENCE and emits one hidden state per step, so the time axis is
+// carried through and only the trailing width changes. ForwardTraced spells both halves out - it reads
+// sequenceLength = input.Shape[Rank-2] and requires input.Shape[Rank-1] == _inputSize, then returns
+// outputShape = input.Shape with the last entry overwritten by _hiddenSize.
+// BatchOptional covers rank 2 as well as rank 3, and rank 2 is genuinely supported rather than merely
+// tolerated: ForwardTraced has an explicit `if (input.Rank == 2) return Reshape(result,
+// [sequenceLength, _hiddenSize])` branch, i.e. an unbatched [Time, Features] sequence.
+// Higher ranks run too - every axis before the last two is folded into batchSize - but each extra
+// leading axis would need a distinct role for a relation to name it, and there is no second batch-like
+// role to give it, so OutputAxesFor declines beyond rank 3 rather than guessing.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class HippoMemoryCellLayer<T> : LayerBase<T>
+public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _hiddenSize;
     private readonly int _inputSize;
@@ -323,6 +337,40 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written rather than generated, because the trailing axis CHANGES: this is a projection to
+    /// the hidden width, so the axis roles alone would describe it as shape-preserving and be wrong.
+    /// Derived from the tail of <see cref="ForwardTraced"/>:
+    /// <c>outputShape = input.Shape.ToArray(); outputShape[^1] = _hiddenSize;</c>
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_hiddenSize)</c> is legitimate here in the way a hardcoded number would not be - the
+    /// hidden width is a constructor argument kept in a field, and it is the same value the base
+    /// constructor already publishes as the output shape (<c>base(new[] { -1, inputSize },
+    /// new[] { -1, hiddenSize })</c>). The time axis is <c>Same</c> because the loop emits exactly one
+    /// hidden state per step and stacks them on axis 1.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // ForwardTraced rejects rank < 2 outright, and ranks above 3 have no distinct role available
+        // for the extra leading axes, so both decline honestly.
+        if (inputRank is not (2 or 3) || _hiddenSize <= 0) return null;
+
+        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
+
+        return inputRank == 2
+            ? new[] { time, features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                time, features,
+            };
     }
 
     /// <inheritdoc />

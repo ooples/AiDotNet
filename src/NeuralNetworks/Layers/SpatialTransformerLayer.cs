@@ -46,8 +46,16 @@ public enum SpatialTransformerDataFormat
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// ChannelsFirst [Batch?, Channels, Height, Width] - the constructor default, and the convention
+// ConvolutionalLayer and MaxPoolingLayer already declare. A type-level layout can name the axes only
+// one way, while the data format is INSTANCE state, so the contract below declines for any other
+// format rather than naming a ChannelsLast input's axes wrongly.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -309,6 +317,48 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     private readonly SpatialTransformerDataFormat _dataFormat;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The sampler resamples onto the configured output grid, so Height and Width are
+    /// <see cref="AxisRelation.Fixed"/> at <c>_outputHeight</c>/<c>_outputWidth</c> whatever came in,
+    /// and the channel and batch axes carry through untouched.
+    /// </para>
+    /// <para>
+    /// THE DEFAULT DATA FORMAT WAS THE DEFECT. It used to be
+    /// <see cref="SpatialTransformerDataFormat.Auto"/>, whose branch decides whether an axis IS
+    /// Channels or Height by comparing the input's SIZES against the already-resolved
+    /// <c>_inputHeight</c>/<c>_inputWidth</c> - and when both readings match it simply prefers one.
+    /// So the same rank-3 shape could be read as <c>[C,H,W]</c> or <c>[H,W,C]</c>, giving outputs with
+    /// the same sizes in a different axis ORDER. That is not a shape a contract can state, and it is
+    /// not a behaviour a caller can rely on. The default is now
+    /// <see cref="SpatialTransformerDataFormat.ChannelsFirst"/>, matching ConvolutionalLayer and
+    /// MaxPoolingLayer, so the out-of-the-box shape is determined by configuration alone.
+    /// </para>
+    /// <para>
+    /// <c>Auto</c> remains selectable for callers who deliberately want inference, and this declines
+    /// for it - as it does for ChannelsLast, whose axis ORDER the type-level layout cannot express
+    /// alongside ChannelsFirst.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_dataFormat != SpatialTransformerDataFormat.ChannelsFirst) return null;
+        if (_outputHeight <= 0 || _outputWidth <= 0) return null;
+        if (inputRank != 3 && inputRank != 4) return null;
+
+        var axes = new List<OutputAxisContract>(inputRank);
+        if (inputRank == 4)
+        {
+            axes.Add(new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)));
+        }
+
+        axes.Add(new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)));
+        axes.Add(new OutputAxisContract(TensorAxis.Height, AxisRelation.Fixed(_outputHeight)));
+        axes.Add(new OutputAxisContract(TensorAxis.Width, AxisRelation.Fixed(_outputWidth)));
+        return axes;
+    }
+
     /// <summary>
     /// The height of the output feature map.
     /// </summary>
@@ -367,7 +417,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// which works well for predicting transformation parameters.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
+    public SpatialTransformerLayer(int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
         : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, activationFunction ?? new TanhActivation<T>())
     {
         if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));
@@ -413,7 +463,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// for their neural networks. For most cases, the basic constructor is sufficient.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int outputHeight, int outputWidth, IVectorActivationFunction<T> vectorActivationFunction, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
+    public SpatialTransformerLayer(int outputHeight, int outputWidth, IVectorActivationFunction<T> vectorActivationFunction, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
         : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, vectorActivationFunction ?? new TanhActivation<T>())
     {
         if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));

@@ -38,9 +38,49 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 0.5")]
+// A dense projection that happens to store its weights sparsely. SPARSITY IS NOT A SHAPE PROPERTY:
+// _sparsity decides how many of the [OutputFeatures, InputFeatures] entries are non-zero, not how wide
+// the result is - the sparse matmul still produces a fully dense [batch, OutputFeatures]. So the
+// contract is the ordinary linear one and says nothing about _sparsity.
+//
+// Ranks 1 and 2 only, per ForwardTraced's own <param> ("shape [inputFeatures] or [batch,
+// inputFeatures]") and enforced there: it promotes rank 1 to [1, InputFeatures] and then reads
+// input2d.Shape[1], so a rank-3 input would compare the wrong axis against InputFeatures and throw.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class SparseLinearLayer<T> : LayerBase<T>
+public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From <c>ForwardTraced</c>: the chain ends at
+    /// <c>TensorBroadcastAdd(outBO, Reshape(_biases, [1, OutputFeatures]))</c>, giving
+    /// <c>[batch, OutputFeatures]</c>, and a rank-1 input is reshaped back to <c>[OutputFeatures]</c>
+    /// on the way out. <c>OutputFeatures</c> is the constructor argument that sizes the weight matrix's
+    /// row count, so <c>Fixed</c> is reading the layer's own parameter, not an observed number.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputFeatures <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputFeatures));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     private readonly ISparseEngine _engine;
     private readonly INumericOperations<T> _numOps;
 

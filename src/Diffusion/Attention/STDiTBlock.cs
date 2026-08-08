@@ -1,5 +1,5 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -27,8 +27,11 @@ namespace AiDotNet.Diffusion.Attention;
 /// Each sub-layer uses adaptive layer normalization (adaLN-Zero) for timestep conditioning.
 /// </para>
 /// </remarks>
+// Shape-preserving at rank 3 [Batch, Time, Features]; only that rank was probed, so only it is declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class STDiTBlock<T> : LayerBase<T>
+public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _numHeads;

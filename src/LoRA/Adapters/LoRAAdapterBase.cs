@@ -1,10 +1,12 @@
 ﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
-
-using AiDotNet.Attributes;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -35,8 +37,18 @@ namespace AiDotNet.LoRA.Adapters;
 /// The result is parameter-efficient fine-tuning that works across different layer architectures!
 /// </para>
 /// </remarks>
+// LoRA targets linear projections, so the shapes it sees are [Batch, Features] and, for attention
+// projections over a sequence, [Batch, Time, Features]. Declared on the BASE: TensorLayoutAttribute is
+// Inherited, and IShapeContract on a base is inherited by definition, so all 34 adapters in this family
+// are covered by this one declaration rather than 34 transcriptions of the same thing.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>
+public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>, IShapeContract
 {
     /// <summary>
     /// The base layer being adapted.
@@ -91,6 +103,24 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// It may be frozen (non-trainable) during fine-tuning for maximum efficiency.
     /// </remarks>
     public ILayer<T> BaseLayer => _baseLayer;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A LoRA adapter adds a low-rank delta to the wrapped layer's output and returns it, so its shape
+    /// law IS the wrapped layer's shape law - the constructor says as much, passing
+    /// <c>baseLayer.GetOutputShape()</c> straight through as this layer's output shape. The contract
+    /// therefore delegates rather than restating anything.
+    /// </para>
+    /// <para>
+    /// This is only possible because <c>OutputAxesFor</c> is an INSTANCE method: the answer depends on
+    /// which layer this adapter was constructed around, which no type-level attribute could express.
+    /// Wrap a Dense and the feature axis is <c>Fixed</c> at that Dense's width; wrap something with no
+    /// contract and this declines, which is the honest answer rather than a guess.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => (_baseLayer as IShapeContract)?.OutputAxesFor(inputRank);
 
     /// <summary>
     /// Gets the LoRA layer providing the low-rank adaptation.

@@ -30,8 +30,25 @@ namespace AiDotNet.TimeSeries;
 /// Multiple blocks work together, with each one focusing on different aspects of the data.
 /// </para>
 /// </remarks>
+// Rank 1 only, and that is this block's own declaration rather than a simplification: the base
+// constructor is handed CreateInputShape(lookbackWindow) => new[] { lookbackWindow } and
+// CreateOutputShape(...) => new[] { lookbackWindow + forecastHorizon }, both one-dimensional.
+// ForwardTraced backs that up - its first statement is Engine.Reshape(input, [_lookbackWindow, 1]),
+// which only succeeds for an input holding exactly _lookbackWindow elements.
+//
+// The axis is Time on both sides because both ARE time: the input is a lookback window of history, and
+// the output is the concatenation [backcast(lookbackWindow) | forecast(forecastHorizon)] documented on
+// ForwardTraced. Naming it Features would suggest the two ends are unrelated quantities when the whole
+// doubly-residual scheme depends on their being the same series.
+//
+// ForwardTape also accepts rank-2 [B, L], but it is a separate public entry point used by NBEATSModel,
+// NOT the LayerBase forward path this contract describes - so no rank-2 layout is declared here.
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input,
+    Note = "A lookback window of exactly lookbackWindow steps.")]
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Output,
+    Note = "Backcast and forecast concatenated: [lookbackWindow | forecastHorizon].")]
 [AutoParameters]
-internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
     private readonly int _lookbackWindow;
     private readonly int _forecastHorizon;
@@ -314,6 +331,37 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         // reshape node was ~1% of driver wall). Same contiguous data as [size],
         // so gradient flow / optimizer moments are bit-identical.
         return new Tensor<T>(new[] { size, 1 }, new Vector<T>(data));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written rather than generated, because input and output share a rank AND an axis role while
+    /// differing in SIZE - exactly the case a generated <c>Same(Time)</c> would get wrong. The block
+    /// emits a longer series than it consumes: <c>CreateOutputShape</c> returns
+    /// <c>new[] { lookbackWindow + forecastHorizon }</c>, and <c>ForwardTraced</c> produces it by
+    /// concatenating a <c>[lookbackWindow]</c> backcast with a <c>[forecastHorizon]</c> forecast along
+    /// axis 0.
+    /// </para>
+    /// <para>
+    /// <c>Fixed</c> rather than a window or a scale, because the output length is set by construction and
+    /// not by the input. Both basis matrices are precomputed at their configured extents
+    /// (<c>_basisBackcast</c> is <c>[lookbackWindow, thetaSizeBackcast]</c>, <c>_basisForecast</c> is
+    /// <c>[forecastHorizon, thetaSizeForecast]</c>), so the two halves come out at those sizes whatever
+    /// is fed in - and the reshape at the top of <c>ForwardTraced</c> already refuses any input that is
+    /// not exactly <c>_lookbackWindow</c> long.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 1 is the only form the LayerBase path accepts; see the layout note on the class.
+        if (inputRank != 1 || _lookbackWindow <= 0 || _forecastHorizon <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Time, AxisRelation.Fixed(_lookbackWindow + _forecastHorizon)),
+        };
     }
 
     /// <summary>

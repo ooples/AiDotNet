@@ -25,8 +25,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Activation)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
+// The canonical element-wise layer: applies a function to each value independently, so shape is
+// identical in and out at any rank.
+[ElementWiseShape(Note = "Applies the activation to each element independently.")]
 [AutoParameters]
-public partial class ActivationLayer<T> : LayerBase<T>
+public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
     /// <remarks>An activation is elementwise, so the shape is carried through unchanged.</remarks>

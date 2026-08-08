@@ -43,9 +43,61 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// RANK 2 IS [Time, Features], NOT [Batch, Features] - this layer's own ForwardTraced says so:
+// "2D input [timeSteps, features]: single batch". That is the opposite of the dense convention, and
+// getting it backwards would name the sequence axis Batch on exactly the rank the layer is tested at
+// ([LayerProperty(TestInputShape = "1, 4")]). Batch is therefore NOT marked optional on the rank-3
+// declaration: doing so would make it also claim rank 2 as [Time, Features] a second time.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class LSTMLayer<T> : LayerBase<T>
+public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Straight off <c>OnFirstForward</c>, which copies the input shape and then overwrites one entry:
+    /// <c>resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize</c>. So every axis but the last is
+    /// carried through and the last becomes <c>Fixed(_hiddenSize)</c>, the constructor argument the gate
+    /// matrices are sized by.
+    /// </para>
+    /// <para>
+    /// THIS LAYER RETURNS THE WHOLE SEQUENCE, not the final state. The Time axis is <c>Same</c>, not
+    /// dropped and not fixed at 1 - the forward collects one hidden state per timestep and concatenates
+    /// them, and the shape-restoration block at the end of <c>ForwardTraced</c> writes
+    /// <c>[timeSteps, _hiddenSize]</c> for the rank-2 case. A contract that collapsed Time here would
+    /// describe a return_sequences=false LSTM, which this is not.
+    /// </para>
+    /// <para>
+    /// RANK 1 IS DELIBERATELY NOT DECLARED. A rank-1 <c>[features]</c> input is accepted, but it is
+    /// reshaped to <c>[1, 1, features]</c> and the restoration block handles only rank 2 and rank &gt; 3
+    /// - so it comes back as rank-3 <c>[1, 1, hidden]</c>. There is no single rank to declare for a case
+    /// whose input and output ranks disagree.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
+        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
+
+        return inputRank switch
+        {
+            2 => new[] { time, features },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                time, features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The size of each input vector (number of features).
     /// </summary>

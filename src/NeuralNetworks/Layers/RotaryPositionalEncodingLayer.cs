@@ -36,8 +36,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
+// Rotates query/key pairs by position: shape-preserving at rank 2 [Time, Features]. Needs a real
+// sequence axis to rotate against, so it is not declared rank-agnostic.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
+public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 {
     private int _maxSequenceLength;
     private readonly int _headDimension;

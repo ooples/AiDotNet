@@ -65,8 +65,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+// Roles from this layer's own guard - "requires at least 2D tensor [nodes, features]" - so the node
+// axis is Other (an unordered vertex set indexed by the adjacency matrix, not a sequence) and the
+// trailing axis is Features, the name the layer itself uses (_inputFeatures / _outputFeatures).
+//
+// ONLY ranks 2 and 3 are declared even though ForwardTraced accepts higher ranks, and that is the
+// point: for rank > 3 it flattens every leading axis into one batch and NEVER restores them - the
+// tail of the method restores the original shape for rank 2 and rank 1 only - so a rank-4 input
+// leaves as rank 3. Declaring rank 4 would claim a rank-preserving layer that this is not.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Middle axis is the graph's node count; nodes are an unordered set, so no sequence role.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -365,6 +378,38 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         int outputFeatures = bias.Length;
         var biasReshaped = bias.Reshape([1, 1, outputFeatures]);
         return Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Derived from the tail of <c>ForwardTraced</c>: the final combination is
+    /// <c>gatedCombined @ _combinationWeights</c> producing <c>_outputFeatures</c> columns, and the
+    /// method then reshapes to <c>[numNodes, _outputFeatures]</c> for a rank-2 input. So the node
+    /// count is carried through - this layer aggregates ALONG the graph and never coarsens it - and
+    /// the feature width is <c>Fixed</c> at the constructor's <c>_outputFeatures</c>.
+    /// </para>
+    /// <para>
+    /// The intermediate <c>3 * _outputFeatures</c> width (incoming, outgoing and self features
+    /// concatenated) is deliberately absent: Step 6 projects it back down before returning, so a
+    /// contract carrying the factor of three would be wrong by exactly that.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 2 and 3 only - higher ranks are flattened into one batch axis and not restored.
+        if (inputRank is not (2 or 3)) return null;
+
+        var nodes = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures));
+
+        return inputRank == 2
+            ? new[] { nodes, features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                nodes, features,
+            };
     }
 
     /// <inheritdoc/>

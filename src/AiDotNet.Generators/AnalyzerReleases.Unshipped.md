@@ -48,3 +48,8 @@ AIDN080 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, 
 AIDN081 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Parameter surface is derived and should not be overridden
 AIDN082 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model parameter surface is derived and should not be overridden
 AIDN083 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Field holds weights the parameter generator cannot see
+ADNGEN002 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, [ModelInput] contradicts the IFullModel<T,TIn,TOut> the model actually implements
+ADNPERF001 | AiDotNet.Performance | Error | ShapeAllocationValidationGenerator, Shape.ToArray() allocates a throwaway int[] for a read-only use
+ADNSHAPE005 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, [LayerProperty] shape metadata contradicts the declared [TensorLayout] ranks
+ADNSHAPE006 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer declares no shape contract, so nothing can reason about its output shape
+ADNTRACE001 | AiDotNet.Correctness | Error | ForwardRecursionValidationGenerator, base.Forward(...) inside a ForwardTraced override is infinite recursion

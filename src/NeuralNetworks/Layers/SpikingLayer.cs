@@ -39,9 +39,45 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
+// THE OUTPUT IS A RANK-1 SPIKE TRAIN AT EVERY INPUT RANK, and ForwardTraced says so in as many words:
+// after ProcessSpikes it reaches "if (_originalInputShape.Length > 1)" and deliberately does nothing -
+// "we keep output as 1D (spike train) per neural network convention. The output represents spike
+// events, not spatial features". ProcessSpikes itself ends at Reshape(withBias, [_bias.Shape[0]]),
+// a rank-1 tensor of one entry per neuron. Hence one output layout against two input ones.
+//
+// _neuronType selects the membrane dynamics (LIF, Izhikevich, Hodgkin-Huxley, ...) but every branch
+// updates the same per-neuron state vector, so the model choice never reaches the shape.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "One spike per neuron; any leading axis is consumed, not carried.")]
 [AutoParameters]
-public partial class SpikingLayer<T> : LayerBase<T>
+public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <c>Fixed(_outputSize)</c> is the constructor argument that sizes the weight matrix
+    /// (<c>[inputSize, outputSize]</c>) and the bias, and the width <c>ProcessSpikes</c> returns.
+    /// It is the layer's own parameter rather than an observed size.
+    /// </para>
+    /// <para>
+    /// NO BATCH AXIS IS CARRIED, and that is a claim about this layer rather than an oversight. For
+    /// rank-2 input <c>ForwardTraced</c> flattens to <c>[shape[0] * shape[1]]</c> and then SLICES back
+    /// to <c>inputSize</c> - it processes one sample's worth of signal and returns one spike train.
+    /// Declaring <c>Same(Batch)</c> would describe a per-sample result the layer never produces.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0 || inputRank < 1 || inputRank > 2) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize)),
+        };
+    }
+
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _outputSize;

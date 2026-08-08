@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
@@ -26,8 +28,19 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
+// Rank 3 ONLY, forced by the code: both ForwardStandard and ForwardWithCache read `input.Shape[0]` as
+// batch and `input.Shape[1]` as sequence length, then reshape to [batch, seqLen, heads, headDimension].
+//
+// Shape-preserving at that rank. Sharing KV heads across query heads is a MEMORY optimisation, not a
+// shape one - ExpandKVHeads widens the cached keys and values back to _numHeads before the attention,
+// and both paths end `.Reshape(batchSize, seqLen, _embeddingDimension)` followed by a square output
+// projection - so neither the grouping nor the cache is visible in the output shape.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class CachedGroupedQueryAttention<T> : LayerBase<T>
+public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,8 +44,27 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Roles are quoted from this layer's own guard: "requires rank>=2 input [seqLen, numClasses] or
+// [batch, seqLen, numClasses]". The trailing axis is the tag set (Features), the one before it the
+// sequence position (Time). Batch is optional rather than a second declaration because ForwardTraced
+// treats rank 2 as the same computation -- it reshapes to [1, seqLen, numClasses], decodes, and then
+// restores the caller's shape ("Engine.Reshape(output, _originalInputShape)").
+//
+// SHAPE-PRESERVING despite being a decoder, which is the part worth stating explicitly: Viterbi picks
+// one tag per timestep, but the layer emits that choice ONE-HOT over the class axis
+// ("output[b, t, bestPath[t]] = NumOps.One") into a tensor allocated at [batchSize, seqLen,
+// _numClasses]. Nothing is reduced away, so no axis changes size. The training-mode short-circuit
+// returns the emissions unchanged, which preserves the shape for the same reason.
+//
+// Ranks above 3 also run -- the layer folds the leading axes into batch and reshapes back -- but they
+// are deliberately NOT declared: two or more leading axes cannot be given distinct roles here, and an
+// axis role is precisely how a relation names its input.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
+public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContract
 {
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -1178,7 +1197,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var lseKeepDim = Engine.TensorAdd(logSum, max);
 
         // Now squeeze the reduced axis to match the shape contract.
-        var inShape = x.Shape.ToArray();
+        var inShape = x._shape;
         var outShape = new int[inShape.Length - 1];
         int oi = 0;
         for (int i = 0; i < inShape.Length; i++)

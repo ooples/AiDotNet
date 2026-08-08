@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Configuration;
 using AiDotNet.NeuralNetworks.Layers;
@@ -11,9 +13,63 @@ namespace AiDotNet.Inference.Quantization;
 /// and NF4 (4-bit NormalFloat, per-group) via the shared <see cref="WeightOnlyProjection"/> engine, so a
 /// FFN/dense layer honors the same <see cref="InferenceQuantizationMode"/> the user selects for attention.
 /// </summary>
+// FEATURE-LAST, exactly as DenseLayer declares it, and for the reason ForwardTraced states in its own
+// comment: "mirror DenseLayer<T>.Forward: apply the transformation along the LAST dimension and flatten
+// every leading dim (batch, sequence, ...) into a single row dimension". Quantization changes how the
+// weights are STORED, never what shape the projection produces, so this layer must declare the same
+// contract as the DenseLayer it replaces - a quantized swap-in that reported a different shape would
+// defeat the point of being a drop-in.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: the leading axes are carried through untouched.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal sealed partial class QuantizedDenseLayer : LayerBase<float>
+internal sealed partial class QuantizedDenseLayer : LayerBase<float>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The trailing axis becomes <c>_outputSize</c> and every leading axis is carried through. Read off
+    /// the two shape-restoring exits of <c>ForwardTraced</c>: rank 1 returns
+    /// <c>activated.Reshape(_outputSize)</c>, and rank &gt; 2 rebuilds <c>outShape</c> by copying
+    /// <c>input.Shape[i]</c> for every leading axis and setting only the last to <c>_outputSize</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputSize)</c> reads the field the constructor derived from the source layer's
+    /// <c>GetOutputLayerShape()</c>, so a quantized copy of a differently sized dense layer reports its own
+    /// width rather than a number observed once. The sequence axis is never pinned - the weight block is
+    /// sized by <c>_inputSize</c> and <c>_outputSize</c> alone, so any number of positions is valid.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     private readonly int _inputSize;
     private readonly int _outputSize;
     private readonly WeightOnlyProjection _proj;

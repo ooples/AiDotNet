@@ -35,9 +35,45 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+// Rank 2 - [numNodes, inputFeatures] - is what the forward's own restore branch names ("Was 2D, return
+// [nodes, outputFeatures]") and the only form [LayerProperty(TestInputShape = "4, 8")] exercises. Higher
+// ranks ARE handled, but their node count must agree with the separately-installed adjacency matrix, so
+// declaring them would be a claim about a tensor this layer never sees alone; left undeclared on purpose.
+//
+// The node axis is TensorAxis.Other: graph nodes are neither a sequence nor a spatial extent, and naming
+// them Time or Length would licence a causal or convolutional layer downstream to read an ordering into
+// them that does not exist.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
+public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the emitted width is configuration, not anything readable off the input:
+    /// <c>_weights</c> is allocated as <c>[inputFeatures, outputFeatures]</c> from the same constructor
+    /// argument this property records, and the forward takes the width straight back off it
+    /// (<c>int outputFeatures = _weights.Shape[1];</c>) before restoring the original rank.
+    /// </para>
+    /// <para>
+    /// The node axis is Same: <c>A * X * W</c> mixes each node with its neighbours, but the adjacency is
+    /// square, so the node count out equals the node count in.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || OutputFeatures <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputFeatures)),
+        };
+    }
+
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
     /// </summary>

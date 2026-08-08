@@ -33,8 +33,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+// The gated residual update h <- g*glu + (1-g)*h keeps the running representation at the input
+// width for every stage, so the feature count is preserved end to end. Declared at rank 2 only:
+// ForwardTraced reshapes to [batch, features], so a rank-3 input comes back out as rank 2 rather
+// than identity, and claiming a higher rank here would be claiming something untrue.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GandalfGFLULayer<T> : LayerBase<T>
+public partial class GandalfGFLULayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numStages;
     private int _numFeatures = -1;

@@ -59,9 +59,64 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
+// Feature-last, with batch optional: OnFirstForward treats the leading axis as batch and everything after
+// it as the per-sample shape it configures the router and experts against, and ForwardTraced restores a
+// rank-1 input to rank 1 before returning. Those two ranks are the ones whose behaviour is coherent, so
+// they are the ones declared - see the note on OutputAxesFor about rank 3.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Routing picks which experts run; the width is whatever the experts produce.")]
 [AutoParameters]
-public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output width is read off <c>GetOutputShape()</c> rather than from a field, because this layer
+    /// does not choose it: <c>OnFirstForward</c> sets it with
+    /// <c>int[] resolvedOutputShape = _experts[0].GetOutputShape()</c>, i.e. it inherits whatever the
+    /// injected experts produce (all experts share one output shape by the MoE contract). That is
+    /// precisely the case <c>Fixed</c> is allowed to read the resolved shape for - the number is real
+    /// configuration, just configuration that lives in a sub-layer.
+    /// </para>
+    /// <para>
+    /// Batch is <c>Same</c>: routing selects WHICH experts run per row, never how many rows there are.
+    /// Neither the expert count nor <c>_topK</c> appears here - they size the routing weights, which are
+    /// consumed by <c>CombineExpertOutputs</c> and never surface on an output axis.
+    /// </para>
+    /// <para>
+    /// RANK 3 IS NOT DECLARED, and that is a real inconsistency in the layer rather than caution on my
+    /// part. For a rank-3 input <c>OnFirstForward</c> strips only the leading axis and configures the
+    /// experts against a per-sample shape of <c>[time, features]</c>, but <c>ForwardTraced</c> then
+    /// collapses the input to <c>[batch * time, features]</c> and feeds the experts rows of width
+    /// <c>features</c>. The two disagree, so there is no rank-3 contract to state honestly.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Lazy layers have no resolved expert output yet, and AxisRelation rejects a non-positive size.
+        var outputShape = GetOutputShape();
+        if (outputShape.Length == 0) return null;
+
+        int outputWidth = outputShape[outputShape.Length - 1];
+        if (outputWidth <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputWidth));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The collection of expert networks.
     /// </summary>

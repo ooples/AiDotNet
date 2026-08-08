@@ -29,8 +29,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 16", TestConstructorArgs = "16, 48, 7")]
+// Roles are this block's own: it documents "operates on [B, S, C], i.e. channels-last", and
+// ForwardTraced binds exactly those three names. The sequence axis is Time; the trailing axis is
+// Channels, and it is pinned to the configured width by the layer itself - ForwardTraced throws
+// unless "C == _channels".
+//
+// SHAPE-PRESERVING, but deliberately NOT [ElementWiseShape]: that shorthand generates the identity
+// at EVERY rank, and this block throws for any rank but 3 ("expects rank-3 [B, S, C]"). Matching
+// rank-3 layouts let the generator derive Same for each axis without over-claiming the ranks.
+// The preservation is structural rather than incidental - ForwardTraced ends in
+// "Engine.TensorAdd(x, input)", a residual, which cannot even be formed unless the shape came back
+// unchanged. That also settles the internal depth-wise convolution: it must be same-padded, or the
+// residual would not add.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ConvNeXtV2Block<T> : LayerBase<T>
+public partial class ConvNeXtV2Block<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _intermediateChannels;

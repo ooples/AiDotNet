@@ -1,5 +1,7 @@
-﻿using AiDotNet.Attributes;
-using System;
+﻿using System;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -24,8 +26,27 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
+// Shape-preserving at rank 3, so the generator derives Same on every axis and no OutputAxesFor is
+// written here. From ForwardTraced: the guard is "if (input.Rank != 3 || input.Shape[2] != _embedDim)
+// throw", and the value returned is AddResidual(h, mlpOut) - which copies a.Shape verbatim, so a
+// residual add can only ever be the shape of the tensor chained back from the input. Both sub-blocks
+// are wrapped in residuals, which is what pins the whole block to its input shape.
+//
+// _ffnDim never appears in the contract, and that is right: the FFN widens to it inside the MLP
+// sub-block and _mlpDown projects straight back to embedDim before the residual add, so the widening
+// is an internal detail with no edge the caller can see. THE SHARDING IS EQUALLY INVISIBLE - each
+// rank's up-projection produces only its localFfn columns and the down-projection's all-reduce sums
+// them back to the full embedDim, so every rank's output is the same tensor.
+//
+// Rank 3 only - no BatchOptional. The guard rejects every other rank outright, so declaring the
+// unbatched [Time, Features] form would claim input this layer throws on.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Identical across ranks: each sub-block's all-reduce restores the full embedding width.")]
 [AutoParameters]
-public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>
+public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly LayerNormalizationLayer<T> _ln1;
     private readonly LayerNormalizationLayer<T> _ln2;

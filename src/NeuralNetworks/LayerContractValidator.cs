@@ -55,6 +55,128 @@ public static class LayerContractValidator
         string ConsumerName,
         string Message);
 
+    /// <summary>How a layer's declared shape CONTRACT compared to the shape the imperative walk resolved.</summary>
+    /// <param name="Agreed">Layers where the contract reproduced the resolved output shape exactly.</param>
+    /// <param name="Declined">Layers whose contract returned nothing for that rank — allowed, not a defect.</param>
+    /// <param name="Unresolved">Layers with no concrete resolved shape to compare against yet.</param>
+    /// <param name="Disagreements">Layers where the two disagree, described one per entry.</param>
+    public readonly record struct ContractShadowResult(
+        int Agreed,
+        int Declined,
+        int Unresolved,
+        IReadOnlyList<string> Disagreements);
+
+    /// <summary>
+    /// Compares each layer's declared shape CONTRACT against the shape the imperative resolution
+    /// actually concluded, and reports where they disagree.
+    /// </summary>
+    /// <param name="layers">The chain, in execution order.</param>
+    /// <returns>Counts plus a description of every disagreement.</returns>
+    /// <remarks>
+    /// <para>
+    /// WHY THIS EXISTS. The library carries two shape systems that never met. The declarative one -
+    /// <see cref="IShapeContract"/> and <see cref="ShapeInference.InferOutputShape"/> - is verified
+    /// against real forward passes but had ZERO production callers. The operational one -
+    /// <c>OnFirstForward</c> populating a field that <c>GetOutputShape()</c> returns - is what every
+    /// model, every graph resolution and every chain check actually uses. A contract nothing consults
+    /// is a decoration; this is the parallel run that earns it authority.
+    /// </para>
+    /// <para>
+    /// PER LAYER, NOT FOLDED ALONG THE CHAIN. Each layer's contract is resolved against that layer's
+    /// OWN resolved input shape, so a disagreement is attributed to exactly one layer instead of
+    /// cascading into every layer after it. The imperative walk has already done the chaining; asking
+    /// the contract to redo it would only add a second way for the same error to be reported.
+    /// </para>
+    /// <para>
+    /// DECLINING IS NOT DISAGREEING. A contract that returns null for a rank is saying it does not
+    /// model that case, which is a legitimate answer and is counted separately. Only a contract that
+    /// answers, and answers differently from what ran, is a finding.
+    /// </para>
+    /// </remarks>
+    public static ContractShadowResult CompareContractsToResolvedShapes<T>(IReadOnlyList<ILayer<T>> layers)
+    {
+        var disagreements = new List<string>();
+        int agreed = 0, declined = 0, unresolved = 0;
+
+        if (layers is null) return new ContractShadowResult(0, 0, 0, disagreements);
+
+        for (int i = 0; i < layers.Count; i++)
+        {
+            var layer = layers[i];
+            if (layer is null) continue;
+            if (layer is not IShapeContract) continue;
+
+            int[] inputShape;
+            int[] resolvedOutput;
+            try
+            {
+                inputShape = layer.GetInputShape();
+                resolvedOutput = layer.GetOutputShape();
+            }
+            catch
+            {
+                unresolved++;
+                continue;
+            }
+
+            if (!IsConcrete(inputShape) || !IsConcrete(resolvedOutput))
+            {
+                unresolved++;
+                continue;
+            }
+
+            int[]? predicted;
+            try
+            {
+                // isBatched: FALSE. GetInputShape/GetOutputShape are per-sample throughout LayerBase,
+                // and chain resolution propagates them as such - there is no batch axis in the shapes
+                // being compared here. Leaving this at the default (true) is what made FlattenLayer
+                // report a disagreement it could not resolve: it collapses everything after the batch,
+                // so being told a per-sample [C,H,W] was batched made it keep C and collapse only H*W.
+                predicted = ShapeInference.InferOutputShape(layer, inputShape, isBatched: false);
+            }
+            catch (Exception ex)
+            {
+                disagreements.Add(
+                    $"[{i}] {layer.GetType().Name}: contract THREW {ex.GetType().Name} resolving "
+                    + $"[{string.Join(",", inputShape)}]");
+                continue;
+            }
+
+            if (predicted is null)
+            {
+                declined++;
+                continue;
+            }
+
+            if (SameShape(predicted, resolvedOutput))
+            {
+                agreed++;
+                continue;
+            }
+
+            disagreements.Add(
+                $"[{i}] {layer.GetType().Name}: in [{string.Join(",", inputShape)}] - contract says "
+                + $"[{string.Join(",", predicted)}] but resolution concluded "
+                + $"[{string.Join(",", resolvedOutput)}]");
+        }
+
+        return new ContractShadowResult(agreed, declined, unresolved, disagreements);
+    }
+
+    private static bool IsConcrete(int[]? shape)
+        => shape is { Length: > 0 } && Array.TrueForAll(shape, d => d > 0);
+
+    private static bool SameShape(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i]) return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Validates a layer chain and returns every disagreement found, in order. An empty result means
     /// every ANNOTATED adjacent pair agrees.
@@ -84,6 +206,20 @@ public static class LayerContractValidator
             var producer = layers[i];
             var consumer = layers[i + 1];
             if (producer is null || consumer is null) continue;
+
+            // An ELEMENT-WISE layer makes no claim about what its axes MEAN, so there is nothing here
+            // to compare. Its layouts exist only so ShapeInference.NameAxes can name an input at all;
+            // the names themselves are positional placeholders that ShapeContractGenerator assigns
+            // (Batch, Channels, Height, ...), and every relation it emits is Same(role), so they cannot
+            // affect a resolved SIZE. They can, however, affect a role COMPARISON - which is what this
+            // method does, and why they must be excluded from it.
+            //
+            // Found by wiring the shape tests into CI: TRIE reported BatchNormalizationLayer
+            // ([ElementWiseShape], placeholder [Batch, Channels, Height] at rank 3) as incompatible
+            // with MaxPoolingLayer (genuinely batch-elided [Channels, Height, Width]). Neither layer is
+            // wrong; comparing a placeholder against a real declaration is. Same reasoning as the
+            // TensorAxis.Other skip below - a non-claim is not evidence of disagreement.
+            if (IsElementWise(producer.GetType()) || IsElementWise(consumer.GetType())) continue;
 
             var outputs = OutputLayouts(producer.GetType());
             if (outputs.Count == 0) continue;
@@ -172,6 +308,17 @@ public static class LayerContractValidator
     }
 
     /// <summary>Declared input layouts for a type, or an empty list when unannotated.</summary>
+    /// <summary>
+    /// Whether a type declares <c>[ElementWiseShape]</c>, i.e. its axis names are placeholders.
+    /// </summary>
+    /// <remarks>
+    /// Read with <c>inherit: true</c> to match how the attribute actually resolves at runtime - the
+    /// same inheritance blind spot that made ADNSHAPE003 report 34 LoRA adapters for a layout their
+    /// base demonstrably declared.
+    /// </remarks>
+    private static bool IsElementWise(Type type)
+        => type.GetCustomAttributes(typeof(ElementWiseShapeAttribute), inherit: true).Length > 0;
+
     public static IReadOnlyList<TensorLayoutAttribute> InputLayouts(Type type)
         => LayoutsFor(type, TensorLayoutDirection.Input);
 

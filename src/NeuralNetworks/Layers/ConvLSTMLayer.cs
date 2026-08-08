@@ -48,9 +48,69 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Roles are this layer's own, from ForwardTraced's rank dispatch: rank 4 is
+// "[timeSteps, height, width, channels]" and rank 5 is "[batchSize, timeSteps, height, width, channels]".
+// Both are declared as separate layouts rather than one BatchOptional layout, so the rank-4 leading axis
+// keeps the name it actually has (Time) instead of borrowing Batch. Rank > 5 is accepted by folding the
+// leading axes into batch, but those axes have no roles to name, so they are not declared.
+[TensorLayout(TensorAxis.Time, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ConvLSTMLayer<T> : LayerBase<T>
+public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// SPATIALLY PRESERVING, and taken from what the forward passes actually do rather than from
+    /// <c>CalculateOutputShape</c>. <see cref="ForwardTraced"/> allocates the recurrent state at
+    /// <c>[batchSize, height, width, _filters]</c> - the INPUT height and width - and emits each step
+    /// at that size; <c>ForwardGpu</c> says the same thing explicitly, "Calculate output spatial
+    /// dimensions (same as input with padding)" followed by <c>outHeight = height</c>. That is also
+    /// structurally forced: the hidden state is fed back into the next step, so anything that shrank
+    /// it would break the recurrence after one step.
+    /// </para>
+    /// <para>
+    /// The static <c>CalculateOutputShape</c> helper, which seeds the base constructor's declared
+    /// shape, instead applies the strided convolution formula
+    /// <c>(inputShape[1] - kernelSize + 2*padding) / strides + 1</c>. THE TWO DISAGREE whenever that
+    /// formula is not the identity - they happen to coincide for the tested kernel 3 / padding 1 /
+    /// stride 1 configuration, which is why the divergence is easy to miss. This contract follows the
+    /// forward, because the forward is what a caller receives; the helper is reported separately as a
+    /// defect rather than encoded here.
+    /// </para>
+    /// <para>
+    /// Time is carried through: one hidden state is emitted per step and they are concatenated on
+    /// axis 1, so the step count survives. Channels are replaced by the configured filter count.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_filters <= 0) return null;
+
+        var filters = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_filters));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        return inputRank switch
+        {
+            4 => new[]
+            {
+                Pass(TensorAxis.Time), Pass(TensorAxis.Height), Pass(TensorAxis.Width), filters,
+            },
+            5 => new[]
+            {
+                Pass(TensorAxis.Batch), Pass(TensorAxis.Time),
+                Pass(TensorAxis.Height), Pass(TensorAxis.Width), filters,
+            },
+            _ => null,
+        };
+    }
+
     private readonly int _kernelSize;
     private readonly int _filters;
     private readonly int _padding;

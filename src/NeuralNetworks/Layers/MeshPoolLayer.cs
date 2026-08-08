@@ -42,9 +42,51 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 3, 2", TestSetupCode = "var e = new int[4, 2]; for (int i = 0; i < 4; i++) for (int j = 0; j < 2; j++) e[i, j] = (i + j + 1) % 4; ((AiDotNet.NeuralNetworks.Layers.MeshPoolLayer<double>)layer).SetEdgeAdjacency(e);")]
+// Rank 2 ONLY: ForwardTraced opens with `if (input.Rank != 2 || input.Shape[1] != InputChannels) throw`,
+// quoting the expected shape as [numEdges, InputChannels]. The leading axis is Other because it counts
+// MESH EDGES - an unordered set indexed by an adjacency table - the same call PointConvolutionLayer makes
+// for its point axis.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the mesh edge count; edges are an unordered set, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class MeshPoolLayer<T> : LayerBase<T>
+public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The channel axis is a real claim and the edge axis deliberately is not.
+    /// </para>
+    /// <para>
+    /// Channels: <c>Same</c>. This layer SELECTS edges, it does not project them - the output is built by
+    /// copying <c>input[srcEdge, c]</c> for every channel <c>c</c>, so the width that goes in is the width
+    /// that comes out. <c>_importanceWeights</c> is <c>[InputChannels]</c> and produces a scalar score per
+    /// edge; it never touches the output width.
+    /// </para>
+    /// <para>
+    /// Edges: <c>Unknown</c>, and that is the accurate answer rather than a cautious one. The count is
+    /// <c>Math.Min(TargetEdges, numEdges)</c> - it SATURATES. <c>Fixed(TargetEdges)</c> would be wrong for
+    /// any mesh smaller than the target (the layer keeps all of its edges and returns <c>numEdges</c>),
+    /// and no relation in the vocabulary saturates: <c>Window</c>, <c>Scaled</c> and <c>Product</c> are
+    /// all monotonically unbounded in the input. Declaring it unknown stops inference at a named boundary
+    /// instead of fabricating a formula that is right only for large meshes.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || TargetEdges <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Other,
+                AxisRelation.Unknown(
+                    $"Edge count is min({TargetEdges}, numEdges) - it saturates at the target, and no "
+                    + "relation in the vocabulary saturates.")),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+        };
+    }
+
     #region Properties
 
     /// <summary>

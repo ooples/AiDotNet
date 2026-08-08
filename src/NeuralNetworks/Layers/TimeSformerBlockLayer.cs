@@ -18,8 +18,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 17, 8", TestConstructorArgs = "8, 2, 32, 4")]
+// RANK 3 ONLY, and that is enforced, not assumed: Forward opens with
+// `if (input.Rank != 3) throw ... "expects [batch, sequence, hidden] input"`, which is also where the
+// axis names come from. The hidden axis is pinned to _hiddenSize by the next guard.
+//
+// Shape is carried through unchanged. The block reshapes hard - patches are split off the CLS token,
+// permuted into [batch*spatialPatches, frames, hidden] for temporal attention and back - but every
+// stage is reassembled: the final line is `Engine.TensorAdd(sequenceOut, ffn)` where sequenceOut is
+// the CLS token re-concatenated with the full patch sequence, so [batch, sequence, hidden] comes back
+// out. Matching layouts therefore say everything, and the generator derives Same(role) per axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Sequence is one CLS token plus frames*spatialPatches patch tokens.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>
+public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _hiddenSize;
     private readonly int _numHeads;

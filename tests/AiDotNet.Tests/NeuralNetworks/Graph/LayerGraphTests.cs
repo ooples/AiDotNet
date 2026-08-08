@@ -69,6 +69,62 @@ public class LayerGraphTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Several outputs
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Graph_ReturnsEveryDeclaredOutput_NotJustTheFirst()
+    {
+        // A decomposition emits more than one tensor - Autoformer's encoder returns a (seasonal, trend)
+        // pair, which IShapeContract.OutputsFor can describe. The graph could not REPRESENT that: it
+        // held a single OutputNodeId, so such a model had to declare one graph per output or pack the
+        // pair into a single fictitious width. Both halves must come back, with distinct shapes.
+        var b = new LayerGraphBuilder<double>();
+        int stem = b.Add(Conv(4));
+        int seasonal = b.Add(Conv(6), input: stem);
+        int trend = b.Add(Conv(3), input: stem);
+        var graph = b.Outputs(seasonal, trend).Build();
+
+        var outputs = graph.ForwardAll(Image(2, 8, 8));
+
+        Assert.Equal(2, outputs.Count);
+        Assert.Equal(6, outputs[0].Shape[0]);
+        Assert.Equal(3, outputs[1].Shape[0]);
+
+        // Forward() stays the first output, so every existing single-output caller is unaffected.
+        Assert.Equal(6, graph.Forward(Image(2, 8, 8)).Shape[0]);
+    }
+
+    [Fact]
+    public void ResolveAllShapes_ReturnsOneShapePerOutput()
+    {
+        var b = new LayerGraphBuilder<double>();
+        int stem = b.Add(Conv(4));
+        int seasonal = b.Add(Conv(6), input: stem);
+        int trend = b.Add(Conv(3), input: stem);
+        var graph = b.Outputs(seasonal, trend).Build();
+
+        var shapes = graph.ResolveAllShapes(new[] { 2, 8, 8 });
+
+        Assert.NotNull(shapes);
+        Assert.Equal(2, shapes!.Count);
+        Assert.Equal(6, shapes[0][0]);
+        Assert.Equal(3, shapes[1][0]);
+
+        // The single-output entry point keeps answering for the first, unchanged.
+        Assert.Equal(6, graph.ResolveShapes(new[] { 2, 8, 8 })![0]);
+    }
+
+    [Fact]
+    public void Outputs_RefusesAnOutputThatDoesNotExist()
+    {
+        var b = new LayerGraphBuilder<double>();
+        b.Add(Conv(4));
+
+        Assert.ThrowsAny<ArgumentException>(() => b.Outputs(0, 9));
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Linear compatibility — the migration must not change unmigrated models
     // ---------------------------------------------------------------------------------------------
 

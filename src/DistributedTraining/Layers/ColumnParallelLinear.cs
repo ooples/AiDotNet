@@ -20,8 +20,17 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+// Rank 2 [Batch, Features] and nothing else, read off ForwardTraced's own arithmetic: the matmul is
+// against a rank-2 weightT ([inputSize, localOut]) and the bias is broadcast from a rank-2
+// [1, _localOutputSize]. Those two shapes only line up with a rank-2 activation, so no other rank is
+// declared -- this layer carries no ExpectedInputRank to force a wider claim.
+//
+// OutputAxesFor below is HAND-WRITTEN: the output width is a SHARD of the full width, and which of the
+// two it is depends on _gatherOutput, which no probe can see.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
+public sealed partial class ColumnParallelLinear<T> : LayerBase<T>, IShapeContract
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly CopyToTensorParallelRegion<T> _f;
@@ -80,6 +89,39 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
                 _weightShard[o, i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
             _biasShard[o] = NumOps.Zero;
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// THIS IS THE ONE CONTRACT IN THE LIBRARY THAT DIFFERS PER RANK — per tensor-parallel rank, not per
+    /// tensor rank. Megatron's column parallelism partitions the OUTPUT dimension, so the width this
+    /// layer actually produces is <c>_localOutputSize</c> (<c>ShardCount(outputSize, WorldSize, Rank)</c>),
+    /// NOT the <c>outputSize</c> the caller passed. When <c>outputSize</c> does not divide evenly across
+    /// the world, the low ranks each take one extra column, and two ranks of the same model legitimately
+    /// report different output widths. Declaring the full width here would be wrong on every rank.
+    /// </para>
+    /// <para>
+    /// The exception is <c>_gatherOutput</c>: the final line of <see cref="ForwardTraced"/> is
+    /// <c>_gatherOutput ? _gather.Apply(local) : local</c>, and that all-gather re-assembles the shards
+    /// back to the full width. Both branches are read from readonly fields set in the constructor, which
+    /// is what makes <c>Fixed</c> legitimate here rather than a hardcoded observation.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2) return null;
+
+        // Mirrors the base ctor's own output-shape expression:
+        //   [gatherOutput ? outputSize : ShardCount(outputSize, backend.WorldSize, backend.Rank)]
+        int outWidth = _gatherOutput ? _fullOutputSize : _localOutputSize;
+        if (outWidth <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outWidth)),
+        };
     }
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)

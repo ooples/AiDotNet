@@ -35,8 +35,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 16", TestConstructorArgs = "16, 4, 64, 31")]
+// Shape-preserving, but declared with explicit layouts rather than [ElementWiseShape], because the
+// shorthand claims EVERY rank and this block accepts exactly two: ForwardTraced "expects rank-2 [S, D]
+// or rank-3 [B, S, D]" and throws otherwise. Roles from the same guard and from the constructor's own
+// base(new[] { -1, -1, modelDim }, new[] { -1, -1, modelDim }).
+//
+// Both branches return to the model width before the merge - the concatenation is projected back by
+// _merge and then added to the input as a residual, `Engine.TensorAdd(merged, input)` - so every axis is
+// carried through and the generator's derived Same(role) contract is the whole truth here.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class BranchformerBlock<T> : LayerBase<T>
+public partial class BranchformerBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDim;
     private readonly int _numHeads;

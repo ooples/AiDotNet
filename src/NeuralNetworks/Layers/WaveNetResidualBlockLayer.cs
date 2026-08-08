@@ -39,8 +39,27 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 16", TestConstructorArgs = "8, 3, 1")]
+// Roles straight from this block's own summary - "1-D waveform/feature data [B, C, T]" - and its
+// [LayerProperty(ExpectedInputRank = 3, TestInputShape = "1, 8, 16")].
+//
+// Shape-preserving on EVERY axis, and the block enforces that itself rather than merely happening to:
+// ForwardTraced ends in Engine.TensorAdd(input, projected), a residual add that would throw if either
+// axis had moved. Channels are pinned by the same add (the class remarks: "the residual add requires
+// C_out == C_in"), and the time axis by the inner convs' "same" padding - the constructor comment
+// "'same' padding keeps T so the residual add lines up". Matching layouts are therefore the whole
+// contract; OutputAxesFor is generated as Same on all three axes.
+//
+// Not [ElementWiseShape], deliberately. That shorthand claims rank-agnostic identity, and this block is
+// neither rank-agnostic (its convs are 1-D, so [B,C,T] is the only form) nor element-wise - each output
+// position mixes a dilated window of its neighbours. The shape happens to be preserved; the values are
+// not, and the axes have real, named meanings worth declaring.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Residual block: gated dilated convs with 'same' padding, then x + projection.")]
 [AutoParameters]
-public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
+public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _kernelSize;

@@ -13,8 +13,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// SHAPE-PRESERVING, and structurally so: ForwardTraced is two residual adds,
+// "Engine.TensorAdd(input, attnOut)" then "Engine.TensorAdd(afterAttn, moeOut)". Neither add can even
+// be formed unless the sublayer handed back exactly the shape it was given, so this block cannot
+// change a shape whatever its sublayers do. Matching input/output layouts let the generator derive
+// Same for every axis.
+//
+// NOT [ElementWiseShape], which would generate the identity at EVERY rank. This block imposes no rank
+// limit of its own, but its attention sublayer is injected (a bare LayerBase<T>) and its accepted ranks
+// are therefore unknowable from here. Rank 3 is the rank the block is exercised at
+// ([LayerProperty(TestInputShape = "1, 4, 8")]) and the one the roles below are named for; claiming
+// more would be claiming on the injected sublayer's behalf.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DbrxDecoderBlock<T> : LayerBase<T>
+public partial class DbrxDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly LayerBase<T> _attention;

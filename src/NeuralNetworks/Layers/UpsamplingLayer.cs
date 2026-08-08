@@ -37,9 +37,57 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2")]
+// Roles from this layer's own guard - "requires rank>=3 [...,C,H,W]" in OnFirstForward - which reads
+// Shape[rank-3], Shape[rank-2], Shape[rank-1] as channels, height and width. Batch is marked optional
+// rather than declared as a second layout because the layer is tested at rank 3
+// ([LayerProperty(TestInputShape = "1, 4, 4")]) and runs identically one rank up: Engine.Upsample
+// scales the trailing two axes and carries every leading axis through untouched.
+// OutputAxesFor below is HAND-WRITTEN, not generated: the scale comes from _scaleFactor.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class UpsamplingLayer<T> : LayerBase<T>
+public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Derived from <c>OnFirstForward</c>, which resolves
+    /// <c>ResolveShapes(new[] { c, h, w }, new[] { c, h * _scaleFactor, w * _scaleFactor })</c>.
+    /// Channels pass through; both spatial axes are multiplied by the constructor's scale factor.
+    /// </para>
+    /// <para>
+    /// <c>Scaled(axis, _scaleFactor)</c> and not <c>Window</c>: a window relation SHRINKS an axis, and
+    /// this layer is nearest-neighbour upsampling - each input position becomes a
+    /// <c>_scaleFactor</c> x <c>_scaleFactor</c> block, so the extent grows exactly by the factor with
+    /// no rounding involved.
+    /// </para>
+    /// <para>
+    /// Ranks 3 and 4 only: rank 3 is the <c>[C,H,W]</c> form the layer is tested at, rank 4 the batched
+    /// one. Higher ranks run too - the guard is rank&gt;=3 - but each extra leading axis would need a
+    /// DISTINCT role to be referred to by a relation, and there is no second batch-like role to give it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4) || _scaleFactor <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Scaled(TensorAxis.Height, _scaleFactor));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Scaled(TensorAxis.Width, _scaleFactor));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     /// <summary>
     /// The factor by which to increase spatial dimensions.
     /// </summary>

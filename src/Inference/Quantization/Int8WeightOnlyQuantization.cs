@@ -2,9 +2,9 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Inference.Quantization;
 
-internal static class Int8WeightOnlyQuantization
+public static class Int8WeightOnlyQuantization
 {
-    internal readonly struct QuantizedWeights
+    public readonly struct QuantizedWeights
     {
         public QuantizedWeights(sbyte[] weights, float[] scales, int rows, int cols)
         {

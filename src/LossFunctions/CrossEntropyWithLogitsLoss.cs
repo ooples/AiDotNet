@@ -363,7 +363,7 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
     private double ProbabilityAxisScore(Tensor<T> target, int axis)
     {
-        int[] shape = target.Shape.ToArray();
+        int[] shape = target._shape;
         int axisSize = shape[axis];
         int inner = 1;
         for (int i = axis + 1; i < shape.Length; i++)

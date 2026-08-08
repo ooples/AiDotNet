@@ -264,10 +264,14 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // If not using shifted attention or not in training mode, use standard LoRA forward
+        // If not using shifted attention or not in training mode, use standard LoRA forward.
+        // ForwardTraced, NOT Forward: LayerBase.Forward is the non-virtual recording wrapper that
+        // dispatches to ForwardTraced, so base.Forward(input) would come straight back here and
+        // recurse until the stack overflows. LoRAAdapterBase overrides ForwardTraced, so this is the
+        // base implementation that call was always meant to reach.
         if (!_useShiftedAttention || !_isTraining)
         {
-            return base.Forward(input);
+            return base.ForwardTraced(input);
         }
 
         // Apply shifted sparse attention during training

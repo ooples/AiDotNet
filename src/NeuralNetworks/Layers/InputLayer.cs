@@ -32,8 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Input)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, SupportsBackpropagation = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+// ForwardTraced is literally `return input;` - the identity, at any rank.
+[ElementWiseShape(Note = "Identity passthrough marking the network's entry point.")]
 [AutoParameters]
-public partial class InputLayer<T> : LayerBase<T>
+public partial class InputLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

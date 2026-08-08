@@ -40,6 +40,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
+// Shape-preserving at every rank it accepts. ForwardTraced reshapes the input to 4-D purely so
+// `Engine.GroupNorm` can be called uniformly, then undoes exactly that reshape on the way out - the
+// rank-3 branch restores [C, H, W] from _addedBatchDimension, and the rank >= 5 branch rebuilds
+// _originalInputShape entry by entry. Normalization rescales values; it never resizes an axis.
+[ElementWiseShape(Note = "Group normalization: grouping partitions the channel axis for the statistics only, so the shape is untouched at any rank >= 2.")]
 [AutoParameters]
 public partial class GroupNormalizationLayer<T> : LayerBase<T>
 {

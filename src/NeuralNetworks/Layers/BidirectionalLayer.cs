@@ -38,9 +38,88 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.RecurrentLayer<double>(8, (AiDotNet.Interfaces.IActivationFunction<double>?)null), true, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// A DECORATOR whose relation depends on the merge mode, so it delegates in one mode and COMPOSES in the
+// other. Read off ForwardTraced -> MergeOutputs:
+//
+//   mergeMode = true  - "return Engine.TensorAdd(forward, backward)". An element-wise add of two tensors
+//                       the same inner layer produced, so the shape is the inner layer's untouched.
+//   mergeMode = false - "return Engine.TensorStack([forward, backward], 0)". A size-2 DIRECTION axis is
+//                       prepended and the rank goes up by one. CalculateOutputShape says the same thing
+//                       from the constructor's side: "newShape[0] = 2" ahead of the inner output shape.
+//
+// ONLY RANK 2 IS DECLARED, and that is a deliberate refusal rather than an omission. ForwardTraced hands
+// the input STRAIGHT to _forwardLayer, so the axis roles named here must be the roles the wrapped
+// recurrent layer reads - and at rank 3 the candidates disagree irreconcilably: RecurrentLayer declares
+// time-major [Time, Batch, Features] while LSTMLayer and GRULayer declare batch-major
+// [Batch, Time, Features]. One type-level layout cannot be both, and picking either would resolve the
+// OTHER family's delegated Same(Time)/Same(Batch) against transposed extents - a confidently wrong shape,
+// which is worse than none. At rank 2 all three agree on [Time, Features], so rank 2 is safe, and it is
+// also the rank this layer is exercised at (TestInputShape = "1, 4").
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Handed to the wrapped layer unchanged; reversing for the backward direction preserves shape.")]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "mergeMode = true: the two directions are added element-wise.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "mergeMode = false: a size-2 direction axis is stacked in front of the inner output.")]
 [AutoParameters]
-public partial class BidirectionalLayer<T> : LayerBase<T>
+public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// BOTH merge modes are stated, because they are genuinely different shape laws and a contract
+    /// covering only one would be silently wrong for half this layer's configurations.
+    /// </para>
+    /// <para>
+    /// <b>mergeMode = true</b> delegates outright: <c>MergeOutputs</c> returns
+    /// <c>Engine.TensorAdd(forward, backward)</c>, an element-wise add of two tensors the wrapped layer
+    /// and its clone produced, so the result carries the wrapped layer's shape exactly.
+    /// </para>
+    /// <para>
+    /// <b>mergeMode = false</b> composes: <c>Engine.TensorStack([forward, backward], 0)</c> prepends a
+    /// new leading axis holding the two directions, so the rank is the inner rank plus one. Its size is
+    /// <c>Fixed(2)</c> because there are exactly two directions - a structural fact of bidirectionality
+    /// rather than a configured width - and <c>CalculateOutputShape</c> writes the same literal 2 into
+    /// the layer's declared output shape. The role is <c>Other</c>: nothing in the vocabulary means
+    /// "direction", and calling it Batch or Channels would be a false claim something downstream acts on.
+    /// </para>
+    /// <para>
+    /// Answers only at rank 2, for the reason recorded on the layouts above: at rank 3 the wrapped
+    /// layer's axis ORDER is a property of which recurrent layer was wrapped, which no type-level layout
+    /// can express. Declining there is the honest outcome.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 3 is deliberately unanswered: see the layouts above. The wrapped layer runs at rank 3
+        // perfectly well, but its axis order is not knowable from this type.
+        if (inputRank != 2) return null;
+
+        var inner = (_forwardLayer as IShapeContract)?.OutputAxesFor(inputRank);
+        if (inner is null || inner.Count == 0) return null;
+
+        // mergeMode = true: an element-wise add cannot move an axis, so this IS the inner relation.
+        if (_mergeMode) return inner;
+
+        foreach (var axis in inner)
+        {
+            // A repeated role cannot be addressed by name, so the whole naming would be refused
+            // (ADNSHAPE002). If the inner layer already used Other, prepending a second one is not a
+            // contract, it is a contradiction.
+            if (axis.Axis == TensorAxis.Other) return null;
+        }
+
+        var axes = new List<OutputAxisContract>(inner.Count + 1)
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Fixed(2)),
+        };
+
+        axes.AddRange(inner);
+
+        return axes;
+    }
+
     private readonly LayerBase<T> _forwardLayer;
     private readonly LayerBase<T> _backwardLayer;
     private readonly bool _mergeMode;

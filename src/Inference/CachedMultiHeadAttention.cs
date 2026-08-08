@@ -1,4 +1,6 @@
 ﻿
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
@@ -36,8 +38,22 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
+// Rank 3 ONLY, and that is forced by the code rather than chosen: both ForwardStandard and
+// ForwardWithCache read `input.Shape[0]` as batch and `input.Shape[1]` as sequence length, then reshape
+// to [batch, seqLen, _headCount, _headDimension]. A rank-2 input would put the feature width where the
+// sequence length is expected and the head reshape would not fit.
+//
+// Shape-preserving at that rank, on BOTH paths: each ends
+// `.Reshape(batchSize, seqLen, _embeddingDimension)` followed by an output projection whose weights are
+// square ([embeddingDimension, embeddingDimension] in the constructor), so the width comes back out
+// unchanged. The KV cache lengthens the KEYS, not the queries - the sequence axis of the RESULT is the
+// query's, which is why caching does not show up in the shape at all.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class CachedMultiHeadAttention<T> : LayerBase<T>
+public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _headCount;
     private readonly int _headDimension;

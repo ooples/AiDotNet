@@ -38,8 +38,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 0, 1, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Roles follow the forward's own stated convention - "assume BHWC format: padding order
+// [batch, height, width, channels]" - matching [LayerProperty(TestInputShape = "1, 4, 4, 1")].
+// OutputAxesFor is HAND-WRITTEN below; the amount added per axis comes from _padding.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class PaddingLayer<T> : LayerBase<T>
+public partial class PaddingLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The amount of padding to add to each dimension of the input tensor.
@@ -49,6 +56,44 @@ public partial class PaddingLayer<T> : LayerBase<T>
     /// the number of zeros to add on both sides of the corresponding dimension.
     /// </remarks>
     private readonly int[] _padding;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Computed from <see cref="_padding"/>, not generated. The forward is
+    /// <c>outputShape[axis] = inputShape[axis] + 2 * _padding[j]</c> - symmetric padding - and
+    /// <c>Window(kernel: 1, stride: 1, padding: p)</c> evaluates to exactly <c>in + 2p</c>, so the
+    /// existing relation vocabulary expresses this without any new machinery.
+    /// </para>
+    /// <para>
+    /// THE SWEEP'S ANSWER FOR THIS LAYER WAS AN ARTIFACT and is worth recording, because it looked
+    /// entirely plausible: it fitted <c>floor((in + 2*8 - 1*(1-1) - 1) / 1) + 1</c>, where 8 and 9 were
+    /// the PROBE'S OWN dimensions handed in as a padding array and read back out as if they were the
+    /// layer's contract. Only varying the array between profiles exposed it.
+    /// </para>
+    /// <para>
+    /// Roles follow the forward's stated convention, "assume BHWC format: padding order
+    /// [batch, height, width, channels]", matching
+    /// <c>[LayerProperty(TestInputShape = "1, 4, 4, 1")]</c>. Declined unless the padding array covers
+    /// every axis, since a partial mapping would need this to guess which axes it applies to.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _padding is null || _padding.Length != 4) return null;
+
+        var roles = new[] { TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels };
+        var axes = new OutputAxisContract[4];
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (_padding[i] < 0) return null;
+            axes[i] = new OutputAxisContract(
+                roles[i], AxisRelation.Window(roles[i], kernel: 1, stride: 1, padding: _padding[i]));
+        }
+
+        return axes;
+    }
 
     /// <summary>
     /// The input tensor from the most recent forward pass.

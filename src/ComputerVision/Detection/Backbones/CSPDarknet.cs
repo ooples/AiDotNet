@@ -318,8 +318,19 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 // ctor is expressible as literal TestConstructorArgs (both require an IActivationFunction).
 // TrainableParameterGenerator keys on LayerBase inheritance, not the attribute, so the
 // generated EnsureSubLayersRegistered() for this CSP stage is emitted regardless.
+//
+// RANK 4 ONLY, and that is a real restriction rather than a conservative one: ForwardTraced
+// concatenates the two branches with `axis: 1`, which is the channel axis only when a batch axis
+// leads. Declaring [C,H,W] as well (as the inner ConvolutionalLayer does, via BatchOptional) would
+// claim a form on which this block would concatenate along HEIGHT.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "CSP stage input: a batched spatial feature map.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Channels become _cv3's output depth; H/W follow the leading strided downsample.")]
 [AutoParameters]
-internal partial class CSPBlock<T> : LayerBase<T>
+public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly ConvolutionalLayer<T> _downsample;
     private readonly ConvolutionalLayer<T> _cv1;
@@ -348,6 +359,44 @@ internal partial class CSPBlock<T> : LayerBase<T>
 
     /// <summary>Channel width is the block's own; spatial extent follows the stride-3x3 downsample.</summary>
     protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Convolutional;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the relation is the COMPOSITION of this block's children, which no probe
+    /// can see. Read straight off <c>ForwardTraced</c>: only <c>_downsample</c> moves the spatial axes
+    /// (3x3, stride from the constructor, padding 1); <c>_cv1</c>/<c>_cv2</c>/<c>_cv3</c> are 1x1
+    /// stride-1 pad-0 and the bottlenecks are 3x3 stride-1 pad-1, all of which leave H and W alone. So
+    /// the whole stage's spatial rule is exactly <c>_downsample</c>'s single window.
+    /// </para>
+    /// <para>
+    /// Channels are whatever <c>_cv3</c> emits — it is the last operation in the forward, so the
+    /// hidden-width split and the concatenate that doubles it are both consumed before the output.
+    /// The terms are read off the child layers rather than off the <c>outChannels</c>/<c>stride</c>
+    /// constructor arguments because those are not retained as fields; the children are the surviving
+    /// record of them.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // A lazily-built child has no output depth yet, and AxisRelation.Fixed rejects a
+        // non-positive size. Declining beats declaring zero.
+        if (inputRank != 4 || _cv3.OutputDepth <= 0 || _downsample.Stride <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_cv3.OutputDepth)),
+            new OutputAxisContract(
+                TensorAxis.Height,
+                AxisRelation.Window(
+                    TensorAxis.Height, _downsample.KernelSize, _downsample.Stride, _downsample.Padding)),
+            new OutputAxisContract(
+                TensorAxis.Width,
+                AxisRelation.Window(
+                    TensorAxis.Width, _downsample.KernelSize, _downsample.Stride, _downsample.Padding)),
+        };
+    }
 
     public override bool SupportsTraining => true;
 
@@ -434,8 +483,28 @@ internal partial class CSPBlock<T> : LayerBase<T>
 // ctor is expressible as literal TestConstructorArgs (both require an IActivationFunction).
 // TrainableParameterGenerator keys on LayerBase inheritance, not the attribute, so the
 // generated EnsureSubLayersRegistered() for this bottleneck is emitted regardless.
+//
+// SHAPE-PRESERVING, and derived rather than assumed. Both children are
+// ConvolutionalLayer(channels, kernelSize: 3, stride: 1, padding: 1), whose window
+// floor((n + 2 - 3)/1) + 1 == n leaves H and W untouched; both emit `channels`, which is also this
+// block's declared input width, so the channel axis carries through too. The residual add is only
+// reachable under that equality — BackboneOps.AddResidual throws on any axis mismatch.
+//
+// Not [ElementWiseShape]: that shorthand claims identity at EVERY rank, and this block is only
+// shape-preserving at the ranks its convolutions accept. Both spatial forms are declared for the
+// same reason ConvolutionalLayer marks batch optional — the unbatched [C,H,W] form is what the
+// constructor hands to LayerBase, and the batched form is what CSPBlock actually feeds it. The axis
+// roles are identical on both sides, so OutputAxesFor is generated as Same across the board.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class CSPBottleneckBlock<T> : LayerBase<T>
+public partial class CSPBottleneckBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly ConvolutionalLayer<T> _cv1;
     private readonly ConvolutionalLayer<T> _cv2;

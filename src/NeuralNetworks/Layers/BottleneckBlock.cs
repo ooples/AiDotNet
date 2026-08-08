@@ -49,9 +49,61 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 1")]
+// Exactly the two ranks this block's own guard admits - OnFirstForward: "requires rank-3 [C,H,W] or
+// rank-4 [B,C,H,W] input" - declared separately rather than as one BatchOptional layout, because a
+// derived contract keys on the declared axis count and would leave the unbatched rank unresolvable.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Taken from <c>OnFirstForward</c>'s own resolution, which is the single place this block decides
+    /// its output shape:
+    /// <c>ResolveShapes(new[] { _inChannels, inputHeight, inputWidth }, new[] { outChannels, outH, outW })</c>
+    /// with <c>outChannels = _baseChannels * Expansion</c> and <c>outH = (inputHeight - 1) / _stride + 1</c>.
+    /// </para>
+    /// <para>
+    /// The spatial expression IS the sliding window of the 3x3 / pad=1 middle convolution, so it is
+    /// declared as one - <c>floor((in + 2*1 - (3-1) - 1) / stride) + 1</c> is <c>(in - 1) / stride + 1</c>
+    /// exactly. The layer's own comment records why the shortcut spelling is a defect rather than a
+    /// simplification: plain <c>in / stride</c> is off by one for odd inputs, and the mismatch surfaces
+    /// as a broken residual add against the downsample branch's BatchNorm.
+    /// </para>
+    /// <para>
+    /// Channels are <c>Fixed</c> at <c>_baseChannels * Expansion</c> - the widening that gives this block
+    /// its name - and NOT <c>Same</c>: the shortcut is 1x1-convolved to that width whenever it differs,
+    /// which is the <c>_inChannels != outChannels</c> half of the <c>_hasDownsample</c> condition.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4) || _baseChannels <= 0 || _stride <= 0) return null;
+
+        var channels = new OutputAxisContract(
+            TensorAxis.Channels, AxisRelation.Fixed(_baseChannels * Expansion));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, kernel: 3, stride: _stride, padding: 1));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, kernel: 3, stride: _stride, padding: 1));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     /// <summary>
     /// The expansion factor for BottleneckBlock. Output channels = base channels * 4.
     /// </summary>

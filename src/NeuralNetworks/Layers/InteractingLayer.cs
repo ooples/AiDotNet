@@ -24,8 +24,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+// AutoInt operates on EMBEDDED TABULAR FIELDS, not a sequence: ForwardTraced reads
+// [batchSize, numFeatures, embDim] off input.Shape and attends across the numFeatures axis. That axis
+// is the set of table columns, which is why it is Other rather than Time - there is no ordering to it,
+// the same reason GraphAttentionLayer names its node axis Other. The trailing axis is the per-field
+// embedding width, the layer's Features.
+// Shape-preserving on all three axes: attention is over the field axis so it cannot change its length,
+// and ProjectOutput ends with `projected.Reshape(batchSize, numFeatures, _embeddingDim)` - the output
+// projection maps _attentionDim back DOWN to the embedding width it started at, which is also what lets
+// the residual add work when useResidual is set.
+// Rank 3 only: the forward pass indexes Shape[0..2] unconditionally, so nothing else is accepted.
+// Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Field embeddings: the middle axis is the tabular fields AutoInt attends across.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class InteractingLayer<T> : LayerBase<T>
+public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;

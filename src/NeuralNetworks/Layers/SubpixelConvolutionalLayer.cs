@@ -40,9 +40,81 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 2, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// NCHW, ranks 3 and 4, per OnFirstForward's guard ("requires rank-3 [C,H,W] or rank-4 [B,C,H,W]") and
+// ForwardTraced's matching branches, which read the last three axes as [C, H, W] either way.
+//
+// The convolution itself is spatially NEUTRAL here - it runs at padSize = _kernelSize / 2, i.e. "same"
+// padding - so _kernelSize does NOT appear in the contract. All of the spatial growth comes from the
+// pixel shuffle that follows, which is why the relation is a clean Scaled rather than a Window.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
+public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read straight off <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { _inputDepth, inH, inW }, new[] { _outputDepth, inH * _upscaleFactor,
+    /// inW * _upscaleFactor })</c>. Both relations come from constructor arguments.
+    /// </para>
+    /// <para>
+    /// THE CHANNEL RELATION IS THE INTERESTING ONE. The kernel is allocated with
+    /// <c>_outputDepth * _upscaleFactor * _upscaleFactor</c> filters, so the convolution's immediate
+    /// result is that much wider - but the pixel shuffle then TRADES those extra channels for
+    /// resolution, moving a factor of <c>_upscaleFactor</c> into each spatial axis and leaving exactly
+    /// <c>_outputDepth</c> channels behind. Declaring the pre-shuffle width would describe an
+    /// intermediate; <c>Fixed(_outputDepth)</c> is what the caller receives.
+    /// </para>
+    /// <para>
+    /// THE CONVOLUTION IS NOT SPATIALLY NEUTRAL, which this contract originally assumed. It runs at
+    /// <c>padSize = _kernelSize / 2</c>, and that is "same" padding only for an ODD kernel. For an
+    /// even one it pads a half-step too much and each spatial axis GROWS by one before the shuffle:
+    /// with <c>_kernelSize = 2</c> a height of 8 becomes <c>(8 + 2*1 - 2) / 1 + 1 = 9</c>, so the
+    /// output is <c>9 * _upscaleFactor</c>, not <c>8 * _upscaleFactor</c>. The conformance sweep caught
+    /// it at exactly that kernel - a plain <c>Scaled</c> was right for every odd kernel and quietly
+    /// off by <c>_upscaleFactor</c> for every even one.
+    /// </para>
+    /// <para>
+    /// So the spatial axes are the convolution's window and THEN the shuffle's factor.
+    /// <see cref="AxisRelation.ProductOf"/> composes the two: a windowed axis multiplied by a constant.
+    /// Neither <see cref="AxisRelation.Scaled"/> (one raw source) nor <see cref="AxisRelation.Window"/>
+    /// (no scaling) can say this alone.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDepth <= 0 || _upscaleFactor <= 0 || _kernelSize <= 0) return null;
+
+        // Mirrors the layer's own padSize = _kernelSize / 2, stride 1.
+        AxisRelation Spatial(TensorAxis axis) => AxisRelation.ProductOf(
+            AxisRelation.Window(axis, kernel: _kernelSize, stride: 1, padding: _kernelSize / 2),
+            AxisRelation.Fixed(_upscaleFactor));
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputDepth));
+        var height = new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels,
+                height,
+                width,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The number of channels in the input tensor.
     /// </summary>

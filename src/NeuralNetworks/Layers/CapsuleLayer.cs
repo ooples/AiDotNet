@@ -40,9 +40,55 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "2, 4, 3")]
+// Roles from this layer's own guard, quoted: OnFirstForward requires
+// "rank>=2 input [...,inputCapsules,inputDimension]". The capsule axis takes Other - it is neither a
+// sequence position nor a feature vector, it indexes ENTITIES, which is exactly what that escape hatch
+// is documented for - and the capsule's own vector width takes Features.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because BOTH trailing axes are set by configuration, which matching layouts cannot
+    /// express. From <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { inputCapsules, inputDimension }, new[] { _numCapsules, _capsuleDimension })</c>,
+    /// and <c>ForwardTraced</c> reconstructs exactly that at higher rank -
+    /// <c>newShape[^2] = _numCapsules; newShape[^1] = _capsuleDimension;</c> with every leading dimension
+    /// copied through.
+    /// </para>
+    /// <para>
+    /// Neither trailing axis is <c>Same</c>: dynamic routing agrees a NEW set of capsules, and the
+    /// transformation matrix is allocated as
+    /// <c>[inputCapsules, inputDimension, _numCapsules, _capsuleDimension]</c> precisely so the input
+    /// count and width are contracted away rather than carried.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 2 and 3 only. ForwardTraced also collapses higher ranks into the batch and restores them,
+        // but each extra leading axis would need a DISTINCT role to be named, and there is no second
+        // batch-like role to give it.
+        if (inputRank is not (2 or 3) || _numCapsules <= 0 || _capsuleDimension <= 0) return null;
+
+        var capsules = new OutputAxisContract(TensorAxis.Other, AxisRelation.Fixed(_numCapsules));
+        var dimension = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_capsuleDimension));
+
+        return inputRank == 2
+            ? new[] { capsules, dimension }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                capsules, dimension,
+            };
+    }
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (routing entropy regularization) should be used during training.
     /// </summary>

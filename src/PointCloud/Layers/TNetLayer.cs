@@ -1,5 +1,7 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -40,8 +42,24 @@ namespace AiDotNet.PointCloud.Layers;
 /// - T-Net learns: "Rotate this cloud 45 degrees to align it"
 /// - Output: Aligned point cloud in standard orientation
 /// </remarks>
+// Rank 2 [points, features] - the form the constructor declares, base([0, numFeatures],
+// [0, numFeatures]), and the only rank ApplyTransformation can read: it indexes Shape[0] and Shape[1]
+// and walks the buffer as `n * numFeatures + f`.
+//
+// The point axis is Length rather than Time: the ordering of points in a cloud carries no temporal
+// meaning, and nothing here masks or recurs over it.
+//
+// SHAPE-PRESERVING despite the name "transformation network". The predicted matrix is
+// _transformDim x _transformDim and is applied to the LEADING _transformDim features only; the loop
+// that follows copies "remaining features if numFeatures > transformDim" straight across. So
+// ApplyTransformation returns `new Tensor<T>(output, [numPoints, numFeatures])` - the input's own
+// dimensions. _transformDim sizes an internal matrix, not the output, which is why it does not appear
+// in this contract. Matching layouts let the generator derive Same(role) for both axes.
+[TensorLayout(TensorAxis.Length, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Point cloud as [numPoints, numFeatures]; the first _transformDim features are the transformed coordinates.")]
+[TensorLayout(TensorAxis.Length, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TNetLayer<T> : LayerBase<T>
+public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _transformDim; // Dimension of transformation (e.g., 3 for XYZ, 64 for features)
     private readonly int _numFeatures;
