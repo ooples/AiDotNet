@@ -132,14 +132,25 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
             Matrix<T>? previous = _previousForwardWeights[j];
 
             if (previous is not null &&
-                previous.Rows == current.Rows && previous.Columns == current.Columns)
+                previous.Rows == current.Rows && previous.Columns == current.Columns &&
+                b.Rows == current.Columns && b.Columns == current.Rows)
             {
+                // THE FORWARD MATRIX IS INDEXED TRANSPOSED, because B and W have opposite
+                // orientations. EnsureFeedback declares B_j as [outFeatures, inFeatures] -- confirmed
+                // by delta.Multiply(b) mapping [B, outFeatures] to [B, inFeatures] -- so W_j is
+                // [inFeatures, outFeatures]. Reading current[row, column] with B-shaped indices threw
+                // IndexOutOfRangeException whenever inFeatures != outFeatures, and when they were
+                // equal it raised nothing and accumulated the TRANSPOSE of the intended increment:
+                // Kolen-Pollack needs B to converge to W, so the rule quietly stopped aligning.
+                //
+                // The shape guard above previously compared previous against current only, never
+                // either against b, so it could not catch this. It does now.
                 for (int row = 0; row < b.Rows; row++)
                 {
                     for (int column = 0; column < b.Columns; column++)
                     {
-                        T forwardIncrement = ops.Subtract(current[row, column], previous[row, column]);
-                        T alignmentError = ops.Subtract(b[row, column], previous[row, column]);
+                        T forwardIncrement = ops.Subtract(current[column, row], previous[column, row]);
+                        T alignmentError = ops.Subtract(b[row, column], previous[column, row]);
                         b[row, column] = ops.Subtract(
                             ops.Add(b[row, column], ops.Multiply(updateScale, forwardIncrement)),
                             ops.Multiply(decay, alignmentError));

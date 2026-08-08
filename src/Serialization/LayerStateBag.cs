@@ -256,10 +256,52 @@ public readonly struct LayerStateBag
         if (type.IsGenericTypeDefinition)
         {
             var args = typeof(TComponent).GetGenericArguments();
-            if (args.Length > 0) type = type.MakeGenericType(args);
+            if (args.Length > 0)
+            {
+                // MakeGenericType throws ArgumentException on an arity mismatch. Raw, that escapes
+                // with neither the layer name nor the key, so a payload naming a two-parameter type
+                // where a one-parameter one belongs reports nothing about which layer or field.
+                try
+                {
+                    type = type.MakeGenericType(args);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot rebuild {_layerName}: '{typeName}' was saved for '{key}', but its "
+                        + $"generic arity does not match {typeof(TComponent).Name}.", ex);
+                }
+            }
         }
 
-        return Activator.CreateInstance(type) as TComponent;
+        // ASSIGNABILITY IS CHECKED BEFORE CONSTRUCTION, not after. typeName comes out of a model
+        // file, and Activator.CreateInstance runs the named type's constructor -- so filtering with
+        // `as TComponent` afterwards prevented nothing: the object, and any side effect its
+        // constructor had, already existed. Any type in any loadable assembly with a public
+        // parameterless constructor was reachable from a crafted payload.
+        if (!typeof(TComponent).IsAssignableFrom(type))
+        {
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: '{key}' names '{typeName}', which is not a "
+                + $"{typeof(TComponent).Name}. Substituting a default would silently change what the "
+                + "layer computes, so the rebuild fails instead.");
+        }
+
+        // A WRONG TYPE THROWS RATHER THAN RETURNING NULL, for the reason this class documents about
+        // itself: a caller that receives null applies its own constructor default, and a layer built
+        // with a Multiquadric kernel that reloads as the default Gaussian is a different function
+        // that nothing downstream would report. The unloadable-type path above already throws; this
+        // one now matches it.
+        try
+        {
+            return (TComponent)Activator.CreateInstance(type);
+        }
+        catch (MissingMethodException ex)
+        {
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: '{typeName}' was saved for '{key}', but it has no "
+                + "public parameterless constructor to rebuild it with.", ex);
+        }
     }
 
     /// <summary>Records a component's concrete type so it can be rebuilt exactly.</summary>

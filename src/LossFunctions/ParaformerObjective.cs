@@ -28,6 +28,18 @@ public sealed class ParaformerObjective<T> : LossFunctionBase<T>
 {
     private readonly LossFunctionBase<T> _crossEntropy;
     private readonly Func<Tensor<T>?> _predictedTokenCount;
+
+    /// <summary>
+    /// Returns the per-instance count of REAL target tokens, or null to fall back to the target's
+    /// sequence-axis length.
+    /// </summary>
+    /// <remarks>
+    /// Sits next to <see cref="_predictedTokenCount"/> deliberately: the MAE term compares the two,
+    /// and a length inferred from a shape cannot exclude padding. Without this the term supervises
+    /// the alpha head toward the padded sequence length rather than the utterance length.
+    /// </remarks>
+    private readonly Func<Tensor<T>?>? _targetTokenCount;
+
     private readonly double _ceWeight;
     private readonly double _maeWeight;
 
@@ -38,17 +50,26 @@ public sealed class ParaformerObjective<T> : LossFunctionBase<T>
     /// <param name="predictedTokenCount">Returns the CIF predictor's per-instance token count
     /// (<c>sum_t alpha_t</c>) from the most recent forward, or null when unavailable — in which case the
     /// MAE term is skipped rather than guessed at.</param>
+    /// <param name="targetTokenCount">
+    /// Returns the per-instance number of REAL target tokens, excluding padding. Optional; when it
+    /// is null the count falls back to the target's sequence-axis length, which counts padded
+    /// positions as tokens. Supply it whenever targets are padded, because a shape alone cannot
+    /// distinguish a pad from a token and the MAE term then trains the alpha head toward the padded
+    /// length.
+    /// </param>
     /// <param name="ceWeight">gamma in Eq 6.</param>
     /// <param name="maeWeight">Weight on the MAE term; Eq 6 states it unweighted, so 1.0 is faithful.</param>
     /// <exception cref="ArgumentNullException">If a required argument is null.</exception>
     public ParaformerObjective(
         LossFunctionBase<T> crossEntropy,
         Func<Tensor<T>?> predictedTokenCount,
+        Func<Tensor<T>?>? targetTokenCount = null,
         double ceWeight = 1.0,
         double maeWeight = 1.0)
     {
         _crossEntropy = crossEntropy ?? throw new ArgumentNullException(nameof(crossEntropy));
         _predictedTokenCount = predictedTokenCount ?? throw new ArgumentNullException(nameof(predictedTokenCount));
+        _targetTokenCount = targetTokenCount;
         _ceWeight = ceWeight;
         _maeWeight = maeWeight;
     }
@@ -89,15 +110,30 @@ public sealed class ParaformerObjective<T> : LossFunctionBase<T>
         {
             return total;
         }
+        // Target length: the number of supervised TOKENS. Supervision, not a differentiable
+        // quantity, so it is built as a constant.
+        //
+        // A caller-supplied count wins, because only the caller can exclude padding. Falling back to
+        // a shape reads the SEQUENCE axis -- Shape[1] for [batch, sequence] and
+        // [batch, sequence, vocab] alike. It previously read Shape[0], which for every batched target
+        // is the BATCH SIZE. The CIF predictor was therefore trained to emit the batch size, so
+        // L_MAE drove the alpha head to a constant unrelated to utterance length: the term the paper
+        // adds to supervise an otherwise unsupervised head was mis-supervising it instead. Silently,
+        // because a plausible loss number came back either way.
+        var suppliedTargetCount = _targetTokenCount?.Invoke();
 
-        // Target length: the number of supervised positions, taken from the target's leading axis. This
-        // is supervision, not a differentiable quantity, so it is built as a constant.
-        int positions = target.Rank > 1 ? target.Shape[0] : target.Length;
-        var targetLength = new Tensor<T>((int[])predictedCount._shape.Clone());
-        var lengthValue = NumOps.FromDouble(positions);
-        for (int i = 0; i < targetLength.Length; i++)
+        // Shape from the PREDICTED count via the public accessor. Reading Tensor<T>._shape reached
+        // into its private backing field from loss code.
+        var countShape = (int[])predictedCount.Shape.ToArray().Clone();
+        var targetLength = suppliedTargetCount ?? new Tensor<T>(countShape);
+        if (suppliedTargetCount is null)
         {
-            targetLength.Data.Span[i] = lengthValue;
+            int positions = target.Rank > 1 ? target.Shape[1] : target.Length;
+            var lengthValue = NumOps.FromDouble(positions);
+            for (int i = 0; i < targetLength.Length; i++)
+            {
+                targetLength.Data.Span[i] = lengthValue;
+            }
         }
 
         // L_MAE = mean |sum_t alpha_t - targetLength|, on the tape so it reaches the alpha predictor.
