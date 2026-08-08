@@ -4,6 +4,15 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
+// Core-contention casualty. Measured in isolation this class is comfortable — its memorization
+// probe is 34 s against a 180 s budget and MoreData is 59 s — yet LossStrictlyDecreases blew the
+// 180 s gate in the full shard with a reported duration of ~1 ms, i.e. starved while queued rather
+// than slow. That is exactly what FoundationScaleSerialCollection documents: at the default
+// maxParallelThreads (all 16 logical cores) N classes x N managed BLAS threads far exceeds the
+// cores. Serializing gives each forward the whole machine. Deliberately NOT marked HeavyTimeout —
+// MeshCNN is not foundation-scale and belongs in the default PR shard, it just must not run
+// sixteen-wide against other heavy classes.
+[Xunit.Collection("FoundationScaleSerial")]
 public class MeshCNNTests : NeuralNetworkModelTestBase<float>
 {
     // Default MeshCNN: InputFeatures=5, NumClasses=40, PoolTargets=[1800,1350,600]
@@ -19,6 +28,19 @@ public class MeshCNNTests : NeuralNetworkModelTestBase<float>
         mesh.SetEdgeAdjacency(CreateTestEdgeAdjacency());
         return mesh;
     }
+
+    // MeshCNN's default architecture carries Dropout (per Hanocka et al. 2019). On the
+    // tiny fixed-sample memorization task the loss converges to a ~0.31 plateau by the
+    // short (50-iter) run, after which the long (200-iter) run oscillates within the
+    // Dropout + Adam-past-convergence noise band (~4e-4 drift observed) rather than
+    // strictly decreasing — not divergence (LossStrictlyDecreases confirms it decreases).
+    //
+    // Tolerance calibrated at 1e-3: ~2.5× the observed ~4e-4 stochastic drift band,
+    // enough headroom to swallow Dropout-mask/Adam-past-convergence noise without also
+    // swallowing genuine regressions. Was 5e-3 (12.5× headroom), which could let a real
+    // training regression pass. LossStrictlyDecreases still catches divergence from the
+    // other direction, so this is the "no significant increase" complement.
+    protected override double MoreDataTolerance => 1e-3;
 
     /// <summary>
     /// Creates a simple circular edge adjacency matrix for testing.

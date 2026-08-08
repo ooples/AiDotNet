@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -20,7 +20,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public sealed class ColumnParallelLinear<T> : LayerBase<T>
+public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly CopyToTensorParallelRegion<T> _f;
@@ -82,7 +82,7 @@ public sealed class ColumnParallelLinear<T> : LayerBase<T>
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // f: identity forward, all-reduce backward (sums this region's input-gradient contributions).
         var x = _f.Apply(input);

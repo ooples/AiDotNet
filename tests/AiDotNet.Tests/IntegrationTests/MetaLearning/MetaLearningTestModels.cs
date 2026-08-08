@@ -37,7 +37,7 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
         }
     }
 
-    public Vector<double> Predict(Matrix<double> input)
+    public virtual Vector<double> Predict(Matrix<double> input)
     {
         var output = new Vector<double>(input.Rows);
         for (int r = 0; r < input.Rows; r++)
@@ -82,7 +82,16 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
     public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
-    public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    /// <summary>Returns a model of THIS type carrying <paramref name="parameters"/>.</summary>
+    /// <remarks>
+    /// Virtual for the same reason <see cref="Predict"/> and <see cref="DeepCopy"/> are: a
+    /// non-virtual implementation that hard-codes `new LinearVectorModel(...)` slices any derived
+    /// type. IdentityEmbeddingModel came back as a plain LinearVectorModel and silently lost its
+    /// identity embedding, which is exactly the scalar collapse its remarks warn about -- and
+    /// meta-learning algorithms build an adapted model from a parameter vector routinely, so this
+    /// is on the path MbPA actually takes.
+    /// </remarks>
+    public virtual IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
         var model = new LinearVectorModel(_inputFeatures);
         model.SetParameters(parameters);
@@ -495,4 +504,60 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 
     public void Dispose() { /* test mock holds no resources */ }
+}
+
+/// <summary>
+/// A <see cref="LinearVectorModel"/> that returns a SINGLE example's raw features instead of a
+/// scalar, so it can stand in for MbPA's embedding network f_gamma.
+/// </summary>
+/// <remarks>
+/// MbPA keys its episodic memory on embeddings and retrieves by Euclidean distance between them.
+/// Collapsing each example to one scalar, as the base model does, would flatten that geometry to a
+/// line and make a nearest-neighbour test unable to distinguish a correct implementation from
+/// several incorrect ones. Returning the features verbatim keeps the retrieval geometry something
+/// the test can reason about exactly.
+///
+/// Multi-row inputs keep the base behaviour (one value per row), because that is what the loss and
+/// gradient paths inherited from the base class expect. The algorithm embeds one example at a time,
+/// so the single-row branch is the one MbPA actually exercises.
+/// </remarks>
+internal sealed class IdentityEmbeddingModel : LinearVectorModel
+{
+    private readonly int _featureCount;
+
+    public IdentityEmbeddingModel(int inputFeatures) : base(inputFeatures)
+    {
+        _featureCount = inputFeatures;
+    }
+
+    public override Vector<double> Predict(Matrix<double> input)
+    {
+        if (input.Rows != 1) return base.Predict(input);
+
+        var embedding = new Vector<double>(_featureCount);
+        for (int j = 0; j < _featureCount && j < input.Columns; j++) embedding[j] = input[0, j];
+        return embedding;
+    }
+
+    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
+    {
+        var copy = new IdentityEmbeddingModel(_featureCount);
+        copy.SetParameters(GetParameters());
+        return copy;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Overridden alongside <see cref="DeepCopy"/>: without it the base built a plain
+    /// LinearVectorModel and the identity embedding vanished mid-test, leaving the retrieval
+    /// geometry a line and the nearest-neighbour assertions unable to tell a correct MbPA from
+    /// several incorrect ones. `Clone` delegates to DeepCopy, so this was the one remaining path
+    /// that sliced the type.
+    /// </remarks>
+    public override IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    {
+        var model = new IdentityEmbeddingModel(_featureCount);
+        model.SetParameters(parameters);
+        return model;
+    }
 }

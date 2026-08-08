@@ -190,7 +190,7 @@ public class PointTransformerV3<T> : NeuralNetworkBase<T>, ISemanticSegmentation
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

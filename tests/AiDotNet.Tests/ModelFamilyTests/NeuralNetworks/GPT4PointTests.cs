@@ -39,6 +39,13 @@ public class GPT4PointTests : VisionLanguageTestBase<float>
     // Flat forward ends at the LLM decoder width (reduced DecoderDim = 512).
     protected override int[] OutputShape => [1, 4, 512];
 
+    // A GPT4Point CPU training step is substantially more expensive than the
+    // small-network base-line assumed by the shared fixture. Keep the same 4x
+    // short/long comparison while bounding this invariant below its 120 s CI
+    // timeout. Convergence is covered separately by the memorization tests.
+    protected override int MoreDataShortIterations => 10;
+    protected override int MoreDataLongIterations => 40;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
     {
         var architecture = new NeuralNetworkArchitecture<float>(
