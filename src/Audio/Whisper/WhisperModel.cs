@@ -525,7 +525,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 numMels: _numMels,
                 maxFrames: maxFrames,
                 maxTokens: _maxTokens,
-                vocabSize: 51865,
+                vocabSize: WhisperVocabSize,
                 dropoutRate: 0.0));
 
             // Two audio projections + encoder positional encoding + N residual
@@ -916,6 +916,18 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </remarks>
     private const int WhisperHopLength = 160;
 
+    /// <summary>
+    /// Whisper's multilingual vocabulary size.
+    /// </summary>
+    /// <remarks>
+    /// Written out twice before -- once configuring the decoder in <c>InitializeLayers</c> and once as a
+    /// local <c>const</c> in <c>CreateTeacherForcingTokens</c>, where it decides whether a target tensor
+    /// is a soft distribution by testing <c>Shape[^1] == vocabSize</c>. If those two ever disagreed, the
+    /// soft-target branch would silently stop recognising its own decoder's output and fall through to
+    /// the hard-token path, reading a probability as a token id.
+    /// </remarks>
+    private const int WhisperVocabSize = 51865;
+
     private Tensor<T> EnsureMelFeatures(Tensor<T> input)
     {
         // Whisper's layer stack consumes frame-major log-mel features [.., frames, NumMels], while
@@ -1105,13 +1117,16 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     private Tensor<T> CreateTeacherForcingTokens(Tensor<T> target)
     {
-        const int vocabSize = 51865;
+        const int vocabSize = WhisperVocabSize;
         bool softTargets = target.Rank >= 2 && target.Shape[^1] == vocabSize;
         int batchSize = target.Rank >= (softTargets ? 3 : 2) ? target.Shape[0] : 1;
         int sequenceLength = softTargets
             ? target.Shape[^2]
             : target.Shape[^1];
         var tokens = CreateStartTokens(batchSize, sequenceLength);
+
+        // Hoisted once rather than re-fetched per element inside the scan below.
+        var targetValues = target.Data.Span;
 
         for (int batch = 0; batch < batchSize; batch++)
         {
@@ -1120,13 +1135,20 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 int previousToken;
                 if (softTargets)
                 {
+                    // ARGMAX OVER THE FLAT BUFFER, COMPARED IN T. This scans the whole vocabulary for
+                    // every position of every batch item -- at the default 448 tokens that is roughly 23
+                    // million element reads before the forward pass even starts, on the training hot
+                    // path. Two costs were avoidable without changing the result: the tensor indexer
+                    // recomputed offsets and bounds-checked per element, and NumOps.ToDouble paid an
+                    // interface dispatch per element to produce a value used only for a comparison.
+                    // Comparing in T against the hoisted span keeps the scan exact and drops both.
                     int distributionOffset = ((batch * sequenceLength) + position - 1) * vocabSize;
                     previousToken = 0;
-                    double bestValue = double.NegativeInfinity;
-                    for (int token = 0; token < vocabSize; token++)
+                    T bestValue = targetValues[distributionOffset];
+                    for (int token = 1; token < vocabSize; token++)
                     {
-                        double value = NumOps.ToDouble(target[distributionOffset + token]);
-                        if (value > bestValue)
+                        T value = targetValues[distributionOffset + token];
+                        if (NumOps.GreaterThan(value, bestValue))
                         {
                             bestValue = value;
                             previousToken = token;
