@@ -238,4 +238,57 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
+
+    /// <summary>
+    /// The differentiable BYOL objective, built entirely from <c>IEngine</c> operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SEPARATE FROM <see cref="ComputeLoss(Tensor{T}, Tensor{T})"/> BECAUSE THAT ONE CANNOT TRAIN.
+    /// The public method loops over the batch on the host, copying rows into <c>Vector&lt;T&gt;</c> and
+    /// calling <c>DotProduct</c>, which severs the gradient tape -- the value is right, the history is
+    /// gone, and an optimizer reading it has nothing to backpropagate.
+    /// </para>
+    /// <para>
+    /// Same objective as one reduction: <c>2 - 2 * cos(p, z)</c> averaged over the batch. The
+    /// per-row dot product is an elementwise multiply summed along the feature axis, so the whole
+    /// batch is one <c>ReduceSum</c> rather than <c>batch</c> host iterations.
+    /// </para>
+    /// </remarks>
+    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    {
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+        if (view1.Shape.Length != 2 || view2.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"BYOL expects rank-2 [batch, dim] tensors; got ranks {view1.Shape.Length} and "
+                + $"{view2.Shape.Length}.", nameof(view1));
+        }
+
+        var p = _normalize ? L2NormalizeOnTape(view1) : view1;
+        var z = _normalize ? L2NormalizeOnTape(view2) : view2;
+
+        // cos(p_i, z_i) per row, then 2 - 2*cos averaged over the batch.
+        var perRowCosine = Engine.ReduceSum(
+            Engine.TensorMultiply(p, z), new[] { 1 }, keepDims: false);
+        var perRowLoss = Engine.ScalarMinusTensor(
+            NumOps.FromDouble(2.0),
+            Engine.TensorMultiplyScalar(perRowCosine, NumOps.FromDouble(2.0)));
+
+        return Engine.ReduceMean(perRowLoss, new[] { 0 }, keepDims: false);
+    }
+
+    /// <summary>Row-wise L2 normalization on the tape.</summary>
+    /// <remarks>
+    /// The epsilon sits inside the square root so a zero row scales by a finite value rather than
+    /// dividing by zero, and its derivative stays finite there too.
+    /// </remarks>
+    private static Tensor<T> L2NormalizeOnTape(Tensor<T> x)
+    {
+        var squaredNorm = Engine.ReduceSum(Engine.TensorMultiply(x, x), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12)));
+
+        return Engine.TensorDivide(x, norm);
+    }
 }

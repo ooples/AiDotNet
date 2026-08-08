@@ -41,6 +41,12 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    /// <summary>
+    /// Added inside the square root when standardizing over the batch, so a constant feature scales
+    /// by a finite value instead of dividing by zero.
+    /// </summary>
+    private const double BatchVarianceEpsilon = 1e-12;
+
     private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly double _lambda;
@@ -301,5 +307,101 @@ public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
         }
 
         return sum;
+    }
+
+    /// <summary>
+    /// The differentiable Barlow Twins objective, built entirely from <c>IEngine</c> operations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SEPARATE FROM <see cref="ComputeLoss(Tensor{T}, Tensor{T})"/> BECAUSE THAT ONE CANNOT TRAIN.
+    /// The public method assembles its result from host loops over tensor indexers, which severs the
+    /// gradient tape: the number it returns is a correct loss VALUE but carries no history, so an
+    /// optimizer reading it gets nothing to backpropagate. Every implementation of
+    /// <see cref="IContrastiveLoss{T}"/> shared that defect, which is why models reaching for a
+    /// published contrastive objective silently trained against a pointwise loss instead.
+    /// </para>
+    /// <para>
+    /// Same objective, expressed as tensor algebra. Writing the two terms as one weighted sum is what
+    /// removes the host loop: with <c>D = C - I</c>, the invariance term is exactly the squared
+    /// diagonal of D and the redundancy term is exactly the squared off-diagonal, so
+    /// <c>sum(D * D * W)</c> with W holding 1 on the diagonal and lambda off it computes
+    /// <c>sum_i (1 - C_ii)^2 + lambda * sum_{i != j} C_ij^2</c> in one reduction.
+    /// </para>
+    /// </remarks>
+    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    {
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+        if (view1.Shape.Length != 2 || view2.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"Barlow Twins expects rank-2 [batch, dim] embeddings; got ranks "
+                + $"{view1.Shape.Length} and {view2.Shape.Length}.", nameof(view1));
+        }
+        if (view1.Shape[0] != view2.Shape[0] || view1.Shape[1] != view2.Shape[1])
+        {
+            throw new ArgumentException(
+                $"Both views must have the same shape; got [{view1.Shape[0]}, {view1.Shape[1]}] and "
+                + $"[{view2.Shape[0]}, {view2.Shape[1]}].", nameof(view2));
+        }
+
+        int batchSize = view1.Shape[0];
+        int dim = view1.Shape[1];
+
+        var z1 = _normalize ? StandardizeOverBatch(view1) : view1;
+        var z2 = _normalize ? StandardizeOverBatch(view2) : view2;
+
+        // C = z1^T z2 / N, the [dim, dim] cross-correlation between the two views' features.
+        var crossCorrelation = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(Engine.TensorPermute(z1, new[] { 1, 0 }), z2),
+            NumOps.FromDouble(1.0 / batchSize));
+
+        var deviation = Engine.TensorSubtract(crossCorrelation, IdentityMatrix(dim));
+        var weighted = Engine.TensorMultiply(
+            Engine.TensorMultiply(deviation, deviation), DiagonalWeights(dim, _lambda));
+
+        return Engine.ReduceSum(weighted, new[] { 0, 1 }, keepDims: false);
+    }
+
+    /// <summary>
+    /// Centres and scales each feature across the batch, on the tape.
+    /// </summary>
+    /// <remarks>
+    /// The epsilon is inside the square root rather than added to the standard deviation afterwards,
+    /// so a constant feature yields a finite scale instead of a division by zero, and the derivative
+    /// stays finite there too.
+    /// </remarks>
+    private static Tensor<T> StandardizeOverBatch(Tensor<T> z)
+    {
+        var batchAxis = new[] { 0 };
+        var mean = Engine.ReduceMean(z, batchAxis, keepDims: true);
+        var centred = Engine.TensorSubtract(z, mean);
+        var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), batchAxis, keepDims: true);
+        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(BatchVarianceEpsilon)));
+
+        return Engine.TensorDivide(centred, scale);
+    }
+
+    /// <summary>Constant [dim, dim] identity. Constant DATA, so building it by index costs no gradient.</summary>
+    private static Tensor<T> IdentityMatrix(int dim)
+    {
+        var identity = new Tensor<T>(new[] { dim, dim });
+        for (int i = 0; i < dim; i++) identity[(i * dim) + i] = NumOps.One;
+        return identity;
+    }
+
+    /// <summary>
+    /// Constant [dim, dim] weights: 1 on the diagonal, <paramref name="lambda"/> off it.
+    /// </summary>
+    private static Tensor<T> DiagonalWeights(int dim, double lambda)
+    {
+        var weights = new Tensor<T>(new[] { dim, dim });
+        var off = NumOps.FromDouble(lambda);
+        for (int i = 0; i < dim; i++)
+            for (int j = 0; j < dim; j++)
+                weights[(i * dim) + j] = i == j ? NumOps.One : off;
+
+        return weights;
     }
 }

@@ -429,12 +429,64 @@ public class InfoNCELoss<T> : IContrastiveLoss<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
-
     /// <summary>
-    /// IContrastiveLoss implementation — delegates to in-batch contrastive loss.
+    /// The differentiable in-batch InfoNCE objective, built entirely from <c>IEngine</c> operations.
     /// </summary>
-    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    /// <remarks>
+    /// SEPARATE FROM <see cref="ComputeLossInBatch"/> BECAUSE THAT ONE CANNOT TRAIN. It assembles
+    /// its result from host loops over tensor indexers, which severs the gradient tape: the value is
+    /// right, the history is gone, and an optimizer reading it has nothing to backpropagate.
+    /// </remarks>
+    /// </summary>
+    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        return ComputeLossInBatch(view1, view2);
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+        if (view1.Shape.Length != 2 || view2.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"InfoNCE expects rank-2 [batch, dim] tensors; got ranks {view1.Shape.Length} and "
+                + $"{view2.Shape.Length}.", nameof(view1));
+        }
+        if (view1.Shape[0] != view2.Shape[0])
+        {
+            throw new ArgumentException(
+                $"Queries and keys must carry the same batch size; got {view1.Shape[0]} and "
+                + $"{view2.Shape[0]}.", nameof(view2));
+        }
+
+        int batchSize = view1.Shape[0];
+
+        var queries = _normalize ? L2NormalizeOnTape(view1) : view1;
+        var keys = _normalize ? L2NormalizeOnTape(view2) : view2;
+
+        // Row i's positive is key i; every other key in the batch is its negative.
+        var logits = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(queries, Engine.TensorPermute(keys, new[] { 1, 0 })),
+            NumOps.FromDouble(1.0 / _temperature));
+
+        var logProbabilities = Engine.TensorLogSoftmax(logits, axis: 1);
+        var positiveLogProbability = Engine.ReduceSum(
+            Engine.TensorMultiply(logProbabilities, IdentityMatrix(batchSize)),
+            new[] { 1 }, keepDims: false);
+
+        return Engine.TensorNegate(Engine.ReduceMean(positiveLogProbability, new[] { 0 }, keepDims: false));
+    }
+
+    /// <summary>Row-wise L2 normalization on the tape.</summary>
+    private static Tensor<T> L2NormalizeOnTape(Tensor<T> x)
+    {
+        var squaredNorm = Engine.ReduceSum(Engine.TensorMultiply(x, x), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12)));
+
+        return Engine.TensorDivide(x, norm);
+    }
+
+    /// <summary>Constant identity selector picking each query's own key. Constant DATA, no gradient.</summary>
+    private static Tensor<T> IdentityMatrix(int size)
+    {
+        var identity = new Tensor<T>(new[] { size, size });
+        for (int i = 0; i < size; i++) identity[(i * size) + i] = NumOps.One;
+        return identity;
     }
 }

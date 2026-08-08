@@ -39,6 +39,8 @@ public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     private readonly bool _normalize;
     private readonly bool _perPatchNormalization;
 
@@ -311,12 +313,38 @@ public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
     }
 
     /// <summary>
-    /// IContrastiveLoss implementation — computes reconstruction loss with all-ones mask
-    /// (all patches contribute equally).
+    /// The differentiable MAE reconstruction objective, built entirely from <c>IEngine</c>
+    /// operations, over all positions.
     /// </summary>
-    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    /// <remarks>
+    /// <para>
+    /// SEPARATE FROM <see cref="ComputeLoss(Tensor{T}, Tensor{T}, Tensor{T})"/> BECAUSE THAT ONE
+    /// CANNOT TRAIN. It assembles its result from host loops over tensor indexers, which severs the
+    /// gradient tape -- a correct loss VALUE carrying no history for an optimizer to backpropagate.
+    /// </para>
+    /// <para>
+    /// The two-view interface carries no mask, so every position contributes: that is the all-ones
+    /// mask the previous delegation built explicitly, and with uniform weights masked mean-squared
+    /// error IS mean-squared error. Use the three-argument overload to score only the masked patches,
+    /// which is what MAE pre-training actually optimizes.
+    /// </para>
+    /// </remarks>
+    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        var mask = Tensor<T>.CreateDefault(view1._shape, NumOps.One);
-        return ComputeLoss(view1, view2, mask);
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+        if (view1.Shape.Length != view2.Shape.Length)
+        {
+            throw new ArgumentException(
+                $"Reconstruction and target must have the same rank; got {view1.Shape.Length} and "
+                + $"{view2.Shape.Length}.", nameof(view2));
+        }
+
+        var difference = Engine.TensorSubtract(view1, view2);
+        var allAxes = new int[view1.Shape.Length];
+        for (int axis = 0; axis < allAxes.Length; axis++) allAxes[axis] = axis;
+
+        return Engine.ReduceMean(
+            Engine.TensorMultiply(difference, difference), allAxes, keepDims: false);
     }
 }

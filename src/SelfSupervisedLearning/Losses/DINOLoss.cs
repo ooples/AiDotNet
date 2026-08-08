@@ -41,6 +41,8 @@ public class DINOLoss<T> : IContrastiveLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     private readonly double _studentTemperature;
     private readonly double _teacherTemperature;
     private readonly int _outputDim;
@@ -357,12 +359,63 @@ public class DINOLoss<T> : IContrastiveLoss<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
-
     /// <summary>
-    /// IContrastiveLoss implementation — delegates to ComputeLoss with default center update.
+    /// The differentiable DINO objective, built entirely from <c>IEngine</c> operations.
     /// </summary>
-    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    /// <remarks>
+    /// <para>
+    /// SEPARATE FROM <see cref="ComputeLoss(Tensor{T}, Tensor{T}, bool)"/> BECAUSE THAT ONE CANNOT
+    /// TRAIN. It assembles its result from host loops over tensor indexers, which severs the gradient
+    /// tape -- a correct loss VALUE carrying no history for an optimizer to backpropagate.
+    /// </para>
+    /// <para>
+    /// The teacher branch is deliberately NOT differentiated. DINO's teacher is an
+    /// exponential-moving-average copy updated outside the optimizer, and its centre is a running
+    /// statistic; both are constants as far as this step's gradient is concerned. The teacher
+    /// distribution is therefore built from the centred, sharpened logits as DATA, and only the
+    /// student's log-softmax carries the tape.
+    /// </para>
+    /// <para>
+    /// The centre is NOT updated here. This overload has no <c>updateCenter</c> switch, and mutating
+    /// a running statistic from inside a loss evaluation would make the objective depend on how many
+    /// times it had been measured. Call <see cref="ComputeLoss(Tensor{T}, Tensor{T}, bool)"/> when
+    /// the centre should advance.
+    /// </para>
+    /// </remarks>
+    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        return ComputeLoss(view1, view2);
+        if (view1 is null) throw new ArgumentNullException(nameof(view1));
+        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+        if (view1.Shape.Length != 2 || view2.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"DINO expects rank-2 [batch, outputDim] logits; got ranks {view1.Shape.Length} and "
+                + $"{view2.Shape.Length}.", nameof(view1));
+        }
+
+        // Student: sharpened log-softmax, on the tape.
+        var studentLogProbabilities = Engine.TensorLogSoftmax(
+            Engine.TensorMultiplyScalar(view1, NumOps.FromDouble(1.0 / _studentTemperature)), axis: 1);
+
+        // Teacher: centred and sharpened softmax, as constant data.
+        var teacherProbabilities = Engine.TensorSoftmax(
+            Engine.TensorMultiplyScalar(
+                Engine.TensorSubtract(view2, CenterRow()),
+                NumOps.FromDouble(1.0 / _teacherTemperature)),
+            axis: 1);
+
+        var crossEntropy = Engine.ReduceSum(
+            Engine.TensorMultiply(teacherProbabilities, studentLogProbabilities),
+            new[] { 1 }, keepDims: false);
+
+        return Engine.TensorNegate(Engine.ReduceMean(crossEntropy, new[] { 0 }, keepDims: false));
+    }
+
+    /// <summary>The running centre as a broadcastable <c>[1, outputDim]</c> row of constant data.</summary>
+    private Tensor<T> CenterRow()
+    {
+        var row = new Tensor<T>(new[] { 1, _outputDim });
+        for (int c = 0; c < _outputDim; c++) row[c] = _center[c];
+        return row;
     }
 }
