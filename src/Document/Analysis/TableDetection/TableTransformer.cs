@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -69,7 +69,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
     private InferenceSession? _onnxStructureSession;
     private string? _onnxDetectionModelPath;
     private string? _onnxStructureModelPath;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private int _hiddenDim;
     private int _numEncoderLayers;
     private int _numDecoderLayers;
@@ -150,7 +150,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numDecoderLayers = 6,
         int numHeads = 8,
         int numQueries = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -175,7 +175,15 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;       // background, table
         _numStructureClasses = 7;   // background, table, column, row, column header, projected row header, spanning cell
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
+        // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.0001,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+            });
 
         ImageSize = imageSize;
 
@@ -215,7 +223,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numDecoderLayers = 6,
         int numHeads = 8,
         int numQueries = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -231,7 +239,15 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;
         _numStructureClasses = 7;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
+        // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.0001,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+            });
 
         ImageSize = imageSize;
 
@@ -1178,7 +1194,10 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
             // not match GetParameters() (a layer's gradient count differs from its
             // ParameterCount), throwing in Engine.Subtract once the forward stopped
             // crashing. TrainWithTape owns the whole step.
-            TrainWithTape(input, expectedOutput);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned but never read, so training ran on the framework default instead of DETR's
+            // 1e-4 (Smock et al., 2022) and the memorization loss went from 0.0000 to 12.3652.
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
