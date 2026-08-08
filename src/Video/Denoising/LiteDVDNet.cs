@@ -218,9 +218,16 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
                 head.SetParameters(damped);
             }
         }
-        catch (ArgumentException)
+        catch (ArgumentException ex)
         {
-            // Head could not be resolved from the declared width; leave its default initialization in place.
+            // Head could not be resolved from the declared width; leave its default initialization in
+            // place. Falling back is correct, but discarding the exception made an unresolvable head
+            // indistinguishable from one that simply had no parameters to damp -- in both cases the
+            // residual scaling silently did not happen.
+            System.Diagnostics.Debug.WriteLine(
+                $"{nameof(LiteDVDNet<T>)}: could not resolve the residual head from the declared width, "
+                + $"so ResidualHeadInitScale was not applied and the head keeps its default "
+                + $"initialization. {ex.Message}");
         }
     }
 

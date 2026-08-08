@@ -156,7 +156,14 @@ public class MixedQueryTransformer<T> : NeuralNetworkBase<T>, IPanopticSegmentat
         _dropRate = dropRate;
         _useNativeMode = true;
         _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructed with no options this trained at
+        // InitialLearningRate = 1e-3, ten times the published rate and unreachable by a caller.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();

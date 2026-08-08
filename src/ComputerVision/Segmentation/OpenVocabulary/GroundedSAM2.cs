@@ -370,8 +370,17 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         var dummy = new Tensor<T>([_channels, _height, _width]);
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
+        // Still best-effort and still not rethrown -- a real forward failure surfaces again on the
+        // actual Train/Predict -- but `catch { }` discarded the diagnosis as well, so that later
+        // failure carried no hint the warm-up had already hit the same problem.
         try { _ = Forward(dummy); }
-        catch { /* best-effort; a real forward failure surfaces on the actual Train/Predict */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"{nameof(GroundedSAM2<T>)}: lazy shape resolution failed on a "
+                + $"{_channels}x{_height}x{_width} warm-up pass; shapes stay unresolved until the "
+                + $"first real Train/Predict. {ex}");
+        }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 
