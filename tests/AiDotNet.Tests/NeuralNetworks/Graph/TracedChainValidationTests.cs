@@ -65,20 +65,34 @@ public class TracedChainValidationTests
         var probe = new Tensor<double>(shape);
         for (int i = 0; i < probe.Length; i++) probe[i] = (i % 7) / 7.0;
 
-        int traced;
+        // Keep the mismatches themselves, not just how many there were. A failure saying "1 mismatch"
+        // names no layer, no axis and no pair - it says something is wrong and leaves the reader to
+        // re-derive which, which is exactly the work the validator already did.
+        var tracedMismatches = new List<LayerContractValidator.LayoutMismatch>();
         using (var trace = new LayerForwardObserver<double>())
         {
             ((dynamic)instance).Predict(probe);
-            traced = trace.ContiguousRuns().Sum(r => LayerContractValidator.Validate<double>(r).Count);
+            foreach (var run in trace.ContiguousRuns())
+            {
+                tracedMismatches.AddRange(LayerContractValidator.Validate<double>(run));
+            }
         }
 
+        int traced = tracedMismatches.Count;
         _out.WriteLine($"{modelName}: linear={linear} traced={traced}");
+        foreach (var m in tracedMismatches)
+        {
+            _out.WriteLine($"  [{m.ProducerIndex}] {m.ProducerName} -> [{m.ConsumerIndex}] {m.ConsumerName}: {m.Message}");
+        }
 
         Assert.True(
             traced == 0,
             $"{modelName}: validating the TRACED dataflow still reports {traced} layout mismatch(es). "
             + "The trace is the dataflow that actually ran, so a report here is either a real defect or a "
             + "gap in the tracer - it is no longer explainable as the linear reading pairing layers that "
-            + "never meet.");
+            + "never meet."
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, tracedMismatches.Select(m =>
+                $"  [{m.ProducerIndex}] {m.ProducerName} -> [{m.ConsumerIndex}] {m.ConsumerName}: {m.Message}")));
     }
 }

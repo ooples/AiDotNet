@@ -31,9 +31,72 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "2, 4")]
+// Roles from this layer's own arithmetic, not from convention: ForwardInternal states "Last two
+// dimensions are [sequence, embedding_dim]; all preceding dimensions are treated as batch dimensions",
+// and OnFirstForward guards rank>=2 while checking input.Shape[^1] == headCount * headDimension.
+//
+// SHAPE-PRESERVING, and the file says so in two places. OnFirstForward builds declaredOutput as all
+// LayerShape.Dynamic with only the trailing entry pinned to _embeddingDimension - and since the guard
+// immediately above it already rejects any input whose last axis differs from _embeddingDimension, that
+// pin is the input's own width restated. The reshape at the end of ForwardInternal confirms it directly:
+// outputShape copies _originalQueryShape for every leading axis, then sets [^2] = seqLengthQ and
+// [^1] = embeddingDimension. Input shape in, same shape out. So every relation below is Same -
+// deliberately NOT Fixed(_embeddingDimension), which would read as a claim the layer resizes the feature
+// axis when it only validates it.
+//
+// The sequence axis is emphatically NOT this layer's to fix - the comment at OnFirstForward records a
+// real defect where adopting a guessed seq=1 made the layer report [1, 128] and then produce [4, 128].
+//
+// BatchOptional covers rank 2 as [Time, Features] - the unbatched form ForwardInternal handles
+// explicitly ("2D [seq, dim] -> batch=1, seq, dim") - and rank 3 as [Batch, Time, Features], the rank
+// this layer is tested at. Rank 1 is deliberately NOT declared even though ForwardInternal reshapes it
+// to [1, dim]: OnFirstForward throws for rank<2, so the resolve path never reaches that branch.
+// Ranks above 3 run too (leading axes are flattened into batch and restored), but each extra leading
+// axis would need a distinct role to be named by a relation, and there is no second batch-like role.
+//
+// Multi-input (query/key/value ports) is safe to contract against ONE input here because the output
+// tracks the QUERY alone: ForwardTracedPorts requires "query" and defaults K and V to it, and the final
+// reshape reads _originalQueryShape and seqLengthQ. A cross-attention K/V of a different length does not
+// move the output.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Trailing axis is the embedding width and must equal headCount * headDimension.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Written by hand even though every relation is <c>Same</c>, because the generator derives its arms
+    /// from the DECLARED axis count and would therefore answer only for rank 3 - leaving the rank-2
+    /// <c>[Time, Features]</c> form that <c>BatchOptional</c> accepts, and that <c>ForwardInternal</c>
+    /// handles explicitly ("2D [seq, dim] -&gt; batch=1, seq, dim"), silently unresolvable. A contract
+    /// that declines on a form its own layout advertises is the failure mode these declarations exist to
+    /// remove.
+    /// </para>
+    /// <para>
+    /// Both arms are pure passthrough. Neither axis is this layer's to change: the sequence length comes
+    /// from the QUERY and is copied into the output reshape as <c>seqLengthQ</c>, and the embedding width
+    /// is validated against <c>_embeddingDimension</c> on the way in rather than chosen on the way out.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        return inputRank switch
+        {
+            // Unbatched [Time, Features] - the rank-2 reading of the BatchOptional layout above.
+            2 => new[] { Pass(TensorAxis.Time), Pass(TensorAxis.Features) },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), Pass(TensorAxis.Features) },
+            // Rank 1 is rejected by OnFirstForward; ranks above 3 run but have no second batch-like role
+            // to name their extra leading axes with, so they decline honestly.
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
     /// </summary>
@@ -998,7 +1061,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("query", out var query) || query == null)
@@ -1036,7 +1099,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return ForwardInternal(input, input, input);
     }
 
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1) return ForwardInternal(inputs[0], inputs[0], inputs[0]);
         if (inputs.Length == 2) return ForwardInternal(inputs[0], inputs[1], inputs[1]); // Q, K=V (Cross Attention)

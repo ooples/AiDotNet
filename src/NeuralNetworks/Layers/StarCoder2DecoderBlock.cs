@@ -14,8 +14,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Shape-preserving at rank 3 [Batch, Time, Features], which the residual structure guarantees rather
+// than merely happens to satisfy: ForwardTraced ends at TensorAdd(afterAttn, ffnOut), and TensorAdd
+// requires both operands to match - so the block's output is pinned to afterAttn's shape, which is
+// itself TensorAdd(input, attnOut). The FFN's flatten/reshape round-trips through afterAttn._shape.
+//
+// ffnDim is INTERIOR and correctly absent: _cFc widens to it and _cProj projects straight back to
+// hiddenSize, so the widening never appears in a tensor the caller sees. Axis roles are named rather
+// than left to [ElementWiseShape] because they are real here - this block mixes across Time, so a
+// downstream chain check should know which axis is the sequence.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class StarCoder2DecoderBlock<T> : LayerBase<T>
+public partial class StarCoder2DecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly LayerBase<T> _attention;

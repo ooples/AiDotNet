@@ -27,8 +27,20 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16, 8", TestConstructorArgs = "8")]
+// Roles straight from ForwardTraced, which reads batch = Shape[0], seqLen = Shape[1], dim = Shape[2]
+// and from the summary on that method - "[batch, seqLen, dim] where seqLen = H*W". The sequence axis is
+// Time rather than Height/Width because that is how the tensor is actually laid out here: the 2D patch
+// grid has already been flattened into one token axis, and this layer re-derives h and w from seqLen
+// (FindSpatialDimensions) rather than receiving them as separate axes.
+//
+// Rank 3 only, and batch is NOT optional: the three Shape[...] reads above are unconditional, so a
+// rank-2 input would throw rather than be treated as unbatched.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class SwinPatchMergingLayer<T> : LayerBase<T>
+public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -74,6 +86,37 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>
 
         RegisterSubLayer(_reduction);
         RegisterSubLayer(_norm);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the sequence axis shrinks. From <c>ForwardTraced</c>:
+    /// <c>newH = h / 2</c>, <c>newW = w / 2</c>, <c>newSeqLen = newH * newW</c>, and the final
+    /// <c>Engine.Reshape(flatOut, [batch, newSeqLen, _outputDim])</c>. Since <c>h * w == seqLen</c> and
+    /// <c>FindSpatialDimensions</c> only returns a factorization in which BOTH are even - it throws
+    /// otherwise - <c>newSeqLen</c> is exactly <c>seqLen / 4</c> for every input this layer accepts.
+    /// That makes <c>Scaled(Time, 1, 4)</c> exact rather than approximate, and its refusal to divide
+    /// unevenly mirrors the layer's own "spatial dimensions must be even" guard.
+    /// </para>
+    /// <para>
+    /// The feature axis is <c>Fixed(_outputDim)</c>, not <c>Scaled(Features, 2)</c>, even though
+    /// <c>_outputDim == _inputDim * 2</c> by construction. The width is produced by
+    /// <c>_reduction</c>, a <c>DenseLayer&lt;T&gt;(_outputDim)</c>, which projects to that size
+    /// whatever the incoming width happens to be - so the constant is the real claim, and the
+    /// doubling is only how that constant was chosen.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Scaled(TensorAxis.Time, 1, 4)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
     }
 
     /// <summary>

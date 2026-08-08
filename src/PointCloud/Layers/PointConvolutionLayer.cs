@@ -1,5 +1,7 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -28,11 +30,49 @@ namespace AiDotNet.PointCloud.Layers;
 /// - Learning shape patterns in point clouds
 /// - Building blocks for PointNet / DGCNN-style architectures
 /// </remarks>
+// Rank 2 [points, channels], the shape the base constructor declares - [0, inputChannels] in,
+// [0, outputChannels] out - and the shape ForwardTraced computes: TensorMatMul(input, _weights) with
+// _weights sized [inputChannels, outputChannels] only types against a rank-2 [N, In] input.
+//
+// The leading axis is Other rather than Length or Time on purpose. It counts POINTS, and this layer's own
+// doc is explicit that a point cloud is an unordered set - "must be invariant to point order" - so calling
+// it a sequence position would name it something it is not. Other is the escape hatch for exactly that:
+// the axis is real and passes through, but it carries no shared role a downstream layer could check.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the point count; a point cloud is unordered, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class PointConvolutionLayer<T> : LayerBase<T>
+public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _inputChannels;
     private readonly int _outputChannels;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A shared per-point 1x1 map: the point count is untouched and the channel width becomes
+    /// <c>_outputChannels</c>. Read off <c>ForwardTraced</c>, whose
+    /// <c>Engine.TensorMatMul(input, _weights)</c> against <c>_weights</c> of
+    /// <c>[inputChannels, outputChannels]</c> produces <c>[N, Out]</c>, and off the base constructor's
+    /// declared <c>[0, outputChannels]</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputChannels)</c> reads the field rather than a literal, so a layer built with a
+    /// different width reports that width. The point axis is <c>Same</c> because nothing here mixes points
+    /// - that is precisely the permutation invariance the layer is built around, and a relation that
+    /// resized it would contradict the layer's defining property.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+        };
+    }
 
     // Trainable parameters as registered Tensors so the autodiff tape trains them.
     // Not readonly: SetTrainableParameters re-points them for the copy-on-write DeepCopy/Clone

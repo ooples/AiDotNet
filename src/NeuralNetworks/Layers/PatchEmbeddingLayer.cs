@@ -34,9 +34,80 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
+// NCHW with an optional batch, per OnFirstForward's guard - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and its reads of Shape[rank-3]/[rank-2]/[rank-1] as channels/H/W either way.
+// One BatchOptional declaration covers both ranks, which is also what ExpectedInputRank = 3 and
+// TestInputShape = "1, 3, 8, 8" (rank 4) between them require.
+//
+// The output is a TOKEN SEQUENCE, not an image: ForwardTraced returns [B, N, embeddingDim] for a
+// rank-4 input and reshapes to [N, embeddingDim] for a rank-3 one. The 2D patch grid has already been
+// flattened into one axis by then, so it is Time - the same reading SwinPatchMergingLayer uses for its
+// seqLen - and the embedding is Features.
+//
+// Rank 5+ is deliberately NOT declared. ForwardTraced does handle it, rebuilding outShape from
+// _originalInputShape's leading dims, but those leading axes have no roles this vocabulary can name.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class PatchEmbeddingLayer<T> : LayerBase<T>
+public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { _channels, _imageHeight, _imageWidth }, new[] { _numPatches,
+    /// _embeddingDim })</c>, where <c>_numPatchesHeight = _imageHeight / _patchSize</c>,
+    /// <c>_numPatchesWidth = _imageWidth / _patchSize</c> and
+    /// <c>_numPatches = _numPatchesHeight * _numPatchesWidth</c>.
+    /// </para>
+    /// <para>
+    /// NOT <c>Fixed(_numPatches)</c>, even though that field exists. This layer is deliberately
+    /// resolution-independent: <c>RefreshLivePatchGrid</c> RECOMPUTES the grid from every live input's
+    /// spatial dims, so <c>_numPatches</c> caches the last image seen rather than stating a
+    /// configuration constant. Freezing it would describe one resolution and be wrong for the next.
+    /// </para>
+    /// <para>
+    /// The integer-floor division is a <see cref="AxisRelation.Window"/> at kernel = stride =
+    /// <c>_patchSize</c> with no padding - exactly the "use only COMPLETE patches, drop the
+    /// partial-patch remainder" crop that <c>OnFirstForward</c> documents and <c>ForwardTraced</c>
+    /// performs. The token axis is then the PRODUCT of the two windowed axes, which is what
+    /// <see cref="AxisRelation.ProductOf"/> exists for: <see cref="AxisRelation.Product"/> multiplies
+    /// RAW input axes and so cannot say "divide each side first".
+    /// </para>
+    /// <para>
+    /// A window that does not fit declines, which matches the layer throwing when H or W is smaller
+    /// than one patch.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_patchSize <= 0 || _embeddingDim <= 0) return null;
+
+        // numPatches = (H / _patchSize) * (W / _patchSize), floor on each side.
+        var tokens = new OutputAxisContract(
+            TensorAxis.Time,
+            AxisRelation.ProductOf(
+                AxisRelation.Window(TensorAxis.Height, kernel: _patchSize, stride: _patchSize, padding: 0),
+                AxisRelation.Window(TensorAxis.Width, kernel: _patchSize, stride: _patchSize, padding: 0)));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_embeddingDim));
+
+        return inputRank switch
+        {
+            // [C,H,W] -> [N, embeddingDim]: the unbatched branch reshapes to exactly these two axes.
+            3 => new[] { tokens, features },
+            // [B,C,H,W] -> [B, N, embeddingDim], the shape the projection reshape produces directly.
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                tokens,
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The size of each square patch (both width and height).
     /// </summary>

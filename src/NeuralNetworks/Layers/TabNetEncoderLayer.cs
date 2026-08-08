@@ -37,8 +37,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+// Tabular encoder: a flat [Batch, Features] table in, one decision vector per sample out. Roles taken
+// from ForwardTraced, which reads the feature width off the LAST axis and reshapes to
+// [batch, _numFeatures].
+//
+// Rank 2 only, and batch is NOT optional even though a rank-1 input runs. The rank-1 path sets
+// batch = 1 and still returns a rank-2 [1, decisionDim] - a rank-CHANGING case rather than the
+// batch-elided form BatchOptional describes, so folding it in would have the contract promise a
+// rank-1 output this layer never produces.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TabNetEncoderLayer<T> : LayerBase<T>
+public partial class TabNetEncoderLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _decisionDim;
     private readonly int _attentionDim;
@@ -113,6 +123,34 @@ public partial class TabNetEncoderLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the feature width is replaced rather than carried. From
+    /// <c>BuildComponents</c>: <c>ResolveShapes(new[] { numFeatures }, new[] { _decisionDim })</c>.
+    /// <c>ForwardTraced</c> confirms it - every step contributes
+    /// <c>ReLU(ft @ _decisionSelector)</c>, shaped <c>[batch, n_d]</c> by that selector's
+    /// <c>[ftOut, _decisionDim]</c> shape, and the steps are SUMMED into <c>aggregated</c> rather than
+    /// concatenated, so the step count does not enter the output shape at all.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_decisionDim)</c> is read off the constructor argument, and it survives the rebuild
+    /// path: <c>BuildComponents</c> re-derives the internal widths whenever the fed input width
+    /// changes, but <c>_decisionDim</c> is readonly and is re-used unchanged. The input width is the
+    /// only thing that adapts.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _decisionDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_decisionDim)),
+        };
+    }
 
     private void BuildComponents(int numFeatures)
     {

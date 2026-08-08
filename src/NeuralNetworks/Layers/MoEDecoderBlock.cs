@@ -13,8 +13,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Pre-LN residual block, so shape preservation is structural rather than incidental: ForwardTraced is two
+// `Engine.TensorAdd(residual, sublayerOut)` pairs, and each one only types when the sublayer returned the
+// residual's exact shape. That holds whatever attention implementation is injected - a sublayer that
+// resized would fail the add rather than change this block's contract. Rank-agnostic for the same reason.
+[ElementWiseShape(Note = "Two residual adds pin the output to the input shape at every rank.")]
 [AutoParameters]
-public partial class MoEDecoderBlock<T> : LayerBase<T>
+public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly RMSNormalizationLayer<T> _norm1;
     private readonly LayerBase<T> _attention;

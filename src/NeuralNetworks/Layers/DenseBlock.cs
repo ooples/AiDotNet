@@ -52,9 +52,70 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 3")]
+// Both ranks come from OnFirstForward naming them itself - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and rejecting everything else. The concatenation helper picks its channel axis the
+// same way ("a.Shape.Length == 4 ? 1 : 0"), so the output keeps the rank it was given.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From this layer's own <c>ResolveShapes(new[] { channels, height, width },
+    /// new[] { channels + _numLayers * _growthRate, height, width })</c> in
+    /// <see cref="OnFirstForward"/>. The spatial extent survives because every inner
+    /// <see cref="DenseBlockLayer{T}"/> is same-padded, and the channel count GROWS BY A CONSTANT: the
+    /// block concatenates the input with one growth-rate slab per layer, so the increase depends on
+    /// the block's configuration and not at all on how many channels arrived.
+    /// </para>
+    /// <para>
+    /// FIXED WOULD BE WRONG HERE, and that is the point worth recording. The output channel count is
+    /// <c>in + numLayers*growthRate</c>, not a constant - a DenseNet block is defined by what it ADDS.
+    /// Freezing the sum observed at one input width would make the contract right for exactly one
+    /// upstream layer and silently wrong for every other.
+    /// </para>
+    /// <para>
+    /// An additive offset looks like it needs a form the vocabulary does not have. It does not:
+    /// with stride 1 and dilation 1 the window formula reduces to <c>in + 2*padding - (kernel-1)</c>,
+    /// which reaches any non-negative offset. An even offset uses <c>kernel: 1</c> and half the offset
+    /// as padding; an odd one uses <c>kernel: 2</c>, whose extra <c>-1</c> absorbs the parity. That is
+    /// the same identity <c>CroppingLayer</c> uses to express a constant trim, run in the other
+    /// direction.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_numLayers <= 0 || _growthRate <= 0) return null;
+
+        int added = _numLayers * _growthRate;
+        // Encode "in + added" as a window: even offsets need no parity correction, odd ones borrow
+        // the -(kernel-1) term to supply it.
+        var grow = (added % 2 == 0)
+            ? AxisRelation.Window(TensorAxis.Channels, kernel: 1, stride: 1, padding: added / 2)
+            : AxisRelation.Window(TensorAxis.Channels, kernel: 2, stride: 1, padding: (added + 1) / 2);
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, grow);
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width) },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     private readonly List<DenseBlockLayer<T>> _layers;
     private readonly int _numLayers;
     private readonly int _growthRate;

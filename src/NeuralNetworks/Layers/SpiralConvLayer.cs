@@ -43,9 +43,58 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
+// Mesh convolution: [V, C] or [B, V, C], per OnFirstForward's own guard - "requires rank-2 [V,C] or
+// rank-3 [B,V,C] input". The vertex axis takes TensorAxis.Other, the same escape hatch
+// PrincipalNeighbourhoodAggregationLayer uses for its node axis, because a mesh vertex count is not
+// any of the spatial roles and calling it Height or Features would assert a structure it does not have.
+//
+// THE SPIRAL NEIGHBOURHOOD DOES NOT REACH THE SHAPE. SpiralLength sizes the gathered feature vector
+// (weights are [OutputChannels, c * SpiralLength]), but GatherSpiralFeatures produces one row per
+// vertex and the matmul contracts that width away - so vertices are preserved, not windowed.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Unbatched mesh: leading axis is the vertex count.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class SpiralConvLayer<T> : LayerBase<T>
+public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From <c>OnFirstForward</c>: <c>ResolveShapes(new[] { v, c }, new[] { v, OutputChannels })</c> -
+    /// the vertex count survives and only the channel axis is rewritten. <c>ProcessBatched</c>'s own
+    /// documented return is <c>[batch, numVertices, OutputChannels]</c>, so the batch axis is carried
+    /// through as well.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(OutputChannels)</c> reads the constructor argument that sizes the weight matrix's row
+    /// count and the bias vector, so it is a width this layer's parameters impose. <c>InputChannels</c>
+    /// is by contrast DISCOVERED from the first input, which is exactly why it appears nowhere here.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputChannels <= 0) return null;
+
+        var vertices = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels));
+
+        return inputRank switch
+        {
+            2 => new[] { vertices, channels },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                vertices,
+                channels,
+            },
+            _ => null,
+        };
+    }
+
     #region Properties
 
     /// <summary>

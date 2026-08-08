@@ -37,8 +37,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
+// Rank 2 [Batch, Features] per this layer's own [LayerProperty(TestInputShape = "2, 4")]. The OUTPUT is
+// rank 1 - one axis is reduced away - so its layout has a single axis whose role depends on Axis;
+// OutputAxesFor below computes it. Both output layouts are declared because either can occur.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class MeanLayer<T> : LayerBase<T>
+public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Gets the axis along which the mean is calculated.
@@ -68,6 +73,33 @@ public partial class MeanLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public int Axis { get; private set; }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Computed from <see cref="Axis"/>, not generated. The forward is
+    /// <c>Engine.ReduceMean(input, [Axis], keepDims: false)</c>, so the reduced axis DISAPPEARS and the
+    /// output has one fewer dimension - <c>[Batch, Features]</c> reduced on axis 0 becomes
+    /// <c>[Features]</c>, on axis 1 becomes <c>[Batch]</c>. Which axis survives is therefore a
+    /// constructor decision, and only an instance contract can state it.
+    /// </para>
+    /// <para>
+    /// The discovery sweep flagged this PARAMETERISED once the profiles varied the reduction axis -
+    /// "size=4 gives 'in.Channels' but axis=1 gives 'in.Batch'" - correctly refusing to publish either
+    /// as fixed. That refusal was right; this method is the answer to it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 2 [Batch, Features] is what this layer declares in its own
+        // [LayerProperty(TestInputShape = "2, 4")]. Higher ranks are not claimed.
+        if (inputRank != 2 || Axis < 0 || Axis >= 2) return null;
+
+        // The surviving axis keeps its role and its size; the reduced one is gone entirely.
+        var survivor = Axis == 0 ? TensorAxis.Features : TensorAxis.Batch;
+
+        return new[] { new OutputAxisContract(survivor, AxisRelation.Same(survivor)) };
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

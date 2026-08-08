@@ -33,9 +33,47 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, NormalizesInput = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 0.5")]
+// A REDUCTION TO A SCALAR, so the output rank is not the input rank and OutputAxesFor is hand-written.
+// Input roles from the constructor's own declared shape - base([inputSize], [1]) - which is rank 1
+// [Features]; rank 2 is that with a leading batch, the form [LayerProperty(TestInputShape = "1, 4")]
+// exercises. The output is a single anomaly score at either rank, so it is declared once, at rank 1.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class AnomalyDetectorLayer<T> : LayerBase<T>
+public partial class AnomalyDetectorLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because this layer COLLAPSES its input: <c>ForwardTraced</c> averages every anomaly
+    /// score it computes into one <c>meanScore</c> and returns <c>new Tensor&lt;T&gt;([1])</c>, whatever
+    /// the input rank. A generated <c>Same(role)</c> contract would have claimed the input shape came
+    /// back out.
+    /// </para>
+    /// <para>
+    /// The size is read off <c>GetOutputShape()</c> rather than written as the literal <c>1</c>, so the
+    /// declaration stays tied to the constructor's <c>base([inputSize], [1])</c> instead of to a number
+    /// observed once. Batch does NOT survive: a batched input still yields a single score, because the
+    /// mean is taken over every element rather than per row.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 1 and 2 only. ForwardTraced does accept higher ranks - it slices the LAST axis - but each
+        // extra leading axis would need a distinct role to be named, and none of them survives the
+        // reduction anyway, so declaring them would only add roles nothing refers to.
+        if (inputRank is not (1 or 2)) return null;
+
+        var outputShape = GetOutputShape();
+        if (outputShape.Length != 1 || outputShape[0] <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputShape[0])),
+        };
+    }
+
     /// <summary>
     /// The threshold for determining anomalous inputs based on the anomaly score.
     /// </summary>

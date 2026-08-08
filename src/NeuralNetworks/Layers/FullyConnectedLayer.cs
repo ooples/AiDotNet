@@ -40,9 +40,52 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// ForwardTraced works in exactly two forms and says so: a rank-1 input is reshaped to [1, N] on the
+// way in and back to rank 1 on the way out ("Preserve original rank: if input was 1D, output should
+// be 1D"), and everything else goes through `Engine.TensorMatMul(input, weightsT)` under the comment
+// "[batch, input] * [input, output] -> [batch, output]". One BatchOptional declaration covers both,
+// which is exact rather than merely convenient here: the rank-1 case IS the batch axis being absent.
+//
+// Higher ranks are deliberately NOT declared. OnFirstForward accepts rank >= 1 and reads Shape[^1]
+// as the feature size, so a rank-3 tensor does reach the matmul - but nothing in this layer's own
+// shape code states what comes back out, and declaring a rank on a guess is the exact failure this
+// contract exists to prevent.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class FullyConnectedLayer<T> : LayerBase<T>
+public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the output width is configuration, not input: it is the constructor's
+    /// <c>outputSize</c>, which every constructor forwards to the base as the output shape and which
+    /// OnFirstForward reads straight back as <c>int outputSize = OutputShape[0];</c> before allocating
+    /// <c>_weights</c> as <c>[outputSize, inputSize]</c>. Reading it off <c>OutputShape</c> rather than
+    /// restating a number keeps the relation true for whatever width the caller actually built.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        int outputSize = OutputShape.Length > 0 ? OutputShape[0] : -1;
+        if (outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.
     /// </summary>

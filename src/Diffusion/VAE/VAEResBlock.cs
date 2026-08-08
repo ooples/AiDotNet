@@ -1,6 +1,8 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -47,9 +49,56 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
+// Roles from this block's own ForwardTraced doc - "Input tensor with shape [batch, channels, height,
+// width]" / "Output tensor with shape [batch, outChannels, height, width]". Batch is NOT marked
+// optional: nothing in this file establishes that the inner GroupNorm and 3x3 convolutions accept an
+// unbatched [C,H,W], and the class carries no [LayerProperty(TestInputShape = ...)] pinning a lower
+// rank, so declaring rank 3 would be a claim made on no evidence.
+// OutputAxesFor below is HAND-WRITTEN: the channel count is a constructor argument.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class VAEResBlock<T> : LayerBase<T>
+public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Channels are the ONLY axis this block moves, and they move to a value the caller chose, so the
+    /// relation is <c>Fixed(_outChannels)</c> read off the constructor argument rather than anything
+    /// derived from the input. Both convolutions are built with
+    /// <c>outputDepth: outChannels</c>, and the residual add at the end of <c>ForwardTraced</c>
+    /// (<c>Engine.TensorAdd(_conv2Output, _skipOutput)</c>) forces the skip branch to agree - which is
+    /// exactly why the 1x1 <c>_skipConv</c> exists at all, and only when <c>inChannels != outChannels</c>.
+    /// </para>
+    /// <para>
+    /// The two spatial axes are <c>Same</c> because every convolution here is deliberately
+    /// extent-preserving: <c>kernelSize: 3, stride: 1, padding: 1</c> on the main path (the constructor
+    /// comment reads "3x3 with padding=1 preserves spatial dimensions") and <c>kernelSize: 1, stride: 1,
+    /// padding: 0</c> on the skip. A <c>Window</c> relation would be technically correct and useless -
+    /// it evaluates to the identity for both configurations, and stating it as <c>Same</c> is what the
+    /// block actually guarantees, since the residual add would throw otherwise.
+    /// </para>
+    /// <para>
+    /// The <c>spatialSize</c> constructor argument is NOT a claim about the input. It only sizes the
+    /// placeholder shapes handed to the base constructor; no forward-path code reads it, and feeding a
+    /// different resolution works.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _outChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels)),
+            new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+            new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+        };
+    }
+
     /// <summary>
     /// First GroupNorm layer.
     /// </summary>

@@ -40,9 +40,71 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// CHANNELS-LAST, unlike ConvolutionalLayer. The roles come from this layer's own OnFirstForward, which
+// names them: rank 4 is [B,H,W,C] and rank 3 is [H,W,C], and any other rank throws outright.
+//
+// Written as two declarations rather than one BatchOptional declaration, because ADNSHAPE005 compares
+// [LayerProperty] against the raw AXIS COUNT of each input layout and does not model the optional batch.
+// This layer carries BOTH ExpectedInputRank = 3 and a rank-4 TestInputShape, so a single 4-axis
+// batch-optional layout - correct at runtime - would still be reported as contradicting the rank-3 claim.
+[TensorLayout(TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input,
+    Note = "NHWC unbatched: per-position filters, so the spatial axes are the ones that carry meaning.")]
+[TensorLayout(TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Channel count becomes the configured output channel count; H and W follow kernel/stride.")]
 [AutoParameters]
-public partial class LocallyConnectedLayer<T> : LayerBase<T>
+public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written, not generated: every relation here reads a constructor argument, which an attribute
+    /// cannot carry. The terms come straight off <c>OnFirstForward</c> -
+    /// <c>_outputHeight = (h - _kernelSize) / _stride + 1</c> and the matching width line - which is
+    /// exactly <c>Window(kernel: _kernelSize, stride: _stride, padding: 0)</c>. This layer exposes no
+    /// padding parameter, hence the 0.
+    /// </para>
+    /// <para>
+    /// The channel axis is <c>Fixed(_outputChannels)</c> because that is the constructor argument the
+    /// layer sizes its filter bank by, and <c>ResolveShapes</c> writes it verbatim as the trailing output
+    /// dim. It is a field, never a literal - a stride-1 16-channel layer and a stride-2 4-channel layer
+    /// report different contracts from the same code.
+    /// </para>
+    /// <para>
+    /// Rank 3 gets no batch axis. The unbatched form goes in as <c>[H,W,C]</c> and comes back out as
+    /// <c>[H',W',C']</c> - <c>ForwardTraced</c> reshapes to 4-D internally but restores the original rank
+    /// before returning, so inventing a batch axis here would describe an intermediate, not the output.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // A lazily-shaped layer still has real kernel/stride/channel counts from construction, but guard
+        // anyway: AxisRelation rejects non-positive sizes, and claiming nothing beats claiming zero.
+        if (_outputChannels <= 0 || _kernelSize <= 0 || _stride <= 0) return null;
+
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, _kernelSize, _stride, padding: 0));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, _kernelSize, _stride, padding: 0));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels));
+
+        return inputRank switch
+        {
+            3 => new[] { height, width, channels },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                height, width, channels,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The weight tensors for the locally connected filters.
     /// </summary>

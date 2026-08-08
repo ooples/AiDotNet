@@ -41,9 +41,63 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
+// BOTH ranks are declared because OnFirstForward names both itself - "requires rank-4 [C,D,H,W] or
+// rank-5 [B,C,D,H,W] input" - and rejects everything else. The batched form is a separate declaration
+// rather than BatchOptional on one, so the unbatched form's leading axis is named Channels (what it
+// actually is) instead of a batch axis that is not there.
+//
+// ForwardTraced also tolerates rank > 5 by folding the leading axes into batch, but that is NOT
+// declared: those axes have no roles to name, and TensorAxis has no way to say "however many".
+[TensorLayout(TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class Conv3DLayer<T> : LayerBase<T>
+public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off this layer's own arithmetic in <see cref="OnFirstForward"/>:
+    /// <c>outD = (d + 2*Padding - KernelSize) / Stride + 1</c>, and identically for H and W. That is
+    /// the sliding-window formula with dilation 1 - this layer exposes no dilation parameter - so
+    /// <c>Window(kernel: KernelSize, stride: Stride, padding: Padding)</c> reproduces it exactly.
+    /// </para>
+    /// <para>
+    /// All three spatial axes share one kernel/stride/padding here, which is why they get the same
+    /// window; that is a property of THIS layer's cubic-kernel API, not of 3-D convolution generally,
+    /// so the three are written out rather than collapsed.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputChannels <= 0 || KernelSize <= 0 || Stride <= 0 || Padding < 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels));
+        OutputAxisContract Spatial(TensorAxis a)
+            => new(a, AxisRelation.Window(a, KernelSize, Stride, Padding));
+
+        return inputRank switch
+        {
+            4 => new[]
+            {
+                channels,
+                Spatial(TensorAxis.Depth), Spatial(TensorAxis.Height), Spatial(TensorAxis.Width),
+            },
+            5 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels,
+                Spatial(TensorAxis.Depth), Spatial(TensorAxis.Height), Spatial(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     #region Properties
 
     /// <summary>

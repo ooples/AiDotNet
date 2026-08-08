@@ -361,8 +361,12 @@ public class PiSSAAdapter<T> : LoRAAdapterBase<T>
     {
         if (!_initializedFromSVD || _residualWeights == null)
         {
-            // Fall back to standard LoRA behavior if not initialized from SVD
-            return base.Forward(input);
+            // Fall back to standard LoRA behavior if not initialized from SVD.
+            // ForwardTraced, NOT Forward: LayerBase.Forward is the non-virtual recording wrapper that
+            // dispatches to ForwardTraced, so base.Forward(input) would come straight back here and
+            // recurse until the stack overflows. LoRAAdapterBase overrides ForwardTraced, so this is
+            // the base implementation that call was always meant to reach.
+            return base.ForwardTraced(input);
         }
 
         // Get batch size and validate input shape

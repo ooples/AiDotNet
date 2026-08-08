@@ -28,8 +28,11 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// - Safety-critical applications (knowing when to defer to a human expert)
 /// </para>
 /// </remarks>
+// Value-only: zeroes elements at inference too (that is the point - it samples), never resizes.
+[AiDotNet.Attributes.ElementWiseShape(
+    Note = "Dropout kept active at inference for MC sampling; shape untouched at any rank.")]
 [AutoParameters]
-public partial class MCDropoutLayer<T> : LayerBase<T>
+public partial class MCDropoutLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly double _dropoutRate;
     private readonly T _scale;

@@ -74,9 +74,60 @@ public delegate Vector<T> UpdateFunction<T>(Vector<T> nodeFeatures, Vector<T> ag
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+// Node axis is Other, not Time or Batch: it counts GRAPH NODES, whose order is defined by the adjacency
+// matrix rather than by sequence position - the same call PointConvolutionLayer makes for its point axis.
+//
+// THE INPUT AND OUTPUT RANKS DO NOT MATCH, which is why rank 2 appears on the input side only. This
+// layer's ForwardTraced normalises every input to [batch, nodes, features] and returns
+// Reshape(outputFlat, [batchSize, numNodes, _outputFeatures]) unconditionally - it stores
+// _originalInputShape but never reads it back. So an unbatched [nodes, features] input, which is exactly
+// what [LayerProperty(TestInputShape = "4, 8")] exercises, comes back as rank-3 [1, nodes, out]. The
+// rank-2 input layout is declared because that form really is accepted; no rank-2 output layout is
+// declared because none is ever produced.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Unbatched graph; note the output comes back rank-3 with a synthesised leading axis.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Node count is preserved; the feature width becomes the configured output width.")]
 [AutoParameters]
-public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Rank 3 only, and both relations come off the single line that builds the result:
+    /// <c>Engine.Reshape(outputFlat, [batchSize, numNodes, _outputFeatures])</c>. Batch and the node
+    /// count are carried through; the trailing width becomes <c>Fixed(_outputFeatures)</c>, the
+    /// constructor argument the GRU-style update gates are sized by.
+    /// </para>
+    /// <para>
+    /// The node axis is <c>Same</c> even though this layer materialises an N x N message tile. That tile
+    /// is an INTERMEDIATE: <c>ReduceSum</c> over axis 2 collapses the neighbour axis back out before the
+    /// update gates run, so one node in is one node out. Neither <c>_messageFeatures</c> nor the
+    /// adjacency matrix's dimensions ever reach an output axis.
+    /// </para>
+    /// <para>
+    /// RANK 2 RETURNS NULL rather than a three-axis answer. The output for an unbatched input is
+    /// <c>[1, nodes, out]</c>, and describing that would require <c>Fixed(1)</c> for the synthesised
+    /// leading axis - a hardcoded literal, not a field, which is precisely the kind of contract that is
+    /// right for one call and wrong for the layer. Declining is the honest answer until the forward
+    /// restores the caller's rank.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _outputFeatures <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures)),
+        };
+    }
+
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly int _messageFeatures;

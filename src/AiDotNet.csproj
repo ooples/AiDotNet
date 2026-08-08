@@ -47,7 +47,14 @@
 
          ADN0054 (hand-written GetMetadata may drift from [LayerState]) is on the same footing and
          comes from this branch. Both sides of the merge added IDs to this one list, so the union is
-         the resolution: dropping either set would silently promote those rules to build errors. -->
+         the resolution: dropping either set would silently promote those rules to build errors.
+
+         ADNSHAPE006 (layer declares no shape contract) is ABSENT from this list, and that absence IS
+         the flip to Error - the whole point of the ladder. It entered at 240 undeclared layers and was
+         kept VISIBLE as a warning, deliberately not NoWarn, so the remaining count could be read off
+         any build. That count is now 0: every layer deriving from LayerBase declares either
+         [TensorLayout] + IShapeContract or [ElementWiseShape]. Adding a layer without one is a build
+         error from here on. -->
     <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;AIDN083</WarningsNotAsErrors>
   </PropertyGroup>
 
@@ -60,7 +67,14 @@
 
          ADN0054 (hand-written GetMetadata may drift from [LayerState]) is on the same footing and
          comes from this branch. Both sides of the merge added IDs to this one list, so the union is
-         the resolution: dropping either set would silently promote those rules to build errors. -->
+         the resolution: dropping either set would silently promote those rules to build errors.
+
+         ADNSHAPE006 (layer declares no shape contract) is ABSENT from this list, and that absence IS
+         the flip to Error - the whole point of the ladder. It entered at 240 undeclared layers and was
+         kept VISIBLE as a warning, deliberately not NoWarn, so the remaining count could be read off
+         any build. That count is now 0: every layer deriving from LayerBase declares either
+         [TensorLayout] + IShapeContract or [ElementWiseShape]. Adding a layer without one is a build
+         error from here on. -->
     <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;ADN0054;AIDN070;AIDN071;AIDN072;AIDN073;AIDN074;AIDN075;AIDN076;NU1603;NU1605;NU1608;AIDN083</WarningsNotAsErrors>
   </PropertyGroup>
 
@@ -339,5 +353,17 @@
 	  <Using Include="AiDotNet.Helpers" />
 	  <Using Include="AiDotNet.Initialization" />
 	</ItemGroup>
+
+	<!-- NO global using or alias for AiDotNet.Attributes, and the reason is measured rather than
+	     stylistic. AiDotNet.Tensors.LinearAlgebra and AiDotNet.Tensors.Helpers are both global usings
+	     above and both define a type named TensorLayout, so [TensorLayout(...)] is CS0104-ambiguous
+	     unless a FILE-LEVEL `using AiDotNet.Attributes;` shadows them from a nearer scope - which is
+	     the only reason the SSM layers compile. Adding the namespace globally cannot help: global
+	     usings share one scope, so it would be a third candidate, not a winner. Aliasing it is worse -
+	     `Alias="TensorLayout"` collides with C#'s own attribute-name lookup (it tries both TensorLayout
+	     and TensorLayoutAttribute), giving CS1614 "ambiguous between TensorLayoutAttribute and
+	     TensorLayoutAttribute" on all 312 attribute sites. Layers that declare axes import the
+	     namespace themselves. -->
+
 
 </Project>

@@ -1,5 +1,7 @@
-using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -82,8 +84,25 @@ public enum HybridSchedulePattern
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+// A STACK of residual blocks, so it is shape-preserving for the same reason any pre-norm residual
+// stack is: ForwardTraced does `current = Engine.TensorAdd(current, blockOut)` per block, which forces
+// every sub-layer to return the shape it was given, and then reshapes back to the shape it came in
+// with - `return Engine.Reshape(result, _originalInputShape)`. Nothing here can resize anything.
+// Axes are named rather than left to [ElementWiseShape] because they are not anonymous: ForwardTraced
+// reads seqLen = Shape[rank-2] and modelDim = Shape[rank-1] and flattens everything before them into
+// batch, and the base constructor declares [sequenceLength, modelDimension]. Time and Features are
+// real roles here, and a hybrid SSM/attention stack chained onto anything else is worth checking
+// against them.
+// BatchOptional covers the unbatched [Time, Features] form, which ForwardTraced handles explicitly
+// (`if (rank == 2) return Engine.Reshape(result, new[] { seqLen, modelDim })`).
+// Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Pre-norm -> sub-layer -> residual, repeated; the residual add pins every axis.")]
 [AutoParameters]
-public partial class HybridBlockScheduler<T> : LayerBase<T>
+public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _sequenceLength;

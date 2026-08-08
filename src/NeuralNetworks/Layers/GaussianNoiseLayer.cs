@@ -36,8 +36,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
+// Adds noise to values; shape is never touched, at any rank.
+[ElementWiseShape(Note = "Adds Gaussian noise during training. Shape untouched at any rank.")]
 [AutoParameters]
-public partial class GaussianNoiseLayer<T> : LayerBase<T>
+public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The mean (average value) of the Gaussian noise distribution.

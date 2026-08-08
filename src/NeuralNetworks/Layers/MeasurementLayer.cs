@@ -33,8 +33,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+// Born rule: |z|^2 per amplitude, then normalised to sum to 1. That rewrites VALUES only - the returned
+// tensor has the caller's exact shape at every rank, as the tail of ForwardTraced spells out (rank 1
+// reshapes back to [stateSize], rank > 2 reshapes back to _originalInputShape, rank 2 is returned as-is).
+// Rank-agnostic, so naming axes would invent meanings the layer does not have.
+[ElementWiseShape(Note = "Converts amplitudes to probabilities over the last axis; shape is untouched.")]
 [AutoParameters]
-public partial class MeasurementLayer<T> : LayerBase<T>
+public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>

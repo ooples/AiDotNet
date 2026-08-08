@@ -1070,8 +1070,21 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 /// <summary>
 /// Tensor-based encoder layer for Informer with ProbSparse attention.
 /// </summary>
+// Rank 1, in equals out, and the declaration is deliberately narrow. This layer holds parameters
+// only - its ForwardTraced throws, because Informer runs the encoder at the model level
+// (InformerModel.ForwardBatch, on a flattened [B*S, d]). The one shape statement the layer makes
+// about ITSELF is its constructor, `base(new[] { embeddingDim }, new[] { embeddingDim })`: a
+// per-position width in and the same width out. That is the pre-norm + residual identity every
+// transformer encoder block has, and ForwardBatch does not contradict it - the encoder stack carries
+// `d` through unchanged; only the DISTILLING layers between blocks change a length, and they are a
+// separate type.
+//
+// No hand-written OutputAxesFor: with matching layouts the generator derives Same(Features), which
+// is the relation above. The sequence axis is deliberately NOT declared - this layer never sees one.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
 
     private readonly int _embeddingDim;
@@ -1239,9 +1252,65 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
 /// <summary>
 /// Tensor-based distilling convolution layer for sequence compression.
 /// </summary>
+// Rank 3 [Batch, Time, Features], NOT the rank-1 shapes this type's own constructor passes to base.
+// Like the encoder and decoder layers in this file, DistillingConvTensor holds parameters only and its
+// ForwardTraced throws - Informer runs everything at the model level. But unlike them, this layer's
+// whole purpose is to CHANGE a length, and a rank-1 [Features] declaration cannot say that: it has no
+// sequence axis to compress, so it would report "shape preserved" for the one layer in the stack that
+// does not preserve it.
+//
+// The forward that genuinely handles this layer is InformerModel.DistillBatch, which reshapes to
+// exactly this rank - `var x = Engine.Reshape(xFlat, new[] { batch, seq, embDim })` - runs the
+// depthwise kernel-3 conv and ELU (all length-preserving, via zero-padded neighbour shifts), then
+// pools with `int outLen = (seq + factor - 1) / factor;`. InformerModel.ForwardBatch applies the same
+// law to its bookkeeping: `currentSeqLen = (currentSeqLen + DistillingFactor - 1) / DistillingFactor`.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <c>outLen = (seq + factor - 1) / factor</c> is a CEILING division, and the sliding-window form
+    /// states it exactly: <c>Window(Time, kernel: 1, stride: factor, padding: 0)</c> resolves to
+    /// <c>floor((seq - 1) / factor) + 1</c>, which equals <c>ceil(seq / factor)</c> for every
+    /// <c>seq &gt;= 1</c>. Kernel 1 rather than 3 because the kernel-3 convolution DistillBatch runs
+    /// first is length-preserving - it builds <c>x[t-1]</c> and <c>x[t+1]</c> by zero-padded shifts and
+    /// adds them, so no length is lost there and only the stride-<c>factor</c> pool changes the extent.
+    /// </para>
+    /// <para>
+    /// The tail is padded, not dropped: when <c>outLen * factor != seq</c> DistillBatch repeats the
+    /// last position up to <c>padded</c> before grouping, which is why this rounds UP where an ordinary
+    /// pooling window rounds down. <c>Scaled(Time, 1, factor)</c> would be wrong twice over - it
+    /// truncates, and it declines outright on a sequence the factor does not divide evenly.
+    /// </para>
+    /// <para>
+    /// The feature axis is <see cref="AxisRelation.Same"/>: the conv is depthwise (a per-channel
+    /// <c>[embeddingDim, 3]</c> kernel applied by broadcast multiply) and the pool reduces axis 2 of
+    /// <c>[batch, outLen, factor, embDim]</c>, so the width is carried through untouched. Not
+    /// <c>Fixed(_embeddingDim)</c> - nothing here checks the incoming width against that field.
+    /// </para>
+    /// <para>
+    /// DistillBatch's <c>if (seq &lt; 2) return (xFlat, seq)</c> early-out agrees with this rather than
+    /// contradicting it: at <c>seq == 1</c> the window also resolves to 1.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _distillingFactor <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.Window(TensorAxis.Time, kernel: 1, stride: _distillingFactor, padding: 0)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+        };
+    }
 
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
@@ -1328,9 +1397,52 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
 /// <summary>
 /// Tensor-based decoder layer for Informer with cross-attention.
 /// </summary>
+// Two input ports - the decoder stream and the encoder memory - which the constructor already declares
+// (base(new int[][] { [embeddingDim], [embeddingDim] }, [embeddingDim])). A decoder layer returns its
+// TARGET stream's shape: cross-attention reads the memory but is sized by the queries, and the
+// residual adds pin every axis. Declared on port 0 for exactly that reason.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Single-input form declines: this layer has two ports, and <c>ForwardTraced</c> throws
+    /// <c>NotSupportedException</c> because the real forward is <c>InformerModel.ForwardBatch</c>.
+    /// <see cref="OutputAxesForPorts"/> is the contract.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output is the decoder stream unchanged in shape. Self-attention, cross-attention and the
+    /// FFN each end in a residual add against the stream, so nothing can resize without breaking the
+    /// add, and the memory on port 1 contributes keys and values rather than extent.
+    /// </para>
+    /// <para>
+    /// This layer was previously undeclared as "multi-input, rule 5". The rule was about
+    /// <see cref="OutputAxesFor(int)"/> being unable to SEE a second input - not about this
+    /// relation being hard. Once the contract could be asked about several ports, the answer was
+    /// simply that port 1 does not affect the shape.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesForPorts(IReadOnlyList<int> inputRanks)
+    {
+        if (inputRanks is null || inputRanks.Count == 0) return null;
+        if (inputRanks[0] != 3) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+        };
+    }
+
 
     private readonly int _embeddingDim;
     private readonly int _numHeads;

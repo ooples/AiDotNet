@@ -15,9 +15,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4")]
+// Both ranks come from OnFirstForward naming them itself - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and rejecting everything else.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Straight from this layer's own <c>ResolveShapes(new[] { _inputChannels, height, width },
+    /// new[] { _growthRate, height, width })</c> in <see cref="OnFirstForward"/>: the spatial extent
+    /// is carried through and only the channel count changes.
+    /// </para>
+    /// <para>
+    /// The spatial preservation is a real property of the composition, not an assumption. Both
+    /// convolutions are built same-padded in the constructor - <c>kernelSize: 1, stride: 1,
+    /// padding: 0</c> and <c>kernelSize: 3, stride: 1, padding: 1</c> - and batch normalization does
+    /// not resize. That is required by DenseNet itself: the caller CONCATENATES this block's output
+    /// with its input along the channel axis, which is only possible if the spatial dims survive.
+    /// </para>
+    /// <para>
+    /// Note the output width is the growth rate, NOT the bottleneck width. The <c>4 * growthRate</c>
+    /// bottleneck is internal to the 1x1 stage and is consumed by the 3x3 stage that follows it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_growthRate <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_growthRate));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width) },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     private readonly BatchNormalizationLayer<T> _bn1;
     private readonly ConvolutionalLayer<T> _conv1x1;
     private readonly BatchNormalizationLayer<T> _bn2;

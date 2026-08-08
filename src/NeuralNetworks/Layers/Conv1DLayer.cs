@@ -37,8 +37,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 2, 8", TestConstructorArgs = "4, 3, 1, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Rank 3 ONLY, and that is enforced rather than assumed: OnFirstForward throws
+// "Conv1DLayer requires rank-3 [B, C, T] input" for any other rank, so no other layout is declared.
+// The axis names are this layer's own - the class summary says "[B, C_in, T]" in and "[B, C_out, T_out]" out.
+// OutputAxesFor is hand-written because every one of the three relations depends on constructor
+// arguments (output channels, kernel, stride, padding, dilation) that no attribute can see.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class Conv1DLayer<T> : LayerBase<T>
+public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
 {
     private int _inputChannels;
     private readonly int _outputChannels;
@@ -50,6 +59,41 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     private Tensor<T> _kernels;
     private Tensor<T> _biases;
     private int[]? _originalInputShape;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Taken straight from this layer's own length arithmetic in <see cref="OnFirstForward"/>:
+    /// <c>tOut = (tIn + 2*_padding - _dilation*(_kernelSize - 1) - 1) / _stride + 1</c>, which is
+    /// exactly what <c>AxisRelation.Window</c> evaluates. Channels are set by configuration
+    /// (<c>_outputChannels</c>), not by the input, and the batch axis is carried through - the forward
+    /// reshapes to <c>[B, C, 1, T]</c>, convolves, and reshapes back with <c>activated.Shape[0]</c>
+    /// untouched.
+    /// </para>
+    /// <para>
+    /// Note that <see cref="OnFirstForward"/> deliberately publishes <c>LayerShape.Dynamic</c> for the
+    /// output length rather than a resolved number, precisely because the length follows the input.
+    /// A relation is the right home for that: it says HOW the length follows instead of freezing one
+    /// value that goes stale the moment a different sequence arrives.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _outputChannels <= 0 || _kernelSize <= 0 || _stride <= 0
+            || _padding < 0 || _dilation <= 0)
+        {
+            return null;
+        }
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.Window(TensorAxis.Time, _kernelSize, _stride, _padding, _dilation)),
+        };
+    }
 
     /// <inheritdoc />
     /// <remarks>

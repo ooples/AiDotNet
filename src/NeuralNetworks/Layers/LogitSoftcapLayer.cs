@@ -17,8 +17,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "30.0")]
+// Squashes values through a bounded function; shape is never touched, at any rank.
+[ElementWiseShape(Note = "Bounds logits via tanh scaling. Shape untouched at any rank.")]
 [AutoParameters]
-public partial class LogitSoftcapLayer<T> : LayerBase<T>
+public partial class LogitSoftcapLayer<T> : LayerBase<T>, IShapeContract
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly double _cap;

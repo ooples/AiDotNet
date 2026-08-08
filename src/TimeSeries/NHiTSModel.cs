@@ -886,9 +886,40 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 /// <summary>
 /// Represents a single stack in the N-HiTS architecture using Tensor operations.
 /// </summary>
+// Rank 1 only, and that is enforced rather than assumed: ForwardInternal reshapes its argument to
+// `[_inputLength, 1]`, which only succeeds when the whole tensor holds exactly _inputLength values.
+// The axis is Time on both sides - in is the (already pooled) lookback window, out is the forecast
+// horizon - which is also what the constructor declares:
+// `base(new[] { inputLength }, new[] { outputLength })`.
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN, and Fixed rather than Same for a reason worth stating: this stack does not
+    /// merely resize its input, it REFUSES to be resized BY it. ForwardInternal's last statement is
+    /// <c>Engine.Reshape(col, new[] { _outputLength })</c>, and the loop before it walks the MLP's
+    /// own weight list, so the horizon comes from the stack's configuration alone.
+    /// </para>
+    /// <para>
+    /// The guard at the top of ForwardInternal makes that emphatic: an input whose length is not
+    /// <c>_inputLength</c> is RESAMPLED onto _inputLength ("Ensure input matches expected size")
+    /// rather than rejected. So no input length - not even a wrong one - reaches the output.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 1 || _outputLength <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Fixed(_outputLength)),
+        };
+    }
+
     private readonly int _inputLength;
     private readonly int _outputLength;
     private readonly int _hiddenSize;

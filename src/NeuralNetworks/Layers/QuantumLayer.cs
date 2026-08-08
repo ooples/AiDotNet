@@ -36,9 +36,41 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
+// Rank 2 only. ForwardTraced accepts rank 1 and higher ranks too, but it collapses them into a batch and
+// never restores the original rank - it always returns the rank-2 TensorTranspose(probabilitiesT). A
+// declaration for those ranks would have to say "rank 1 in, rank 2 out", which is a shape the callers of
+// a layer contract should not be routed into silently; rank 2 is the form the layer round-trips.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class QuantumLayer<T> : LayerBase<T>
+public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output width is the quantum state dimension <c>1 &lt;&lt; _numQubits</c>, taken from
+    /// <c>ForwardTraced</c>'s own <c>int dimension = 1 &lt;&lt; _numQubits;</c> - the returned tensor is
+    /// <c>[batch, dimension]</c>, the measured probability distribution over all 2^n basis states.
+    /// </para>
+    /// <para>
+    /// DELIBERATELY NOT <c>Fixed(_outputSize)</c>, even though that field exists and the base constructor
+    /// was handed it. The forward never uses it: the input is padded or sliced to <c>dimension</c>
+    /// (<c>TensorSetSlice</c> when narrower, <c>TensorSlice</c> when wider) and the result is one
+    /// probability per basis state. With the layer's own test arguments <c>(4, 4, 2)</c> the two happen to
+    /// agree - <c>2^2 == 4</c> - which is exactly the coincidence that would make a wrong contract look
+    /// right. Derived from the arithmetic, not from the declared field.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _numQubits <= 0 || _numQubits >= 31) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(1 << _numQubits)),
+        };
+    }
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _outputSize;

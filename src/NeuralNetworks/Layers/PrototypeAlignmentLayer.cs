@@ -36,6 +36,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "2, 4", TestConstructorArgs = "4, 3")]
+// Shape-preserving at every rank, per ForwardTraced's three exits: rank 1 returns [_embedDim], rank 2
+// returns the [N, D] it computed, and every higher rank is reshaped back to the captured origShape. The
+// leading axes are only flattened for the matmul and restored afterwards, so nothing about them changes.
+//
+// The prototype count K is a real intermediate width - weights are [N, K] after the softmax - but it
+// never reaches the output, because the aggregation weights @ prototypes ([N,K] @ [K,D]) contracts it
+// away. Reading K as an output axis would be the mistake this annotation exists to prevent; the layer
+// returns a blend of prototypes in the INPUT's own embedding space, which is the point of the method.
+[ElementWiseShape(Note = "Re-expresses each token as a softmax blend of the prototype bank; shape is untouched at any rank.")]
 [AutoParameters]
 public partial class PrototypeAlignmentLayer<T> : LayerBase<T>
 {

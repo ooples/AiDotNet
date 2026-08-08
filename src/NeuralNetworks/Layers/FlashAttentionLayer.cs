@@ -30,8 +30,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations (typically float or double).</typeparam>
+// Tiled attention with the same result as standard attention: shape-preserving at rank 2
+// [Time, Features], the rank the discovery sweep probed.
+[AiDotNet.Attributes.TensorLayout(TensorAxis.Time, TensorAxis.Features,
+    Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+[AiDotNet.Attributes.TensorLayout(TensorAxis.Time, TensorAxis.Features,
+    Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class FlashAttentionLayer<T> : LayerBase<T>
+public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _headCount;
     private readonly int _headDimension;

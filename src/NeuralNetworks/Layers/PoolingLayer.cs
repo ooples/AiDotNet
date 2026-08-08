@@ -40,9 +40,59 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 2")]
+// Roles and ranks straight from OnFirstForward, which reads [C, H, W] at rank 3 and [B, C, H, W] at
+// rank 4 and throws for anything else. One declaration with BatchOptional covers both, which is what
+// that method's own two branches describe. Ranks above 4 reach ForwardTraced (it collapses the leading
+// axes into a batch) but never reach OnFirstForward without throwing, so they are not declared.
+// OutputAxesFor below is hand-written: the spatial relation depends on PoolSize/Stride, both ctor args.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class PoolingLayer<T> : LayerBase<T>
+public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written from this layer's own <c>CalculateOutputDimension</c>, which is
+    /// <c>(inputDim - poolSize) / stride + 1</c>. That is the sliding-window formula with padding 0 and
+    /// dilation 1 - <c>floor((in + 0 - 1*(k-1) - 1) / s) + 1</c> reduces to exactly it - so
+    /// <c>Window(PoolSize, Stride, padding: 0)</c> is the relation, not an approximation of it. This layer
+    /// exposes no padding parameter, which is why the padding term is 0 rather than configurable.
+    /// </para>
+    /// <para>
+    /// Channels pass through untouched: <c>OnFirstForward</c> resolves
+    /// <c>[inputDepth, inputHeight, inputWidth] -&gt; [inputDepth, outH, outW]</c>, so only the two spatial
+    /// axes move. Note that a "divide by stride" shorthand would be wrong here whenever
+    /// <c>PoolSize != Stride</c> - overlapping windows are supported and give a larger output than the
+    /// stride alone suggests.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (PoolSize <= 0 || Stride <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, PoolSize, Stride, padding: 0));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, PoolSize, Stride, padding: 0));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels,
+                height,
+                width,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets the size of the pooling window.
     /// </summary>

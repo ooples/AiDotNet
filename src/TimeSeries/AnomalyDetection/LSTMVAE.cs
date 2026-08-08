@@ -366,9 +366,33 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
 /// <summary>
 /// Tensor-based LSTM Encoder for VAE with proper backpropagation.
 /// </summary>
+// Rank 1 only, and that is the shape the layer is CONSTRUCTED at rather than an assumption:
+// `base(new[] { inputSize }, new[] { latentDim * 2 })`. ForwardTraced flattens with
+// `input.ToVector()`, so a higher-rank input would not throw - but nothing in this layer states what
+// one would mean, and the tensor it emits is rank 1 regardless.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because the emitted width is not carried through and is not a bare field: the
+    /// forward allocates <c>new Tensor&lt;T&gt;(new[] { _latentDim * 2 })</c>, filling the first
+    /// <c>_latentDim</c> slots with the mean and the next <c>_latentDim</c> with the log-variance.
+    /// That doubling IS the VAE's [mean | logVar] packing, so the output width is set by the latent
+    /// size alone and is independent of how wide the input window was.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 1 || _latentDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_latentDim * 2)),
+        };
+    }
+
 
     private readonly int _inputSize;
     private readonly int _latentDim;
@@ -599,9 +623,31 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 /// <summary>
 /// Tensor-based LSTM Decoder for VAE with proper backpropagation.
 /// </summary>
+// Rank 1 only, matching the shapes the layer is CONSTRUCTED with:
+// `base(new[] { latentDim }, new[] { outputSize })`.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because the width is reconstruction size, not the latent size it was handed.
+    /// DecodeWithCache copies at most <c>_latentDim</c> values out of whatever it is given
+    /// (<c>Math.Min(latent.Length, _latentDim)</c>) and then projects through
+    /// <c>_outputWeights</c> [O, H], returning <c>Reshape(new[] { _outputSize })</c> - so the input
+    /// width does not reach the output at all.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 1 || _outputSize <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize)),
+        };
+    }
+
 
     private readonly int _latentDim;
     private readonly int _outputSize;

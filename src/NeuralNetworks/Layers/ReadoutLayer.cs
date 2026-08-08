@@ -38,9 +38,50 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+// Ranks 1 and 2, the two forms ForwardTraced round-trips: a rank-1 input is reshaped to [1, inputSize]
+// and returned as [OutputShape[0]], and a rank-2 input passes straight through the matmul. Higher ranks
+// are flattened into a batch and restored from _originalInputShape, but a readout head has nothing to say
+// about what a third axis would be, so it is not declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ReadoutLayer<T> : LayerBase<T>
+public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A linear readout: the trailing axis becomes the layer's own output width and the batch axis is
+    /// carried through. Read off <c>ForwardTraced</c>, which returns <c>[OutputShape[0]]</c> for rank 1
+    /// and sets <c>outputShape[^1] = OutputShape[0]</c> for higher ranks - the same value the constructor
+    /// passed to the base as <c>outputSize</c>.
+    /// </para>
+    /// <para>
+    /// The size is read from the base's declared output shape rather than copied into a private field,
+    /// because that is the value the forward itself uses; a second copy could disagree with it after a
+    /// shape-resolving path and there would be no way to tell which one the contract meant.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var declared = OutputShape;
+        if (declared is null || declared.Length != 1 || declared[0] <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(declared[0]));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and outputs.
     /// </summary>

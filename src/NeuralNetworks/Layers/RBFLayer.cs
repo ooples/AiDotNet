@@ -38,9 +38,51 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+// Ranks 1 and 2, which is exactly what ForwardTraced round-trips: an unbatched rank-1 input is reshaped
+// to [1, features] for the kernel and the batch axis is stripped again on the way out
+// ("wasUnbatched ? Engine.Reshape(output, [output.Shape[1]]) : output"). One declaration with
+// BatchOptional says that, rather than two declarations saying it twice. Higher ranks are passed to
+// Engine.RBFKernel unchanged, which is a 2-D kernel, so they are not declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class RBFLayer<T> : LayerBase<T>
+public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One output per RBF centre. <c>_centers</c> is allocated <c>[outputSize, inputSize]</c> and
+    /// <c>Engine.RBFKernel(processedInput, _centers, epsilons)</c> emits one activation per centre per
+    /// row, so the feature axis becomes the centre count and the batch axis is carried through.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputSize)</c> reads the constructor argument, which is the right source here even for
+    /// the LAZY constructor: only the INPUT width is resolved on first forward
+    /// (<c>OnFirstForward</c> sets <c>_inputSize</c> from <c>input.Shape[rank - 1]</c>) - the centre count
+    /// is architectural and known at construction in both constructors, so this contract is answerable
+    /// before any tensor has been seen.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _outputSize;

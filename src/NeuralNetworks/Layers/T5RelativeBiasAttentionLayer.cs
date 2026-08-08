@@ -58,8 +58,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 2")]
+// Shape-preserving, so the generator derives Same on every axis and no OutputAxesFor is written here.
+// From the tail of ForwardTraced: rank 3 returns output3D, shaped [batchSize, seqLen, _hiddenSize], and
+// any other rank is reshaped to outShape, which copies input.Shape for every leading axis and then sets
+// seqLen and _hiddenSize. Self-attention preserves the sequence length by construction, and the feature
+// width comes back unchanged because _oWeights projects hidden -> hidden - the layer additionally
+// REFUSES any input whose trailing axis is not _hiddenSize, so Same(Features) is not merely observed.
+//
+// Deliberately NOT [ElementWiseShape]: that shorthand claims preservation at any rank, and this layer
+// throws for rank < 2 ("expects input of rank >= 2"). BatchOptional covers exactly the two forms the
+// method's own comment names - "Accept [batch, seq, hidden] or [seq, hidden]". Higher ranks run too
+// (leading axes are folded into batchSize and restored), but each extra leading axis would need a
+// distinct role for a relation to refer to it, and there is no second batch-like role to give it.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>
+public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _hiddenSize;
     private readonly int _numHeads;

@@ -45,8 +45,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 2, 4, 2, 0, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Roles come from this layer's own guard in OnFirstForward - "requires rank-3 [B, C, T] input" - so
+// rank 3 is the ONLY declared form and Batch is NOT optional: a rank-2 input is rejected outright,
+// and BatchOptional would advertise a form the layer throws on.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class Conv1DTransposeLayer<T> : LayerBase<T>
+public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
 {
     private int _inputChannels;
     private readonly int _outputChannels;
@@ -206,6 +213,51 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         int deficit = 2 * _padding - _dilation * (_kernelSize - 1) - _outputPadding;
         if (deficit <= 0) return 1;
         return 1 + (deficit + _stride - 1) / _stride;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the time axis follows <see cref="ComputeOutputLength"/>, which is the
+    /// INVERSE of a sliding window: <c>T_out = (T-1)*stride - 2*padding + dilation*(K-1) +
+    /// outputPadding + 1</c>. <c>Window</c> models the forward direction only, so it cannot express
+    /// this - a transposed convolution GROWS its axis by roughly <c>stride</c>, and reading the
+    /// window formula backwards would understate the output by that whole factor.
+    /// </para>
+    /// <para>
+    /// Rewriting the formula as <c>T_out = T*stride + C</c> with
+    /// <c>C = dilation*(K-1) + outputPadding + 1 - stride - 2*padding</c> shows the one case that IS
+    /// in the vocabulary: when <c>C</c> is zero the layer is exactly <c>Scaled(Time, stride)</c>.
+    /// That is not an edge case - it is the configuration HiFi-GAN uses
+    /// (<c>kernel = 2*rate, stride = rate, padding = rate/2</c>), so the vocoder stacks this
+    /// annotation is written for resolve their lengths precisely rather than stopping at Unknown.
+    /// When <c>C</c> is non-zero the length is a genuine affine offset and no relation carries it,
+    /// so it is declared Unknown WITH the offset in the reason rather than approximated.
+    /// </para>
+    /// <para>
+    /// The channel count is <c>Fixed</c> from <c>_outputChannels</c> - that is the one output axis
+    /// <c>OnFirstForward</c> pins: <c>ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels,
+    /// LayerShape.Dynamic })</c>. The <c>Dynamic</c> on the second axis there is the same statement
+    /// this contract makes, expressed as a relation instead of a placeholder.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3) return null;
+
+        int offset = _dilation * (_kernelSize - 1) + _outputPadding + 1 - _stride - 2 * _padding;
+        var time = offset == 0
+            ? AxisRelation.Scaled(TensorAxis.Time, _stride)
+            : AxisRelation.Unknown(
+                $"Transposed-convolution length is T*{_stride} + {offset}; an affine offset on a "
+                + "scaled axis is not in the relation vocabulary.");
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+            new OutputAxisContract(TensorAxis.Time, time),
+        };
     }
 
     /// <inheritdoc/>

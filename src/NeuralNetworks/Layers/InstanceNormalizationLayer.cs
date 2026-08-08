@@ -40,8 +40,38 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+// Value-only: it rescales, never resizes. ForwardTraced flattens to 4-D purely so it can delegate to
+// Engine.GroupNorm, then undoes that with `return Engine.Reshape(output, _originalInputShape)` — the
+// output shape is literally the input shape, at every rank.
+// The axes are still NAMED rather than left to [ElementWiseShape], because axis 1 is not anonymous:
+// ForwardTraced reads `channels = input.Shape[1]` in every branch and throws unless it equals
+// _numChannels. A channels-second contract is the whole point of this layer, and a chain that hands it
+// a feature-last tensor is exactly the mistake worth catching.
+// The four ranks declared are the four the forward pass branches on by hand, with the roles taken from
+// its own comments ("2D [batch, channels]", "3D [batch, channels, length]", "4D [batch, channels,
+// height, width]", "5D [batch, channels, D, H, W]"). The length axis of the 3-D form is Time to match
+// Conv1DLayer, which declares [Batch, Channels, Time] and is what normally feeds it. Higher ranks run
+// through the ND branch but have no further distinct spatial role available, so they are not declared.
+// Same rank, same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Per-sample, per-channel normalization over the spatial axes; nothing is resized.")]
 [AutoParameters]
-public partial class InstanceNormalizationLayer<T> : LayerBase<T>
+public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly T _epsilon;
     private readonly int _numChannels;

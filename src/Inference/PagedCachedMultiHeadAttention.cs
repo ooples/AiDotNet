@@ -1,5 +1,7 @@
-﻿using AiDotNet.Attributes;
-using System.Buffers;
+﻿using System.Buffers;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.Quantization;
@@ -21,8 +23,32 @@ namespace AiDotNet.Inference;
 /// For concurrent serving, create one sequence per request (distinct <see cref="SequenceId"/> values).
 /// </para>
 /// </remarks>
+// Rank 3 EXACTLY, which is stricter than the eager MultiHeadAttentionLayer and deliberately so - every
+// path in this file indexes all three axes by position. The batched kernel opens with
+// `batchSize = input.Shape[0]; seqLen = input.Shape[1]; embDim = input.Shape[2]`, ForwardStateless
+// reads `input.Shape[1]` for the ALiBi bias, and SplitHeads reshapes [B, S, headCount*D]. A rank-2
+// input would silently read the embedding width out of the sequence axis, so BatchOptional is NOT set:
+// the paged KV cache indexes rows by batch position, and there is no unbatched form to be optional about.
+//
+// SHAPE-PRESERVING, and both forward paths agree. The constructor declares it -
+// `base([sequenceLength, embeddingDimension], [sequenceLength, embeddingDimension], ...)` - and
+// ForwardStateless materializes exactly that: `new Tensor<T>([batch, seqLen, _embeddingDimension])`.
+// The trailing axis comes back at _embeddingDimension because _outputWeights is square
+// [embeddingDimension, embeddingDimension]; the input's own width is already pinned to the same number
+// by the Q/K/V projections, so the two coincide and this is the matched-layout case - OutputAxesFor is
+// generated as Same on every axis rather than hand-written.
+//
+// GROUPED-QUERY ATTENTION does not reach the contract. K and V project to kvHeadCount * headDimension,
+// which is narrower under GQA, but RepeatKV widens each KV head back across its query-head group before
+// FlashAttention, and the output projection is over the full query width either way. _kvHeadCount is a
+// parameter-count and cache-footprint decision, not a shape one.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "One sequence per batch row; rows are isolated by sequence id in the paged KV cache.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>
+public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>, IShapeContract
 {
     private readonly int _headCount;
     private readonly int _kvHeadCount;

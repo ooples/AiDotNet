@@ -3464,6 +3464,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return;
         }
 
+        // SHADOW COMPARISON - reporting only, and deliberately separate from the layout mismatches
+        // above. The layouts check axis ROLES; this checks the SIZES the shape contracts predict
+        // against the sizes the imperative resolution concluded. It is the parallel run that has to
+        // come back clean before InferOutputShape can be made authoritative in TryAdvanceLayerShape
+        // and LayerGraph.ResolveShapes, because until now nothing in production consulted a contract
+        // at all and there was no evidence either way.
+        try
+        {
+            var shadow = LayerContractValidator.CompareContractsToResolvedShapes(Layers);
+            if (shadow.Disagreements.Count > 0
+                && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                var shadowReport = new System.Text.StringBuilder();
+                shadowReport.Append(GetType().Name)
+                    .Append(": shape CONTRACT disagrees with resolved shape (agreed=")
+                    .Append(shadow.Agreed)
+                    .Append(", declined=").Append(shadow.Declined)
+                    .Append(", unresolved=").Append(shadow.Unresolved)
+                    .Append(')');
+
+                foreach (var d in shadow.Disagreements)
+                {
+                    shadowReport.AppendLine().Append("  ").Append(d);
+                }
+
+                System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + shadowReport);
+            }
+        }
+        catch
+        {
+            // A diagnostic must never be the reason a model fails to construct.
+        }
+
         if (mismatches.Count == 0) return;
 
         var report = new System.Text.StringBuilder();

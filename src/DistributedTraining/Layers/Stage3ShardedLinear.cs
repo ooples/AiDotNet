@@ -19,9 +19,39 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
+// SHARDING IS A STORAGE CONCERN, NOT A SHAPE ONE, and that is the whole point of the contract here.
+// _shardLen splits the weight across ranks, but ForwardTraced all-gathers it back to the full
+// [outputSize, inputSize] before the matmul, so every rank returns the SAME full-width [batch,
+// outputSize]. A contract mentioning _shardLen or WorldSize would describe the parameter layout rather
+// than the tensor the caller receives, and would differ from rank to rank - which a shape must not.
+//
+// Rank 2 only: the chain is TensorMatMul(input, weightT) followed by TensorBroadcastAdd against a
+// [1, _outputSize] bias, both of which want an explicit [batch, features] operand.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>
+public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The ordinary linear relation: <c>Fixed(_outputSize)</c> from the constructor argument that sizes
+    /// the bias and the gathered weight's row count, with the batch axis carried through. The inline
+    /// shape comments in <c>ForwardTraced</c> trace it directly -
+    /// <c>[outputSize, inputSize] -> [inputSize, outputSize] -> [batch, outputSize]</c>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputSize <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize)),
+        };
+    }
+
     private readonly ICommunicationBackend<T> _backend;
     private readonly FsdpAllGatherParameter<T> _unshard;
     private readonly AverageGradientAcrossRanks<T> _averageBiasGradient;

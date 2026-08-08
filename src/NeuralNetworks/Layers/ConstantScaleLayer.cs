@@ -13,8 +13,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "1.0")]
+// Multiplies every value by a constant; shape is never touched, at any rank.
+[ElementWiseShape(Note = "Scales by a fixed constant. Shape untouched at any rank.")]
 [AutoParameters]
-public partial class ConstantScaleLayer<T> : LayerBase<T>
+public partial class ConstantScaleLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly T _scale;
 

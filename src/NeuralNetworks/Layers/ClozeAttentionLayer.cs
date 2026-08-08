@@ -31,8 +31,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+// Roles are this layer's own, quoted from its guard: "expects rank-2 [S, D] or rank-3 [B, S, D]".
+// S is the sequence position (Time), D the model width (Features). Batch is optional rather than a
+// second declaration because ForwardTraced treats the rank-2 case as literally the same computation —
+// it reshapes to [1, S, D], runs, and reshapes back — so there is no second relation to describe.
+//
+// NOT [ElementWiseShape], even though [LayerProperty(ChangesShape = false)] is accurate. That
+// shorthand generates an identity across EVERY rank, and this layer throws for any rank but 2 and 3;
+// it is also not element-wise in the sense the shorthand implies, since attention mixes across
+// positions. Declaring the two ranks it really accepts, with named axes, is the honest form.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Attention re-weights positions in place: every axis survives at its input size.")]
 [AutoParameters]
-public partial class ClozeAttentionLayer<T> : LayerBase<T>
+public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDim;
 

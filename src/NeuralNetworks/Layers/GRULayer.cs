@@ -41,9 +41,69 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// The accepted forms are the two the forward names: rank 3 "[batchSize, sequenceLength, inputSize]" and
+// rank 2 "[sequenceLength, inputSize] -> add batch dim". Rank 1 and rank > 3 are handled too but pad,
+// truncate or flatten leading axes into an anonymous batch, so nothing there can be named honestly.
+//
+// THE OUTPUT RANK DEPENDS ON returnSequences, which is why there are three output declarations rather
+// than one. That is not redundancy - a GRU that returns only its final state genuinely emits one fewer
+// axis than one returning the whole sequence, and OutputAxesFor picks between them from the field.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Unbatched final state: rank-2 input with returnSequences = false.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Batched final state: rank-3 input with returnSequences = false.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "Full hidden-state sequence: returnSequences = true.")]
 [AutoParameters]
-public partial class GRULayer<T> : LayerBase<T>
+public partial class GRULayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the RANK of the output, not merely a size, depends on configuration. Every
+    /// case below is read off the end of ForwardTraced:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>returnSequences — <c>Engine.Reshape(..., [batchSize, sequenceLength, _hiddenSize])</c>.</item>
+    /// <item>otherwise — <c>output = currentHiddenState</c>, which is <c>[batchSize, _hiddenSize]</c>.</item>
+    /// <item>rank-2 input, no sequences — <c>Engine.Reshape(output, [_hiddenSize])</c>, dropping the batch
+    /// axis the layer itself added.</item>
+    /// </list>
+    /// <para>
+    /// The one asymmetry is what the code does rather than a rounding of it: a rank-2 input WITH
+    /// returnSequences comes back at rank THREE, because the entry path sets <c>batchSize = 1</c> and the
+    /// restore branch fires only for <c>_originalInputShape.Length &gt; 3</c> or for the no-sequences
+    /// rank-2 case. Hence <c>Fixed(1)</c> on that batch axis — a real axis of extent one that this layer
+    /// manufactures, not the caller's batch carried through.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
+        var batch = new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch));
+        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
+
+        return inputRank switch
+        {
+            2 => _returnSequences
+                ? new[]
+                {
+                    new OutputAxisContract(TensorAxis.Batch, AxisRelation.Fixed(1)),
+                    time,
+                    features,
+                }
+                : new[] { features },
+            3 => _returnSequences
+                ? new[] { batch, time, features }
+                : new[] { batch, features },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The weight tensors for the update gate (z), reset gate (r), and candidate hidden state (h).
     /// </summary>
@@ -512,13 +572,30 @@ public partial class GRULayer<T> : LayerBase<T>
         }
 
         var resolvedInput = new int[input.Shape.Length];
-        var resolvedOutput = new int[input.Shape.Length];
-        for (int i = 0; i < input.Shape.Length; i++)
+        for (int i = 0; i < input.Shape.Length; i++) resolvedInput[i] = input.Shape[i];
+
+        // THE DECLARED OUTPUT MUST HONOUR _returnSequences, which this ignored. It always kept the
+        // input rank and swapped the last axis for _hiddenSize, so a rank-2 [Time, Features] input
+        // declared [Time, _hiddenSize] - while ForwardTraced with returnSequences = false ends on
+        // Engine.Reshape(output, [_hiddenSize]), rank 1. The layer declared a sequence it does not
+        // return, and every layer sized from that declaration inherited the wrong rank.
+        //
+        // Matches the three declared output layouts on this class: full sequence keeps the rank; a
+        // final state drops the TIME axis, leaving [Features] unbatched or [Batch, Features] batched.
+        int[] resolvedOutput;
+        if (_returnSequences || input.Shape.Length < 2)
         {
-            resolvedInput[i] = input.Shape[i];
-            resolvedOutput[i] = input.Shape[i];
+            resolvedOutput = new int[input.Shape.Length];
+            for (int i = 0; i < input.Shape.Length; i++) resolvedOutput[i] = input.Shape[i];
+            resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
         }
-        resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+        else
+        {
+            // Drop the time axis, which is the second-from-last for both accepted ranks.
+            resolvedOutput = new int[input.Shape.Length - 1];
+            for (int i = 0; i < input.Shape.Length - 2; i++) resolvedOutput[i] = input.Shape[i];
+            resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize;
+        }
 
         ResolveShapes(resolvedInput, resolvedOutput);
     }

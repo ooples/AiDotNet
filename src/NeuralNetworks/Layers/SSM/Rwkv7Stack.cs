@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -34,8 +36,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// thought, not just the one below it. A plain chain has nowhere to put that, so instead one object
 /// holds the whole run of layers and hands the first layer's answer along as it goes.</para>
 /// </remarks>
+// Stacks RWKV7 blocks and threads vFirst through them; each block is shape-preserving, so the stack is
+// too. Same [Time, Features] convention as the rest of this folder.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class Rwkv7Stack<T> : LayerBase<T>
+public partial class Rwkv7Stack<T> : LayerBase<T>, IShapeContract
 {
     private readonly List<RWKV7Block<T>> _blocks;
 

@@ -64,8 +64,21 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+// Shape relations DISCOVERED by probing (LayerShapeDiscoverySweepTests): every axis is carried
+// through unchanged, at rank 2 and rank 3 alike. The ROLES, however, are read from the layer's own
+// forward rather than from the probe - discovery recovers relations, never axis names, and here the
+// positional stand-in would have been wrong. ForwardTraced computes
+// seqLen = Shape[rank-2], modelDim = Shape[rank-1], batchSize = 1 when rank < 3, so a rank-2 input is
+// [Time, Features] and NOT [Batch, Features]: the leading axis is sequence position, not batch.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Rank 3+ folds every leading axis into the batch; sequence and model dim stay last.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ABCLayer<T> : LayerBase<T>
+public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numSlots;
@@ -139,6 +152,35 @@ public partial class ABCLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Shape-preserving at every rank it accepts: probing [4,4] and its per-axis variants produced an
+    /// output identical to the input in both axes, and the rank-3 form behaves the same way. Only ranks
+    /// 2 and 3 are declared because only those were MEASURED - claiming more would be the guess this
+    /// system exists to remove, and a contract that over-claims is worse than one that declines.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        switch (inputRank)
+        {
+            case 2:
+                return new[]
+                {
+                    new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                    new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+                };
+            case 3:
+                return new[]
+                {
+                    new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                    new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                    new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+                };
+            default:
+                return null;
+        }
+    }
 
     /// <summary>
     /// Gets the model dimension.

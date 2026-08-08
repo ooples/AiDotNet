@@ -37,9 +37,46 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "4, 0.02")]
+// THE OUTPUT IS RANK 1 WHATEVER THE INPUT RANK, and that asymmetry is the whole contract. ResolveShapes
+// declares "new[] { inputSize } -> new[] { ColumnCount }", and ForwardTraced honours it literally: it
+// flattens the entire tensor to [input.Length], multiplies by the connection matrix, and returns
+// Engine.Reshape(outputMask, [ColumnCount]). Nothing rebuilds a leading axis on the way out, so a
+// rank-2 input does NOT produce a rank-2 output - hence a single output layout against two input ones.
+//
+// The sparse-distributed-representation width is the only thing this layer fixes; SparsityThreshold
+// decides how many of those ColumnCount entries come back set, not how many exist, so it has no
+// bearing on the shape.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
+    Note = "A fixed-width sparse distributed representation; any leading axis is consumed, not carried.")]
 [AutoParameters]
-public partial class SpatialPoolerLayer<T> : LayerBase<T>
+public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One relation at every accepted rank: <c>Fixed(ColumnCount)</c>, the constructor's column count,
+    /// which is also the width of the connection matrix <c>[inputSize, columnCount]</c> the forward
+    /// pass multiplies through. It is a genuine parameter of the layer rather than an observed size.
+    /// </para>
+    /// <para>
+    /// NO <c>Same(Batch)</c> APPEARS HERE EVEN FOR RANK-2 INPUT, and that is deliberate rather than an
+    /// omission. <c>ForwardTraced</c> reshapes to <c>[input.Length]</c> - the whole tensor, batch axis
+    /// included - so there is no per-sample axis left to carry through. Declaring the batch axis as
+    /// preserved would describe a tensor this layer never returns.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (ColumnCount <= 0 || inputRank < 1 || inputRank > 2) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(ColumnCount)),
+        };
+    }
+
     /// <summary>
     /// The size of the input vector.
     /// </summary>

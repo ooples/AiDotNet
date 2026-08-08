@@ -395,6 +395,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor ModelInputContradictsInterfaceDescriptor = new DiagnosticDescriptor(
+        id: "ADNGEN002",
+        title: "[ModelInput] contradicts the IFullModel<T,TIn,TOut> the model actually implements",
+        messageFormat: "Model '{0}' declares [ModelInput({1}, {2})] but implements "
+                       + "IFullModel<T, {3}, {4}>. The attribute and the type system disagree about "
+                       + "the model's own I/O, and the ATTRIBUTE wins when the test family is chosen "
+                       + "- so the model is routed to a family whose fixture it cannot satisfy, and "
+                       + "is then silently dropped with NO test at all. Correct the attribute to "
+                       + "match the implemented interface; the type system is the ground truth.",
+        category: "AiDotNet.TestScaffold",
+        // WARNING FOR NOW, ERROR ONCE THE BACKLOG IS CLEARED - same ladder as ADNGEN001, and for the
+        // same reason: the real count is not yet known, and erroring on an unmeasured backlog would
+        // redden the build and block everything else. The flip to Error is the point of the rule.
+        //
+        // This is a CONTRADICTION, not a preference: two statements about one model that cannot both
+        // be true. It is worth its own diagnostic because of how it failed - not loudly, but by
+        // making a model look like a near-miss ("resolves to family NeuralNetwork, missing an
+        // interface") when the truth was that its own declaration was wrong. Six RL policies and
+        // eleven Safety modules sat uncovered behind that misreading.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     private static readonly DiagnosticDescriptor ArchitectureFixtureSizeMismatchDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST002",
         title: "Generated scaffold architecture size disagrees with its InputShape",
@@ -2617,6 +2639,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                // ADNGEN002 — report BEFORE the family is resolved, because a contradicting
+                // attribute is what corrupts that resolution. Reported whether or not the model
+                // ends up generatable: a model that declares one I/O shape and implements another
+                // is wrong even when it happens to land in a workable family by luck.
+                if (model.DeclaredInputTypeName is not null && model.InterfaceInputTypeName is not null &&
+                    (!string.Equals(model.DeclaredInputTypeName, model.InterfaceInputTypeName, System.StringComparison.Ordinal) ||
+                     (model.DeclaredOutputTypeName is not null && model.InterfaceOutputTypeName is not null &&
+                      !string.Equals(model.DeclaredOutputTypeName, model.InterfaceOutputTypeName, System.StringComparison.Ordinal))))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ModelInputContradictsInterfaceDescriptor, Location.None,
+                        model.FullyQualifiedName,
+                        model.DeclaredInputTypeName, model.DeclaredOutputTypeName ?? "?",
+                        model.InterfaceInputTypeName, model.InterfaceOutputTypeName ?? "?"));
+                }
+
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                 {
@@ -2781,6 +2819,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool usesMatrixInput = false;
         bool usesVectorOutput = false;
 
+        // ADNGEN002 evidence. The four flags above are written from TWO independent sources — the
+        // [ModelInput] attribute and the implemented IFullModel<T,TIn,TOut> — and a model whose
+        // attribute disagrees with its own type system therefore looks identical to one where both
+        // agree. These four strings keep the two claims apart so the disagreement can be reported.
+        string? declaredInputTypeName = null;
+        string? declaredOutputTypeName = null;
+        string? interfaceInputTypeName = null;
+        string? interfaceOutputTypeName = null;
+
         foreach (var attr in modelClass.GetAttributes())
         {
             if (attr.AttributeClass is null)
@@ -2824,6 +2871,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 if (inputTypeSym is not null)
                 {
                     var inputName = inputTypeSym.Name;
+                    // Keep the DECLARED shape separately from the flags. The flags below are also
+                    // set from the implemented IFullModel<T,TIn,TOut>, and merging both sources
+                    // into one bool is what made a contradiction between them invisible — see
+                    // ADNGEN002.
+                    declaredInputTypeName = inputName;
                     if (inputName.Contains("Tensor"))
                         usesTensorInput = true;
                     else if (inputName.Contains("Matrix"))
@@ -2831,6 +2883,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 if (outputTypeSym is not null)
                 {
+                    declaredOutputTypeName = outputTypeSym.Name;
                     if (outputTypeSym.Name.Contains("Vector"))
                         usesVectorOutput = true;
                 }
@@ -2886,6 +2939,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 var inputTypeDisplay = iface.TypeArguments[1].ToDisplayString();
                 var outputTypeDisplay = iface.TypeArguments[2].ToDisplayString();
+                // The IMPLEMENTED shape, kept apart from the DECLARED one (see ADNGEN002). Reduced
+                // to the bare type name so it compares against the attribute's typeof(Tensor<>)
+                // form: "AiDotNet.Tensors.LinearAlgebra.Vector<T>" -> "Vector".
+                interfaceInputTypeName = SimpleTypeName(inputTypeDisplay);
+                interfaceOutputTypeName = SimpleTypeName(outputTypeDisplay);
                 if (inputTypeDisplay.Contains("Matrix"))
                     usesMatrixInput = true;
                 else if (inputTypeDisplay.Contains("Tensor"))
@@ -3126,6 +3184,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
+            DeclaredInputTypeName = declaredInputTypeName,
+            DeclaredOutputTypeName = declaredOutputTypeName,
+            InterfaceInputTypeName = interfaceInputTypeName,
+            InterfaceOutputTypeName = interfaceOutputTypeName,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
@@ -3480,13 +3542,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static TestFamily? ResolveTestBaseClass(ModelTestInfo model)
     {
         // === TIER 1: Specialized families (check first — most specific) ===
+        //
+        // A CATEGORY describes a model's MECHANISM; a BASE CLASS describes its test CONTRACT, and
+        // those are not the same claim. AnoGANDetector carries CategoryGAN because it detects
+        // anomalies WITH a GAN, but it derives from AnomalyDetectorBase<T> (ModelBase<T, Matrix<T>,
+        // Vector<T>>) and so has an anomaly detector's Train/Predict shape, not a generator's.
+        // MatchaTTS carries CategoryDiffusion for its flow-matching decoder while deriving from
+        // AudioNeuralNetworkBase<T>.
+        //
+        // Taking the mechanism claim UNCONDITIONALLY is what silently cost these models every test
+        // they had: Tier 1 resolved a family whose fixture requires an interface the model does not
+        // implement, IsCompatibleWithFamily then rejected it, and the model was dropped — no
+        // fixture, no failure, no coverage. The contract-based tiers below would have classified it
+        // correctly, but the chain had already returned.
+        //
+        // So a category shortcut is a PROPOSAL that must satisfy the family's own contract to be
+        // taken. When it does not, fall through to the base-class tiers, which is where the real
+        // I/O contract is expressed. Note this can only ever ADD coverage: any model whose
+        // classification changes here is one that resolves to an incompatible family today and
+        // therefore has no generated test at all.
+        //
+        // The Extends* checks below stay unconditional — a base class IS the contract, so if one of
+        // those is incompatible that is a genuine defect to report, not something to route around.
 
         // Priority 1: GaussianProcess
-        if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
+        if ((model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess) &&
+            IsCompatibleWithFamily(model, TestFamily.GaussianProcess))
             return TestFamily.GaussianProcess;
 
         // Priority 2: TimeSeriesModel
-        if (model.Categories.Contains(CategoryTimeSeriesModel))
+        if (model.Categories.Contains(CategoryTimeSeriesModel) &&
+            IsCompatibleWithFamily(model, TestFamily.TimeSeries))
             return TestFamily.TimeSeries;
 
         // Priority 2a: 3D Diffusion (most specific diffusion subtype)
@@ -3506,15 +3592,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.LatentDiffusion;
 
         // Priority 4: Diffusion (plain, non-latent)
-        if (model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel)
+        if ((model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel) &&
+            IsCompatibleWithFamily(model, TestFamily.Diffusion))
             return TestFamily.Diffusion;
 
         // Priority 5: GAN
-        if (model.Categories.Contains(CategoryGAN))
+        if (model.Categories.Contains(CategoryGAN) &&
+            IsCompatibleWithFamily(model, TestFamily.GAN))
             return TestFamily.GAN;
 
         // Priority 6: EmbeddingModel
-        if (model.Categories.Contains(CategoryEmbeddingModel))
+        if (model.Categories.Contains(CategoryEmbeddingModel) &&
+            IsCompatibleWithFamily(model, TestFamily.Embedding))
             return TestFamily.Embedding;
 
         // Priority 7: GraphNetwork
@@ -3526,7 +3615,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // sequence dimension, which the generic GraphNN [nodes, features] test input
         // can't supply. Let those fall through to the Forecasting family; only pure
         // (non-forecasting) graph networks are classified as GraphNN here.
-        if (model.Categories.Contains(CategoryGraphNetwork) && !model.ExtendsForecastingModelBase)
+        if (model.Categories.Contains(CategoryGraphNetwork) && !model.ExtendsForecastingModelBase &&
+            IsCompatibleWithFamily(model, TestFamily.GraphNN))
             return TestFamily.GraphNN;
 
         // === TIER 2: Mid-level NN hierarchy (base class chain detection) ===
@@ -16131,6 +16221,32 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return backtick >= 0 ? name.Substring(0, backtick) : name;
     }
 
+    /// <summary>
+    /// Reduces a fully-qualified generic display string to its bare type name so an IMPLEMENTED
+    /// type argument can be compared against a DECLARED <c>typeof(X&lt;&gt;)</c> attribute argument.
+    /// </summary>
+    /// <remarks>
+    /// The two sources spell the same type differently — the interface walk yields
+    /// <c>AiDotNet.Tensors.LinearAlgebra.Vector&lt;T&gt;</c> while
+    /// <c>attr.ConstructorArguments[0].Value.Name</c> yields <c>Vector</c> — so they must be
+    /// normalised before ADNGEN002 can decide whether they actually disagree. Comparing the raw
+    /// forms would report every model as contradictory.
+    /// </remarks>
+    private static string SimpleTypeName(string displayString)
+    {
+        var name = displayString;
+
+        var angle = name.IndexOf('<');
+        if (angle >= 0)
+            name = name.Substring(0, angle);
+
+        var dot = name.LastIndexOf('.');
+        if (dot >= 0)
+            name = name.Substring(dot + 1);
+
+        return StripBacktick(name);
+    }
+
     private static string EscapeString(string value)
     {
         return value
@@ -16179,6 +16295,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>Whether the IFullModel output type is Vector (not Matrix or Tensor).</summary>
         public bool UsesVectorOutput { get; set; }
+
+        /// <summary>Input type named by the model's <c>[ModelInput]</c> attribute, if it has one.</summary>
+        /// <remarks>
+        /// Kept separate from <see cref="InterfaceInputTypeName"/> so ADNGEN002 can tell a DECLARED
+        /// shape from an IMPLEMENTED one. The <c>UsesTensorInput</c>/<c>UsesMatrixInput</c> flags
+        /// are written from both sources, so once they are set the two claims are indistinguishable
+        /// — which is why a model could declare Tensor→Tensor while implementing
+        /// <c>IFullModel&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;</c> and nothing noticed.
+        /// </remarks>
+        public string? DeclaredInputTypeName { get; set; }
+
+        /// <summary>Output type named by the model's <c>[ModelInput]</c> attribute, if it has one.</summary>
+        public string? DeclaredOutputTypeName { get; set; }
+
+        /// <summary>Input type argument of the <c>IFullModel&lt;T,TIn,TOut&gt;</c> the model actually implements.</summary>
+        public string? InterfaceInputTypeName { get; set; }
+
+        /// <summary>Output type argument of the <c>IFullModel&lt;T,TIn,TOut&gt;</c> the model actually implements.</summary>
+        public string? InterfaceOutputTypeName { get; set; }
 
         /// <summary>Whether the model has an accessible parameterless constructor.</summary>
         public bool HasParameterlessConstructor { get; set; }

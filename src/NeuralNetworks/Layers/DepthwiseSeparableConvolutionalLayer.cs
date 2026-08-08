@@ -37,9 +37,55 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Both ranks come from OnFirstForward naming them itself - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and rejecting everything else.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
+public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From this layer's own arithmetic in <see cref="OnFirstForward"/>:
+    /// <c>outH = (h - _kernelSize + 2*_padding) / _stride + 1</c>, and the same for width - the
+    /// sliding-window formula at dilation 1, which this layer does not parameterize.
+    /// </para>
+    /// <para>
+    /// A separable convolution is two stages, but only ONE of them moves a spatial window. The
+    /// depthwise stage carries the <c>_kernelSize</c>/<c>_stride</c>/<c>_padding</c> geometry
+    /// (kernels shaped <c>[_inputDepth, 1, _kernelSize, _kernelSize]</c>); the pointwise stage is 1x1
+    /// (<c>[_outputDepth, _inputDepth, 1, 1]</c>) and only remixes channels. So the spatial axes take
+    /// the window once, not twice, and the channel count is whatever the pointwise stage was
+    /// configured to emit.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDepth <= 0 || _kernelSize <= 0 || _stride <= 0 || _padding < 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputDepth));
+        OutputAxisContract Spatial(TensorAxis a)
+            => new(a, AxisRelation.Window(a, _kernelSize, _stride, _padding));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, Spatial(TensorAxis.Height), Spatial(TensorAxis.Width) },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, Spatial(TensorAxis.Height), Spatial(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The filter kernels used for the depthwise convolution step.
     /// </summary>

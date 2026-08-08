@@ -38,9 +38,47 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+// Rank 2 - [numNodes, inputFeatures] - is what the forward's own restore branch names ("Was 2D, return
+// [nodes, outputFeatures]") and the only form [LayerProperty(TestInputShape = "4, 8")] exercises. Other
+// ranks ARE handled, but their node count must agree with the separately-installed adjacency matrix, so
+// a declaration there would be a claim about a tensor this layer never sees on its own.
+//
+// The node axis is TensorAxis.Other: graph nodes are neither a sequence nor a spatial extent, and naming
+// them Time or Length would licence a downstream causal or convolutional layer to read an ordering into
+// them that does not exist.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the emitted width is configuration - and, worth stating explicitly, it is NOT
+    /// the sum of the two branches. The self and neighbour projections are both
+    /// <c>[_inputFeatures, _outputFeatures]</c> and step 5 COMBINES them with
+    /// <c>Engine.TensorAdd(selfTransformed, neighborTransformed)</c>, not a concatenation, so the width is
+    /// <c>_outputFeatures</c> once. That factor-of-two question is exactly what a shape contract should
+    /// settle rather than leave to the reader.
+    /// </para>
+    /// <para>
+    /// The node axis is Same: aggregating a neighbourhood into each node changes what a node holds, never
+    /// how many nodes there are. The optional L2 normalization is per-vector and does not resize anything.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputFeatures <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures)),
+        };
+    }
+
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly SAGEAggregatorType _aggregatorType;

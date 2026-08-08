@@ -36,8 +36,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// MULTI-INPUT, yet the shape still resolves against ONE input - which is the case the multi-input rule
+// exists to distinguish, not to exclude. ValidateInputShapes rejects any construction whose shapes are
+// not all identical, and the constructor passes `inputShapes[0]` straight through as the output shape:
+//     base(inputShapes, inputShapes[0], ...)
+// So the second addend cannot change the answer; it is constrained to equal the first. Element-wise sum
+// plus an optional activation leaves every axis untouched at every rank.
+[ElementWiseShape(Note = "Element-wise sum of identically-shaped inputs; shape is untouched at any rank.")]
 [AutoParameters]
-public partial class AddLayer<T> : LayerBase<T>
+public partial class AddLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Stores the input tensors from the most recent forward pass for use in the backward pass.
@@ -270,7 +277,7 @@ public partial class AddLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         // Collect sequential input_0, input_1, ... — require contiguous keys starting at 0
@@ -348,7 +355,7 @@ public partial class AddLayer<T> : LayerBase<T>
     /// This operation combines information from multiple sources in your network.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {

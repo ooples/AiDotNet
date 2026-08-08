@@ -56,8 +56,28 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4")]
+// Shape-preserving, and the residual connection is what makes that a hard guarantee rather than a
+// coincidence: ForwardTraced ends with Engine.TensorAdd(output3D, input3D), which only type-checks when
+// the input's trailing width already equals _modelDimension. So every axis is carried through and
+// nothing needs a hand-written relation - the generator derives Same(role) for each.
+//
+// Rank 2 is [Time, Features], not [Batch, Features]: ForwardTraced reads the sequence length from
+// input.Shape[rank - 2] at every rank, and the constructor's base shape is [-1, modelDimension] with the
+// -1 documented as the FREE sequence axis. That also matches [LayerProperty(TestInputShape = "4, 16")].
+// Both ranks are spelled out rather than folded into one BatchOptional declaration because the generator
+// emits one arm per declared axis count, and the optional-batch form would leave rank 2 without one.
+//
+// Rank 1 is deliberately absent: the output-reshape block indexes outputShape[rank - 2], so a rank-1
+// input throws rather than round-tripping.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Selective scan is a recurrence over Time: the sequence length is consumed, never resized.")]
 [AutoParameters]
-internal partial class MambaBlock<T> : LayerBase<T>
+public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
 {
     // Configuration
     private readonly int _modelDimension;

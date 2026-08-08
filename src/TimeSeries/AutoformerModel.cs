@@ -1103,9 +1103,57 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
 /// tape forward (<c>AutoformerModel.EncoderLayerEngine</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
+// TWO inputs and TWO outputs - the (seasonal, trend) pair Autoformer's series decomposition carries
+// through every layer. See AutoformerModel.EncoderLayerEngine, whose signature is literally
+// (Tensor seasonal, Tensor trend) -> (Tensor seasonal, Tensor trend). Both streams are [B, T, emb] and
+// stay that way: the auto-correlation block and the FFN each end in a residual add, and decomposition
+// splits a stream into two streams of the SAME width rather than widening one.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Declines: this layer has two inputs and two outputs, and its own <c>ForwardTraced</c> throws
+    /// because the real forward is <c>AutoformerModel.EncoderLayerEngine</c>.
+    /// <see cref="OutputsFor"/> is the contract.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Both outputs are shaped like the incoming seasonal stream on port 0. Nothing widens: the
+    /// residual adds pin every axis, and decomposition yields two streams of the same width.
+    /// </para>
+    /// <para>
+    /// THE CONSTRUCTOR'S <c>embeddingDim * 2</c> WAS A FICTION. This layer declared
+    /// <c>base(new[] { embeddingDim }, new[] { embeddingDim * 2 })</c>, packing the pair into one
+    /// number, and no code anywhere produces a tensor of that width. It stayed undeclarable for as
+    /// long as a contract could describe only ONE output - and declaring the packed number would have
+    /// meant describing a tensor that does not exist, which is worse than declaring nothing. With
+    /// <c>OutputsFor</c> the pair can be stated as what it actually is.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<IReadOnlyList<OutputAxisContract>>? OutputsFor(IReadOnlyList<int> inputRanks)
+    {
+        if (inputRanks is null || inputRanks.Count == 0) return null;
+        if (inputRanks[0] != 3) return null;
+
+        return new[] { SeriesStreamAxes(), SeriesStreamAxes() };
+    }
+
+    /// <summary>One decomposition stream: [Batch, Time, Features], carried through unchanged.</summary>
+    internal static IReadOnlyList<OutputAxisContract> SeriesStreamAxes() => new[]
+    {
+        new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+        new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+    };
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _movingAvgKernel;
@@ -1264,9 +1312,48 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
 /// tape forward (<c>AutoformerModel.DecoderLayerEngine</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
+// The decoder half of the same pair. DecoderLayerEngine takes FOUR tensors - the decoder's own
+// (seasonal, trend) plus the encoder's - and returns TWO, both shaped like the decoder seasonal stream
+// on port 0. Cross-correlation reads the encoder streams but is sized by the decoder queries.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Declines: four inputs, two outputs, and <c>ForwardTraced</c> throws - the real forward is
+    /// <c>AutoformerModel.DecoderLayerEngine</c>. <see cref="OutputsFor"/> is the contract.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Both outputs follow port 0, the decoder's seasonal stream. As in the encoder, the constructor's
+    /// declared output width of <c>embeddingDim * 2</c> is a packed placeholder no code produces.
+    /// </para>
+    /// <para>
+    /// NOTE, not fixed here: the constructor declares THREE input shapes
+    /// (<c>base(new int[][] { [emb], [emb], [emb] }, ...)</c>) while <c>DecoderLayerEngine</c> consumes
+    /// FOUR tensors. This contract sizes from port 0 and so is unaffected either way, but the declared
+    /// port count and the real one disagree.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<IReadOnlyList<OutputAxisContract>>? OutputsFor(IReadOnlyList<int> inputRanks)
+    {
+        if (inputRanks is null || inputRanks.Count == 0) return null;
+        if (inputRanks[0] != 3) return null;
+
+        return new[]
+        {
+            AutoformerEncoderLayer<T>.SeriesStreamAxes(),
+            AutoformerEncoderLayer<T>.SeriesStreamAxes(),
+        };
+    }
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _movingAvgKernel;

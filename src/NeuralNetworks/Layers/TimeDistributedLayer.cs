@@ -35,9 +35,107 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true)]
+// A COMPOSING decorator, not a delegating one. ForwardTraced builds
+// `outputShape = new[] { batchSize, timeSteps }.Concat(_innerLayer.GetOutputShape())`, so the leading
+// two axes are this layer's (carried straight through from the input) and every trailing axis is the
+// INNER layer's own output extent. The rank is therefore 2 + the inner layer's rank, which is why this
+// cannot simply forward OutputAxesFor to the inner layer the way LoRAAdapterBase does.
+//
+// Rank 2 is the degenerate case the same method spells out: `timeSteps = rank == 2 ? 1 : Shape[1]`,
+// the input is reshaped to [batch, 1, features], and the single-step result is reshaped back to
+// [batch] ++ inner - so at rank 2 no Time axis survives into the output.
+//
+// The declared ranks are the ones ForwardTraced genuinely handles (it throws only below rank 2) paired
+// with an inner layer whose output axes can be NAMED: rank 3 [Batch, Time, Features] over a
+// per-position projection, and rank 5 [Batch, Time, Channels, Height, Width] over a per-frame
+// convolution - the video case the class docs describe. Output rank 4 is declared because the rank-2
+// input form with a 3-axis inner layer would produce it.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Degenerate single-step form: folded to [batch, 1, features] and unfolded again.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "One feature vector per time step; the inner layer sees [batch, features].")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "One frame per time step; the inner layer sees [batch, channels, height, width].")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TimeDistributedLayer<T> : LayerBase<T>
+public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Composed from the inner layer rather than delegated to it, because this wrapper PREPENDS axes.
+    /// Read straight off <c>ForwardTraced</c>:
+    /// <c>var outputShape = new[] { batchSize, timeSteps }.Concat(_innerLayer.GetOutputShape())</c> -
+    /// batch and time are the input's own, and the trailing extents are whatever the inner layer
+    /// reports, independent of the input's trailing extents.
+    /// </para>
+    /// <para>
+    /// The trailing axes are therefore <c>Fixed</c> off <c>GetOutputShape()</c> - a real read of the
+    /// wrapped instance, not a transcribed literal - and NOT a delegation to the inner contract. That
+    /// distinction is the implementation's, not a simplification: the forward never re-derives the
+    /// inner extents from the per-step input, it copies the shape the inner layer already reports.
+    /// </para>
+    /// <para>
+    /// Only expressible because <c>OutputAxesFor</c> is an INSTANCE method: the trailing sizes belong to
+    /// the layer this wrapper was constructed around. Where they cannot be named or are not yet
+    /// resolved, this declines rather than guessing.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // ForwardTraced: "if (rank < 2) throw ... requires at least 2D input".
+        if (inputRank < 2) return null;
+
+        var inner = _innerLayer.GetOutputShape();
+        if (inner is null || inner.Length == 0) return null;
+
+        foreach (int extent in inner)
+        {
+            // A lazy inner layer reports placeholder extents until its first forward resolves them, and
+            // AxisRelation.Fixed rejects a non-positive size. Claiming nothing beats claiming zero.
+            if (extent <= 0) return null;
+        }
+
+        // GetOutputShape() gives the inner extents but not their ROLES - it is a list of numbers. Only
+        // the arrangements this wrapper is documented and used for can be named without inventing a
+        // role, and a role invented here would be propagated as fact by everything downstream.
+        TensorAxis[] innerRoles = inner.Length switch
+        {
+            1 => [TensorAxis.Features],
+            3 => [TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width],
+            _ => [],
+        };
+
+        if (innerRoles.Length == 0) return null;
+
+        var axes = new List<OutputAxisContract>(2 + inner.Length)
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        };
+
+        // At rank 2 the wrapper runs exactly one step and reshapes the time axis back out, so it is
+        // absent from the result: "activated = Engine.Reshape(activated, [batchSize] ++ innerOutputShape)".
+        if (inputRank >= 3)
+        {
+            axes.Add(new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)));
+        }
+
+        for (int i = 0; i < inner.Length; i++)
+        {
+            axes.Add(new OutputAxisContract(innerRoles[i], AxisRelation.Fixed(inner[i])));
+        }
+
+        return axes;
+    }
+
     /// <summary>
     /// The inner layer that is applied to each time step.
     /// </summary>

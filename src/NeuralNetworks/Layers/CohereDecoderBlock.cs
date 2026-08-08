@@ -18,8 +18,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Shape-preserving by CONSTRUCTION, not by coincidence. The last statement of ForwardTraced is
+// "Engine.TensorAdd(Engine.TensorAdd(input, attnOut), ffnOut)" -- a residual add against the untouched
+// input -- and the FFN branch is explicitly restored to the input's shape one line earlier
+// ("Engine.Reshape(down, input._shape)"). A residual block that resized anything could not add.
+//
+// Roles are the block's own: the trailing axis is the model width the class calls HiddenSize (the base
+// ctor declares [-1, hiddenSize] and ForwardTraced reads "featureDim = input.Shape[rank - 1]"), and the
+// axis before it is the decoder's sequence position. Batch is optional because the leading axis is
+// absent at rank 2 -- the form the base ctor declares -- and present at rank 3, the form
+// [LayerProperty(TestInputShape = "1, 4, 8")] exercises; ForwardTraced flattens every leading axis
+// into one before projecting, so both run the same code.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class CohereDecoderBlock<T> : LayerBase<T>
+public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly LayerNormalizationLayer<T> _norm;
     private readonly LayerBase<T> _attention;

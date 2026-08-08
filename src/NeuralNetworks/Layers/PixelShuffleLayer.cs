@@ -39,8 +39,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "2")]
+// Roles from this layer's own guard - "requires rank>=3 [...,C,H,W]" - and from ForwardTraced, which
+// branches on rank 3 ([C,H,W], a batch axis is added internally and stripped again) and rank 4
+// ([B,C,H,W], handed straight to Engine.PixelShuffle). Ranks above 4 are also accepted, by collapsing
+// the leading axes; they are not declared here because each leading axis would need a DISTINCT role and
+// this layer says nothing about what those axes mean. OutputAxesFor below is hand-written: every
+// relation is a function of _upscaleFactor, a constructor argument.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class PixelShuffleLayer<T> : LayerBase<T>
+public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
 {
     #region Fields
 
@@ -83,6 +97,47 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public int UpscaleFactor => _upscaleFactor;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Taken from <c>OnFirstForward</c>, which resolves
+    /// <c>[c, h, w] -&gt; [c / r2, h * _upscaleFactor, w * _upscaleFactor]</c> with
+    /// <c>r2 = _upscaleFactor * _upscaleFactor</c>. Channel information is not discarded, it is MOVED into
+    /// the two spatial axes - which is exactly why the channel divisor is the square of the spatial factor.
+    /// </para>
+    /// <para>
+    /// <c>Scaled</c> refuses uneven division, and that refusal is the layer's own precondition rather than
+    /// a limitation of the vocabulary: <c>OnFirstForward</c> throws when <c>c % r2 != 0</c>. A contract that
+    /// silently rounded here would accept inputs the layer rejects.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_upscaleFactor < 1) return null;
+
+        int r2 = _upscaleFactor * _upscaleFactor;
+
+        var channels = new OutputAxisContract(
+            TensorAxis.Channels, AxisRelation.Scaled(TensorAxis.Channels, 1, r2));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Scaled(TensorAxis.Height, _upscaleFactor, 1));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Scaled(TensorAxis.Width, _upscaleFactor, 1));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels,
+                height,
+                width,
+            },
+            _ => null,
+        };
+    }
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;

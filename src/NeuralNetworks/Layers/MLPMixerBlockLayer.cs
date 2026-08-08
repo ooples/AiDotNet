@@ -30,8 +30,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
+// Both mixers are residual: ForwardTraced ends each half with `Engine.TensorAdd(x, sublayerOut)`, and an
+// add only types when the sublayer handed back x's exact shape. The temporal mixer transposes to the
+// patch axis, expands to numPatches * expansionFactor and contracts straight back to numPatches; the
+// channel mixer does the same on hiddenDim. Every widened dimension is an INTERMEDIATE - expansionFactor
+// never reaches an output axis - so the block is shape-preserving at whatever rank it is handed.
+[ElementWiseShape(Note = "Token-mixing then channel-mixing, each expanded and contracted back and added residually.")]
 [AutoParameters]
-public partial class MLPMixerBlockLayer<T> : LayerBase<T>
+public partial class MLPMixerBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numPatches;
     private readonly int _hiddenDim;

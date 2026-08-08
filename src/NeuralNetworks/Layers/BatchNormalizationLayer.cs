@@ -43,8 +43,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
+// Rescales values using batch statistics; never resizes, at any rank.
+[ElementWiseShape(Note = "Normalises using batch statistics; every dimension is carried through.")]
 [AutoParameters]
-public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
     /// <inheritdoc />
     /// <remarks>Normalization rescales values; it never changes any axis.</remarks>

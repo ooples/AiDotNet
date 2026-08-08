@@ -57,9 +57,44 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "16, 4, 2, 8, true, 0.0, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
+// Rank 2 - [numNodes, inputFeatures] - is what the forward's own restore branch names ("Was 2D, return
+// [nodes, outputFeatures]") and the only form [LayerProperty(TestInputShape = "4, 16")] exercises. Other
+// ranks ARE handled, but their node count must agree with the separately-installed adjacency matrix, so
+// a declaration there would be a claim about a tensor this layer never sees on its own.
+//
+// The node axis is TensorAxis.Other: graph nodes are neither a sequence nor a spatial extent, and naming
+// them Time would licence a downstream causal layer to mask them by position, which is meaningless here.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the emitted width is <c>_outputFeatures</c>, set by the output projection
+    /// <c>[_numHeads * _headDim, _outputFeatures]</c>, and nothing after it widens again: the FFN expands
+    /// to <c>_ffnHiddenDim</c> and comes back through <c>[_ffnHiddenDim, _outputFeatures]</c>, and both
+    /// residual adds sit at <c>_outputFeatures</c> - when <c>_inputFeatures != _outputFeatures</c> the
+    /// layer zero-pads or truncates the RESIDUAL to reach that width rather than changing the width.
+    /// </para>
+    /// <para>
+    /// The node axis is Same: attention over the adjacency re-weights nodes, it does not add or drop any.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputFeatures <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures)),
+        };
+    }
+
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly int _numHeads;

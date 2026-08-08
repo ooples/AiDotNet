@@ -45,9 +45,67 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, IsStateful = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 16")]
+// FEATURE-LAST. ForwardTraced flattens every leading axis into a step counter
+// ("flatBatch *= input.Shape[d]" over d < rank-1), runs the reservoir update once per step, and then
+// rebuilds the caller's shape with only the trailing axis replaced:
+// "outputShape[d] = input.Shape[d]" for d < rank-1 and "outputShape[rank - 1] = _reservoirSize".
+// So every axis but the last is carried through untouched at any rank.
+//
+// Batch is optional on the two-axis form because the rank-1 branch is real - "rank == 1 ? Reshape(input,
+// [1, _inputSize])" and it returns [_reservoirSize] - and NOT on the three-axis form, because marking it
+// there would make that declaration also accept rank 2 as [Time, Features], colliding with the
+// [Batch, Features] the first one already claims at that rank.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-step update: the leading axes are flattened into a step counter and restored unchanged.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ReservoirLayer<T> : LayerBase<T>
+public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The trailing axis is <c>Fixed(_reservoirSize)</c>, straight off
+    /// <c>outputShape[rank - 1] = _reservoirSize</c> in <c>ForwardTraced</c>. It is a constructor argument
+    /// rather than anything read from the input - a reservoir's whole purpose is to project a narrow input
+    /// into a much wider fixed state space, so the output width is deliberately independent of the input
+    /// width, which the layer in fact pins to <c>_inputSize</c> and rejects otherwise.
+    /// </para>
+    /// <para>
+    /// STATEFUL BUT NOT SHAPE-STATEFUL. <c>_reservoirState</c> carries across calls and makes the VALUES
+    /// depend on call history; it has no effect on the shape, so the relation is still a pure function of
+    /// the input shape.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_reservoirSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_reservoirSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The size of the input vector at each time step.
     /// </summary>

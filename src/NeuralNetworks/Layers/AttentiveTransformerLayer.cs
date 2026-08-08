@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Tabular;
 
@@ -40,11 +42,36 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+// Rank 2 only, and that is not a simplification: ForwardTraced reads <c>input.Shape[0]</c> as the batch
+// and the Sparsemax runs with <c>axis: 1</c>, so a rank other than 2 would select over the wrong axis.
+// Roles from the constructor's own shapes - base([inputDim], [outputDim]) - plus the leading batch the
+// XML docs name: "Processed features ... [batch_size, input_dim]" -> "attention mask [batch_size, output_dim]".
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class AttentiveTransformerLayer<T> : LayerBase<T>
+public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Hand-written because the feature axis CHANGES SIZE, which the generator cannot see from matching
+    /// layouts: the attention mask has one entry per ORIGINAL feature, not per processed feature, so the
+    /// output width is <c>_outputDim</c> whatever the input width. Read straight off
+    /// <c>ForwardTraced</c>, which sizes its prior scales <c>[input.Shape[0], _outputDim]</c> and returns
+    /// the mask at that shape.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim)),
+        };
+    }
     private readonly double _relaxationFactor;
 
     // Attention layers

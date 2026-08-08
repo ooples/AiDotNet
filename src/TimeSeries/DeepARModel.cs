@@ -906,17 +906,50 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// through it (BPTT) and the Adam optimizer updates the registered weights from tape
 /// gradients. Activations are column-major <c>[hiddenSize, batch]</c>.
 /// </summary>
+// Rank 2 and COLUMN-MAJOR, which the class summary states outright ("Activations are column-major
+// [hiddenSize, batch]") and Step's ops confirm: TensorMatMul(_wx [4H, inputSize], xt) puts the
+// feature axis first and the batch axis second. Rank 2 only - ForwardTraced tolerates a rank-1
+// argument when reading the batch size, but it then adds a rank-1 x-contribution to a rank-2
+// h-contribution, so nothing here defines a rank-1 result.
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, TensorAxis.Batch, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// HAND-WRITTEN because a recurrent cell replaces the feature axis rather than carrying it
+    /// through: ForwardTraced returns the <c>h</c> of <c>Step</c>, and <c>Step</c> builds it as
+    /// <c>oGate * tanh(cNew)</c> out of gates narrowed to <c>_hiddenSize</c> rows each - so the
+    /// width is the hidden size, whatever the input width was. Only the batch column count survives,
+    /// which is why the second axis is Same. The constructor states the same pair:
+    /// <c>base(new[] { inputSize }, new[] { hiddenSize })</c>.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _hiddenSize <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize)),
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        };
+    }
+
     private readonly int _inputSize;
     private readonly int _hiddenSize;
 
     // Input-to-gate and hidden-to-gate weights, stacked over the 4 gates in the order
     // (input, forget, cell, output): _wx is [4H, inputSize], _wh is [4H, H], _bias is [4H].
-    private  Tensor<T> _wx;
-    private  Tensor<T> _wh;
-    private  Tensor<T> _bias;
+    //
+    // NOT readonly: these are registered trainable parameters, and TrainableParameterGenerator emits a
+    // SetTrainableParameters that REPLACES them with ParameterBuffer views. readonly forbade that
+    // assignment (CS0191), so the buffer-backed path could never have worked for this cell. The
+    // conflict stayed invisible only because the generator skips non-partial types and this class was
+    // not partial until it declared a shape contract.
+    private Tensor<T> _wx;
+    private Tensor<T> _wh;
+    private Tensor<T> _bias;
 
     public int InputSize => _inputSize;
     public int HiddenSize => _hiddenSize;

@@ -99,8 +99,25 @@ public sealed class LayerGraph<T>
     /// <summary>The nodes, in the order they were added.</summary>
     public IReadOnlyList<LayerNode<T>> Nodes => _nodes;
 
-    /// <summary>Id of the node whose output is the model's output.</summary>
-    public int OutputNodeId { get; }
+    /// <summary>Id of the node whose output is the model's output — the FIRST, when there are several.</summary>
+    public int OutputNodeId => OutputNodeIds[0];
+
+    /// <summary>
+    /// Ids of every node whose output is a model output, in declaration order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Usually one. A decomposition emits several: Autoformer's encoder returns a (seasonal, trend)
+    /// PAIR, which <see cref="IShapeContract.OutputsFor"/> can now describe declaratively. Until this
+    /// existed the graph could not REPRESENT what the contract could state - a model with two outputs
+    /// had to declare two whole graphs, which is what ABCNet does for its two entry points.
+    /// </para>
+    /// <para>
+    /// Single-output graphs are unaffected: this is a one-element list and
+    /// <see cref="OutputNodeId"/> reads it, so every existing caller behaves exactly as before.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<int> OutputNodeIds { get; }
 
     /// <summary>True when at least one node's output feeds more than one consumer.</summary>
     /// <remarks>
@@ -113,9 +130,17 @@ public sealed class LayerGraph<T>
     public bool IsLinear => !HasFanOut && _nodes.All(n => !n.HasEdgeTransform);
 
     internal LayerGraph(List<LayerNode<T>> nodes, int outputNodeId)
+        : this(nodes, new[] { outputNodeId })
     {
+    }
+
+    internal LayerGraph(List<LayerNode<T>> nodes, IReadOnlyList<int> outputNodeIds)
+    {
+        if (outputNodeIds is null || outputNodeIds.Count == 0)
+            throw new ArgumentException("A graph needs at least one output node.", nameof(outputNodeIds));
+
         _nodes = nodes;
-        OutputNodeId = outputNodeId;
+        OutputNodeIds = outputNodeIds;
 
         var consumerCount = new int[nodes.Count];
         foreach (var n in nodes)
@@ -169,7 +194,19 @@ public sealed class LayerGraph<T>
     /// Nodes are executed in id order, which is a valid topological order by construction: the builder
     /// refuses an edge to a node that does not yet exist, so a node's inputs always precede it.
     /// </remarks>
-    public Tensor<T> Forward(Tensor<T> input)
+    public Tensor<T> Forward(Tensor<T> input) => ForwardAll(input)[0];
+
+    /// <summary>
+    /// Executes the graph and returns EVERY output, in <see cref="OutputNodeIds"/> order.
+    /// </summary>
+    /// <param name="input">The model input, delivered to every node with no predecessors.</param>
+    /// <returns>One tensor per declared output node.</returns>
+    /// <remarks>
+    /// <see cref="Forward"/> is this taking the first, which is the whole of it for the single-output
+    /// graphs that are the norm. A decomposition needs both halves — Autoformer's encoder returns a
+    /// (seasonal, trend) pair — and returning only the first would silently discard one.
+    /// </remarks>
+    public IReadOnlyList<Tensor<T>> ForwardAll(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
@@ -189,7 +226,9 @@ public sealed class LayerGraph<T>
             values[i] = node.Layer is null ? fed : node.Layer.Forward(fed);
         }
 
-        return values[OutputNodeId];
+        var outputs = new Tensor<T>[OutputNodeIds.Count];
+        for (int i = 0; i < OutputNodeIds.Count; i++) outputs[i] = values[OutputNodeIds[i]];
+        return outputs;
     }
 
     /// <summary>
@@ -298,7 +337,39 @@ public sealed class LayerGraph<T>
             }
         }
 
+        _lastResolvedShapes = shapes;
         return shapes[OutputNodeId];
+    }
+
+    /// <summary>Per-node shapes from the most recent <see cref="ResolveShapes"/>, or null.</summary>
+    private int[]?[]? _lastResolvedShapes;
+
+    /// <summary>
+    /// Resolves the graph and returns EVERY output shape, in <see cref="OutputNodeIds"/> order.
+    /// </summary>
+    /// <param name="inputShape">The shape delivered to nodes with no predecessors.</param>
+    /// <returns>One shape per declared output node, or <c>null</c> if any of them failed to resolve.</returns>
+    /// <remarks>
+    /// The multi-output counterpart of <see cref="ResolveShapes"/>, which returns only the first.
+    /// Declining as a whole when ANY output fails is deliberate and matches the per-node rule already
+    /// used here: half a set of output shapes is not a shape for the model.
+    /// </remarks>
+    public IReadOnlyList<int[]>? ResolveAllShapes(int[] inputShape)
+    {
+        if (ResolveShapes(inputShape) is null) return null;
+
+        var shapes = _lastResolvedShapes;
+        if (shapes is null) return null;
+
+        var outputs = new int[OutputNodeIds.Count][];
+        for (int i = 0; i < OutputNodeIds.Count; i++)
+        {
+            var shape = shapes[OutputNodeIds[i]];
+            if (shape is null || shape.Length == 0) return null;
+            outputs[i] = shape;
+        }
+
+        return outputs;
     }
 
     /// <summary>
@@ -429,18 +500,58 @@ public sealed class LayerGraphBuilder<T>
     }
 
     /// <summary>Declares which node's output is the model's output. Defaults to the last node added.</summary>
+    /// <remarks>
+    /// Replaces any previously declared outputs. To declare several, use <see cref="Outputs"/>.
+    /// </remarks>
     public LayerGraphBuilder<T> Output(int nodeId)
     {
         if (nodeId < 0 || nodeId >= _nodes.Count)
             throw new ArgumentOutOfRangeException(nameof(nodeId), nodeId, "No such node.");
         _outputId = nodeId;
+        _extraOutputIds = null;
         return this;
     }
+
+    /// <summary>
+    /// Declares SEVERAL output nodes, in the order the model returns them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A decomposition emits more than one tensor - Autoformer's encoder returns a (seasonal, trend)
+    /// pair - and until the graph could hold several outputs, such a model had to declare one graph per
+    /// output or pack the pair into a single fictitious width. The declarative side already describes
+    /// this via <see cref="IShapeContract.OutputsFor"/>; this is the operational half.
+    /// </para>
+    /// <para>
+    /// Order is the model's return order and is preserved through <see cref="LayerGraph{T}.ForwardAll"/>
+    /// and <see cref="LayerGraph{T}.ResolveAllShapes"/>.
+    /// </para>
+    /// </remarks>
+    public LayerGraphBuilder<T> Outputs(params int[] nodeIds)
+    {
+        if (nodeIds is null || nodeIds.Length == 0)
+            throw new ArgumentException("A graph needs at least one output node.", nameof(nodeIds));
+
+        foreach (int id in nodeIds)
+        {
+            if (id < 0 || id >= _nodes.Count)
+                throw new ArgumentOutOfRangeException(nameof(nodeIds), id, "No such node.");
+        }
+
+        _outputId = nodeIds[0];
+        _extraOutputIds = nodeIds.Length > 1 ? (int[])nodeIds.Clone() : null;
+        return this;
+    }
+
+    /// <summary>Additional output ids when more than one was declared; null for the usual single case.</summary>
+    private int[]? _extraOutputIds;
 
     /// <summary>Builds the graph.</summary>
     public LayerGraph<T> Build()
     {
         if (_nodes.Count == 0) throw new InvalidOperationException("A graph needs at least one node.");
-        return new LayerGraph<T>(_nodes, _outputId);
+        return _extraOutputIds is null
+            ? new LayerGraph<T>(_nodes, _outputId)
+            : new LayerGraph<T>(_nodes, _extraOutputIds);
     }
 }

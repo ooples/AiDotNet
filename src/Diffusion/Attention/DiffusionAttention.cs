@@ -1,5 +1,7 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -38,8 +40,13 @@ namespace AiDotNet.Diffusion.Attention;
 /// ```
 /// </para>
 /// </remarks>
+// Shape-preserving at rank 3. The forward branches on rank - `isImageFormat = Shape.Length == 4`
+// selects [B,C,H,W], otherwise [B,S,D] - and ONLY the rank-3 sequence form was probed, so only that
+// is declared. The rank-4 image form is deliberately left undeclared rather than assumed.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DiffusionAttention<T> : LayerBase<T>
+public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Number of channels.
@@ -329,8 +336,33 @@ public partial class DiffusionAttention<T> : LayerBase<T>
 /// This enables the model to generate images that match the text description.
 /// </para>
 /// </remarks>
+// SHAPE-PRESERVING on BOTH forms its own forward branches on, read off ForwardWithContext:
+//
+//   rank 4 - `isImageFormat` branch: permute [B,C,H,W] -> [B,H,W,C], flatten to [B, H*W, C], attend,
+//            then reshape back to [B,H,W,C] and permute to [B,C,H,W]. The trailing reshape only has
+//            enough elements if attention kept the feature width, which it does.
+//   rank 3 - the else branch passes the tensor to _crossAttention untouched.
+//
+// The identity on the feature axis is the nested CrossAttentionLayer's, not an assumption: it is
+// declared `[-1, queryDim] -> [-1, queryDim]` with `[LayerProperty(ChangesShape = false)]`, so both
+// the sequence length and the width survive. Axis roles are therefore identical on both sides at
+// both ranks and OutputAxesFor is generated as Same throughout.
+//
+// The context tensor is deliberately absent from this contract. It is a second input, and the output
+// borrows nothing from its shape - contextDim is consumed inside the attention's key/value
+// projections and never reaches the result.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Already-flattened token form: [batch, sequence, queryDim].")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Image form: flattened to H*W tokens internally and restored before returning.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DiffusionCrossAttention<T> : LayerBase<T>
+public partial class DiffusionCrossAttention<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Query dimension (spatial channels).

@@ -36,8 +36,19 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// MULTI-INPUT, yet the shape still resolves against ONE input - the same case AddLayer documents, and
+// the case the multi-input rule exists to distinguish rather than to exclude. ValidateInputShapes
+// rejects any construction whose shapes are not all identical (`!inputShapes[i].SequenceEqual(
+// inputShapes[0])` throws), and both constructors pass `inputShapes[0]` straight through as the output
+// shape:
+//     base(inputShapes, inputShapes[0], ...)
+// So the other factors cannot change the answer; they are constrained to equal the first. Element-wise
+// Hadamard product plus an optional activation leaves every axis untouched at every rank, which is why
+// this is the shorthand rather than named axes - a gate mask and the features it gates carry entirely
+// different axis meanings, and this layer is indifferent to both.
+[ElementWiseShape(Note = "Element-wise product of identically-shaped inputs; shape is untouched at any rank.")]
 [AutoParameters]
-public partial class MultiplyLayer<T> : LayerBase<T>
+public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The input tensors from the most recent forward pass.
@@ -208,7 +219,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         var tensors = new List<Tensor<T>>();
@@ -282,7 +293,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>
     /// The method also saves all inputs and the output for later use in backpropagation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {

@@ -17,8 +17,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 4 }, 4, 2")]
+// FEATURE-LAST, inherited wholesale from the DenseLayer blocks this layer is a chain of: each block
+// fixes the TRAILING axis and carries every leading axis through untouched, so the chain does too.
+// Batch is optional because the leading axis is absent in the shape the constructor declares
+// (base(inputShape, ...) with the rank-1 [4] of TestConstructorArgs) and present in the shape the layer
+// is exercised at ([LayerProperty(TestInputShape = "1, 4")]); both run the same chain.
+//
+// Ranks above 2 are left undeclared rather than assumed. DenseLayer accepts them, so the chain very
+// likely does as well — but "likely" is not a contract, and this layer's own declared and tested shapes
+// only evidence the two ranks below.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
+public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly DenseLayer<T>[] _mlpBlocks;
     private readonly int[] _updateFrequencies;
@@ -170,6 +183,42 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>
             rates[i] = _numOps.FromDouble(rate);
         }
         return rates;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The chain is <c>yt = MLP^(fk)(...MLP^(f1)(xt))</c> and every block is built as
+    /// <c>new DenseLayer&lt;T&gt;(hiddenDim, ...)</c>, so the LAST block's width is the layer's width no
+    /// matter how many levels precede it. The frequency levels differ in how OFTEN each block updates,
+    /// not in what shape it produces — which is why the count of levels does not enter this contract at
+    /// all.
+    /// </para>
+    /// <para>
+    /// <c>hiddenDim</c> is not retained as a field, so it is read back off <c>GetOutputShape()</c> — the
+    /// constructor passes it there directly (<c>base(inputShape, new[] { hiddenDim })</c>). That is a
+    /// genuine read of the layer's own construction state, not a constant observed from a sample run.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (1 or 2)) return null;
+
+        var declaredOutput = GetOutputShape();
+        if (declaredOutput is null || declaredOutput.Length == 0) return null;
+
+        int hiddenDim = declaredOutput[declaredOutput.Length - 1];
+        if (hiddenDim <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(hiddenDim));
+
+        return inputRank == 1
+            ? new[] { features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            };
     }
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)

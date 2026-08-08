@@ -58,8 +58,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+// Rank 3 only, and the layer says so itself: "requires rank-3 [B, S, D] input" - it rejects every other
+// rank loudly, so no other rank is declared. Roles match the constructor's own
+// base(new[] { -1, -1, encoderDim }, new[] { -1, -1, encoderDim }).
+//
+// SHAPE-PRESERVING, though the middle axis changes MEANING: the soft-CIF alignment is built at [B, L, S]
+// with L set to S, so `Engine.BatchMatMul(alignment, input)` returns [B, L=S, D] - encoder frames go in,
+// token embeddings come out, one per frame slot. The size relation is Same; the reinterpretation is not
+// something the vocabulary can express, and pretending the count is data-dependent would be worse, since
+// the tensor really does come back at the input's length. The genuinely data-dependent quantity - how
+// many of those slots hold real tokens - is exposed separately as LastPredictedTokenCount, not as shape.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class CifAlignmentLayer<T> : LayerBase<T>
+public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _encoderDim;
     private readonly T _threshold;

@@ -40,8 +40,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// Roles from OnFirstForward, which names both accepted forms itself: "requires rank-3 [C,H,W] or
+// rank-4 [B,C,H,W] input". BatchOptional folds them into one declaration, and it must cover both
+// because this layer's [LayerProperty(ExpectedInputRank = 4)] pins the batched form.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
+public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The number of channels in the input data.
@@ -488,6 +495,46 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         }
 
         ResolveShapes(new[] { c, h, w }, new[] { _outputDepth, outH, outW });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The two <c>outH</c>/<c>outW</c> lines directly above are the sliding-window formula verbatim -
+    /// <c>(in + 2*padding - dilation*(kernel-1) - 1) / stride + 1</c> - so both spatial axes are
+    /// <c>Window</c> with this layer's own <c>_kernelSize</c>, <c>_stride</c>, <c>_padding</c> and
+    /// <c>_dilation</c>. Dilation is the whole point of this layer and is passed through explicitly:
+    /// omitting it would collapse the contract onto a plain convolution and OVERSTATE the output,
+    /// since dilation widens the kernel's reach and therefore shrinks the result.
+    /// </para>
+    /// <para>
+    /// Hand-written rather than generated for the reason <c>MaxPoolingLayer</c> gives: the window is a
+    /// caller-chosen relation, and a probe run at one configuration cannot tell a stride-1 dilated
+    /// convolution (which happens to look shape-preserving at the right padding) from the general case.
+    /// The channel axis is <c>Fixed(_outputDepth)</c>, the constructor argument <c>ResolveShapes</c>
+    /// publishes as the leading output dimension.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 3 and 4 only - exactly the two OnFirstForward accepts before it throws.
+        if (inputRank is not (3 or 4) || _kernelSize <= 0 || _stride <= 0 || _dilation <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputDepth));
+        var height = new OutputAxisContract(
+            TensorAxis.Height,
+            AxisRelation.Window(TensorAxis.Height, _kernelSize, _stride, _padding, _dilation));
+        var width = new OutputAxisContract(
+            TensorAxis.Width,
+            AxisRelation.Window(TensorAxis.Width, _kernelSize, _stride, _padding, _dilation));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
     }
 
     /// <summary>

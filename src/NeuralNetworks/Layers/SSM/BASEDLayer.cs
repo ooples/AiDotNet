@@ -63,9 +63,23 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+// Shape-preserving at every accepted rank - relations DISCOVERED by probing
+// (LayerShapeDiscoverySweepTests), roles read from the layer's own forward: like every layer in this
+// folder it takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is [Time, Features]
+// with NO batch axis. The probe's positional stand-in would have said [Batch, Channels] and been wrong.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class BASEDLayer<T> : LayerBase<T>
+public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
 {
+    // OutputAxesFor is GENERATED from the [TensorLayout] attributes above (ShapeContractGenerator).
+    // Nothing to write here: the layouts already state that every axis is carried through, and
+    // restating that in a hand-copied method is how a contract drifts from its own declaration.
+
     private readonly int _modelDimension;
     private readonly int _numHeads;
     private readonly int _headDimension;

@@ -31,8 +31,36 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
+// A DUAL-INPUT layer that is nonetheless safe to declare, and it is worth saying why: a contract
+// resolves against ONE input's axes, so a layer whose output size depends on its second input cannot be
+// declared at all. This one does not. ForwardCrossAttention returns "Output tensor with same shape as
+// query" - attention emits one row per QUERY position, and the context only sets how many keys each of
+// those rows attends over. The context's own length never reaches the output. The query is input 0 in
+// every entry point: ForwardTraced passes it as both query and context, ForwardTracedMany takes
+// inputs[0] as query, and ForwardTracedPorts takes it by the name "query".
+//
+// SHAPE-PRESERVING at each declared rank, from the restore block at the end of that method: rank 2 comes
+// back as [queryLen, _queryDim], rank 4 as [batch, _queryDim, height, width]. The feature axis looks
+// fixed but is genuinely Same, because the layer REJECTS a query whose feature width is not _queryDim
+// ("Query feature dimension ... must match expected") rather than reshaping it - so in and out always
+// agree, and matching layouts let the generator derive Same for every axis.
+//
+// Rank 4 is named [Batch, Channels, Height, Width] because that is what the method's own parameter doc
+// calls it ("[batch, channels, H, W]"); the layer folds H*W into the query length and unfolds it again.
+// Ranks above 4 are handled by collapsing the leading axes into batch, but those axes have no roles to
+// name, so they are not declared.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class CrossAttentionLayer<T> : LayerBase<T>
+public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
@@ -226,7 +254,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass. Accepts "query" and optional "context" by name.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("query", out var query) || query == null)
@@ -249,7 +277,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Array of inputs: [query] or [query, context].</param>
     /// <returns>Output tensor with same shape as query.</returns>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1)
         {

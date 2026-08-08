@@ -28,8 +28,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = 4, Cost = ComputeCost.Low, TestInputShape = "2, 8, 4, 4", TestConstructorArgs = "8")]
+// Shifts channels along time; moves values between positions but resizes nothing. Roles are read from
+// the layer's own guard: "expects rank-4 [T, C, H, W] or rank-5 [B, T, C, H, W]" - so the temporal axis
+// leads when unbatched. Only rank 4 was probed, so only rank 4 is declared.
+[TensorLayout(TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TemporalShiftLayer<T> : LayerBase<T>
+public partial class TemporalShiftLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _shiftedChannelRatio;
 

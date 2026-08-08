@@ -183,4 +183,61 @@ public class LayerForwardTracingTests
         }
     }
 
+    [Fact]
+    public void MultiInputLayerRecordsEveryInput_SoJoinsAreVisible()
+    {
+        // THE BLIND SPOT THIS CLOSES. Only the single-input Forward recorded; the two multi-input
+        // surfaces - Forward(IReadOnlyDictionary) and Forward(params Tensor<T>[]) - did not. So
+        // tracing reconstructed the straight-line stretches perfectly and silently lost every JOIN:
+        // Add, Concatenate, Multiply, cross-attention, memory read/write. A tracer blind to joins is
+        // not recovering a graph, it is recovering a list - and a list is exactly what tracing exists
+        // to stop the validator from assuming.
+        using var trace = new LayerForwardObserver<double>();
+
+        var left = new ConvolutionalLayer<double>(outputDepth: 4, kernelSize: 3, stride: 1, padding: 1);
+        var right = new ConvolutionalLayer<double>(outputDepth: 4, kernelSize: 3, stride: 1, padding: 1);
+        var input = Image(3, 8, 8);
+
+        var a = left.Forward(input);
+        var b = right.Forward(input);
+
+        // _shape directly, not Shape.ToArray(): Shape is an immutable wrapper, so ToArray()
+        // materialises a fresh int[] on every call. The field is internal and AiDotNetTests is in
+        // AiDotNet.Tensors' InternalsVisibleTo list, so there is no reason to pay for the copy.
+        var shape = a._shape;
+        // Cast disambiguates the scalar- vs vector-activation overloads, which are otherwise
+        // ambiguous on a bare null.
+        var add = new AddLayer<double>(new[] { shape, shape }, (IActivationFunction<double>?)null);
+        var sum = add.Forward(a, b);
+
+        Assert.NotNull(sum);
+
+        // Two convolutions plus ONE record per Add input. Four calls, not three: the Add contributes
+        // two, which is what makes it a join rather than a step.
+        var addCalls = trace.Calls.Where(c => ReferenceEquals(c.Layer, add)).ToList();
+        _out.WriteLine($"total recorded calls: {trace.Calls.Count}, of which AddLayer: {addCalls.Count}");
+
+        Assert.Equal(2, addCalls.Count);
+        Assert.All(addCalls, c => Assert.Same(sum, c.Output));
+
+        // Both convolution outputs must appear as recorded inputs of the Add - by REFERENCE, not by
+        // shape. Both convs emit identically-shaped tensors here precisely so a shape comparison
+        // would pass while proving nothing.
+        Assert.Contains(addCalls, c => ReferenceEquals(c.Input, a));
+        Assert.Contains(addCalls, c => ReferenceEquals(c.Input, b));
+
+        // And the graph must actually resolve two distinct parents for the join.
+        var producers = trace.ResolveProducers();
+        var addProducerIndices = trace.Calls
+            .Select((c, i) => (c, i))
+            .Where(x => ReferenceEquals(x.c.Layer, add))
+            .Select(x => producers[x.i])
+            .Where(p => p >= 0)
+            .Distinct()
+            .ToList();
+
+        _out.WriteLine($"distinct producers resolved for the join: {addProducerIndices.Count}");
+
+        Assert.Equal(2, addProducerIndices.Count);
+    }
 }

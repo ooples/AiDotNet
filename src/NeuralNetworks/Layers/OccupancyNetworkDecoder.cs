@@ -67,9 +67,67 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 2, Cost = ComputeCost.Medium, TestInputShape = "1, 3", TestConstructorArgs = "3, 16, 8, 2")]
+// THE DISCOVERY SWEEP GOT THIS WRONG, and the contract below is hand-derived because of it. The sweep
+// reported rank 1 -> 1 all-Same, contradicting this layer's own [LayerProperty(ChangesShape = true,
+// ExpectedInputRank = 2)] on both counts: the rank-1 [12] fallback probe happened to forward, and
+// "shape-preserving" was an artifact of that probe rather than anything the layer does.
+//
+// What the layer actually does is stated in two places that agree. The base constructor declares
+// `base([pointDim], [1])`, and the trunk terminates in a one-wide head:
+//     _fcOut = new DenseLayer<T>(1, ... SigmoidActivation ...)
+// which is structural, not incidental - an occupancy network answers "is this point inside the shape?"
+// with ONE probability per queried point. Everything between (_fcP, the numBlocks conditional-ResNet
+// blocks, the final conditional norm) runs at `hidden` width and never touches the point count.
+//
+// Roles: the leading axis is the batch of QUERIED POINTS and the trailing axis is the point's
+// coordinates, so [Batch, Features] - ForwardTraced's own summary reads "queried point(s) [B, pointDim]
+// (or [pointDim]) -> occupancy logit(s) [B, 1]". BatchOptional covers exactly the two forms that summary
+// names: rank 2 (the tested rank) and the rank-1 query the forward promotes to [1, pointDim] and then
+// demotes back on the way out, "preserving the caller's rank".
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Features here are a point's coordinates, pointDim wide.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "One occupancy probability per queried point.")]
 [AutoParameters]
-public partial class OccupancyNetworkDecoder<T> : LayerBase<T>
+public partial class OccupancyNetworkDecoder<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the feature axis keeps its position but not its size, so a generated
+    /// <c>Same(Features)</c> would say this decoder returns as many numbers as the point has
+    /// coordinates. It returns one.
+    /// </para>
+    /// <para>
+    /// The width is read off <see cref="LayerBase{T}.OutputShape"/> rather than written as a literal,
+    /// even though it is 1 for every configuration this type can be built in. That is the same
+    /// discipline the rest of these contracts follow: the number belongs to the layer's declaration
+    /// (<c>base([pointDim], [1])</c>), so reading it there keeps the contract and the declaration from
+    /// drifting apart if the head ever grows a second output. There is no <c>OnFirstForward</c> on this
+    /// type, so <c>OutputShape</c> is exactly what the constructor set.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (1 or 2)) return null;
+        if (OutputShape is null || OutputShape.Length == 0) return null;
+
+        int outWidth = OutputShape[OutputShape.Length - 1];
+        if (outWidth <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outWidth));
+
+        return inputRank == 1
+            ? new[] { features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            };
+    }
+
     private readonly int _pointDim;
     private readonly int _hidden;
     private readonly int _latentDim;

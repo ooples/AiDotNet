@@ -39,8 +39,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
+// Grouped-query attention: shape-preserving at rank 2 [Time, Features], the rank the sweep probed.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
+public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;

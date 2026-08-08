@@ -33,8 +33,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 2, 16, 0.0")]
+// SHAPE-PRESERVING. All three sublayers of ForwardCore end in a residual add against the stream they
+// were given - `TensorAdd(input, s)`, `TensorAdd(afterSelf, c)`, `TensorAdd(afterCross, ffnReshaped)` -
+// and the FFN detour explicitly restores the stream's own dimensions with
+// `Engine.Reshape(ffnDownOut, afterCross._shape)`. Matching layouts therefore say everything and the
+// generator derives Same(role) per axis.
+//
+// The ENCODER OUTPUT does not enter this contract, and that is the point rather than an omission.
+// This block takes two inputs (ForwardTracedMany), but the cross-attention consumes the encoder side
+// as keys/values only: its result is added to the DECODER stream, so the output is sized by the
+// decoder stream alone. The encoder sequence length is free to differ and does not reach the output.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "The decoder stream. A second input, the encoder output, may have a different sequence length and does not size the result.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class TransformerDecoderBlock<T> : LayerBase<T>
+public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _hiddenSize;
     private readonly int _numHeads;
@@ -198,7 +213,7 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>
     /// Multi-input dispatch: 1 input = decoder-only (degenerate cross-attention),
     /// 2 inputs = (decoderStream, encoderOutput) true cross-attention.
     /// </summary>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1) return ForwardCore(inputs[0], encoderOutput: null);
         if (inputs.Length == 2) return ForwardCore(inputs[0], inputs[1]);

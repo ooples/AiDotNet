@@ -15,6 +15,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+// Shape-preserving at any rank, and structurally so rather than incidentally: ForwardTraced is two
+// residual adds, `Engine.TensorAdd(input, attnNormed)` and `Engine.TensorAdd(afterAttn, ffnNormed)`,
+// and a residual can only add a tensor of its own shape. The FFN widens to ffnDim internally but the
+// down projection returns to hiddenSize and is reshaped straight back with
+// `Engine.Reshape(down, afterAttn._shape)` - so the widening never reaches the block's boundary.
+[ElementWiseShape(Note = "Residual decoder block: the FFN widens to ffnDim internally and comes back to hiddenSize before the residual add, so the block's own shape is unchanged.")]
 [AutoParameters]
 public partial class Gemma2DecoderBlock<T> : LayerBase<T>
 {
