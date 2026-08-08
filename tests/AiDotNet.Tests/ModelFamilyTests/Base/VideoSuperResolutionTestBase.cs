@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for video super-resolution models. Inherits video NN invariants
 /// and adds SR-specific: output at least as large as input and finite values.
 /// </summary>
-public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
+public abstract class VideoSuperResolutionTestBase<T> : VideoNNModelTestBase<T>
 {
     [Fact(Timeout = 120000)]
     public async Task Output_AtLeastAsLargeAsInput()
@@ -37,8 +37,12 @@ public abstract class VideoSuperResolutionTestBase : VideoNNModelTestBase
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
-                $"SR output[{i}] is NaN — upscaling introduced numerical instability.");
+            double v = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(v) || double.IsInfinity(v),
+                $"SR output[{i}] is not finite (NaN/Infinity) — upscaling introduced numerical instability.");
         }
     }
 }
+
+/// <summary>Non-generic &lt;double&gt; alias — the default for video-SR models that are not floated.</summary>
+public abstract class VideoSuperResolutionTestBase : VideoSuperResolutionTestBase<double> { }

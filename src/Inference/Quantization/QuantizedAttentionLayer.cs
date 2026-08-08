@@ -159,7 +159,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     /// </summary>
     internal int OutputBiasLength => _outputBias.Length;
 
-    public override Tensor<float> Forward(Tensor<float> input)
+    protected override Tensor<float> ForwardTraced(Tensor<float> input)
     {
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;

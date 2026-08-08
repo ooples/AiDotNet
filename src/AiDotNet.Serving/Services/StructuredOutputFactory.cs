@@ -32,7 +32,7 @@ internal static class StructuredOutputFactory
     /// <param name="eosTokenId">The model's end-of-sequence token id, or a negative value if none.</param>
     public static ITokenConstraint? Build(JToken? responseFormat, ITokenizer tokenizer, int eosTokenId)
     {
-        ArgumentNullException.ThrowIfNull(tokenizer);
+        if (tokenizer is null) throw new ArgumentNullException(nameof(tokenizer));
         if (responseFormat is null || responseFormat.Type == JTokenType.Null)
         {
             return null;

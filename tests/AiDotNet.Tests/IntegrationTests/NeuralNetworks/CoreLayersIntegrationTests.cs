@@ -566,6 +566,49 @@ public class CoreLayersIntegrationTests
             precision: 4);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task DepthwiseSeparableConvolutionalLayer_Metadata_SurvivesCloneReconstruction()
+    {
+        await Task.Yield();
+        // Regression for #1789: this layer published NO metadata, so DeserializationHelper had nothing to
+        // rebuild it from and fell back to a guessed output depth. Its parameter count is
+        //   inputDepth * (kernelSize^2 + outputDepth) + outputDepth,
+        // so the wrong depth makes the rebuilt layer reject the original's saved weights. A block created with
+        // outputDepth 96 over 48 input channels (48 * (9 + 96) + 96 = 5136 parameters) came back sized for
+        // outputDepth 32 and threw "Expected 2000 parameters, but got 5136" out of Clone().
+        var layer = new DepthwiseSeparableConvolutionalLayer<float>(96, 3, 1, 1);
+
+        // Forward once so the lazy input depth resolves to 48, the way a trained model's layer would be.
+        layer.Forward(new Tensor<float>([48, 8, 8]));
+        var trained = layer.GetParameters();
+        Assert.Equal(5136, trained.Length);
+
+        var metadata = layer.GetMetadata();
+        Assert.True(metadata.ContainsKey("OutputDepth"),
+            "DepthwiseSeparableConvolutionalLayer.GetMetadata() must persist 'OutputDepth' — it is a constructor argument with no trainable-parameter backing, so clone/deserialize cannot recover it otherwise.");
+        Assert.Equal("96", metadata["OutputDepth"]);
+        Assert.Equal("3", metadata["FilterSize"]);
+        Assert.Equal("1", metadata["Stride"]);
+        Assert.Equal("1", metadata["Padding"]);
+
+        // Rebuild exactly as the deserialization path does — from metadata alone — and feed it the original's
+        // parameters. This threw before the fix.
+        var rebuilt = new DepthwiseSeparableConvolutionalLayer<float>(
+            int.Parse(metadata["OutputDepth"], System.Globalization.CultureInfo.InvariantCulture),
+            int.Parse(metadata["FilterSize"], System.Globalization.CultureInfo.InvariantCulture),
+            int.Parse(metadata["Stride"], System.Globalization.CultureInfo.InvariantCulture),
+            int.Parse(metadata["Padding"], System.Globalization.CultureInfo.InvariantCulture));
+
+        rebuilt.SetParameters(trained);
+
+        var restored = rebuilt.GetParameters();
+        Assert.Equal(trained.Length, restored.Length);
+        for (int i = 0; i < trained.Length; i++)
+        {
+            Assert.Equal(trained[i], restored[i], Tolerance);
+        }
+    }
+
     #endregion
 
     #region FlattenLayer Tests

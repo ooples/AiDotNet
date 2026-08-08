@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
@@ -42,6 +43,82 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         for (int i = 0; i < seqLen; i++)
             tensor[i] = NumOps.FromDouble(rng.Next(numLabels));
         return tensor;
+    }
+
+    /// <summary>
+    /// NER override of <see cref="NeuralNetworkModelTestBase{T}.ScaledInput_ShouldChangeOutput"/>.
+    /// Sequence-labeling models (e.g. BiLSTM-CRF) emit a DISCRETE label sequence via an argmax / CRF
+    /// Viterbi decode, so the base invariant "output must change when the input is scaled 10x" does not
+    /// apply: it is a property of continuous-output models, not of an argmax-decoded discrete labeler.
+    ///
+    /// NEITHER DOES THE OPPOSITE. An earlier revision asserted the labels must stay EQUAL under a
+    /// positive rescale, on the reasoning that argmax is scale-invariant. Argmax is invariant to
+    /// scaling the SCORES; this test scales the INPUT, and the map from input to scores is not a
+    /// positive scalar multiple. Embeddings, biases, nonlinear layers and CRF transition scores all
+    /// break it, so a perfectly correct NER model can decode different labels for 10x input — and the
+    /// assertion would have failed it for being correct.
+    ///
+    /// What holds under a rescale is that the decode remains WELL-FORMED: same sequence length as the
+    /// unscaled decode, every label a finite non-negative id. That is asserted here. The claim that the
+    /// model responds to its input at all is a different claim, and it is tested where it is true — by
+    /// DifferentInputs_ShouldProduceDifferentOutputs, which this file also overrides — so this test
+    /// exercises it directly rather than asserting a property of scaling that does not hold.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public override async Task ScaledInput_ShouldChangeOutput()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+
+        var input = CreateRandomTensor(InputShape, rng);
+        var scaledInput = new Tensor<T>(InputShape);
+        for (int i = 0; i < input.Length; i++)
+            scaledInput[i] = NumOps.FromDouble(ConvertToDouble(input[i]) * 10.0);
+
+        var baseline = network.Predict(input);
+        var output = network.Predict(scaledInput);
+
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0, "NER model produced an empty label sequence for scaled input.");
+        for (int i = 0; i < output.Length; i++)
+        {
+            double v = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(v) || double.IsInfinity(v),
+                "NER model produced a non-finite label for scaled input.");
+        }
+
+        // WELL-FORMED, NOT UNCHANGED. Requiring equality here would fail a correct model: scaling
+        // the input is not scaling the scores, and embeddings, biases, nonlinearities and CRF
+        // transitions all break the positive-multiple relation argmax invariance depends on.
+        Assert.Equal(baseline.Length, output.Length);
+        for (int i = 0; i < output.Length; i++)
+        {
+            double label = ConvertToDouble(output[i]);
+            Assert.True(label >= 0.0 && Math.Floor(label) == label,
+                $"Decoded label[{i}] is {label}, which is not a valid label id. A rescaled input " +
+                "must still decode to a well-formed label sequence.");
+        }
+
+        // AND THE MODEL MUST ACTUALLY RESPOND TO ITS INPUT. Without this the test would assert only
+        // that nothing exploded -- the state the previous revision was written to escape. Input
+        // sensitivity is a real property of this family, so it is exercised here on a genuinely
+        // DIFFERENT input rather than on a rescaled one, which is the distinction the whole
+        // override turns on.
+        var different = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(4242));
+        var differentOutput = network.Predict(different);
+
+        bool anyDifference = differentOutput.Length != baseline.Length;
+        for (int i = 0; !anyDifference && i < baseline.Length; i++)
+        {
+            anyDifference = ConvertToDouble(baseline[i]) != ConvertToDouble(differentOutput[i]);
+        }
+
+        Assert.True(anyDifference,
+            "The model decoded an identical label sequence for two unrelated random inputs, so its " +
+            "forward pass is not responding to its input at all. (Rescaling the input is deliberately " +
+            "NOT used for this check: a correct model may decode the same labels for a rescaled input.)");
     }
 
     /// <summary>

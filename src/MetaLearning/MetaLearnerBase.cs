@@ -1,4 +1,4 @@
-using AiDotNet.Data.Structures;
+﻿using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -561,18 +561,57 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
         IFullModel<T, TInput, TOutput> model,
         TInput input,
         TOutput expectedOutput)
+        => ComputeGradients(model, input, expectedOutput, lossOverride: null);
+
+    /// <summary>
+    /// Computes gradients against a loss function OTHER than the configured one.
+    /// </summary>
+    /// <param name="model">The model to differentiate.</param>
+    /// <param name="input">Input data.</param>
+    /// <param name="expectedOutput">Expected output.</param>
+    /// <param name="lossOverride">
+    /// The loss to differentiate; <c>null</c> uses <see cref="LossFunction"/>, making this identical to
+    /// the three-argument overload.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <b>Why an algorithm would want a different loss than the one it was configured with.</b> Some
+    /// meta-learners train a network that is not the thing the loss is defined on. MbPA's embedding
+    /// network emits a KEY, not a prediction: the prediction comes from a separate output head that the
+    /// algorithm owns and adapts by hand. Differentiating the configured loss against the embedding
+    /// network's raw output therefore compares a key with a label and trains the embedding to BE the
+    /// label -- which trains the wrong function and leaves the head out of the meta-objective entirely.
+    /// </para>
+    /// <para>
+    /// Passing a loss that closes over the head restores the composition: the loss the embedding network
+    /// differentiates is the real, head-composed one, and the chain rule through the head is expressed
+    /// once, in the loss, instead of being approximated or skipped.
+    /// </para>
+    /// <para>
+    /// The override reaches BOTH paths on purpose. Handing it only to
+    /// <see cref="IGradientComputable{T, TInput, TOutput}"/> would leave models that fall back to the
+    /// finite-difference estimator silently differentiating the configured loss instead -- the same
+    /// wrong objective, now reachable only by choosing a different model class, which is the hardest
+    /// kind of discrepancy to find.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> ComputeGradients(
+        IFullModel<T, TInput, TOutput> model,
+        TInput input,
+        TOutput expectedOutput,
+        ILossFunction<T>? lossOverride)
     {
         // PRODUCTION PATH: Use model's built-in gradient computation (IGradientComputable)
         // This is the preferred method as it uses proper backpropagation with GPU acceleration
         if (model is IGradientComputable<T, TInput, TOutput> gradientModel)
         {
-            return gradientModel.ComputeGradients(input, expectedOutput, LossFunction);
+            return gradientModel.ComputeGradients(input, expectedOutput, lossOverride ?? LossFunction);
         }
 
         // FALLBACK PATH: Manual gradient computation using loss function derivative
         // This should only be used for simple models that don't implement IGradientComputable
         // WARNING: This is less efficient and may not work correctly for all model architectures
-        return ComputeGradientsFallback(model, input, expectedOutput);
+        return ComputeGradientsFallback(model, input, expectedOutput, lossOverride);
     }
 
     /// <summary>
@@ -597,8 +636,11 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
     private Vector<T> ComputeGradientsFallback(
         IFullModel<T, TInput, TOutput> model,
         TInput input,
-        TOutput expectedOutput)
+        TOutput expectedOutput,
+        ILossFunction<T>? lossOverride)
     {
+        var lossFunction = lossOverride ?? LossFunction;
+
         // Emit a warning once about the expensive fallback being used
         if (!_gradientFallbackWarningEmitted)
         {
@@ -625,7 +667,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
                 $"for proper gradient computation.");
         }
 
-        T baseLoss = LossFunction.CalculateLoss(predVector, expectedVector);
+        T baseLoss = lossFunction.CalculateLoss(predVector, expectedVector);
 
         // SPSA gradient approximation: estimates ALL N gradients with just 2 forward passes
         // per sample (vs N forward passes for per-parameter finite differences).
@@ -644,13 +686,13 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
             InterfaceGuard.Parameterizable(model).SetParameters(Engine.Add(parameters, eDelta));
             var predPlus = ConvertToVector(model.Predict(input));
             T lossPlus = predPlus is not null
-                ? LossFunction.CalculateLoss(predPlus, expectedVector)
+                ? lossFunction.CalculateLoss(predPlus, expectedVector)
                 : baseLoss;
 
             InterfaceGuard.Parameterizable(model).SetParameters(Engine.Subtract(parameters, eDelta));
             var predMinus = ConvertToVector(model.Predict(input));
             T lossMinus = predMinus is not null
-                ? LossFunction.CalculateLoss(predMinus, expectedVector)
+                ? lossFunction.CalculateLoss(predMinus, expectedVector)
                 : baseLoss;
 
             T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
