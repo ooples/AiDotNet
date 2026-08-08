@@ -51,6 +51,50 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
     private const string LayerPropertyAttributeName = "AiDotNet.Attributes.LayerPropertyAttribute";
     private const string ShapeContractName = "AiDotNet.Interfaces.IShapeContract";
 
+    /// <summary>
+    /// Marker for "this type belongs to a model family whose base carries a shape contract".
+    /// </summary>
+    /// <remarks>
+    /// Segmentation is the first family brought in, so the prefix names it explicitly rather than
+    /// guessing from interface naming. Widening this to other families is a deliberate act - each one
+    /// needs its law MEASURED first, and three of the five families measured so far (TTS, forecasting,
+    /// time-series foundation) returned several output ranks, which is a multi-layout declaration
+    /// rather than a single law.
+    /// </remarks>
+    private const string FamilyInterfacePrefix = "AiDotNet.Interfaces.ISegmentationModel";
+
+    private static readonly DiagnosticDescriptor ModelWithoutShapeContractDescriptor = new(
+        id: "ADNSHAPE007",
+        title: "Model implements a family interface but inherits no shape contract",
+        messageFormat: "'{0}' implements '{1}' but derives from no base that declares a shape contract, "
+                       + "so nothing can reason about its output shape. Derive from the family base "
+                       + "(SegmentationModelBase and its eight family bases carry the contract) and "
+                       + "override OutputAxesFor only where this model genuinely differs - as SAM does "
+                       + "for its /16 encoder and SegMamba for its volumetric "
+                       + "[Classes, Depth, Height, Width] output, both found by the conformance sweep.",
+        category: "AiDotNet.Shapes",
+        // Declared Warning here but ENFORCED AS AN ERROR, because it is absent from
+        // <WarningsNotAsErrors> and the project sets TreatWarningsAsErrors. That is deliberate and
+        // possible only because the rule is SCOPED to one family (see FamilyInterfacePrefix) that is
+        // already at zero: all 70 concrete segmentation models derive from SegmentationModelBase. There
+        // is no backlog to work down, so there is no ladder to climb - unlike ADNSHAPE006, which
+        // entered at 85 of ~270 layers and needed one.
+        //
+        // Widening FamilyInterfacePrefix to another family is what would require the ladder again: that
+        // family's law has to be measured first, and every member brought onto its base, before this
+        // rule can be pointed at it without reddening the build against unfinished work.
+        //
+        // Mutation-proven in both directions rather than assumed: putting DiffSeg back on
+        // NeuralNetworkBase makes this fire, and restoring it silences it again. A rule reporting zero
+        // is indistinguishable from a rule that does not work until that check is run.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description:
+            "A model contract is worth something only because the conformance sweep verifies it against "
+            + "a real Predict. This rule is the other half: it stops a NEW model silently opting out of "
+            + "a family law its siblings all satisfy, which is how the layer inventory drifted to 268 "
+            + "undeclared types before ADNSHAPE006 existed.");
+
     private static readonly DiagnosticDescriptor LayerWithoutShapeContractDescriptor = new(
         id: "ADNSHAPE006",
         title: "Layer declares no shape contract, so nothing can reason about its output shape",
@@ -278,6 +322,30 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             {
                 spc.ReportDiagnostic(Diagnostic.Create(
                     LayerWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(), type.Name));
+            }
+
+            // ADNSHAPE007 - the MODEL-side counterpart. A model that implements a family interface but
+            // derives from no contract-declaring base has silently opted out of its family's shape law.
+            //
+            // This is the exact defect the segmentation refactor fixed: all 70 concrete segmentation
+            // models implemented ISemanticSegmentation / IPanopticSegmentation / etc. while deriving
+            // straight from NeuralNetworkBase, leaving SegmentationModelBase and its eight family bases
+            // with ZERO users - so a family contract had nowhere to attach and reached nothing. Without
+            // this rule the next model added would quietly do the same, and the only symptom would be a
+            // model the shape system cannot answer for.
+            //
+            // Scoped to concrete types: an abstract base legitimately leaves the contract to subclasses.
+            if (!type.IsAbstract && !hasContract)
+            {
+                var familyInterface = type.AllInterfaces.FirstOrDefault(i =>
+                    i.ConstructedFrom.ToDisplayString().StartsWith(FamilyInterfacePrefix));
+
+                if (familyInterface is not null)
+                {
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        ModelWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(),
+                        type.Name, familyInterface.Name));
+                }
             }
 
             if (DerivesFromLayerBase(type))

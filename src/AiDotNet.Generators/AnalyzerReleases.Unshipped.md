@@ -53,3 +53,4 @@ ADNPERF001 | AiDotNet.Performance | Error | ShapeAllocationValidationGenerator, 
 ADNSHAPE005 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, [LayerProperty] shape metadata contradicts the declared [TensorLayout] ranks
 ADNSHAPE006 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer declares no shape contract, so nothing can reason about its output shape
 ADNTRACE001 | AiDotNet.Correctness | Error | ForwardRecursionValidationGenerator, base.Forward(...) inside a ForwardTraced override is infinite recursion
+ADNSHAPE007 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Model implements a family interface but inherits no shape contract

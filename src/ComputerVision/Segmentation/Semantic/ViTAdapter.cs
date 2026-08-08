@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Transformer Adapter for Dense Predictions", "https://arxiv.org/abs/2205.08534", Year = 2023, Authors = "Chen et al.")]
-public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
+public class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ViTAdapterOptions _options;
 
@@ -76,40 +76,24 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
+    // Only ViT-Adapter's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from SemanticSegmentationBase -> SegmentationModelBase.
     private readonly ViTAdapterModelSize _modelSize;
     private readonly int _embedDim;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly int[] _numHeads;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    /// <summary>
-    /// Gets whether this ViT-Adapter instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode (trainable) and <c>false</c>
-    /// in ONNX mode (inference only). To fine-tune on your data, use the native constructor.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
+    // same thing, so re-declaring them here would only create two sources of one fact.
     internal bool UseNativeMode => _useNativeMode;
     internal ViTAdapterModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -142,19 +126,12 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ViTAdapterModelSize modelSize = ViTAdapterModelSize.Base,
         double dropRate = 0.1,
         ViTAdapterOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new ViTAdapterOptions();
         Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = dropRate;
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         (_embedDim, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
 
@@ -184,30 +161,14 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         ViTAdapterModelSize modelSize = ViTAdapterModelSize.Base,
         ViTAdapterOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new ViTAdapterOptions();
         Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"ViT-Adapter ONNX model not found: {onnxModelPath}");
-
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         (_embedDim, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
-
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load ViT-Adapter ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -253,7 +214,7 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -277,7 +238,7 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         };
     }
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -288,7 +249,7 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -303,22 +264,6 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
-        return result;
-    }
-
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -472,37 +417,6 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
             ? new ViTAdapter<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
             : new ViTAdapter<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
     }
-
-    /// <summary>
-    /// Releases managed resources.
-    /// </summary>
-    /// <param name="disposing">True from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees ONNX session resources. Use <c>using</c> statement.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    {
-        if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
-        base.Dispose(disposing);
-    }
-
-    #endregion
-
-    #region ISemanticSegmentation Implementation
-
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-
-    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
-
-    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

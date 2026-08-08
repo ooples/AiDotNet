@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -60,44 +60,28 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 // Citation URL corrected: the arXiv id for this title is 2308.12469, not 2305.02015.
 [ResearchPaper("Diffuse, Attend, and Segment: Unsupervised Zero-Shot Segmentation using Stable Diffusion", "https://arxiv.org/abs/2308.12469", Year = 2023, Authors = "Junjiao Tian, Lavisha Aggarwal, Andrea Colber, Zunzhi You, Eldhose Iype, Haiyang Sheng")]
-public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
+public class DiffSeg<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly DiffSegOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
+    // Only DiffSeg's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from SemanticSegmentationBase -> SegmentationModelBase.
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    /// <summary>
-    /// Gets whether this DiffSeg instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> DiffSeg is designed for unsupervised use without training.
-    /// Native mode supports optional fine-tuning; ONNX mode is inference-only.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
+    // same thing, so re-declaring them here would only create two sources of one fact.
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -126,18 +110,11 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         double dropRate = 0.1,
         DiffSegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new DiffSegOptions();
         Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _dropRate = dropRate;
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
@@ -166,31 +143,15 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         string onnxModelPath,
         int numClasses = 150,
         DiffSegOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new DiffSegOptions();
         Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"DiffSeg ONNX model not found: {onnxModelPath}");
-
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
-
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load DiffSeg ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -235,7 +196,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -247,7 +208,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     #region Private Methods
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -258,7 +219,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -273,22 +234,6 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
-        return result;
-    }
-
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -409,28 +354,6 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
             ? new DiffSeg<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
             : new DiffSeg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
     }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
-        base.Dispose(disposing);
-    }
-
-    #endregion
-
-    #region ISemanticSegmentation Implementation
-
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-
-    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
-
-    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }
