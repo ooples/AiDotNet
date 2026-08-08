@@ -283,24 +283,57 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
+    /// <summary>
+    /// The Q-table's <c>(state, action)</c> entries in a fixed order.
+    /// </summary>
+    /// <remarks>
+    /// ONE ordered enumeration, shared by <see cref="ParameterCount"/>, <see cref="GetParameters"/>
+    /// and <see cref="SetParameters"/>. Export walked the actual dictionary entries while restore
+    /// looped 0..ActionSize-1 for every state, so a ragged table -- the normal state of a tabular
+    /// agent that has not tried every action -- put values back on the wrong (state, action) pairs
+    /// and inserted entries the agent never visited.
+    ///
+    /// Ordinal by key rather than dictionary order: Dictionary guarantees nothing about enumeration
+    /// order across insertions, so a vector written in one order and read back in another is
+    /// silently wrong.
+    /// </remarks>
+    private List<(string State, int Action)> OrderedQTableEntries()
+    {
+        var entries = new List<(string State, int Action)>();
+        var states = new List<string>(_qTable.Keys);
+        states.Sort(StringComparer.Ordinal);
+
+        foreach (string state in states)
+        {
+            var actions = new List<int>(_qTable[state].Keys);
+            actions.Sort();
+            foreach (int action in actions) entries.Add((state, action));
+        }
+
+        return entries;
+    }
+
     public override Vector<T> GetParameters()
     {
-        var p = new List<T>();
-        foreach (var s in _qTable)
-            foreach (var a in s.Value)
-                p.Add(a.Value);
-        var v = new Vector<T>(p.Count);
-        for (int i = 0; i < p.Count; i++) v[i] = p[i];
+        var entries = OrderedQTableEntries();
+        var v = new Vector<T>(entries.Count);
+        for (int i = 0; i < entries.Count; i++) v[i] = _qTable[entries[i].State][entries[i].Action];
         return v;
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int idx = 0;
-        foreach (var s in _qTable.ToList())
-            for (int a = 0; a < _options.ActionSize; a++)
-                if (idx < parameters.Length)
-                    _qTable[s.Key][a] = parameters[idx++];
+        var entries = OrderedQTableEntries();
+
+        if (parameters.Length != entries.Count)
+        {
+            throw new ArgumentException(
+                $"Expected {entries.Count} parameters for the Q-table's stored (state, action) "
+                + $"entries; got {parameters.Length}.", nameof(parameters));
+        }
+
+        for (int i = 0; i < entries.Count; i++)
+            _qTable[entries[i].State][entries[i].Action] = parameters[i];
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

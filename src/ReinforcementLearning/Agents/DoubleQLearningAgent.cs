@@ -304,7 +304,59 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable1 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable1.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _qTable2 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable2.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _epsilon = state.Epsilon;
+
+        // The two tables are validated together, HERE, before anything reads them. GetParameters
+        // sizes its vector from _qTable1.Count but then fills from both tables, indexing
+        // stateQValues[action] for every action in 0..ActionSize-1. Persisted data with a state
+        // missing from one table overruns that vector; a state missing an ACTION throws
+        // KeyNotFoundException from inside the flatten. Neither failure says anything about the file
+        // that caused it.
+        ValidatePairedQTables();
     }
+
+    /// <summary>
+    /// Requires the two Q-tables to describe the same states and each state to hold exactly the
+    /// actions <c>0 .. ActionSize - 1</c>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The restored tables are not a matched pair.</exception>
+    private void ValidatePairedQTables()
+    {
+        if (_qTable1.Count != _qTable2.Count)
+        {
+            throw new InvalidOperationException(
+                $"Serialized {nameof(DoubleQLearningAgent<T>)} has {_qTable1.Count} states in QTable1 "
+                + $"and {_qTable2.Count} in QTable2. Double Q-learning keeps one entry per state in "
+                + "both tables; the model data is incomplete or was written by an incompatible version.");
+        }
+
+        foreach (var entry in _qTable1)
+        {
+            if (!_qTable2.ContainsKey(entry.Key))
+            {
+                throw new InvalidOperationException(
+                    $"Serialized {nameof(DoubleQLearningAgent<T>)} has state '{entry.Key}' in QTable1 "
+                    + "but not in QTable2.");
+            }
+
+            RequireCompleteActionSet(entry.Key, entry.Value, nameof(_qTable1));
+            RequireCompleteActionSet(entry.Key, _qTable2[entry.Key], nameof(_qTable2));
+        }
+    }
+
+    private void RequireCompleteActionSet(string stateKey, Dictionary<int, T> actions, string tableName)
+    {
+        for (int action = 0; action < _options.ActionSize; action++)
+        {
+            if (!actions.ContainsKey(action))
+            {
+                throw new InvalidOperationException(
+                    $"Serialized {nameof(DoubleQLearningAgent<T>)} is missing action {action} for state "
+                    + $"'{stateKey}' in {tableName}. Every state must hold actions 0 to "
+                    + $"{_options.ActionSize - 1}.");
+            }
+        }
+    }
+
 
     public override Vector<T> GetParameters()
     {
