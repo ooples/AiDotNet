@@ -5,6 +5,8 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>
@@ -43,6 +45,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Evaluation)]
 public class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The locally-adapted output parameters memory-based parameter adaptation produces. Held here rather than in the wrapped model, and replaced wholesale on restore.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _trainedOutputParams,
+            value => _trainedOutputParams = value));
+    }
     private readonly MbPAEpisodicMemory<T> _memory;
     private readonly MbPAOptions<T, TInput, TOutput> _options;
     private Vector<T> _trainedOutputParams;
@@ -183,16 +194,6 @@ public class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
         throw new NotSupportedException(
             $"MbPA cannot assemble predictions into {typeof(TOutput).Name}. " +
             "Use Vector<T>, Matrix<T> or Tensor<T> as the meta-learning output type.");
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>Returns theta, the trained head — not any theta_x, which never outlives a call.</remarks>
-    public override Vector<T> GetParameters() => _trainedOutputParams;
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _trainedOutputParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
     }
 
     /// <inheritdoc/>
