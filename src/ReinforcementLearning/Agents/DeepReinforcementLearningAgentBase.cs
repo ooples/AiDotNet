@@ -38,6 +38,14 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// </remarks>
 public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>TEMPORARY, and deleted once every agent under this base registers its
+    /// components: an agent that has not been converted registers nothing, so the base
+    /// fold would answer 0 for it while its own GetParameters still returns real weights.
+    /// Deriving the count from that vector keeps the two in step during the conversion.
+    /// </remarks>
+    public override long ParameterCount => GetParameters().Length;
     /// <summary>
     /// Gets the global execution engine for hardware-accelerated vector operations.
     /// </summary>
@@ -78,41 +86,6 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
     {
         Networks = new List<INeuralNetwork<T>>();
     }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters across all networks.
-    /// </summary>
-    /// <remarks>
-    /// This sums the parameter counts from all neural networks used by the agent.
-    /// Useful for monitoring model complexity and memory requirements.
-    /// </remarks>
-    /// <summary>
-    /// Folded from <see cref="GetParameters"/>, so the count and the vector cannot disagree.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This used to sum <c>ParameterCount</c> across every entry in <c>Networks</c>. That is not
-    /// what the subclasses actually expose: a deep RL agent holds both trainable and DERIVED
-    /// networks, and <c>GetParameters</c> returns only the trainable ones. DQNAgent is the clearest
-    /// case — <c>GetParameters()</c> is <c>_qNetwork.GetParameters()</c>, and <c>SetParameters</c>
-    /// writes <c>_qNetwork</c> and then RECOMPUTES the target by copying weights across. The target
-    /// network is derived state, not an independent parameter, so counting it overstated the total
-    /// by exactly its size on all ten agents deriving from this base.
-    /// </para>
-    /// <para>
-    /// A mismatch here is not cosmetic: callers pair the two by length, so a saved vector sized by
-    /// the count restores into the wrong slots, and the agent silently keeps its initial weights.
-    /// Deriving the count from the vector is the same rule PyTorch relies on — the count is a fold
-    /// over the one registry, never a second opinion about it.
-    /// </para>
-    /// <para>
-    /// This materialises the vector to measure it. Deliberate: correctness first, and no subclass's
-    /// <c>GetParameters</c> reads <c>ParameterCount</c>, so there is no recursion. If profiling ever
-    /// shows the allocation matters, the answer is a length-only walk over the SAME source the
-    /// vector is built from, never a second hand-maintained sum.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
 
     /// <summary>
     /// Disposes of resources used by the agent, including neural networks.
