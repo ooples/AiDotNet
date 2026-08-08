@@ -90,6 +90,15 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     private int _maskConvIndex;
     private int _upsampleIndex;
     private bool _customLayers;
+
+    /// <summary>
+    /// The exception from the lazy shape warm-up, if it failed. Null when it succeeded or has not run.
+    /// </summary>
+    /// <remarks>
+    /// The warm-up is best-effort by design, so its failure must not propagate -- but discarding the
+    /// exception makes the first and cleanest occurrence invisible. Retained for later diagnosis.
+    /// </remarks>
+    private Exception? _shapeWarmupFailure;
     private bool _lazyShapesWarmed;
     #endregion
 
@@ -371,7 +380,15 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try { _ = Forward(dummy); }
-        catch { /* best-effort; a real forward failure surfaces on the actual Train/Predict */ }
+        catch (Exception ex)
+        {
+            // KEPT, NOT DISCARDED. The warm-up is best-effort and must not propagate -- a real
+            // forward failure surfaces again on the actual Train/Predict -- but an empty catch
+            // makes the FIRST occurrence invisible, and that run has the cleanest stack of any: a
+            // bare dummy input carrying no user data. AiDotNet is a library and has no logger, so
+            // the exception is retained where a debugger or a later diagnosis can reach it.
+            _shapeWarmupFailure = ex;
+        }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 

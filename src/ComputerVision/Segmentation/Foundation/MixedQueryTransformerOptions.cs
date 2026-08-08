@@ -26,6 +26,27 @@ public class MixedQueryTransformerOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
     }
+
+    /// <summary>
+    /// Optimizer learning rate. Default 1e-4, the Mask2Former training recipe this architecture
+    /// inherits (AdamW, lr 1e-4, weight decay 0.05).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why this exists.</b> The constructor previously built its optimizer bare, so training ran
+    /// on AdamW's own generic default of 0.001 -- ten times this value -- and no caller could
+    /// correct it, because there was no property to set. Both halves of the rule were broken: the
+    /// default was not the paper's, and it was not overridable.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The learning rate controls how large a step training takes on each
+    /// update. Too large and training diverges; too small and it crawls. The value here is the one
+    /// this architecture's authors trained with, so prefer it unless you have measured a reason to
+    /// change it.
+    /// </para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-4;
 
 }

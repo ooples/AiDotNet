@@ -72,6 +72,16 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
+
+    /// <summary>
+    /// The exception from resolving the head width, if it failed. Null when it succeeded.
+    /// </summary>
+    /// <remarks>
+    /// The fallback -- leaving the head's default initialization in place -- is deliberate, but the
+    /// exception was being dropped, so the width that failed to resolve could not be recovered
+    /// afterwards. Retained for diagnosis; the fallback is unchanged.
+    /// </remarks>
+    private Exception? _headResolutionFailure;
     private bool _disposed;
 
     /// <summary>
@@ -218,9 +228,13 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
                 head.SetParameters(damped);
             }
         }
-        catch (ArgumentException)
+        catch (ArgumentException ex)
         {
-            // Head could not be resolved from the declared width; leave its default initialization in place.
+            // Head could not be resolved from the declared width; its default initialization stands.
+            // The type is already narrowed to the one failure this path expects, but the exception
+            // itself was still dropped, so the width that failed to resolve was unrecoverable after
+            // the fact. Retained for diagnosis; the fallback behaviour is unchanged.
+            _headResolutionFailure = ex;
         }
     }
 
