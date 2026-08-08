@@ -737,16 +737,28 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException(
                     "SetAbstractionLayer deserialize: missing SA_InputChannels metadata.");
 
-            double[] saRadii = (TryGetString(additionalParams, "SA_Radii") ?? "")
-                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => double.Parse(s, inv)).ToArray();
-            int[] saNeighbors = (TryGetString(additionalParams, "SA_NeighborSamples") ?? "")
-                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => int.Parse(s, inv)).ToArray();
+            // TryParse, NOT Parse. This metadata is external input: a corrupt SA_Radii threw a bare
+            // FormatException (or OverflowException) straight past the branch-failure handling, which
+            // catches only MissingLayerCtorException and message-matched InvalidOperationException. The
+            // caller saw neither the layer name nor the offending key, and the metadata matcher never
+            // got its fallback. Each value now reports which key and which entry failed.
+            double[] saRadii = ParseDelimited(
+                TryGetString(additionalParams, "SA_Radii"), '|', "SA_Radii",
+                token => double.TryParse(token, System.Globalization.NumberStyles.Float, inv, out var d)
+                    ? d
+                    : throw SaMetadataError("SA_Radii", token));
+            int[] saNeighbors = ParseDelimited(
+                TryGetString(additionalParams, "SA_NeighborSamples"), '|', "SA_NeighborSamples",
+                token => int.TryParse(token, System.Globalization.NumberStyles.Integer, inv, out var i)
+                    ? i
+                    : throw SaMetadataError("SA_NeighborSamples", token));
             int[][] saMlp = (TryGetString(additionalParams, "SA_Mlp") ?? "")
                 .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(branch => branch.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => int.Parse(s, inv)).ToArray())
+                .Select(branch => ParseDelimited(
+                    branch, ',', "SA_Mlp",
+                    token => int.TryParse(token, System.Globalization.NumberStyles.Integer, inv, out var i)
+                        ? i
+                        : throw SaMetadataError("SA_Mlp", token)))
                 .ToArray();
 
             if (saRadii.Length == 0 || saRadii.Length != saNeighbors.Length || saRadii.Length != saMlp.Length)
@@ -3967,6 +3979,38 @@ public static class DeserializationHelper
             TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
         attention.ConfigurePositionalEncoding(positionalType, ropeTheta, maxSequenceLength);
     }
+
+    /// <summary>
+    /// Splits a delimited metadata value and converts each token, reporting the key and the offending
+    /// token when a token is malformed.
+    /// </summary>
+    /// <remarks>
+    /// Serialized metadata is external input, so a malformed token has to surface as a diagnosable
+    /// <see cref="InvalidOperationException"/> naming the key -- not as a bare <c>FormatException</c>
+    /// from deep inside a LINQ projection, which escapes the branch-failure handling entirely.
+    /// </remarks>
+    private static TValue[] ParseDelimited<TValue>(
+        string? raw, char separator, string keyName, Func<string, TValue> convert)
+    {
+        if (string.IsNullOrEmpty(raw))
+        {
+            return Array.Empty<TValue>();
+        }
+
+        var tokens = raw.Split(new[] { separator }, StringSplitOptions.RemoveEmptyEntries);
+        var values = new TValue[tokens.Length];
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            values[i] = convert(tokens[i].Trim());
+        }
+
+        return values;
+    }
+
+    private static InvalidOperationException SaMetadataError(string keyName, string token) =>
+        new InvalidOperationException(
+            $"SetAbstractionLayer deserialize: metadata '{keyName}' contains a value that is not a "
+            + $"number: '{token}'. The payload is corrupt or was written by an incompatible build.");
 
     private static int? TryGetInt(Dictionary<string, object>? parameters, string key)
     {
