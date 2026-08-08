@@ -646,6 +646,18 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 
         int numFactors = factors.Shape[factors.Shape.Length - 1];
         int numAssets = alpha.Shape[alpha.Shape.Length - 1];
+        // Only rank 1 and rank 2 are supported, and the rank is checked rather than assumed. The
+        // batched branch treats alpha.Shape[0] as the WHOLE batch, so a rank-3 feature tensor such as
+        // [batch, sequence, assets] collapsed its sequence axis into the batch: the beta reshape
+        // target then asked for batch * assets * factors elements out of a buffer holding
+        // batch * sequence * assets * factors, and reshaped the wrong count without saying so.
+        if (alpha.Shape.Length > 2)
+        {
+            throw new ArgumentException(
+                $"{nameof(FactorVAE<T>)} supports unbatched [assets] or batched [batch, assets] "
+                + $"features; got rank {alpha.Shape.Length}. Flatten any sequence axis into the batch "
+                + "before predicting.", nameof(features));
+        }
 
         if (alpha.Shape.Length == 1)
         {
@@ -669,6 +681,17 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private Tensor<T> AlignReturns(Tensor<T> returns, Tensor<T> features)
     {
         int rank = features.Shape.Length;
+
+        // Same two supported ranks as DecodeReturns. Without this, mismatched returns were forced to
+        // rank 2 while features could be rank 3, and Engine.Concat(.., features.Shape.Length - 1)
+        // then joined tensors of different ranks.
+        if (rank > 2)
+        {
+            throw new ArgumentException(
+                $"{nameof(FactorVAE<T>)} supports rank-1 or rank-2 features; got rank {rank}.",
+                nameof(features));
+        }
+
         if (returns.Shape.Length == rank) return returns;
 
         // Flatten everything after the leading (batch) axis onto the feature axis.
