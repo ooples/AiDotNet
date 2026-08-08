@@ -8,6 +8,35 @@ namespace AiDotNet.NeuralNetworks.Options;
 public class GatedDeltaNetOptions : NeuralNetworkOptions
 {
     /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public GatedDeltaNetOptions() { }
+
+    /// <summary>
+    /// Initializes a new instance by copying every property from another instance.
+    /// </summary>
+    /// <param name="other">The instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="other"/> is null.
+    /// </exception>
+    /// <remarks>
+    /// <see cref="LearningRate"/> IS COPIED HERE, AND MUST STAY COPIED. This constructor is what
+    /// <c>GatedDeltaNetLanguageModel&lt;T&gt;.CreateNewInstance</c> calls, so a property
+    /// missing from it is not merely absent from the clone -- the clone silently reverts to the
+    /// default while the original keeps the configured value, and nothing reports the divergence.
+    /// A model cloned for evaluation would then train at a different rate than the one it was
+    /// cloned from.
+    /// </remarks>
+    public GatedDeltaNetOptions(GatedDeltaNetOptions other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+    }
+
+    /// <summary>
     /// Gets or sets the peak AdamW learning rate used when the model builds its own optimizer.
     /// </summary>
     /// <value>Defaults to 3e-4, the rate the Gated DeltaNet paper pretrains with (arXiv:2412.06464).</value>
