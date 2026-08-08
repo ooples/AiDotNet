@@ -74,6 +74,16 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     private const double DEFAULT_LEARNING_RATE = 0.0003;
 
     /// <summary>
+    /// The step size below which the inner solve gives up rather than halving further.
+    /// </summary>
+    /// <remarks>
+    /// A step this small moves the iterate by less than double precision can represent against the
+    /// weights themselves, so continuing to halve only spins. Reaching it means no valid M-matrix
+    /// step exists from the current point, and the solve stops there as unconverged.
+    /// </remarks>
+    private const double MIN_LEARNING_RATE = 1e-16;
+
+    /// <summary>
     /// Adam optimizer beta1 (first moment decay).
     /// </summary>
     private const double ADAM_BETA1 = 0.99;
@@ -289,25 +299,61 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             var invCheck = InvertMatrix(checkM, d);
             if (invCheck is null || HasNegativeEntry(invCheck, d))
             {
-                // Stepped outside M-matrix domain — halve learning rate and retry
-                double tempLr = learningRate;
-                // Undo step
-                for (int i = 0; i < vecLen; i++)
+                // Stepped outside the M-matrix domain. RETRY UNTIL THE STEP IS VALID, rather than
+                // halving once and hoping: the single replacement step was never itself checked, so
+                // if it also landed outside the domain the next iteration computed a log-determinant
+                // on an invalid matrix and fell through to the fallback gradient.
+                //
+                // Each attempt restarts from the last VALID weights, which is why the undo is inside
+                // the loop -- undoing a step taken at one rate and redoing it at another only lands
+                // back on the same point if the rate used for the undo is the rate that took it.
+                bool recovered = false;
+                double appliedRate = learningRate;
+
+                while (learningRate >= MIN_LEARNING_RATE)
                 {
-                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
-                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-                    w[i] += tempLr * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                    // Undo whatever rate produced the current (invalid) position.
+                    for (int i = 0; i < vecLen; i++)
+                    {
+                        double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                        double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                        w[i] += appliedRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                    }
+
+                    learningRate *= 0.5;
+                    if (learningRate < MIN_LEARNING_RATE) break;
+
+                    for (int i = 0; i < vecLen; i++)
+                    {
+                        double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                        double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                        w[i] -= learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                    }
+                    for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
+                    appliedRate = learningRate;
+
+                    var retryW = UnflattenMatrix(w, d);
+                    var retryM = new Matrix<T>(d, d);
+                    for (int ci = 0; ci < d; ci++)
+                    {
+                        retryM[ci, ci] = NumOps.FromDouble(s);
+                        for (int cj = 0; cj < d; cj++)
+                            retryM[ci, cj] = NumOps.Subtract(retryM[ci, cj],
+                                NumOps.Multiply(retryW[ci, cj], retryW[ci, cj]));
+                    }
+
+                    var retryInv = InvertMatrix(retryM, d);
+                    if (retryInv is not null && !HasNegativeEntry(retryInv, d))
+                    {
+                        recovered = true;
+                        break;
+                    }
                 }
-                learningRate *= 0.5;
-                if (learningRate < 1e-16) break;
-                // Redo with smaller step
-                for (int i = 0; i < vecLen; i++)
-                {
-                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
-                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-                    w[i] -= learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
-                }
-                for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
+
+                // The rate floor was reached with no valid step available. The last undo left w on
+                // the previous valid iterate, so the solve stops there as unconverged rather than
+                // continuing from a point outside the domain.
+                if (!recovered) break;
             }
 
             // Convergence check at checkpoint intervals

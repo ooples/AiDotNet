@@ -705,12 +705,24 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
 
         var restored = filter.Forward(input);   // [rows, restoredTime]
 
+        // TWO DIFFERENT FAILURES, reported differently. A rank other than 2 means the layer returned
+        // an unexpected shape, which is a wiring problem, not a window-length mismatch; folding the
+        // two together made the message claim the filter "restores to 0, which is the configured
+        // SequenceLength" and advise passing a window of 0 steps, and SequenceLength is validated
+        // positive, so both statements were false.
+        if (restored.Shape.Length != 2)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(Stockformer<T>)}: the learnable inverse filter returned a rank-"
+                + $"{restored.Shape.Length} tensor; a rank-2 [rows, time] result is required.");
+        }
+
         // The upsample filters are DenseLayer(_options.SequenceLength), so their output width is
         // ALWAYS SequenceLength, whatever the input window length is. Reading with `time` as the row
         // stride therefore ran past the end of `restored` when time > SequenceLength, and picked
         // values out of the wrong row when time < SequenceLength. ReadShape accepts any time length,
-        // so PredictBands could reach both. Checked here, where the two widths are both in hand.
-        int restoredTime = restored.Shape.Length == 2 ? restored.Shape[1] : 0;
+        // so PredictBands could reach both.
+        int restoredTime = restored.Shape[1];
         if (restoredTime != time)
         {
             throw new ArgumentException(
@@ -718,6 +730,7 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
                 + $"{restoredTime}, which is the configured SequenceLength. Pass a window of "
                 + $"{restoredTime} steps, or build the model with SequenceLength = {time}.");
         }
+
         // Back to [assets, time, features].
         var result = new Tensor<T>(new[] { assets, time, featureCount });
         for (int a = 0; a < assets; a++)

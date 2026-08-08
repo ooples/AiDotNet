@@ -271,6 +271,9 @@ public class CausalDiscoveryOptions
     /// How much stronger one cross-map direction must be than the other before Convergent Cross
     /// Mapping will orient an edge between two series. Default: null (0.2).
     /// </summary>
+    /// <value>
+    /// A value between 0 and 1, or <c>null</c> to use the algorithm's default of <c>0.2</c>.
+    /// </value>
     /// <remarks>
     /// <para>
     /// CCM tests both directions and compares their cross-map skill. The two skills are almost never
@@ -281,6 +284,17 @@ public class CausalDiscoveryOptions
     /// <para>
     /// Valid range is 0 to 1, since the compared skills are correlations. Raise it to report only
     /// pairs with a decisive asymmetry; lower it to admit weaker directional evidence.
+    /// </para>
+    /// <para><b>For Beginners:</b> Convergent Cross Mapping decides which of two time series drives
+    /// the other by checking which one predicts the other better. Real data almost always makes one
+    /// direction score a little higher purely by chance, so without a rule the algorithm would claim
+    /// a cause for every pair it looks at.
+    ///
+    /// This setting is how much better one direction has to be before that claim is made. At the
+    /// default of 0.2 the winning direction must beat the other by 0.2, and pairs closer than that
+    /// are reported as related but with no direction. Raise it toward 1 to get fewer, more confident
+    /// arrows; lower it toward 0 to get more arrows, more of which will be guesses. Leave it unset to
+    /// take the default.
     /// </para>
     /// </remarks>
     public double? DirectionalityAsymmetryThreshold { get; set; }

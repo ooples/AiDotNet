@@ -338,7 +338,6 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                 int byFrom = a.From.CompareTo(b.From);
                 return byFrom != 0 ? byFrom : a.To.CompareTo(b.To);
             });
-            candidates.Sort((a, b) => b.Strength.CompareTo(a.Strength));
             var projected = new Matrix<T>(d, d);
 
             bool CreatesCycle(int from, int to)

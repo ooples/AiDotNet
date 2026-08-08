@@ -285,9 +285,15 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
             TransactionCostBasisPoints = _options.TransactionCostBasisPoints,
         };
 
-        // Architecture and LossFunction are carried across. The single-argument constructor rebuilt
-        // DEFAULT layers and took the implicit default loss, so a model constructed with a custom
-        // architecture or loss cloned into a different model than the one it was copied from.
-        return new SignatureInformedTransformer<T>(copy, Architecture, LossFunction);
+        // LossFunction always carries across. Architecture carries across ONLY when it holds no
+        // layers: InitializeLayers adds Architecture.Layers into Layers BY REFERENCE, and ILayer<T>
+        // has no Clone, so a layer-carrying architecture would give the clone the SAME layer objects
+        // as its source and training either would mutate both. See the matching note in
+        // GraphAttentionPortfolio.CreateNewInstance.
+        bool architectureCarriesLayers = Architecture.Layers is not null && Architecture.Layers.Count > 0;
+
+        return architectureCarriesLayers
+            ? new SignatureInformedTransformer<T>(copy, null, LossFunction)
+            : new SignatureInformedTransformer<T>(copy, Architecture, LossFunction);
     }
 }

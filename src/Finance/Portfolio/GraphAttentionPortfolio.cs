@@ -299,9 +299,20 @@ public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
             MaxEpochs = _options.MaxEpochs,
         };
 
-        // Architecture and LossFunction are carried across. Calling the single-argument constructor
-        // rebuilt DEFAULT layers and took the implicit default loss, so a model constructed with a
-        // custom architecture or loss cloned into a different model than the one it was copied from.
-        return new GraphAttentionPortfolio<T>(copy, Architecture, LossFunction);
+        // LossFunction always carries across; calling the single-argument constructor took the
+        // implicit default and a model built with a custom loss cloned into a different one.
+        //
+        // Architecture carries across ONLY when it holds no layers. InitializeLayers adds
+        // Architecture.Layers into Layers BY REFERENCE when that collection is non-empty, and
+        // ILayer<T> has no Clone, so handing a layer-carrying architecture to the clone would give
+        // both models the SAME layer objects -- training or UpdateParameters on either would mutate
+        // both. A clone that silently shares state is a worse defect than one that rebuilds default
+        // layers, so the layer-carrying case falls back to the default build until layers can be
+        // deep-copied.
+        bool architectureCarriesLayers = Architecture.Layers is not null && Architecture.Layers.Count > 0;
+
+        return architectureCarriesLayers
+            ? new GraphAttentionPortfolio<T>(copy, null, LossFunction)
+            : new GraphAttentionPortfolio<T>(copy, Architecture, LossFunction);
     }
 }

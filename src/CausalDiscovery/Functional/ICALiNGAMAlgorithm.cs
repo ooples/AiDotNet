@@ -80,12 +80,19 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         int n = data.Rows;
         int d = data.Columns;
 
-        // n is a divisor in CenterData, WhitenData and FastICA, so n == 0 fills the returned
-        // adjacency with NaN instead of returning an empty graph, and d < 2 puts the eigen
-        // decomposition and the row-assignment step on degenerate matrices. PNLAlgorithm returns an
-        // empty matrix for the same condition and RCDAlgorithm throws on it; match the siblings
-        // rather than producing a graph whose entries are arbitrary.
-        if (n == 0 || d < 2) return new Matrix<T>(d, d);
+        // n is a divisor in CenterData, WhitenData and FastICA, so too few samples fills the returned
+        // adjacency with meaningless numbers instead of returning an empty graph. n == 1 is the worst
+        // case and passes a naive n == 0 check: centring one sample gives exactly zero, so the
+        // covariance is the zero matrix, every eigenvalue is floored to 1e-12, the whitening scale
+        // becomes 1e6, and FastICA runs on an all-zero sample. d < 2 puts the eigen decomposition and
+        // the row-assignment step on degenerate matrices.
+        //
+        // The bound matches the sibling RCDAlgorithm's: d + 3 samples, enough for the covariance to
+        // have a chance of being estimable at all. PNLAlgorithm returns an empty matrix for its own
+        // degenerate case and RCDAlgorithm throws; returning empty is the quieter of the two and is
+        // what this method's callers already handle.
+        if (d < 2 || n < d + 3) return new Matrix<T>(d, d);
+
 
         var centered = CenterData(data, n, d);
         var (whitened, whiteningMatrix) = WhitenData(centered, n, d);

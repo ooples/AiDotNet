@@ -98,7 +98,18 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     
     #region Shared Fields
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    /// <summary>
+    /// Not readonly: <c>UseAMSGrad</c> is restored from a saved model, and the default optimizer
+    /// captures that flag at construction, so a reload has to rebuild it. Only ever replaced when
+    /// this instance built its own -- see <see cref="_usesDefaultOptimizer"/>.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// True when no optimizer was supplied to the constructor, so the default one may be rebuilt on
+    /// deserialization. A CALLER-SUPPLIED optimizer is never discarded.
+    /// </summary>
+    private readonly bool _usesDefaultOptimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FactorVAEOptions<T> _options;
 
@@ -120,7 +131,12 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private double _beta;
     private double _gamma;
     private double _dropoutRate;
-    private readonly Random _random;
+    /// <summary>
+    /// Not readonly for the same reason as <see cref="_optimizer"/>: it is built from
+    /// <c>Seed</c> at construction, and a restored seed has to rebuild it or the reloaded model
+    /// keeps sampling from the seed it happened to be constructed with.
+    /// </summary>
+    private Random _random;
 
     #endregion
 
@@ -260,6 +276,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         InitializeLayers();
@@ -309,6 +326,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         InitializeLayers();
@@ -876,6 +894,20 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         _options.KlWeight = reader.ReadDouble();
         _options.UseAMSGrad = reader.ReadBoolean();
         _options.Seed = reader.ReadBoolean() ? reader.ReadInt32() : (int?)null;
+
+        // Restoring the OPTIONS is not enough on its own. _random and the default optimizer are both
+        // built from these values during construction, so without rebuilding them the reloaded model
+        // kept sampling from the seed it happened to be constructed with and kept the AMSGrad setting
+        // it was constructed with -- the three restored values would have been dead on arrival.
+        // KlWeight needs no such treatment: it is read from _options at the point of use.
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
+
+        // Only when this instance built its own. A caller-supplied optimizer carries state and
+        // configuration the saved model knows nothing about, and discarding it would be worse than
+        // the flag not taking effect.
+        if (_usesDefaultOptimizer) _optimizer = CreateDefaultOptimizer();
     }
 
     #endregion

@@ -232,22 +232,56 @@ public class AssetGraphBuilder<T>
             for (int s = 0; s < steps; s++) column[s] = panel[(s * assets) + a];
             columns[a] = column;
         }
-        // Each column is double-centred ONCE, up front, instead of once per partner inside the pair
-        // loop. That loop called DistanceCorrelation for every pair, and each of those calls centred
-        // BOTH of its arguments, so every column paid the O(steps^2) centring and its n x n
-        // allocation (assets - 1) times over.
-        var centred = new double[assets][];
-        for (int a = 0; a < assets; a++) centred[a] = DoubleCentredDistances(columns[a], steps);
+        // Each column is double-centred ONCE instead of once per partner. That loop called
+        // DistanceCorrelation for every pair, and each of those calls centred BOTH of its arguments,
+        // so every column paid the O(steps^2) centring and its n x n allocation (assets - 1) times.
+        //
+        // BOUNDED, because the cache is the trade: holding every column's centred matrix costs
+        // assets * steps^2 * 8 bytes, which at 500 assets over a 250-step panel is about 250 MB and
+        // grows with the paper's ~5,000-firm scale. Columns are processed in blocks sized to a fixed
+        // memory budget, so only one block plus one partner column is resident. Every pair is still
+        // visited exactly once, and each column is centred at most (blocks) times rather than
+        // (assets - 1) times.
+        const long CentringBudgetBytes = 64L * 1024 * 1024;
+        long perColumnBytes = (long)steps * steps * sizeof(double);
+        int blockSize = perColumnBytes > 0
+            ? (int)Math.Max(1, Math.Min(assets, CentringBudgetBytes / perColumnBytes))
+            : assets;
 
         var result = new Tensor<T>(new[] { assets, assets });
-        for (int i = 0; i < assets; i++)
+        for (int i = 0; i < assets; i++) result[(i * assets) + i] = NumOps.One;   // a series is perfectly dependent on itself
+
+        for (int blockStart = 0; blockStart < assets; blockStart += blockSize)
         {
-            result[(i * assets) + i] = NumOps.One;   // a series is perfectly dependent on itself
-            for (int j = i + 1; j < assets; j++)
+            int blockEnd = Math.Min(assets, blockStart + blockSize);
+
+            var block = new double[blockEnd - blockStart][];
+            for (int i = blockStart; i < blockEnd; i++)
+                block[i - blockStart] = DoubleCentredDistances(columns[i], steps);
+
+            // Pairs inside the block: both centred matrices are already resident.
+            for (int i = blockStart; i < blockEnd; i++)
             {
-                double dcor = DistanceCorrelationFromCentred(centred[i], centred[j], steps);
-                result[(i * assets) + j] = NumOps.FromDouble(dcor);
-                result[(j * assets) + i] = NumOps.FromDouble(dcor);
+                for (int j = i + 1; j < blockEnd; j++)
+                {
+                    double dcor = DistanceCorrelationFromCentred(
+                        block[i - blockStart], block[j - blockStart], steps);
+                    result[(i * assets) + j] = NumOps.FromDouble(dcor);
+                    result[(j * assets) + i] = NumOps.FromDouble(dcor);
+                }
+            }
+
+            // Pairs crossing into later blocks: the partner is centred once and reused against the
+            // whole resident block, so it is centred once per block rather than once per pair.
+            for (int j = blockEnd; j < assets; j++)
+            {
+                var partner = DoubleCentredDistances(columns[j], steps);
+                for (int i = blockStart; i < blockEnd; i++)
+                {
+                    double dcor = DistanceCorrelationFromCentred(block[i - blockStart], partner, steps);
+                    result[(i * assets) + j] = NumOps.FromDouble(dcor);
+                    result[(j * assets) + i] = NumOps.FromDouble(dcor);
+                }
             }
         }
 

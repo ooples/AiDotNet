@@ -949,7 +949,6 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         writer.Write(Convert.ToDouble(_residualMean));
         writer.Write(Convert.ToDouble(_residualStdDev));
         writer.Write(Convert.ToDouble(_anomalyThreshold));
-        writer.Write(_prophetOptions.RegressorCount);
     }
 
     /// <summary>
