@@ -130,18 +130,31 @@ public class MbPAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     /// </remarks>
     public int AdaptationSteps { get; set; } = 1;
 
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaBatchSize"/>
     public int MetaBatchSize { get; set; } = 4;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.NumMetaIterations"/>
     public int NumMetaIterations { get; set; } = 1000;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.GradientClipThreshold"/>
     public double? GradientClipThreshold { get; set; } = 10.0;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.RandomSeed"/>
     public int? RandomSeed { get => Seed; set => Seed = value; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EvaluationTasks"/>
     public int EvaluationTasks { get; set; } = 100;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EvaluationFrequency"/>
     public int EvaluationFrequency { get; set; } = 100;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EnableCheckpointing"/>
     public bool EnableCheckpointing { get; set; } = false;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.CheckpointFrequency"/>
     public int CheckpointFrequency { get; set; } = 500;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
     public ILossFunction<T>? LossFunction { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     public MbPAOptions(IFullModel<T, TInput, TOutput> metaModel)

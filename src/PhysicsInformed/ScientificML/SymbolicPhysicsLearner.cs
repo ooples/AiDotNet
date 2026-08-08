@@ -619,17 +619,28 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             var gram = new double[featureCount, featureCount];
             var rhs = new double[featureCount];
+
+            // ONE CONVERSION PER FEATURE PER SAMPLE, NOT f*(f+1)/2. The inner loop used to call
+            // NumOps.ToDouble(inputs[i, column]) for every (row, column) pair, so each sample paid for
+            // the upper triangle of conversions when f of them describe the whole row. NumOps.ToDouble
+            // is an interface dispatch, so this is real work rather than a constant factor on cheap
+            // arithmetic. The centred row is hoisted into a buffer that is reused across samples.
+            var centeredRow = new double[featureCount];
             for (int i = 0; i < sampleCount; i++)
             {
                 double centeredOutput = NumOps.ToDouble(outputs[i]) - outputMean;
+                for (int j = 0; j < featureCount; j++)
+                {
+                    centeredRow[j] = NumOps.ToDouble(inputs[i, j]) - featureMeans[j];
+                }
+
                 for (int row = 0; row < featureCount; row++)
                 {
-                    double centeredRow = NumOps.ToDouble(inputs[i, row]) - featureMeans[row];
-                    rhs[row] += centeredRow * centeredOutput;
+                    double value = centeredRow[row];
+                    rhs[row] += value * centeredOutput;
                     for (int column = row; column < featureCount; column++)
                     {
-                        double centeredColumn = NumOps.ToDouble(inputs[i, column]) - featureMeans[column];
-                        gram[row, column] += centeredRow * centeredColumn;
+                        gram[row, column] += value * centeredRow[column];
                     }
                 }
             }
@@ -645,7 +656,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 diagonalScale = Math.Max(diagonalScale, Math.Abs(gram[row, row]));
             }
 
-            double ridge = Math.Max(1.0, diagonalScale) * 1e-10;
+            // RELATIVE TO THE GRAM MATRIX, NOT TO 1.0. Math.Max(1.0, diagonalScale) meant that for a
+            // well-scaled but small problem -- features in, say, the 1e-3 range, giving a diagonal around
+            // 1e-6 -- the ridge was a FIXED 1e-10 rather than 1e-16 of the diagonal, so the regularizer
+            // was four orders of magnitude larger relative to the data than intended and biased the fit.
+            // Scaling by the diagonal keeps the ratio constant at every problem scale; the fallback only
+            // covers an exactly-zero diagonal, where there is no scale to be relative to.
+            double ridge = diagonalScale > 0.0 ? diagonalScale * 1e-10 : 1e-10;
             for (int i = 0; i < featureCount; i++)
             {
                 gram[i, i] += ridge;
