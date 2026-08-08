@@ -73,7 +73,12 @@ public class TabPFNOptions<T> : RiskModelOptions<T>
         UsePositionalEncoding = other.UsePositionalEncoding;
         UsePreNorm = other.UsePreNorm;
         InitScale = other.InitScale;
-        OutputHeadDimensions = other.OutputHeadDimensions is null ? null! : (int[])other.OutputHeadDimensions.Clone();
+        // An empty array rather than a suppressed null. OutputHeadDimensions is declared
+        // non-nullable, so a null source already violates its own contract, and propagating that
+        // with a null-forgiving operator just moves the failure downstream to whoever reads it.
+        OutputHeadDimensions = other.OutputHeadDimensions is null
+            ? []
+            : (int[])other.OutputHeadDimensions.Clone();
         UseEnsemble = other.UseEnsemble;
         NumEnsembles = other.NumEnsembles;
         CategoricalCardinalities = other.CategoricalCardinalities is null ? null : (int[])other.CategoricalCardinalities.Clone();

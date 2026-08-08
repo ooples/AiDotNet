@@ -65,17 +65,33 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
         if (other is null) throw new ArgumentNullException(nameof(other));
 
         Seed = other.Seed;
-        EmbeddingDimension = other.EmbeddingDimension;
-        HiddenDimension = other.HiddenDimension;
-        NumLayers = other.NumLayers;
-        DropoutRate = other.DropoutRate;
-        FeedForwardMultiplier = other.FeedForwardMultiplier;
-        UseLayerNorm = other.UseLayerNorm;
-        MLPHiddenDimensions = other.MLPHiddenDimensions is null ? null! : (int[])other.MLPHiddenDimensions.Clone();
-        UseColumnEmbedding = other.UseColumnEmbedding;
-        EmbeddingInitScale = other.EmbeddingInitScale;
-        LearningRate = other.LearningRate;
+
+        // BEFORE CategoricalCardinalities: that property's setter validates the two against each
+        // other, so assigning the cardinalities first rejects a perfectly valid source.
+        NumCategoricalFeatures = other.NumCategoricalFeatures;
+
+        EmbeddingDimension = other.EmbeddingDimension;
+        HiddenDimension = other.HiddenDimension;
+        NumHeads = other.NumHeads;
+        NumLayers = other.NumLayers;
+        DropoutRate = other.DropoutRate;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        UseLayerNorm = other.UseLayerNorm;
+        UseColumnEmbedding = other.UseColumnEmbedding;
+        EmbeddingInitScale = other.EmbeddingInitScale;
+        LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
+
+        // An empty array rather than a suppressed null. MLPHiddenDimensions is declared
+        // non-nullable, so a null source already violates its own contract; propagating that with a
+        // null-forgiving operator carries the violation into the clone and defers the failure to
+        // whichever layer-builder dereferences it next.
+        MLPHiddenDimensions = other.MLPHiddenDimensions is null
+            ? []
+            : (int[])other.MLPHiddenDimensions.Clone();
+        CategoricalCardinalities = other.CategoricalCardinalities is null
+            ? null
+            : (int[])other.CategoricalCardinalities.Clone();
     }
 
     /// <summary>
