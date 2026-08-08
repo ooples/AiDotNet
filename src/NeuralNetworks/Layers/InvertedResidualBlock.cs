@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "8")]
-public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     // Non-readonly: lazy ctor leaves these null until OnFirstForward
     // observes input.Shape and allocates each against the resolved
@@ -405,7 +405,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     /// </summary>
     /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
     /// <returns>The output tensor after the inverted residual computation.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor leaves all sub-layers null until OnFirstForward
         // resolves the input channel count and allocates them. Subsequent

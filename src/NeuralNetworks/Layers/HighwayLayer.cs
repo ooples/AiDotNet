@@ -518,7 +518,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// should be transformed and which should pass through unchanged.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: gate every backward-only cache (not just _lastInput) so an InferenceMode
         // arena loop holds no recycled-scratch references. Forward uses locals throughout.

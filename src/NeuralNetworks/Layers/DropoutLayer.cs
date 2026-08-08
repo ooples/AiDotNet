@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4")]
-public class DropoutLayer<T> : LayerBase<T>
+public partial class DropoutLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The probability of dropping out (deactivating) a neuron during training.
@@ -177,6 +177,10 @@ public class DropoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    /// <remarks>Dropout masks elements in place, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DropoutLayer{T}"/> class.
     /// </summary>
@@ -216,7 +220,8 @@ public class DropoutLayer<T> : LayerBase<T>
     /// will throw an exception.
     /// </para>
     /// </remarks>
-    public DropoutLayer(double dropoutRate = 0.5)
+    public DropoutLayer(
+        [LayerState] double dropoutRate = 0.5)
         : base(Array.Empty<int>(), []) // Dropout layer doesn't change the shape of the input
     {
         if (dropoutRate < 0 || dropoutRate >= 1)
@@ -283,7 +288,7 @@ public class DropoutLayer<T> : LayerBase<T>
     /// forcing the network to be resilient and not depend too much on any single neuron.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
@@ -317,6 +322,38 @@ public class DropoutLayer<T> : LayerBase<T>
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, _dropoutMask);
+    }
+
+    /// <summary>
+    /// Refreshes the mask tensor captured by a fused compiled-training plan without
+    /// replacing the tensor reference embedded in that plan.
+    /// </summary>
+    /// <remarks>
+    /// A compiled plan traces <see cref="Forward"/> once and replays the resulting
+    /// graph. Replacing <see cref="_dropoutMask"/> on a later call cannot affect that
+    /// graph because it still owns the original tensor reference. Mutating the
+    /// captured tensor in place gives each replay a fresh deterministic mask while
+    /// preserving the compiled graph and its optimizer state.
+    /// </remarks>
+    internal void RefreshCompiledTrainingMask()
+    {
+        if (!IsTrainingMode || _dropoutMask is null || _dropoutMask.Length == 0)
+            return;
+
+        ulong counter = AdvanceSeedCounter();
+        int? perCallSeed = RandomSeed.HasValue
+            ? DeriveSeed32(RandomSeed.Value, counter)
+            : (int?)null;
+
+        using var refreshedMask = Engine.TensorDropoutMask<T>(
+            _dropoutMask._shape, _dropoutRate, _scale, perCallSeed);
+        if (refreshedMask.Length != _dropoutMask.Length)
+            throw new InvalidOperationException(
+                $"Compiled dropout mask length changed from {_dropoutMask.Length} to {refreshedMask.Length}.");
+
+        refreshedMask.AsSpan().CopyTo(_dropoutMask.AsWritableSpan());
+        _dropoutMask.IncrementVersion();
+        Engine.InvalidatePersistentTensor(_dropoutMask);
     }
 
     /// <summary>

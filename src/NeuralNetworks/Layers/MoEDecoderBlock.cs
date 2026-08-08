@@ -61,7 +61,7 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var normed1 = _norm1.Forward(input);
         var attnOut = _attention.Forward(normed1);

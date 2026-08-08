@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public class GaussianNoiseLayer<T> : LayerBase<T>
+public partial class GaussianNoiseLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The mean (average value) of the Gaussian noise distribution.
@@ -253,7 +253,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     /// They make training more difficult but don't affect the final predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

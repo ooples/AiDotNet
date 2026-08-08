@@ -155,7 +155,7 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy gate — OnFirstForward resolves _inputChannels and replays
         // any Deserialize-buffered parameters before sub-layer Forwards

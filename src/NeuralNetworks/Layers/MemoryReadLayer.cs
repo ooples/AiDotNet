@@ -658,7 +658,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// quick tests or when a pipeline only supports a single input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Promote rank-1 [features] to rank-2 [1, features] so the downstream
         // TensorMatMul (which requires rank >= 2) works for the standalone

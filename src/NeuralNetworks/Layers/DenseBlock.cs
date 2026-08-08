@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 3")]
-public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly List<DenseBlockLayer<T>> _layers;
     private readonly int _numLayers;
@@ -207,7 +207,7 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// </summary>
     /// <param name="input">The input tensor [B, C, H, W].</param>
     /// <returns>The output tensor with all layer outputs concatenated.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy gate — drives inner-layer shape resolution so any
         // Deserialize-buffered parameters get a chance to be replayed

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -46,8 +46,99 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8")]
-public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// A fully-connected layer maps the LAST axis and treats everything before it as independent positions.
+// It therefore genuinely accepts two forms — [Batch, Features] and [Batch, Time, Features] — which is the
+// case that makes multiple declarations necessary rather than convenient.
+//
+// BATCH IS OPTIONAL ONLY ON THE TWO-AXIS FORM, and that is not an oversight. Marking it optional on the
+// three-axis form too would make that declaration also accept rank 2, as [Time, Features] — which is
+// indistinguishable from the [Batch, Features] the other declaration already accepts at that rank. Two
+// declarations claiming the same rank with DIFFERENT axis names is a genuine ambiguity: a resolver cannot
+// tell whether the leading axis of a rank-2 input is Batch or Time, so it cannot name the output axes
+// either, and shape inference has to decline for a case that is in fact completely ordinary. Dropping the
+// flag costs nothing, because an unbatched [Time, Features] input is already covered — this layer carries
+// every leading axis through untouched, so which name it goes by does not change what it computes.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: the leading axes are carried through untouched.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+// Rank 1 and rank 4 are declared because this layer ACCEPTS them - measured, not assumed:
+// [12] -> [5] and [1,4,6,6] -> [1,4,6,5]. Leaving them undeclared made shape inference decline
+// on cases the layer handles, and a contract that declines on working input is one callers learn
+// to route around. The rank-4 axes are named [Batch, Channels, Height, Features] rather than with
+// anonymous placeholders because that is precisely the convolution hand-off - and it makes the
+// consequence legible: fed a feature map, this layer maps WIDTH as the feature axis.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// FEATURE-LAST, and that is the whole content of the declaration. This layer fixes the TRAILING
+    /// axis and passes every leading axis through untouched — the mirror image of a convolution, which
+    /// fixes the leading channel axis. Reading one with the other's rule inverts which axis is a real
+    /// claim by the layer and which was merely carried along.
+    /// </para>
+    /// <para>
+    /// The sequence length is never this layer's to fix. Its parameters are sized by the feature width
+    /// alone, so the same layer is meant to accept any number of time steps; a declaration that pinned
+    /// one would turn a correct layer into one that appears to reject valid inputs.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0 || inputRank < 1) return null;
+
+        // RANK-POLYMORPHIC, and measured rather than assumed. This layer maps the LAST axis and passes
+        // every leading axis through untouched, at any rank:
+        //
+        //     [12]        -> [5]
+        //     [4,12]      -> [4,5]
+        //     [2,7,12]    -> [2,7,5]
+        //     [1,4,6,6]   -> [1,4,6,5]
+        //
+        // Enumerating rank 2 and rank 3 by hand, as the [TensorLayout] declarations above still do, was
+        // therefore incomplete: it made shape inference decline for ranks this layer handles perfectly
+        // well, and a contract that declines on a working case is a contract callers learn to ignore.
+        // Expressing it as code rather than as attributes is the point - an attribute cannot enumerate
+        // every rank, and "the last axis, whatever the rank" is the actual rule.
+        //
+        // NOTE for chain validation: feeding a convolution's [Batch, Channels, Height, Width] straight
+        // in yields [Batch, Channels, Height, outputSize] - it maps WIDTH as the feature axis. That is
+        // rarely what an author means; it is why conv -> dense normally needs an explicit flatten, and
+        // why this layer accepting it silently is worth flagging rather than celebrating.
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        // Enumerated rather than generated, because every leading axis needs a DISTINCT role: axis roles
+        // are how a relation refers to its input, so two anonymous placeholders in one layout cannot be
+        // told apart and the whole naming is refused. Ranks beyond four decline honestly.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), Pass(TensorAxis.Channels), Pass(TensorAxis.Height), features,
+            },
+            _ => null,
+        };
+    }
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
     /// </summary>
@@ -337,6 +428,19 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 100 × 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
     public override long ParameterCount
     {
         get
@@ -407,10 +511,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// starting values that help with training.
     /// </para>
     /// </remarks>
-    public DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
+    public DenseLayer(
+        [LayerState] int outputSize,
+        IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -478,6 +585,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { outputSize }, vectorActivation)
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -987,7 +1095,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return new Tensor<T>(shape);
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <remarks>
+    /// Overrides ForwardTraced rather than Forward so this layer is visible to graph tracing: the
+    /// base's Forward records which tensor this call consumed and produced, which is how a model's
+    /// real dataflow is recovered without the model declaring it. A layer that overrides Forward
+    /// directly bypasses that recording and becomes a hole in the traced graph.
+    /// </remarks>
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Shape-inference mode: resolve dims + return a placeholder, no weight allocation.
         if (IsInferringShapes) return ShapeInferenceOutput(input);

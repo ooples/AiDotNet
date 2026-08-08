@@ -68,7 +68,10 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     /// <param name="embeddingDim">Embedding dimension.</param>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="dropoutRate">Dropout rate for attention.</param>
-    public IntersampleAttentionLayer(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1)
+    public IntersampleAttentionLayer(
+        [LayerState] int embeddingDim,
+        [LayerState] int numHeads = 8,
+        [LayerState] double dropoutRate = 0.1)
         : base([embeddingDim], [embeddingDim])
     {
         _embeddingDim = embeddingDim;
@@ -106,8 +109,12 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor [batchSize, numFeatures, embeddingDim].</param>
     /// <returns>Output with intersample attention applied [batchSize, numFeatures, embeddingDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        // Registers the four projections with GetSubLayers() via the generated
+        // EnsureSubLayersRegistered(); they otherwise stay invisible to every structural walker.
+        EnsureInitializedFromInput(input);
+
         _inputCache = input;
 
         int batchSize = input.Shape[0];

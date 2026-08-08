@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 2, 2", TestConstructorArgs = "")]
-public class FlattenLayer<T> : LayerBase<T>
+public partial class FlattenLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The shape of the input tensor.
@@ -225,7 +225,7 @@ public class FlattenLayer<T> : LayerBase<T>
     /// "unflattened" back to the original shape during backpropagation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

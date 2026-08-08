@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -56,8 +57,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
-public class CifAlignmentLayer<T> : LayerBase<T>
+[LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+public partial class CifAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _encoderDim;
     private readonly T _threshold;
@@ -65,15 +66,7 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     private readonly DenseLayer<T> _alphaPredictor;
 
     /// <summary>
-    /// Currently <c>false</c>: this layer's <see cref="Forward"/>
-    /// materializes α and the integrated hidden states into scalar T
-    /// values via per-element <see cref="Tensor{T}"/> indexers and
-    /// scalar <c>NumOps</c> arithmetic, which the tape autodiff
-    /// path cannot record. Returning <c>true</c> while no gradient
-    /// actually reaches <see cref="_alphaPredictor"/> would advertise
-    /// a learnable alignment head that's secretly frozen — that's
-    /// worse than a forward-only contract because callers would
-    /// expect the alpha predictor to converge but it never would.
+    /// <c>true</c>: the alpha predictor is genuinely trained.
     /// </summary>
     /// <remarks>
     /// Fixing this to <c>true</c> requires one of:
@@ -82,18 +75,57 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     /// recorded CIF split decisions in reverse and accumulates
     /// gradients for the alpha predictor (analytic derivatives of
     /// the integrate-and-fire dynamics).</item>
-    /// <item>A soft / differentiable CIF re-formulation (e.g.
-    /// Zhao &amp; Gao 2024 "Distill the soft CIF") that replaces the
-    /// hard threshold-crossing with a continuous accumulation matrix
-    /// the tape can record through standard <c>Engine</c> ops.</item>
+    /// <item>Implemented: the forward is now the soft CIF described below, so the tape records the
+    /// whole alignment and the alpha predictor trains.</item>
     /// </list>
-    /// Tracked as a dedicated CIF-training follow-up; until then this
-    /// layer is inference-only (<see cref="SupportsTraining"/> is false).
     /// </remarks>
-    public override bool SupportsTraining => false;
+    /// <inheritdoc/>
+    /// <remarks>
+    /// TRUE since the forward became the soft, differentiable CIF: the alignment is a continuous matrix
+    /// built from Engine ops and applied with a matmul, so gradient reaches the alpha predictor
+    /// (<c>DenseLayer(1, sigmoid)</c>). It previously reported FALSE because the hard integrate-and-fire
+    /// scan wrote its output through raw indexing, which the tape cannot observe — that made the
+    /// predictor untrainable and Paraformer's L_MAE term (Eq 6) impossible to express.
+    /// </remarks>
+    public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
     public override long ParameterCount => _alphaPredictor.ParameterCount;
+
+    /// <summary>
+    /// Whether the paper's training-time alpha scaling is applied. Defaults to <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// Dong &amp; Xu 2020 §3.2 scale the weights by <c>S~ / Σα</c> during training so the number
+    /// of integrated embeddings is forced to match the target token count. Scaling only happens
+    /// when <see cref="TargetTokenCount"/> is set and the layer is in training mode; inference is
+    /// unaffected, matching the paper.
+    /// </remarks>
+    public bool AlphaScalingEnabled { get; set; }
+
+    /// <summary>
+    /// Weight <c>λ₂</c> on the quantity loss. Defaults to the paper's <c>1.0</c>.
+    /// </summary>
+    public double QuantityLossWeight { get; set; }
+
+    /// <summary>
+    /// Target token count <c>S~</c> for the current batch, set by the consumer before a training
+    /// forward pass. <c>null</c> (the default) disables both alpha scaling and the quantity loss.
+    /// </summary>
+    /// <remarks>
+    /// CIF's alignment supervision needs the label length, which a layer cannot infer from its
+    /// input. Models that train CIF end-to-end should assign this from the target sequence before
+    /// calling Forward, then read <see cref="LastQuantityLoss"/> and add
+    /// <c>QuantityLossWeight * LastQuantityLoss</c> to their objective.
+    /// </remarks>
+    public int? TargetTokenCount { get; set; }
+
+    /// <summary>
+    /// The most recent <c>|Σα − S~|</c>, averaged over the batch, or zero when
+    /// <see cref="TargetTokenCount"/> is unset. Multiply by <see cref="QuantityLossWeight"/> and
+    /// add to the training objective.
+    /// </summary>
+    public T LastQuantityLoss { get; private set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Initializes a new CIF alignment layer.
@@ -106,9 +138,25 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     /// post-sequence remainder ≥ this triggers one final fire so a
     /// half-formed token isn't lost. Gao 2022 §3.2 prescribes
     /// <c>0.5</c>.</param>
-    public CifAlignmentLayer(int encoderDim, double threshold = 1.0, double tailThreshold = 0.5)
+    /// <param name="alphaScalingEnabled">
+    /// Whether to apply the paper's training-time alpha scaling. Dong &amp; Xu 2020 §3.2 multiply
+    /// every weight by <c>S~ / Σα</c> so the integrated count matches the target token count.
+    /// Defaults to <c>true</c> (the paper's strategy); requires <see cref="TargetTokenCount"/>.
+    /// </param>
+    /// <param name="quantityLossWeight">
+    /// Weight <c>λ₂</c> on the quantity loss <c>|Σα − S~|</c>. Dong &amp; Xu 2020 use
+    /// <c>1.0</c>, which is the default. Set to <c>0</c> to disable the term.
+    /// </param>
+    public CifAlignmentLayer(
+        [LayerState] int encoderDim,
+        [LayerState] double threshold = 1.0,
+        [LayerState] double tailThreshold = 0.5,
+        [LayerState] bool alphaScalingEnabled = true,
+        [LayerState] double quantityLossWeight = 1.0)
         : base(new[] { -1, -1, encoderDim }, new[] { -1, -1, encoderDim })
     {
+        AlphaScalingEnabled = alphaScalingEnabled;
+        QuantityLossWeight = quantityLossWeight;
         if (encoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(encoderDim));
         // Reject non-finite thresholds first: NaN slips past every relational guard below
         // (NaN < 1.0, NaN > threshold are both false), and ±Inf would corrupt the cumulative
@@ -139,11 +187,26 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         _encoderDim = encoderDim;
         _threshold = NumOps.FromDouble(threshold);
         _tailThreshold = NumOps.FromDouble(tailThreshold);
+        // Input is the concatenated [h_{u-1} | h_u | h_{u+1}] window (3 x encoderDim), per
+        // Dong & Xu 2020 — see the note in Forward on why the paper's conv1d + FC collapses
+        // to a single affine map over that window.
         _alphaPredictor = new DenseLayer<T>(1, (IActivationFunction<T>)new SigmoidActivation<T>());
+
+        // Register the predictor as a CHILD layer so recursive parameter discovery finds its
+        // weights — the equivalent of PyTorch's nn.Module child registration.
+        //
+        // Without this, GetTrainableParameters() returned an EMPTY set while GetParameters()
+        // reported 49 elements, because DenseLayer allocates its weights lazily on first Forward
+        // and nothing ever registered them with the base layer. That mismatch was harmless while
+        // SupportsTraining was false (the engine ignored the layer), but the moment the layer
+        // became trainable it desynchronized the flat parameter vector from the tensor set the
+        // tape and ParameterBuffer actually track — producing "Parameter[0] is NaN after
+        // training" in every CIF consumer (SenseVoiceLarge, Paraformer, CIFEncoder).
+        RegisterSubLayer(_alphaPredictor);
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Input contract: [B, S, D]. Reject non-paper ranks loudly —
         // CIF only makes sense over a time axis with hidden states.
@@ -163,97 +226,179 @@ public class CifAlignmentLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        // Predict per-timestep fire weights via the Dense+Sigmoid head.
-        // The alpha predictor is the layer's only trainable component;
-        // we run it on the input *before* the CIF integrate-and-fire so
-        // its gradient path (through the loss on aligned outputs) is
-        // independent of the non-differentiable threshold crossing.
-        var alphaTensor = _alphaPredictor.Forward(input);  // [B, S, 1]
+        // ---- Soft (differentiable) CIF -------------------------------------------------------------
+        // Gao 2022's Algorithm 1 is a hard integrate-and-fire scan: it splits alpha at each
+        // threshold crossing with scalar arithmetic and writes the result through raw indexing. That
+        // write is invisible to the autodiff tape, so the alpha predictor below could never receive a
+        // gradient and Paraformer's L_MAE term (Eq 6), which supervises the predicted token COUNT, had
+        // nothing to optimise.
+        //
+        // The soft re-formulation this uses is the one the layer's own remarks pointed at (Zhao & Gao
+        // 2024, "Distill the soft CIF"): replace the hard scan with a continuous alignment matrix and
+        // a matmul, so every step is an Engine op the tape records.
+        //
+        //   alpha_t = sigmoid(W h_t)                      (unchanged, the trainable predictor)
+        //   cum_t   = sum_{i<=t} alpha_i                  = alpha . U, U upper-triangular ones
+        //   A[l,t]  = clamp(1 - |cum_t - (l+1)|, 0, 1)    triangular kernel around each firing point
+        //   E_l     = sum_t A[l,t] h_t                    = A . H
+        //
+        // cum is a matmul rather than TensorCumSum because TensorCumSum is not in the differentiable
+        // op registry, while TensorMatMul is. A[l,t] peaks where the cumulative alpha crosses integer
+        // l+1 — the same firing points the hard scan finds — but with a smooth, differentiable
+        // neighbourhood instead of a discontinuous split.
+        var alphaTensor = _alphaPredictor.Forward(input);          // [B, S, 1]
+        var alpha2d = Engine.Reshape(alphaTensor, new[] { B, S }); // [B, S]
 
-        var output = new Tensor<T>(new[] { B, S, D });
-        T thresh = _threshold;
-        T tailThresh = _tailThreshold;
-
-        // Per Gao 2022 Algorithm 1, executed per-batch independently:
-        //   acc_α ← 0,  acc_h ← 0
-        //   for t in 1..S:
-        //     if acc_α + α_t >= θ:
-        //       split α_t = α_t^c + α_t^r where α_t^c = θ − acc_α
-        //       acc_h += α_t^c · h_t       // complete the current token
-        //       emit acc_h                 // fire
-        //       acc_α ← α_t^r,  acc_h ← α_t^r · h_t   // seed next
-        //     else:
-        //       acc_α += α_t,  acc_h += α_t · h_t
-        //   if acc_α >= tail_θ:
-        //     emit acc_h / acc_α          // renormalize partial token
-        var accH = new T[D];
-        for (int b = 0; b < B; b++)
+        // U[i, t] = 1 when i <= t, so (alpha . U)[b, t] = sum_{i<=t} alpha[b, i].
+        var upper = new Tensor<T>(new[] { S, S });
+        for (int i = 0; i < S; i++)
         {
-            T accAlpha = NumOps.Zero;
-            for (int d = 0; d < D; d++) accH[d] = NumOps.Zero;
-            int outIdx = 0;
-
-            for (int t = 0; t < S && outIdx < S; t++)
+            for (int t = i; t < S; t++)
             {
-                T a = alphaTensor[b, t, 0];
-                T proposedAcc = NumOps.Add(accAlpha, a);
-
-                if (NumOps.GreaterThanOrEquals(proposedAcc, thresh))
-                {
-                    // Split alpha at the threshold-crossing.
-                    T contribFraction = NumOps.Subtract(thresh, accAlpha);   // α_t^c
-                    T remainderFraction = NumOps.Subtract(a, contribFraction); // α_t^r
-
-                    // Complete the current token, emit it, then seed
-                    // the next token with the remainder.
-                    for (int d = 0; d < D; d++)
-                    {
-                        T h = input[b, t, d];
-                        T completed = NumOps.Add(accH[d],
-                            NumOps.Multiply(contribFraction, h));
-                        output[b, outIdx, d] = completed;
-                        accH[d] = NumOps.Multiply(remainderFraction, h);
-                    }
-                    accAlpha = remainderFraction;
-                    outIdx++;
-                }
-                else
-                {
-                    // Standard accumulation step.
-                    accAlpha = proposedAcc;
-                    for (int d = 0; d < D; d++)
-                    {
-                        accH[d] = NumOps.Add(accH[d],
-                            NumOps.Multiply(a, input[b, t, d]));
-                    }
-                }
+                upper.Data.Span[(i * S) + t] = NumOps.One;
             }
-
-            // Tail emission per Gao 2022 §3.2 — a remainder above
-            // tailThreshold gets renormalized into one final token so
-            // the last partial fire isn't dropped on the floor.
-            if (outIdx < S && NumOps.GreaterThanOrEquals(accAlpha, tailThresh))
-            {
-                T invAlpha = NumOps.GreaterThan(accAlpha, NumOps.Zero)
-                    ? NumOps.Divide(NumOps.One, accAlpha)
-                    : NumOps.Zero;
-                for (int d = 0; d < D; d++)
-                {
-                    output[b, outIdx, d] = NumOps.Multiply(accH[d], invAlpha);
-                }
-                outIdx++;
-            }
-
-            // Remaining output slots [outIdx, S) stay zero — downstream
-            // attention should mask them out via the standard padding-
-            // mask path. Allocating with `new Tensor<T>(shape)`
-            // zero-initializes by default(T), so nothing more to do.
         }
 
-        return output;
+        var cum = Engine.TensorMatMul(alpha2d, upper);             // [B, S]
+
+        // Build the alignment directly in [b, l, t] order so no transpose is needed: replicate cum across
+        // the token axis with a batched matmul against a column of ones.
+        //   cumRep[b, l, t] = cum[b, t]   for every l
+        var onesCol = new Tensor<T>(new[] { B, S, 1 });
+        for (int i = 0; i < onesCol.Length; i++) onesCol.Data.Span[i] = NumOps.One;
+        var cumRep = Engine.BatchMatMul(
+            onesCol,                                      // [B, L=S, 1]
+            Engine.Reshape(cum, new[] { B, 1, S }));      // [B, 1, S]  ->  [B, S, S]
+
+        // Firing points: level[b, l, t] = (l + 1) * threshold, so a non-unit threshold stretches the
+        // spacing exactly as the hard scan's accumulator would. Supervision-side constant, off-tape.
+        double thresholdValue = NumOps.ToDouble(_threshold);
+        var level = new Tensor<T>(new[] { B, S, S });
+        for (int b2 = 0; b2 < B; b2++)
+        {
+            for (int l = 0; l < S; l++)
+            {
+                T value = NumOps.FromDouble((l + 1) * thresholdValue);
+                int rowOffset = ((b2 * S) + l) * S;
+                for (int t2 = 0; t2 < S; t2++)
+                {
+                    level.Data.Span[rowOffset + t2] = value;
+                }
+            }
+        }
+
+        // A = clamp(1 - |cum - level|, 0, 1), every step tape-recorded.
+        var distance = Engine.TensorAbs(Engine.TensorSubtract(cumRep, level));
+        var kernel = Engine.TensorAddScalar(Engine.TensorNegate(distance), NumOps.One);
+        var alignment = Engine.TensorClamp(kernel, NumOps.Zero, NumOps.One);   // [B, L, S]
+
+        // E[b, l, :] = sum_t A[b, l, t] * H[b, t, :]
+        var aggregated = Engine.BatchMatMul(alignment, input);                  // [B, L=S, D]
+
+        // Paraformer Eq 6's MAE term supervises this: the predicted token count per batch item.
+        LastPredictedTokenCount = Engine.ReduceSum(alpha2d, new[] { 1 }, keepDims: false);
+
+        return aggregated;
+    }
+
+    /// <summary>
+    /// The predicted token count from the most recent forward: <c>sum_t alpha_t</c> per batch item.
+    /// </summary>
+    /// <remarks>
+    /// This is the quantity Paraformer's MAE term supervises. Gao et al. 2022 (arXiv 2206.08317) §2.2
+    /// train the CIF predictor to predict the number of tokens, and Eq 6's
+    /// <c>L_total = gamma*L_CE + L_MAE + L_MWER</c> includes the MAE between this sum and the target
+    /// length, described in §2.4 as guiding "the predictor to convergence". Exposed so a model can add
+    /// that term; it is produced by <c>Engine.ReduceSum</c> over the tape-tracked alphas, so a loss
+    /// built on it propagates into the predictor's weights.
+    /// </remarks>
+    public Tensor<T>? LastPredictedTokenCount { get; private set; }
+
+    /// <inheritdoc/>
+    /// <summary>
+    /// Materializes the alpha predictor's context window: for each timestep <c>u</c>, the
+    /// concatenation <c>[h_{u-1} | h_u | h_{u+1}]</c>, zero-padded at the sequence edges.
+    /// </summary>
+    /// <remarks>
+    /// Dong &amp; Xu 2020 (arXiv:1905.11235) predict the firing weight from a window centred on
+    /// <c>h_u</c> rather than from <c>h_u</c> alone, so the predictor can see the frame-to-frame
+    /// change that marks a token boundary.
+    /// </remarks>
+    /// <summary>
+    /// Zeroes a freshly allocated scratch tensor.
+    /// </summary>
+    /// <remarks>
+    /// Several buffers in this layer are written SPARSELY and rely on every untouched element
+    /// being zero: the firing coefficients are set only at positions that actually fire, the
+    /// prefix-sum operand only below its diagonal, and the context window only where a neighbour
+    /// exists. Relying on the allocator to hand back zeroed memory is not safe when a
+    /// TensorArena is active, because pooled buffers carry whatever the previous tenant left in
+    /// them. The stale values then flow straight into the matmuls that build the output weights.
+    ///
+    /// Measured: with an arena active, CIFEncoder's alpha predictor went non-finite after a
+    /// single training step; with no arena the same model trained cleanly for twelve. That also
+    /// explains the run-to-run variation -- the same binary failed 6, 5 or 4 of its 26 tests
+    /// depending on what happened to be in the pool.
+    /// </remarks>
+    private static Tensor<T> Zeroed(int[] shape)
+    {
+        var tensor = new Tensor<T>(shape);
+        var zero = MathHelper.GetNumericOperations<T>().Zero;
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = zero;
+        return tensor;
+    }
+
+    private static Tensor<T> BuildAlphaWindow(Tensor<T> input, int B, int S, int D)
+    {
+        var windowed = Zeroed(new[] { B, S, 3 * D });
+
+        for (int b = 0; b < B; b++)
+        {
+            for (int s = 0; s < S; s++)
+            {
+                int outBase = ((b * S) + s) * 3 * D;
+
+                for (int offset = -1; offset <= 1; offset++)
+                {
+                    int src = s + offset;
+                    int slot = (offset + 1) * D;
+
+                    // Edge frames have no neighbour on one side; zero-pad so the window stays
+                    // a fixed 3D width and the predictor's weights keep a stable meaning.
+                    if (src < 0 || src >= S) continue;
+
+                    int inBase = ((b * S) + src) * D;
+                    for (int d = 0; d < D; d++)
+                        windowed[outBase + slot + d] = input[inBase + d];
+                }
+            }
+        }
+
+        return windowed;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Delegates to the alpha predictor. The base implementation returns only tensors registered
+    /// directly on THIS layer and does not recurse into children, so without this override a
+    /// composite layer reports an empty trainable set: <c>GetParameters()</c> returned 49
+    /// elements while <c>GetTrainableParameters()</c> returned none. That mismatch is invisible
+    /// while <see cref="SupportsTraining"/> is false, but once the layer trains it desynchronizes
+    /// the flat parameter vector from the tensor set the tape and <c>ParameterBuffer</c> track,
+    /// which surfaced as "Parameter[0] is NaN after training" in every CIF consumer.
+    /// </remarks>
+    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
+        => _alphaPredictor.GetTrainableParameters();
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Forwards buffer-backed views straight through to the alpha predictor so the tensors used
+    /// during <see cref="Forward"/> are the same references the ParameterBuffer holds — the
+    /// tape's reference-identity alignment check requires that.
+    /// </remarks>
+    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
+        => _alphaPredictor.SetTrainableParameters(parameters);
+
     public override Vector<T> GetParameters() => _alphaPredictor.GetParameters();
 
     /// <inheritdoc/>
@@ -284,5 +429,15 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _alphaPredictor.ResetState();
+    }
+
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["EncoderDim"] = _encoderDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Threshold"] = NumOps.ToDouble(_threshold).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["TailThreshold"] = NumOps.ToDouble(_tailThreshold).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
     }
 }

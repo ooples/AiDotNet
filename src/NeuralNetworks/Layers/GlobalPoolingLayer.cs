@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "AiDotNet.Enums.PoolingType.Max")]
-public class GlobalPoolingLayer<T> : LayerBase<T>
+public partial class GlobalPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The type of pooling operation to apply globally (Max or Average).
@@ -380,7 +380,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// preserving the most important information about each feature.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
@@ -428,16 +428,31 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     {
         return rank switch
         {
-            // 4D: [batch, height, width, channels] -> reduce height (1) and width (2)
-            4 => [1, 2],
-            // 3D: [batch, seq_len, features] -> reduce seq_len (1)
+            // 4D: [batch, channels, height, width] -> reduce the SPATIAL axes (2, 3).
+            //
+            // This read [1, 2] and described the input as [batch, height, width, channels]. The
+            // rest of this layer does not use that layout and neither does the library:
+            // OnFirstForward takes channels from index 1, the resolved output contract is
+            // [C, 1, 1], ConvolutionalLayer emits [B, C, H, W], and the integration tests
+            // document 3-D input as [channels, height, width]. Against real NCHW input the old
+            // axes reduced channels and height and kept width, so global pooling collapsed the
+            // feature dimension it exists to preserve — a wrong tensor, not merely a wrong
+            // declaration. It surfaced as "[C,1,1] declared but [B,1,1,W] produced".
+            4 => [2, 3],
+            // 3D: [batch, seq_len, features] -> reduce seq_len (1).
+            //
+            // Deliberately unchanged. Rank 3 is genuinely ambiguous here: this is the mean-pool
+            // over a token axis that transformer encoders rely on, while OnFirstForward reads the
+            // same rank as an unbatched [C, H, W]. Only the batched reading affects the computed
+            // tensor, so it stays; the declaration side is the part that disagrees.
             3 => [1],
             // 2D: [batch, features] -> nothing to reduce
             2 => [],
             // 1D: [features] -> reduce all to single value
             1 => [0],
-            // 5D+: reduce all middle dimensions
-            _ when rank > 4 => Enumerable.Range(1, rank - 2).ToArray(),
+            // 5D+: [batch, channels, ...spatial] -> reduce every spatial axis, keep channels.
+            // Same correction as the rank-4 case; OnFirstForward reads rank-5 as [B, C, D, H, W].
+            _ when rank > 4 => Enumerable.Range(2, rank - 2).ToArray(),
             // 0D: nothing to reduce
             _ => []
         };
