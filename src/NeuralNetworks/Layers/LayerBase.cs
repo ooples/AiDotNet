@@ -2055,10 +2055,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// layer at a time without a broken build in between. The default throws, because a layer that
     /// implements neither has no computation at all - that is a bug, not a default worth inventing.
     /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Always, unless a derived layer overrides this. NotSupportedException rather than
+    /// NotImplementedException, and the distinction is not cosmetic: NotImplementedException reads as
+    /// "this library has not finished building this yet", which would be a promise that some future
+    /// version supplies a base-class forward pass. There is nothing to supply -- a layer with no
+    /// computation of its own cannot be given one generically, so the condition is permanent for that
+    /// type and belongs to the DERIVED layer, not to this base. NotSupportedException says exactly
+    /// that, and it is what the caller can act on.
+    /// </exception>
     protected virtual Tensor<T> ForwardTraced(Tensor<T> input)
-        => throw new NotImplementedException(
-            $"{GetType().Name} implements neither Forward nor ForwardTraced. Layers must override "
-            + "ForwardTraced with their computation.");
+        => throw new NotSupportedException(
+            $"{GetType().Name} implements neither Forward nor ForwardTraced, so it has no forward "
+            + "computation. Override ForwardTraced in that layer with its computation; LayerBase "
+            + "cannot supply one.");
 
     #region Mixed Precision Support
 
