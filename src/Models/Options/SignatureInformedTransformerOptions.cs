@@ -19,6 +19,47 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class SignatureInformedTransformerOptions<T> : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public SignatureInformedTransformerOptions() { }
+
+    /// <summary>
+    /// Initializes a new instance by copying every property from another instance.
+    /// </summary>
+    /// <param name="other">The instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="other"/> is null.
+    /// </exception>
+    /// <remarks>
+    /// EVERY property is copied, deliberately and exhaustively. A copy constructor that misses one
+    /// is silent data loss: the clone keeps the default while the original keeps the configured
+    /// value, and nothing reports the divergence -- the bug class behind the Tacotron2 and
+    /// TimeBridge clone failures. When a property is added to this class it must be added here too.
+    /// </remarks>
+    public SignatureInformedTransformerOptions(SignatureInformedTransformerOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        NumAssets = other.NumAssets;
+        LookbackWindow = other.LookbackWindow;
+        Horizon = other.Horizon;
+        SignatureLevel = other.SignatureLevel;
+        ModelDimension = other.ModelDimension;
+        FeedForwardDimension = other.FeedForwardDimension;
+        NumHeads = other.NumHeads;
+        NumLayers = other.NumLayers;
+        RelationalHiddenDimension = other.RelationalHiddenDimension;
+        Temperature = other.Temperature;
+        CVaRAlpha = other.CVaRAlpha;
+        DropoutRate = other.DropoutRate;
+        LearningRate = other.LearningRate;
+        BatchSize = other.BatchSize;
+        MaxEpochs = other.MaxEpochs;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        TransactionCostBasisPoints = other.TransactionCostBasisPoints;
+    }
+
     /// <summary>Gets or sets the number of assets in the universe. Default 30, the paper's smallest pool.</summary>
     /// <remarks>The paper evaluates 30/40/50-asset subsets of the S&amp;P 100, plus DOW30 and CSI300.</remarks>
     public int NumAssets { get; set; } = 30;

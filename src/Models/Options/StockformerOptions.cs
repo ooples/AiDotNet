@@ -23,6 +23,45 @@ namespace AiDotNet.Models.Options;
 public class StockformerOptions<T> : ModelOptions
 {
     /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public StockformerOptions() { }
+
+    /// <summary>
+    /// Initializes a new instance by copying every property from another instance.
+    /// </summary>
+    /// <param name="other">The instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="other"/> is null.
+    /// </exception>
+    /// <remarks>
+    /// EVERY property is copied, deliberately and exhaustively. A copy constructor that misses one
+    /// is silent data loss: the clone keeps the default while the original keeps the configured
+    /// value, and nothing reports the divergence -- the bug class behind the Tacotron2 and
+    /// TimeBridge clone failures. When a property is added to this class it must be added here too.
+    /// </remarks>
+    public StockformerOptions(StockformerOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        NumAssets = other.NumAssets;
+        NumFeatures = other.NumFeatures;
+        HiddenDimension = other.HiddenDimension;
+        NumHeads = other.NumHeads;
+        NumLayers = other.NumLayers;
+        SpatialSamples = other.SpatialSamples;
+        SequenceLength = other.SequenceLength;
+        PredictionHorizon = other.PredictionHorizon;
+        WaveletOrder = other.WaveletOrder;
+        WaveletLevels = other.WaveletLevels;
+        NumDirectionClasses = other.NumDirectionClasses;
+        TaskLossWeight = other.TaskLossWeight;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        MissingValueSentinel = other.MissingValueSentinel;
+    }
+
+    /// <summary>
     /// Gets or sets the number of stocks (graph nodes) in the cross-section. Default 500.
     /// </summary>
     public int NumAssets { get; set; } = 500;
