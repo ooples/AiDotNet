@@ -275,7 +275,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         _changepointTimes = BuildChangepointTimes(n, tMin, tMax);
         int changepointCount = _changepointTimes.Length;
 
-        _effectiveSeasonalPeriods = ComputeEffectiveSeasonalPeriods(n);
+        _effectiveSeasonalPeriods = ComputeEffectiveSeasonalPeriods(tMax - tMin);
         int order = Math.Max(1, _prophetOptions.FourierOrder);
         int[] harmonicsPerPeriod = new int[_effectiveSeasonalPeriods.Length];
         int seasonalLen = 0;
@@ -431,7 +431,24 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// when supplied; otherwise falls back to the enabled standard seasonalities (weekly/yearly/daily), keeping
     /// only periods the training window actually covers (at least two full cycles) so seasonality is identifiable.
     /// </summary>
-    private double[] ComputeEffectiveSeasonalPeriods(int n)
+    /// <param name="timeSpan">
+    /// The observed span in the SAME units as the periods, <c>tMax - tMin</c>.
+    /// </param>
+    /// <remarks>
+    /// The guard compares durations, not a duration against a row COUNT. SeasonalPeriods are
+    /// documented in days, the standard seasonalities are durations in days, and FitLeastSquares
+    /// reads column 0 as the time value -- so comparing them against y.Length only coincided with the
+    /// right answer for daily-sampled data. Sub-daily OADate input admitted periods the window does
+    /// not cover (a week of hourly data is 168 rows but only 7 days, so a yearly period passed a row
+    /// count of 168 &gt;= 2 * 365.25 nowhere near a two-cycle span... and conversely 3000 hourly rows
+    /// admitted yearly seasonality over 125 days of data), and any coarser scale dropped periods it
+    /// did cover.
+    ///
+    /// The two-cycle threshold now applies to explicit periods as well. One cycle cannot separate a
+    /// seasonal term from the trend, so admitting a period the window covers only once reports
+    /// seasonality that the data cannot identify.
+    /// </remarks>
+    private double[] ComputeEffectiveSeasonalPeriods(double timeSpan)
     {
         var periods = new List<double>();
         var configured = _prophetOptions.SeasonalPeriods;
@@ -439,14 +456,14 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             foreach (int period in configured)
             {
-                if (period >= 2 && period <= n) periods.Add(period);
+                if (period >= 2 && 2 * period <= timeSpan) periods.Add(period);
             }
         }
         else
         {
-            if (_prophetOptions.WeeklySeasonality && 2 * 7 <= n) periods.Add(7.0);
-            if (_prophetOptions.YearlySeasonality && 2 * 365.25 <= n) periods.Add(365.25);
-            if (_prophetOptions.DailySeasonality && 2 * 24 <= n) periods.Add(24.0);
+            if (_prophetOptions.WeeklySeasonality && 2 * 7 <= timeSpan) periods.Add(7.0);
+            if (_prophetOptions.YearlySeasonality && 2 * 365.25 <= timeSpan) periods.Add(365.25);
+            if (_prophetOptions.DailySeasonality && 2 * 24 <= timeSpan) periods.Add(24.0);
         }
         return periods.ToArray();
     }
