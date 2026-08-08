@@ -347,7 +347,7 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// LayerBase Forward -- uses tape-tracked Engine operations for automatic differentiation.
     /// Output tensor layout: [backcast(lookbackWindow) | forecast(forecastHorizon)].
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Use Engine.Reshape for tape-tracked reshaping
         var x = Engine.Reshape(input, [_lookbackWindow, 1]);

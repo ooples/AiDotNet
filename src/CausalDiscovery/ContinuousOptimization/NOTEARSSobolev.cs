@@ -176,7 +176,8 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
                 if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
                     hasEdges = true;
 
-        return hasEdges ? result : FallbackCorrelationGraph(data);
+        var candidate = hasEdges ? result : FallbackCorrelationGraph(data);
+        return EnforceAcyclic(candidate);
     }
 
     private void InitializeMLPParameters(int d, int h)
@@ -221,37 +222,27 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     }
 
     /// <summary>
-    /// Forward pass: output = W2[j]^T * sigmoid(W1[j]^T * x + b1[j]) + b2[j]
-    /// Also returns hidden activations and pre-activation values for gradient computation.
+    /// Forward pass: output = W2[j]^T * sigmoid(W1[j]^T * x + b1[j]) + b2[j].
+    /// The caller supplies a reusable hidden buffer because this method runs once
+    /// per sample, variable, and optimizer step.
     /// </summary>
-    private (T output, T[] hidden, T[] preAct) ForwardMLP(Matrix<T> data, int sample, int j, int d, int h)
+    private T ForwardMLP(Matrix<T> data, int sample, int j, int d, int h, T[] hidden)
     {
-        var hidden = new T[h];
-        var preAct = new T[h];
-
-        // Vectorized forward pass using Engine.DotProduct
-        // Pre-allocate reusable vectors outside the inner loop
-        var inputVec = new Vector<T>(d);
-        for (int i = 0; i < d; i++) inputVec[i] = data[sample, i];
-
-        var wCol = new Vector<T>(d);
         for (int k = 0; k < h; k++)
         {
-            for (int i = 0; i < d; i++) wCol[i] = _W1[j][i, k];
-            T sum = NumOps.Add(_b1[j][0, k], Engine.DotProduct(inputVec, wCol));
-            preAct[k] = sum;
+            T sum = _b1[j][0, k];
+            for (int i = 0; i < d; i++)
+                sum = NumOps.Add(sum, NumOps.Multiply(data[sample, i], _W1[j][i, k]));
 
             double sv = NumOps.ToDouble(sum);
             double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             hidden[k] = NumOps.FromDouble(sigVal);
         }
 
-        var hiddenVec = new Vector<T>(h);
-        var w2Vec = new Vector<T>(h);
-        for (int k = 0; k < h; k++) { hiddenVec[k] = hidden[k]; w2Vec[k] = _W2[j][0, k]; }
-        T output = NumOps.Add(_b2[j], Engine.DotProduct(hiddenVec, w2Vec));
-
-        return (output, hidden, preAct);
+        T output = _b2[j];
+        for (int k = 0; k < h; k++)
+            output = NumOps.Add(output, NumOps.Multiply(hidden[k], _W2[j][0, k]));
+        return output;
     }
 
     /// <summary>
@@ -308,12 +299,13 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         double totalLoss = 0;
         double totalSobolev = 0;
         T invN = NumOps.FromDouble(1.0 / n);
+        var hidden = new T[h];
 
         for (int sample = 0; sample < n; sample++)
         {
             for (int j = 0; j < d; j++)
             {
-                var (pred, hidden, _) = ForwardMLP(data, sample, j, d, h);
+                T pred = ForwardMLP(data, sample, j, d, h, hidden);
                 T residual = NumOps.Subtract(pred, data[sample, j]);
                 double residualD = NumOps.ToDouble(residual);
                 totalLoss += residualD * residualD;
