@@ -66,5 +66,9 @@ public class VinVLOptions : FoundationalVLMOptions
         TextDim = 768;
         FusionDim = 768;
         NumFusionLayers = 12;
+        // The official Oscar+ / VinVL pre-training recipe uses AdamW at
+        // 5e-5 with 0.01 decay for the BERT-style single-stream encoder.
+        LearningRate = 5e-5;
+        WeightDecay = 0.01;
     }
 }

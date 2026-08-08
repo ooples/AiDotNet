@@ -57,8 +57,8 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "Expanding Performance Boundaries of Open-Source Multimodal Models with InternVL 2.5",
-    "https://arxiv.org/abs/2412.05819",
+    "Expanding Performance Boundaries of Open-Source Multimodal Models with Model, Data, and Test-Time Scaling",
+    "https://arxiv.org/abs/2412.05271",
     Year = 2024,
     Authors = "Chen et al."
 )]
@@ -267,7 +267,7 @@ public class InternVL25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
