@@ -73,7 +73,9 @@ public class UniTSOptions<T> : TimeSeriesRegressionOptions<T>
         HiddenDimension = other.HiddenDimension;
         NumLayers = other.NumLayers;
         NumHeads = other.NumHeads;
-        ConvKernelSizes = other.ConvKernelSizes;
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        ConvKernelSizes = other.ConvKernelSizes is null ? null! : (int[])other.ConvKernelSizes.Clone();
         DropoutRate = other.DropoutRate;
         TaskType = other.TaskType;
         NumClasses = other.NumClasses;

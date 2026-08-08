@@ -72,7 +72,9 @@ public class MOIRAIOptions<T> : TimeSeriesRegressionOptions<T>
         Seed = other.Seed;
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
-        PatchSizes = other.PatchSizes;
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        PatchSizes = other.PatchSizes is null ? null! : (int[])other.PatchSizes.Clone();
         HiddenDimension = other.HiddenDimension;
         NumLayers = other.NumLayers;
         NumHeads = other.NumHeads;

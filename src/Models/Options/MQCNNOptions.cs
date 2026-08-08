@@ -78,7 +78,9 @@ public class MQCNNOptions<T> : TimeSeriesRegressionOptions<T>
         Seed = other.Seed;
         LookbackWindow = other.LookbackWindow;
         ForecastHorizon = other.ForecastHorizon;
-        Quantiles = other.Quantiles;
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        Quantiles = other.Quantiles is null ? null! : (double[])other.Quantiles.Clone();
         EncoderChannels = other.EncoderChannels;
         DecoderChannels = other.DecoderChannels;
         KernelSize = other.KernelSize;

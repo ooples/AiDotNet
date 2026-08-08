@@ -82,7 +82,9 @@ public class DeepStateOptions<T> : TimeSeriesRegressionOptions<T>
         StateDimension = other.StateDimension;
         HiddenDimension = other.HiddenDimension;
         NumRnnLayers = other.NumRnnLayers;
-        SeasonalPeriods = other.SeasonalPeriods;
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        SeasonalPeriods = other.SeasonalPeriods is null ? null! : (int[])other.SeasonalPeriods.Clone();
         UseTrend = other.UseTrend;
         UseSeasonality = other.UseSeasonality;
         DropoutRate = other.DropoutRate;

@@ -118,8 +118,12 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
         CriticLearningRate = other.CriticLearningRate;
         TargetUpdateTau = other.TargetUpdateTau;
         ExplorationNoise = other.ExplorationNoise;
-        ActorHiddenLayers = other.ActorHiddenLayers;
-        CriticHiddenLayers = other.CriticHiddenLayers;
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        ActorHiddenLayers = other.ActorHiddenLayers is null ? null! : new List<int>(other.ActorHiddenLayers);
+        // Cloned, not shared: a bare assignment leaves the clone and the original writing
+        // through the SAME buffer, so mutating one silently reconfigures the other.
+        CriticHiddenLayers = other.CriticHiddenLayers is null ? null! : new List<int>(other.CriticHiddenLayers);
         Optimizer = other.Optimizer;
     }
 
