@@ -668,7 +668,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 gram[i, i] += ridge;
             }
 
-            var solved = SolveLinearSystem(gram, rhs);
+            var solved = SolveNormalEquations(gram, rhs, featureCount);
             if (solved is null)
             {
                 return null;
@@ -695,65 +695,68 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             return BuildLinearExpression(coefficients, NumOps.FromDouble(intercept), includeIntercept: true);
         }
 
-        private static double[]? SolveLinearSystem(double[,] matrix, double[] values)
+        /// <summary>
+        /// Solves the ridge-regularized normal equations for the centred least-squares fit.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>THE FRAMEWORK'S SOLVER, NOT A LOCAL ONE.</b> This used to be sixty lines of Gaussian
+        /// elimination with partial pivoting written out by hand -- a second, unreviewed
+        /// implementation of something the framework already provides, tests, and can swap the
+        /// algorithm of. A bug fixed in <see cref="MatrixSolutionHelper"/> would never have reached
+        /// the copy, and a copy is where numerical bugs survive longest because nobody thinks to
+        /// look at it.
+        /// </para>
+        /// <para>
+        /// <b>Cholesky is the right decomposition here rather than a general-purpose one.</b> The
+        /// matrix is a Gram matrix -- X-transpose-X of the centred features -- so it is symmetric
+        /// and positive semi-definite by construction, and the scale-relative ridge added by the
+        /// caller makes it positive definite. Cholesky exploits that structure for roughly half the
+        /// work of LU, and it does not need the pivoting the hand-rolled version spent a third of
+        /// its lines on, because a positive-definite matrix has no zero pivot to search around.
+        /// </para>
+        /// <para>
+        /// <b>The catch preserves a control-flow outcome, it does not swallow a fault.</b> Exactly
+        /// collinear features can still defeat a ridge of 1e-10 of the diagonal, and the
+        /// decomposition reports that as <see cref="ArgumentException"/>. For this caller that is not
+        /// an error but the ordinary answer "this candidate expression is degenerate, reject it" --
+        /// which is precisely what the old <c>return null</c> on a tiny pivot meant. The candidate is
+        /// dropped and the search continues, so nothing is hidden from anyone; the alternative would
+        /// be tearing down an entire symbolic-regression run because one candidate out of thousands
+        /// happened to be rank-deficient.
+        /// </para>
+        /// </remarks>
+        private static double[]? SolveNormalEquations(double[,] gram, double[] rhs, int featureCount)
         {
-            int size = values.Length;
-            var solution = (double[])values.Clone();
-
-            for (int pivot = 0; pivot < size; pivot++)
+            var a = new Matrix<double>(featureCount, featureCount);
+            var b = new Vector<double>(featureCount);
+            for (int row = 0; row < featureCount; row++)
             {
-                int bestRow = pivot;
-                double bestMagnitude = Math.Abs(matrix[pivot, pivot]);
-                for (int row = pivot + 1; row < size; row++)
+                b[row] = rhs[row];
+                for (int column = 0; column < featureCount; column++)
                 {
-                    double magnitude = Math.Abs(matrix[row, pivot]);
-                    if (magnitude > bestMagnitude)
-                    {
-                        bestMagnitude = magnitude;
-                        bestRow = row;
-                    }
-                }
-
-                if (bestMagnitude < 1e-15 || double.IsNaN(bestMagnitude) || double.IsInfinity(bestMagnitude))
-                {
-                    return null;
-                }
-
-                if (bestRow != pivot)
-                {
-                    for (int column = pivot; column < size; column++)
-                    {
-                        (matrix[pivot, column], matrix[bestRow, column]) =
-                            (matrix[bestRow, column], matrix[pivot, column]);
-                    }
-
-                    (solution[pivot], solution[bestRow]) = (solution[bestRow], solution[pivot]);
-                }
-
-                double pivotValue = matrix[pivot, pivot];
-                for (int row = pivot + 1; row < size; row++)
-                {
-                    double factor = matrix[row, pivot] / pivotValue;
-                    matrix[row, pivot] = 0.0;
-                    for (int column = pivot + 1; column < size; column++)
-                    {
-                        matrix[row, column] -= factor * matrix[pivot, column];
-                    }
-                    solution[row] -= factor * solution[pivot];
+                    a[row, column] = gram[row, column];
                 }
             }
 
-            for (int row = size - 1; row >= 0; row--)
+            Vector<double> solution;
+            try
             {
-                double value = solution[row];
-                for (int column = row + 1; column < size; column++)
-                {
-                    value -= matrix[row, column] * solution[column];
-                }
-                solution[row] = value / matrix[row, row];
+                solution = MatrixSolutionHelper.SolveLinearSystem(a, b, MatrixDecompositionType.Cholesky);
+            }
+            catch (ArgumentException)
+            {
+                // Rank-deficient even after the ridge: the candidate is degenerate, not the run.
+                return null;
             }
 
-            return solution;
+            var solved = new double[featureCount];
+            for (int row = 0; row < featureCount; row++)
+            {
+                solved[row] = solution[row];
+            }
+
+            return solved;
         }
 
         private SymbolicExpression<T>? TryConvertModelToExpression(IFullModel<T, Matrix<T>, Vector<T>> model)

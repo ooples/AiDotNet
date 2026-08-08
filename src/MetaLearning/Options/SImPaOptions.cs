@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Components;
 using AiDotNet.Models.Options;
 using AiDotNet.Validation;
@@ -69,13 +69,13 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// Gets or sets the latent noise width for the implicit posterior generator. Default 128, the paper's
     /// value.
     /// </summary>
-    public int LatentDimension { get; set; } = ImplicitPosteriorGenerator<double>.PaperLatentDimension;
+    public int LatentDimension { get; set; } = SImPaPaperConstants.LatentDimension;
 
     /// <summary>Gets or sets the generator's first hidden width. Default 256, the paper's value.</summary>
-    public int GeneratorFirstHiddenWidth { get; set; } = ImplicitPosteriorGenerator<double>.PaperFirstHiddenWidth;
+    public int GeneratorFirstHiddenWidth { get; set; } = SImPaPaperConstants.FirstHiddenWidth;
 
     /// <summary>Gets or sets the generator's second hidden width. Default 512, the paper's value.</summary>
-    public int GeneratorSecondHiddenWidth { get; set; } = ImplicitPosteriorGenerator<double>.PaperSecondHiddenWidth;
+    public int GeneratorSecondHiddenWidth { get; set; } = SImPaPaperConstants.SecondHiddenWidth;
 
     /// <summary>
     /// Gets or sets the posterior samples drawn per task while META-TRAINING. Default 1, the paper's value.
@@ -100,7 +100,7 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <summary>
     /// Gets or sets the Monte Carlo samples used to train the phi-network. Default 512, the paper's value.
     /// </summary>
-    public int KLMonteCarloSamples { get; set; } = CompressionLemmaKLEstimator<double>.PaperMonteCarloSamples;
+    public int KLMonteCarloSamples { get; set; } = SImPaPaperConstants.MonteCarloSamples;
 
     /// <summary>Gets or sets the ascent steps taken on the compression-lemma objective. Default 32.</summary>
     public int KLEstimatorSteps { get; set; } = 32;

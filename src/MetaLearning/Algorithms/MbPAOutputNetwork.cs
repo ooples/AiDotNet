@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
@@ -95,6 +95,90 @@ internal static class MbPAOutputNetwork<T>
         }
         return gradient;
     }
+
+    /// <summary>
+    /// The gradient of <c>-w * log p(v | h, theta)</c> with respect to the head's INPUT <c>h</c> —
+    /// the embedding — holding the head's parameters fixed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is the piece that lets f_gamma be trained through the head instead of around it.</b>
+    /// <see cref="Gradient"/> differentiates the same log-likelihood with respect to <c>theta</c>, which
+    /// is what the local adaptation steps on. Meta-training needs the other factor: with the same
+    /// residual <c>r_o = w (prediction_o - target_o)</c> shared by both of MbPA's distributions, the
+    /// weight gradient is <c>r (x) h</c> and the input gradient is <c>W-transpose r</c>. Composing the
+    /// latter with the embedding network's own backward pass gives <c>dL/dgamma</c> for the real,
+    /// head-composed loss.
+    /// </para>
+    /// <para>
+    /// The returned vector is <paramref name="featureDim"/> long — the head's input width — regardless
+    /// of how long <paramref name="key"/> is, for the same reason <see cref="Forward"/> reads only the
+    /// first <c>featureDim</c> entries of the key: the head is defined over that width, and an
+    /// embedding of some other length has already been resized to it by the caller.
+    /// </para>
+    /// </remarks>
+    internal static Vector<T> InputGradient(
+        Vector<T> parameters, Vector<T> key, Vector<T> target, double weight,
+        int featureDim, int outputDim, MbPAOutputDistribution distribution)
+    {
+        var prediction = Forward(parameters, key, featureDim, outputDim, distribution);
+        var gradient = new double[featureDim];
+
+        for (int o = 0; o < outputDim; o++)
+        {
+            double residual = weight *
+                (Ops.ToDouble(prediction[o]) - (o < target.Length ? Ops.ToDouble(target[o]) : 0.0));
+            if (residual == 0.0) continue;
+
+            int rowStart = o * featureDim;
+            for (int f = 0; f < featureDim; f++)
+            {
+                int idx = rowStart + f;
+                if (idx < parameters.Length) gradient[f] += residual * Ops.ToDouble(parameters[idx]);
+            }
+        }
+
+        var result = new Vector<T>(featureDim);
+        for (int f = 0; f < featureDim; f++) result[f] = Ops.FromDouble(gradient[f]);
+        return result;
+    }
+
+    /// <summary>
+    /// The head's loss itself: <c>-w log p(v | h, theta)</c>, cross entropy for the categorical case
+    /// and one-half squared error for the Gaussian one.
+    /// </summary>
+    /// <remarks>
+    /// Reported so that meta-training's loss and its gradient describe the SAME objective. Computing
+    /// the loss one way and the gradient another is how a training loop comes to look convergent while
+    /// optimizing something else.
+    /// </remarks>
+    internal static double Loss(
+        Vector<T> parameters, Vector<T> key, Vector<T> target, double weight,
+        int featureDim, int outputDim, MbPAOutputDistribution distribution)
+    {
+        var prediction = Forward(parameters, key, featureDim, outputDim, distribution);
+        double total = 0.0;
+
+        for (int o = 0; o < outputDim; o++)
+        {
+            double v = o < target.Length ? Ops.ToDouble(target[o]) : 0.0;
+            double p = Ops.ToDouble(prediction[o]);
+            if (distribution == MbPAOutputDistribution.Categorical)
+            {
+                // Clamped because softmax underflows to exactly zero for a confidently wrong class,
+                // and log(0) would poison the reported mean loss with -infinity for every later task.
+                total -= v * Math.Log(Math.Max(p, 1e-12));
+            }
+            else
+            {
+                double d = p - v;
+                total += 0.5 * d * d;
+            }
+        }
+
+        return weight * total;
+    }
+
 
     /// <summary>
     /// MbPA's local adaptation: T gradient steps on the retrieved neighbours' weighted likelihood,

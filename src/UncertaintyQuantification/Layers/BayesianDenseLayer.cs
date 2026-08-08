@@ -225,6 +225,36 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         _samplePending = false;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>THIS IS WHERE THE POSTERIOR SAMPLE IS REFRESHED, and it has to be here rather than in
+    /// Forward.</b> The eager path draws a fresh reparameterized epsilon inside
+    /// <see cref="Forward"/>, but a COMPILED training tape never calls Forward again -- it replays
+    /// captured tensor references. So on the compiled path the same epsilon was reused for every
+    /// step of training, and a Bayesian layer that never resamples is not Bayesian: the
+    /// reparameterization trick degenerates into one frozen noise draw, and the variance
+    /// parameters are fitted against a constant.
+    /// </para>
+    /// <para>
+    /// <see cref="RefreshCompiledTrainingSample"/> was written for exactly this and was called by
+    /// nothing -- it is <c>internal</c>, so there was no external caller either. The comment on
+    /// the sampling branch in Forward claims "compiled replay refreshes the same captured tensor
+    /// references between steps", which described an intention rather than any code path.
+    /// </para>
+    /// <para>
+    /// <c>ZeroGrad</c> is the right hook because it is the per-step boundary BOTH paths cross:
+    /// every training loop zeroes gradients once per step, eager or compiled, so the refresh
+    /// happens exactly once per step on either. Doing it here rather than adding a new hook also
+    /// means no caller has to learn about Bayesian layers to train one correctly.
+    /// </para>
+    /// </remarks>
+    public override void ZeroGrad()
+    {
+        base.ZeroGrad();
+        RefreshCompiledTrainingSample();
+    }
+
     /// <summary>
     /// Computes the KL divergence between the weight distribution and the prior.
     /// </summary>

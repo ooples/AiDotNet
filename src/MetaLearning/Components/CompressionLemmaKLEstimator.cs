@@ -42,7 +42,8 @@ public class CompressionLemmaKLEstimator<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>Monte Carlo samples the paper draws when training the phi-network per task.</summary>
-    public const int PaperMonteCarloSamples = 512;
+    /// <remarks>Alias for <see cref="SImPaPaperConstants.MonteCarloSamples"/>, where the value lives.</remarks>
+    public const int PaperMonteCarloSamples = SImPaPaperConstants.MonteCarloSamples;
 
     private readonly int _inputDim;
     private readonly int _hidden;
