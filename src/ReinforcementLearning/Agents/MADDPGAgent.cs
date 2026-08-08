@@ -73,6 +73,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var network in _actorNetworks) RegisterParameterComponent(network);
         foreach (var network in _criticNetworks) RegisterParameterComponent(network);
         foreach (var network in _targetActorNetworks) RegisterParameterComponent(network);
+        foreach (var network in _targetCriticNetworks) RegisterParameterComponent(network);
     }
     private MADDPGOptions<T> _options;
 

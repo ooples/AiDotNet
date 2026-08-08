@@ -3145,6 +3145,53 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// flag on both of its exit paths.
     /// </remarks>
     protected void MarkLayerShapesResolved() => _layerShapesResolved = true;
+    /// <summary>
+    /// Brings this network's weights into existence now, for a network whose architecture already
+    /// determines every shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ResolveLazyLayerShapes"/> pins each lazy layer's input and output shape from the
+    /// architecture, but it stops there: the weight tensors are still unallocated, so
+    /// <see cref="ParameterCount"/> and <see cref="GetParameters"/> both answer zero. That is the
+    /// correct answer for a layer whose input width is genuinely unknown -- reading a size must not
+    /// allocate, which is why the parameter surface never materializes on its own -- but it is the
+    /// WRONG answer for a network that was handed a concrete inputSize at construction and simply
+    /// has not been forwarded yet. QMIXAgent is the canonical case: its agent and mixing networks
+    /// resolve to [10]->[32]->[1] and still reported 0 parameters forever, because the only thing
+    /// that would have materialized them was a forward pass its replay-buffer training never ran.
+    /// </para>
+    /// <para>
+    /// A model that knows its own architecture is complete calls this to close that gap. It is the
+    /// deliberate, CALLER-DRIVEN allocation the read path refuses to perform implicitly: the cost is
+    /// paid where someone asked for it, never inside a bare count query. Dispose and
+    /// ComputeTopologyFingerprint both read <see cref="ParameterCount"/>, and allocating there threw
+    /// OutOfMemoryException on a 774M-parameter model that was being torn down.
+    /// </para>
+    /// <para>
+    /// Idempotent, and a no-op for any layer still carrying the -1 shape sentinel -- those have
+    /// nothing to allocate until a real input arrives.
+    /// </para>
+    /// </remarks>
+    public void MaterializeParameters()
+    {
+        ResolveLazyLayerShapes();
+
+        if (Layers is not null)
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                if (Layers[i] is LayerBase<T> layer) layer.MaterializeParameters();
+            }
+        }
+
+        // The network-level extras GetParameters also folds, so count and vector stay in step.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is LayerBase<T> extraLayer) extraLayer.MaterializeParameters();
+        }
+    }
+
 
 
     /// <summary>
