@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Fairness;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("BEATS: Benchmarking Evaluation of AI Text-based Bias and Stereotypes",
+[ResearchPaper("BEATS: Bias Evaluation and Assessment Test Suite for Large Language Models",
     "https://arxiv.org/abs/2503.24310",
     Year = 2025,
     Authors = "Various")]

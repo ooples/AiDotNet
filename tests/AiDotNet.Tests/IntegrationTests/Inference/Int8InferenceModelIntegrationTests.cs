@@ -154,6 +154,23 @@ public class Int8InferenceModelIntegrationTests
             $"Quantized: {int8.QuantizedWeightBytes} bytes, original: {int8.OriginalWeightBytes} bytes.");
     }
 
+    // SerialPerf: this is a WALL-CLOCK ratio guard, and it only means anything when nothing else
+    // is competing for CPU. Run alongside the rest of Integration H-L it measures runner
+    // contention rather than the dequant primitive, and the median-of-5 hardening added earlier
+    // cannot fix that, because each round's ratio couples TWO independent noise sources — when the
+    // sub-millisecond fp32 baseline happens to be slow the ratio looks healthy no matter how int8
+    // performed. Three consecutive CI runs show the failure mode plainly:
+    //   4.35x PASS  (int8 14.607ms / fp32 3.358ms)
+    //   4.43x PASS  (int8 23.823ms / fp32 0.496ms)  <- int8 nearly 2x SLOWER than the failing run
+    //   22.20x FAIL (int8 12.858ms / fp32 0.424ms)
+    // The run that passed most comfortably had the WORST int8 time, so the guard was inverted with
+    // respect to the thing it exists to protect. Measured serially in a container at runner parity
+    // the same test reports a stable 16.86x and passes.
+    // Route it to the dedicated serial shard, exactly as TransformerTrainPathReproIssue1227And1228
+    // and Issue1296LargeXTrainBatching already are, so the 20x ceiling keeps its full strength
+    // instead of being relaxed to absorb noise. The trait is on the METHOD, not the class: the
+    // other six tests here are correctness checks and stay in Integration H-L.
+    [Xunit.Trait("Category", "SerialPerf")]
     [Fact(Timeout = 180000)]
     public async Task FromTrained_PredictWallClockGapVsFP32_DocumentsCurrentState()
     {
@@ -185,8 +202,11 @@ public class Int8InferenceModelIntegrationTests
         int seqLen = 16;
         int embDim = 64;
         int numHeads = 4;
-        const int warmupIters = 5;
-        const int measureIters = 20;
+        // Tiered JIT/PGO commonly promotes hot methods after ~30 calls. Five warm-up
+        // calls left the first three CI rounds paying compilation/cold-code costs even
+        // though the final round was healthy. Cross that boundary before measuring.
+        const int warmupIters = 64;
+        const int measureIters = 64;
 
         var fp32 = BuildAndWarmTransformer(seqLen, embDim, numHeads, seed: 53);
         // Explicit cloneModel: true so FromTrained's INT8 rewrite
@@ -208,38 +228,53 @@ public class Int8InferenceModelIntegrationTests
             int8.Predict(input);
         }
 
-        // The fp32 baseline here is sub-millisecond per call, so a SINGLE timing round is
-        // noise-dominated on a shared CI runner — a lone scheduling hiccup or an unusually fast
-        // fp32 round spikes the ratio far above the true value (observed 25x on CI vs ~8-15x
-        // steady-state), producing false regression failures. Take the MEDIAN ratio over several
-        // measurement rounds (per the repo's median-of-N timing guidance) so one noisy round
-        // can't trip the ceiling while a genuine dequant regression — which shifts every round —
-        // still does.
-        const int rounds = 5;
-        var ratios = new double[rounds];
-        double fp32Ms = 0, int8Ms = 0;
+        // The fp32 baseline is sub-millisecond, so divide two independently noisy samples only
+        // after aggregating them. A median of paired ratios can fail even when the steady-state
+        // final round is healthy because each tiny denominator amplifies noise differently.
+        // Alternate ordering to avoid consistently giving either path the warmer cache/turbo state.
+        const int rounds = 7;
+        var fp32Samples = new double[rounds];
+        var int8Samples = new double[rounds];
         for (int r = 0; r < rounds; r++)
         {
-            var swFp32 = Stopwatch.StartNew();
-            for (int i = 0; i < measureIters; i++)
-                fp32.Predict(input);
-            swFp32.Stop();
+            if ((r & 1) == 0)
+            {
+                var swFp32 = Stopwatch.StartNew();
+                for (int i = 0; i < measureIters; i++)
+                    fp32.Predict(input);
+                swFp32.Stop();
+                fp32Samples[r] = swFp32.Elapsed.TotalMilliseconds / measureIters;
 
-            var swInt8 = Stopwatch.StartNew();
-            for (int i = 0; i < measureIters; i++)
-                int8.Predict(input);
-            swInt8.Stop();
+                var swInt8 = Stopwatch.StartNew();
+                for (int i = 0; i < measureIters; i++)
+                    int8.Predict(input);
+                swInt8.Stop();
+                int8Samples[r] = swInt8.Elapsed.TotalMilliseconds / measureIters;
+            }
+            else
+            {
+                var swInt8 = Stopwatch.StartNew();
+                for (int i = 0; i < measureIters; i++)
+                    int8.Predict(input);
+                swInt8.Stop();
+                int8Samples[r] = swInt8.Elapsed.TotalMilliseconds / measureIters;
 
-            fp32Ms = swFp32.Elapsed.TotalMilliseconds / measureIters;
-            int8Ms = swInt8.Elapsed.TotalMilliseconds / measureIters;
-            ratios[r] = int8Ms / Math.Max(fp32Ms, 0.0001);
+                var swFp32 = Stopwatch.StartNew();
+                for (int i = 0; i < measureIters; i++)
+                    fp32.Predict(input);
+                swFp32.Stop();
+                fp32Samples[r] = swFp32.Elapsed.TotalMilliseconds / measureIters;
+            }
         }
-        System.Array.Sort(ratios);
-        double ratio = ratios[rounds / 2]; // median of the per-round ratios
+        System.Array.Sort(fp32Samples);
+        System.Array.Sort(int8Samples);
+        double fp32Ms = fp32Samples[rounds / 2];
+        double int8Ms = int8Samples[rounds / 2];
+        double ratio = int8Ms / Math.Max(fp32Ms, 0.0001);
 
         _output.WriteLine(
-            $"INT8 wall-clock ratio: {ratio:F2}x median over {rounds} rounds " +
-            $"(last round int8={int8Ms:F3}ms vs fp32={fp32Ms:F3}ms) " +
+            $"INT8 wall-clock ratio: {ratio:F2}x from independent medians over {rounds} rounds " +
+            $"(int8={int8Ms:F3}ms vs fp32={fp32Ms:F3}ms) " +
             $"on {seqLen}x{embDim} transformer canary, {numHeads} heads, {measureIters} iters/round.");
 
         // 20x post-SIMD ceiling (down from the pre-SIMD 50x). The measured

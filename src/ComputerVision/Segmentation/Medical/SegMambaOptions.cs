@@ -23,6 +23,25 @@ public class SegMambaOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        ChannelDimensions = other.ChannelDimensions.ToArray();
+        StageDepths = other.StageDepths.ToArray();
+        StateDimension = other.StateDimension;
     }
 
+    /// <summary>
+    /// Gets or sets the feature width of each encoder stage.
+    /// </summary>
+    /// <remarks>The default <c>[48, 96, 192, 384]</c> follows the original SegMamba paper.</remarks>
+    public int[] ChannelDimensions { get; set; } = [48, 96, 192, 384];
+
+    /// <summary>
+    /// Gets or sets the number of tri-orientated Mamba blocks in each encoder stage.
+    /// </summary>
+    /// <remarks>The default <c>[2, 2, 2, 2]</c> follows the original SegMamba paper.</remarks>
+    public int[] StageDepths { get; set; } = [2, 2, 2, 2];
+
+    /// <summary>
+    /// Gets or sets the selective state-space dimension used by every Mamba block.
+    /// </summary>
+    public int StateDimension { get; set; } = 16;
 }

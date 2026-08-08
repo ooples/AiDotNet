@@ -34,6 +34,18 @@ public class LayoutAwareDocumentTests
         return new Tensor<float>(new[] { 1, 3, size, size }, data);
     }
 
+    // LayoutLM v1 (Xu et al. 2020, KDD) is a TEXT + 2D-layout model: it consumes a rank-1 sequence of
+    // token IDs (looked up by its front EmbeddingLayer), NOT a document image — the image-region stream
+    // first appears in LayoutLMv2/v3. So the v1 forward is exercised with a token-ID sequence; the
+    // image-consuming models below (LayoutLMv2/v3, DiT, ...) keep CreateSmallImage.
+    private static Tensor<float> CreateTokenSequence(int length = 16)
+    {
+        var data = new Vector<float>(length);
+        for (int i = 0; i < length; i++)
+            data[i] = i % 50; // token IDs well within any BERT-scale vocab
+        return new Tensor<float>(new[] { length }, data);
+    }
+
     #region LayoutLM Tests
 
     [Fact(Timeout = 120000)]
@@ -49,7 +61,7 @@ public class LayoutAwareDocumentTests
     {
         var arch = CreateArchitecture();
         var model = new LayoutLM<float>(arch);
-        var input = CreateSmallImage();
+        var input = CreateTokenSequence();
         var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");

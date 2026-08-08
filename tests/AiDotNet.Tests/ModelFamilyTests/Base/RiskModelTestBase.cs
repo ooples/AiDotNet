@@ -11,7 +11,16 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits financial model invariants and adds risk-specific: non-negative risk
 /// and sensitivity to market conditions.
 /// </summary>
-public abstract class RiskModelTestBase : FinancialModelTestBase
+/// <remarks>
+/// Generic over T so the source generator's float scaffold can emit
+/// <c>RiskModelTestBase&lt;float&gt;</c>. While this base was non-generic, every risk model
+/// (TabNet, TabTransformer, ...) was locked to &lt;double&gt; — adding them to
+/// <c>Fp32TestClassNames</c> would have been CS0308 — so the float-first remedy was
+/// unavailable and only fixture shrinks could fit them in the CI budget. Same treatment
+/// DocumentNNModelTestBase already received. The non-generic shim below preserves every
+/// existing <c>: RiskModelTestBase</c> derivation.
+/// </remarks>
+public abstract class RiskModelTestBase<T> : FinancialModelTestBase<T>
 {
     [Fact(Timeout = 60000)]
     public async Task RiskEstimate_ShouldBeFinite()
@@ -25,8 +34,9 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Risk estimate[{i}] is NaN.");
-            Assert.False(double.IsInfinity(output[i]), $"Risk estimate[{i}] is Infinity.");
+            double v = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(v), $"Risk estimate[{i}] is NaN.");
+            Assert.False(double.IsInfinity(v), $"Risk estimate[{i}] is Infinity.");
         }
     }
 
@@ -46,7 +56,7 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
         int minLen = Math.Min(risk1.Length, risk2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(risk1[i] - risk2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(risk1[i]) - ConvertToDouble(risk2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -56,3 +66,9 @@ public abstract class RiskModelTestBase : FinancialModelTestBase
             "Risk model produces identical estimates for different market conditions.");
     }
 }
+
+/// <summary>
+/// Non-generic double-precision shim, mirroring the FinancialModelTestBase /
+/// VideoNNModelTestBase pattern, so existing <c>: RiskModelTestBase</c> derivations keep compiling.
+/// </summary>
+public abstract class RiskModelTestBase : RiskModelTestBase<double> { }

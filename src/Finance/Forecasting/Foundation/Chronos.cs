@@ -479,6 +479,12 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             errors.Add("DropoutRate must be between 0 and 1 (exclusive).");
         if (options.Temperature <= 0)
             errors.Add("Temperature must be positive.");
+        // The bound is the half-width of the binning domain, so a non-positive value collapses
+        // [-bound*s, +bound*s] to a point or inverts it -- every observation then falls in one bin
+        // and the forecast is constant. It was the only numeric option on the class that nothing
+        // here checked, while all ten of its siblings were checked.
+        if (options.QuantizationBound <= 0)
+            errors.Add("QuantizationBound must be positive.");
 
         if (errors.Count > 0)
             throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
