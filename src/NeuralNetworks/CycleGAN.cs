@@ -773,6 +773,38 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     protected override void InitializeLayers() { }
 
+    /// <summary>
+    /// Forwards the mode to the four sub-networks, which the base walk cannot reach.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="NeuralNetworkBase{T}.SetTrainingMode"/> propagates by iterating <c>Layers</c>, and
+    /// this model deliberately leaves that empty — its trainable state is four whole
+    /// <see cref="NeuralNetworkBase{T}"/> instances, not layers. So without this override
+    /// <c>SetTrainingMode(false)</c> was a no-op: every dropout and batch-normalization inside the
+    /// generators and discriminators stayed in TRAINING mode during inference, using batch
+    /// statistics instead of running ones and sampling dropout masks on a prediction path.
+    /// </para>
+    /// <para>
+    /// Only <see cref="TranslateAtoB"/> and <see cref="TranslateBtoA"/> were unaffected, because
+    /// they each save, flip and restore the generator's mode by hand around a single call. Every
+    /// other entry point — <c>Predict</c> included — was not covered.
+    /// </para>
+    /// <para>
+    /// Note this cannot be solved by <c>GetExtraTrainableLayers</c>: that hook is not consulted by
+    /// mode propagation, and its <c>LayerBase&lt;T&gt;</c> element type cannot hold a whole network.
+    /// </para>
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+
+        GeneratorAtoB.SetTrainingMode(isTraining);
+        GeneratorBtoA.SetTrainingMode(isTraining);
+        DiscriminatorA.SetTrainingMode(isTraining);
+        DiscriminatorB.SetTrainingMode(isTraining);
+    }
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup

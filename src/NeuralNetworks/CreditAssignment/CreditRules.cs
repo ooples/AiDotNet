@@ -45,9 +45,12 @@ public static class CreditRules
     /// deep dense stacks.
     /// </summary>
     /// <param name="seed">Optional RNG seed for the initial feedback matrices (reproducibility).</param>
-    /// <param name="feedbackLearningRate">Step size for the feedback-matrix (alignment) update.</param>
-    /// <param name="weightDecay">Weight decay applied to the feedback matrices (drives convergence to the forward weights).</param>
-    public static ICreditRule<T> KolenPollack<T>(int? seed = null, double feedbackLearningRate = 0.05, double weightDecay = 0.001)
+    /// <param name="feedbackLearningRate">
+    /// Scale applied to the observed forward-optimizer increment. The paper-faithful default 1.0 gives the
+    /// feedback matrix the same increment as the forward matrix; callers may customize the scale.
+    /// </param>
+    /// <param name="weightDecay">Decay applied to the feedback/forward alignment error.</param>
+    public static ICreditRule<T> KolenPollack<T>(int? seed = null, double feedbackLearningRate = 1.0, double weightDecay = 0.001)
         => new KolenPollackCreditRule<T>(seed, feedbackLearningRate, weightDecay);
 
     /// <summary>

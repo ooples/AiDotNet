@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
-public class AveragePoolingLayer<T> : LayerBase<T>
+public partial class AveragePoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the size of the pooling window.
@@ -272,7 +272,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
     /// The method processes the input channel by channel, sliding the pooling window across
     /// the height and width dimensions.
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 

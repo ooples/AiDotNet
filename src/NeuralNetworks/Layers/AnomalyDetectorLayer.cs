@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, NormalizesInput = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 0.5")]
-public class AnomalyDetectorLayer<T> : LayerBase<T>
+public partial class AnomalyDetectorLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The threshold for determining anomalous inputs based on the anomaly score.
@@ -242,7 +242,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// The output is a tensor with just one value: the anomaly score between 0 and 1.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInputShape = input._shape;
         int rank = input.Shape.Length;

@@ -501,7 +501,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var inputSize = inputShape[0];
         var rbmOutputSizes = Layers
             .Where(l => l is RBMLayer<T>)
-            .Select(l => l.GetOutputShape()[0])
+            .Select(l => l.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0])
             .ToList();
 
         _layerSizes = [inputSize, .. rbmOutputSizes];

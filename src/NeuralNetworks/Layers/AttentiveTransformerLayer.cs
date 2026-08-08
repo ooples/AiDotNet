@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Tabular;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class AttentiveTransformerLayer<T> : LayerBase<T>
+public partial class AttentiveTransformerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -175,7 +175,7 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
     /// This method is for ILayer interface compatibility. For actual TabNet usage,
     /// use the overload that accepts both processedFeatures and priorScales.
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Create uniform prior scales (all ones)
         var priorScales = Tensor<T>.CreateDefault([input.Shape[0], _outputDim], NumOps.One);

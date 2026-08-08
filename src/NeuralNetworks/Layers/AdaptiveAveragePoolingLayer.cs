@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
-public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
+public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 {
     private readonly int _outputHeight;
     private readonly int _outputWidth;
@@ -134,7 +134,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor of any rank >= 3. Last 3 dims are [C, H, W].</param>
     /// <returns>The pooled output tensor with same leading dims, [C, outH, outW].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length < 3)
             throw new ArgumentException("Input must have at least 3 dimensions (channels, height, width).");

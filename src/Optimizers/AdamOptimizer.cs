@@ -361,10 +361,9 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
                 previousStepData = currentStepData;
 
-                // Per-epoch scheduler tick — same rationale as OnBatchEnd
-                // above. Epoch-level schedulers (StepPerEpoch, etc.) need
-                // this to advance.
-                OnEpochEnd();
+                // The epoch-end event is now raised by NotifyEpochStart when the NEXT epoch
+                // begins, which is what extends the epoch cadence to every optimizer rather than
+                // this one. Calling it here as well would advance the schedule twice per epoch.
             }
 
             return CreateOptimizationResult(bestStepData, inputData);

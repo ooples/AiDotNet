@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -44,6 +45,7 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -70,9 +72,10 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         int numHeads = 8,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        GLAOptions? options = null)
+        GLAOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GLAOptions();
         Options = _options;
@@ -81,6 +84,15 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         _numLayers = numLayers;
         _numHeads = numHeads;
         _maxSeqLength = maxSeqLength;
+        // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructing AdamWOptimizer with no options
+        // silently trained at InitialLearningRate = 1e-3, which is neither the published rate nor
+        // something the caller could change short of building the whole optimizer themselves.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         InitializeLayers();
     }
 
@@ -105,6 +117,11 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -119,19 +136,26 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        if (gradients.Length != ParameterCount)
+        if (parameters.Length != ParameterCount)
         {
             throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}",
+                nameof(parameters));
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
+        // The canonical optimizer supplies post-update parameter values. Applying a
+        // second hard-coded SGD step here both bypassed the configured optimizer and
+        // materialized two full-model vectors. Stream the values to each layer so the
+        // optimizer remains the single owner of the update and layer COW stays intact.
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -172,9 +196,14 @@ public class GLALanguageModel<T> : NeuralNetworkBase<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var cloneOptimizer = _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
+            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
+            : null;
         return new GLALanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options);
+            _maxSeqLength, LossFunction, new GLAOptions(_options), cloneOptimizer);
     }
 
     #endregion

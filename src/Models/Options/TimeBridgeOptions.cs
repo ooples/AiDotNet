@@ -19,6 +19,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>
     public TimeBridgeOptions() { }
 
     public TimeBridgeOptions(TimeBridgeOptions<T> other)
@@ -35,6 +36,7 @@ public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
         ModelSize = other.ModelSize;
         BridgeDimension = other.BridgeDimension;
         UseStationarityGating = other.UseStationarityGating;
+        LearningRate = other.LearningRate;
     }
 
     public int ContextLength { get; set; } = 512;
@@ -58,4 +60,12 @@ public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <value>Defaults to true.</value>
     public bool UseStationarityGating { get; set; } = true;
+
+    /// <summary>Gets or sets the Adam learning rate used for native training.</summary>
+    /// <value>Defaults to 0.0001.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
+    /// the loss rises instead of falling.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-4;
 }

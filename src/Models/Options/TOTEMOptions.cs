@@ -46,6 +46,7 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
         NumHeads = other.NumHeads; CodebookSize = other.CodebookSize;
         CodebookDimension = other.CodebookDimension; NumCodebooks = other.NumCodebooks;
         DropoutRate = other.DropoutRate; CommitmentWeight = other.CommitmentWeight;
+        LearningRate = other.LearningRate;
     }
 
     /// <summary>
@@ -141,5 +142,14 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     /// their nearest codebook entry. Higher values produce tighter clusters. The original
     /// VQ-VAE paper recommends 0.25.</para>
     /// </remarks>
+    /// <summary>
+    /// Gets or sets the Adam learning rate. Defaults to the paper's 1e-3.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
+    /// training becomes unstable.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
+
     public double CommitmentWeight { get; set; } = 0.25;
 }

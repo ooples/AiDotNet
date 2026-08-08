@@ -27,7 +27,7 @@ public class TimeMAEOptions<T> : TimeSeriesRegressionOptions<T>
         PatchLength = other.PatchLength; HiddenDimension = other.HiddenDimension;
         NumEncoderLayers = other.NumEncoderLayers; NumDecoderLayers = other.NumDecoderLayers;
         NumHeads = other.NumHeads; MaskRatio = other.MaskRatio;
-        DropoutRate = other.DropoutRate;
+        DropoutRate = other.DropoutRate; LearningRate = other.LearningRate;
     }
 
     public int ContextLength { get; set; } = 512;
@@ -39,4 +39,8 @@ public class TimeMAEOptions<T> : TimeSeriesRegressionOptions<T>
     public int NumHeads { get; set; } = 8;
     public double MaskRatio { get; set; } = 0.75;
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the Adam learning rate used for native training.</summary>
+    /// <value>Defaults to 0.0001.</value>
+    public double LearningRate { get; set; } = 1e-4;
 }
