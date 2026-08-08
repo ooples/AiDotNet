@@ -129,17 +129,13 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         {
             var term = _losses[i].ComputeTapeLoss(predicted, target);
 
-            // Loss implementations disagree on the SHAPE of their scalar result: some return a rank-1
-            // [1] tensor and others a rank-0 scalar []. Adding those directly throws
-            // "Tensor shapes must match. Got [1] and []", which aborts the training step and shows up
-            // as the misleading "no parameters changed after training" -- measured with focal ([1])
-            // plus dice ([]) on SAM2. Normalise every term to [1] first; the reshape is an Engine op,
-            // so the tape is preserved.
-            if (term.Length == 1 && term.Shape.Length != 1)
-            {
-                term = Engine.Reshape(term, new[] { 1 });
-            }
-
+            // NO SHAPE NORMALIZATION HERE ANY MORE. This used to reshape every term to rank-1 [1]
+            // because implementations disagreed -- the focal([1]) + dice([]) combination on SAM2
+            // threw "Tensor shapes must match. Got [1] and []", aborting the step and surfacing as
+            // the misleading "no parameters changed after training". ComputeTapeLoss now documents
+            // rank-0 [] as its contract and every implementation honours it, so absorbing a wrong
+            // shape here would hide a real contract violation instead of reporting it. The
+            // sameShape check below is the loud failure that replaces it.
             var scaled = Engine.TensorMultiplyScalar(term, _weights[i]);
 
             if (accumulated is null)

@@ -67,21 +67,25 @@ public class FactorVAEObjective<T> : LossFunctionBase<T>
             return recon;
         }
 
-        var weighted = Engine.TensorMultiplyScalar(AsScalar(kl), NumOps.FromDouble(_klWeight));
-        return Engine.TensorAdd(AsScalar(recon), weighted);
+        var weighted = Engine.TensorMultiplyScalar(ToRank0(kl), NumOps.FromDouble(_klWeight));
+        return Engine.TensorAdd(ToRank0(recon), weighted);
     }
 
     /// <summary>
-    /// Reduces a tensor to a rank-1 single-element scalar so the two terms are addable regardless of
-    /// how each was reduced.
+    /// Fully reduces a term to the rank-0 scalar the <c>ComputeTapeLoss</c> contract requires.
     /// </summary>
-    private Tensor<T> AsScalar(Tensor<T> value)
+    /// <remarks>
+    /// This previously reshaped a fully-reduced term UP to rank-1 <c>[1]</c>, which is the opposite
+    /// of the contract: a <c>[1]</c> tape root leaves the backward pass with no scalar to seed from.
+    /// The KL term arrives from a caller-supplied provider rather than from a sibling loss, so the
+    /// reduction itself is still needed -- only its target rank changes.
+    /// </remarks>
+    private Tensor<T> ToRank0(Tensor<T> value)
     {
-        if (value.Shape.Length == 1 && value.Shape[0] == 1) return value;
+        if (value.Shape.Length == 0) return value;
 
         var axes = Enumerable.Range(0, value.Shape.Length).ToArray();
-        var reduced = Engine.ReduceSum(value, axes, keepDims: false);
-        return reduced.Shape.Length == 0 ? Engine.Reshape(reduced, [1]) : reduced;
+        return Engine.ReduceSum(value, axes, keepDims: false);
     }
 
     /// <inheritdoc/>

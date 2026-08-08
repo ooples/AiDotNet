@@ -113,12 +113,10 @@ public sealed class ParaformerObjective<T> : LossFunctionBase<T>
             ? mae
             : Engine.TensorMultiplyScalar(mae, NumOps.FromDouble(_maeWeight));
 
-        // Both terms are full reductions; normalise rank before adding so a rank-0 CE and a rank-0 MAE
-        // combine cleanly regardless of which reduction shape each produced.
-        return Engine.TensorAdd(AsScalarRank(total), AsScalarRank(maeTerm));
+        // Both terms are already rank-0: each ends in a full ReduceMean with keepDims: false. The
+        // AsScalarRank helper that used to wrap them reshaped to rank-1 [1], which is the opposite
+        // of the documented ComputeTapeLoss contract -- a [1] root leaves the tape with no scalar to
+        // seed the backward from. Adding two rank-0 tensors needs no normalization at all.
+        return Engine.TensorAdd(total, maeTerm);
     }
-
-    /// <summary>Reshapes a fully-reduced loss term to rank 1 so two terms always add cleanly.</summary>
-    private Tensor<T> AsScalarRank(Tensor<T> term)
-        => term.Shape.Length == 1 && term.Length == 1 ? term : Engine.Reshape(term, new[] { 1 });
 }
