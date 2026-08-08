@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -104,7 +104,14 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
     {
         _options = options ?? new SALMONNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // READS THE CONFIGURED RATE. The bare AdamWOptimizer(this) ran at Adam's own 1e-3 default while
+        // SALMONNOptions.LearningRate sat at 1e-5 -- the property existed and was documented, and setting
+        // it did nothing. Two orders of magnitude matters especially here: the paper fine-tunes LoRA
+        // adapters and a Q-Former on top of a frozen backbone, which is exactly the regime a large rate
+        // destabilizes.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.Vicuna);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
