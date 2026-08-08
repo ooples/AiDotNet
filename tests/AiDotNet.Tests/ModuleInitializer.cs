@@ -60,6 +60,40 @@ internal static class TestModuleInitializer
         System.Environment.SetEnvironmentVariable("MKL_NUM_THREADS",      "1");
         System.Environment.SetEnvironmentVariable("OPENBLAS_NUM_THREADS", "1");
 
+        // The same pinning, for the MANAGED engine — which the three env vars above do not reach.
+        // #1166 removed native BLAS oversubscription but CpuParallelSettings.MaxDegreeOfParallelism
+        // still defaulted to ProcessorCount, so managed BlasManaged GEMMs re-created exactly the
+        // pathology #1166 describes: 16 xUnit workers x 16 managed threads = 256 threads on 16
+        // cores. That matters most for the ModelFamily shard, whose tests are almost entirely
+        // managed-engine model forwards.
+        //
+        // Measured symptom: tests reporting a ~1 ms duration alongside a [Fact(Timeout)] failure —
+        // starved while queued, never executing. In isolation the victims had four to eight times
+        // of headroom (13 s/60 s, 14 s/60 s, 15 s/120 s, 18 s/120 s, 34 s/180 s). The victim SET
+        // also shifted between runs, which is what marks it as contention rather than any
+        // individual test being marginal: serializing one round's casualties simply starved a
+        // different five the next round.
+        //
+        // Heavy classes that genuinely want the whole machine are unaffected:
+        // FoundationScaleCpuFixture raises this back to ProcessorCount for the serialized
+        // FoundationScaleSerial collection and restores it on dispose — its "defensive: restore the
+        // all-cores default in case an earlier test capped it" branch is written for exactly this.
+        //
+        // AIDOTNET_TEST_CPU_MDOP exists so the COST of this cap can be A/B measured without a
+        // rebuild between arms — a rebuild in the middle of a timing run changes what is warm and
+        // makes the two arms incomparable. It is a measurement hook only: unset, malformed, or
+        // non-positive all fall through to 1, so the shipped default is exactly as it was and no CI
+        // configuration can weaken it by accident.
+        int managedDop = 1;
+        string? dopOverride = System.Environment.GetEnvironmentVariable("AIDOTNET_TEST_CPU_MDOP");
+        if (!string.IsNullOrWhiteSpace(dopOverride)
+            && int.TryParse(dopOverride, out int parsedDop)
+            && parsedDop > 0)
+        {
+            managedDop = parsedDop;
+        }
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = managedDop;
+
         // Force CPU-only mode for all tests
         // This prevents GPU/OpenCL errors on systems without proper GPU support
         try

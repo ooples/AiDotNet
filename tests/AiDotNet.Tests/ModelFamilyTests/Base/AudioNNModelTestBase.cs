@@ -100,6 +100,19 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
     // Audio models must handle varying input sizes gracefully.
     // =====================================================
 
+    /// <summary>
+    /// Index of the <see cref="InputShape"/> axis that represents the model's
+    /// variable-length (time / audio-token) dimension — the axis
+    /// <see cref="DifferentInputLengths_ShouldNotCrash"/> halves to simulate a
+    /// shorter clip. Defaults to the last axis, which is correct for the raw-audio
+    /// and time-major frontends that make up most of the audio family. Transformer
+    /// audio-language models whose input is <c>[batch, tokens, embedDim]</c> (e.g.
+    /// Pengi) must override this to the token axis: their final embedding dimension is
+    /// fixed by the attention projection weights and cannot vary, so halving the last
+    /// axis would feed an invalid embedding width rather than a shorter sequence.
+    /// </summary>
+    protected virtual int VariableLengthAxis => InputShape.Length - 1;
+
     [Fact(Timeout = 120000)]
     public async Task DifferentInputLengths_ShouldNotCrash()
     {
@@ -108,9 +121,10 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
-        // Try input at half the default size
+        // Try input with the variable-length axis halved (a shorter clip / fewer tokens).
         var halfShape = (int[])InputShape.Clone();
-        halfShape[halfShape.Length - 1] = Math.Max(1, halfShape[halfShape.Length - 1] / 2);
+        int lenAxis = VariableLengthAxis;
+        halfShape[lenAxis] = Math.Max(1, halfShape[lenAxis] / 2);
         var smallInput = CreateRandomTensor(halfShape, rng);
 
         var output = network.Predict(smallInput);
