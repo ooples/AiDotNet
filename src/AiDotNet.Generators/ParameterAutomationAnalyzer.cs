@@ -74,6 +74,21 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                      "diffusion models mixed a COUNT from one child with a VECTOR LENGTH from another " +
                      "in one expression, and VideoUNetPredictor's estimate was nine times out.");
 
+    private static readonly DiagnosticDescriptor UndiscoverableWeight = new(
+        id: "AIDN073",
+        title: "Field holds weights the parameter generator cannot see",
+        messageFormat: "'{0}.{1}' is {2}, so automatic discovery skips it; it contributes to no ParameterCount, no checkpoint and no optimizer",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Make it a non-readonly Tensor<T> if it is trained, or mark it [Buffer] (persistent " +
+                     "state that is never optimized) or [Scratch] (rebuilt each forward). Say which — " +
+                     "silence here is indistinguishable from an oversight, and the parameter-count " +
+                     "contract test cannot catch it because the count and the vector omit the SAME field " +
+                     "and therefore agree on a wrong answer. InformerModel reported 1,688 parameters " +
+                     "against a real 167,640 this way: every Q/K/V/O projection, FFN weight and LayerNorm " +
+                     "gain it owned was readonly, so nothing counted, saved or trained them.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -132,6 +147,43 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                 if (!auto && ownsTensors)
                     spc.ReportDiagnostic(Diagnostic.Create(MissingAutoParameters, location, type.Name));
 
+                // AIDN073: fields the generator's discovery predicate will silently skip. Only checked
+                // under [AutoParameters], where discovery is the ONLY way a weight reaches the surface;
+                // without the attribute the author is registering by hand and knows what they own.
+                if (auto)
+                {
+                    foreach (var f in type.GetMembers().OfType<IFieldSymbol>())
+                    {
+                        if (f.IsStatic || f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) continue;
+                        if (HasAnyAttribute(f, "BufferAttribute", "Buffer", "ScratchAttribute", "Scratch")) continue;
+
+                        // Nullable is the sanctioned way to say "optional / not always present", and the
+                        // gradient and cache fields that use it are legion. Flagging them would bury the
+                        // real finding, so only the two skips that silently ate real weights are reported.
+                        bool nullable = f.NullableAnnotation == NullableAnnotation.Annotated
+                                        || f.Type.NullableAnnotation == NullableAnnotation.Annotated;
+                        if (nullable) continue;
+
+                        // An ARRAY of matrices is skipped for the same reason a single one is, and
+                        // LoHaAdapter holds its Hadamard factors that way -- report the element type
+                        // so the message names something the author can actually find in the file.
+                        var probe = f.Type is IArrayTypeSymbol arr ? arr.ElementType : f.Type;
+
+                        string? why = null;
+                        if (IsTensorType(probe) && f.IsReadOnly)
+                            why = "readonly";
+                        else if (IsMatrixOrVectorType(probe))
+                            why = probe.OriginalDefinition.ToDisplayString().Contains(".Matrix<")
+                                ? (f.Type is IArrayTypeSymbol ? "an array of Matrix<T>" : "Matrix<T>") + " rather than Tensor<T>"
+                                : (f.Type is IArrayTypeSymbol ? "an array of Vector<T>" : "Vector<T>") + " rather than Tensor<T>";
+
+                        if (why is null) continue;
+                        var fl = f.Locations.FirstOrDefault(l => l.IsInSource);
+                        if (fl is null) continue;
+                        spc.ReportDiagnostic(Diagnostic.Create(UndiscoverableWeight, fl, type.Name, f.Name, why));
+                    }
+                }
+
                 foreach (var member in type.GetMembers())
                 {
                     if (!member.IsOverride) continue;
@@ -183,6 +235,32 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             if (c.OriginalDefinition.ToDisplayString()
                 .StartsWith("AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal))
                 return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Matrix&lt;T&gt; and Vector&lt;T&gt;: numeric containers the discovery predicate does not accept,
+    /// so weights held in them reach no parameter surface. LoRALayer held its A and B this way and
+    /// derived a ParameterCount of zero.
+    /// </summary>
+    private static bool IsMatrixOrVectorType(ITypeSymbol type)
+    {
+        var name = type.OriginalDefinition.ToDisplayString();
+        return name.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal)
+            || name.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
+    }
+
+    private static bool HasAnyAttribute(ISymbol symbol, params string[] names)
+    {
+        foreach (var a in symbol.GetAttributes())
+        {
+            var n = a.AttributeClass?.Name;
+            if (n is null) continue;
+            foreach (var candidate in names)
+            {
+                if (string.Equals(n, candidate, System.StringComparison.Ordinal)) return true;
+            }
         }
         return false;
     }

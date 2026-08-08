@@ -43,3 +43,4 @@ ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model canno
 AIDN070 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Layer does not use automatic parameter discovery
 AIDN071 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Parameter surface is derived and should not be overridden
 AIDN072 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model parameter surface is derived and should not be overridden
+AIDN073 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Field holds weights the parameter generator cannot see
