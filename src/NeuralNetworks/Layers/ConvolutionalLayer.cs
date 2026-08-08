@@ -399,6 +399,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// so you can understand where you made a mistake.
     /// </para>
     /// </remarks>
+    // [Scratch]: these hold the last forward's input and output for the backward pass. They are
+    // per-forward CACHES, not weights, and [AutoParameters] would otherwise discover them --
+    // any non-nullable Tensor<T> field is a candidate. Counting them makes ParameterCount
+    // depend on the batch size and spatial extent of whatever ran last: this layer measured
+    // 37,120 against its true 3,584, the extra 33,536 being a cached [1,3,16,16] input and a
+    // [1,128,16,16] output. It also made a model appear to change size once a forward had run.
+    [Scratch]
     private Tensor<T> _lastInput;
 
     /// <summary>
@@ -419,6 +426,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// and adjust its internal values to make better predictions next time.
     /// </para>
     /// </remarks>
+    // [Scratch]: these hold the last forward's input and output for the backward pass. They are
+    // per-forward CACHES, not weights, and [AutoParameters] would otherwise discover them --
+    // any non-nullable Tensor<T> field is a candidate. Counting them makes ParameterCount
+    // depend on the batch size and spatial extent of whatever ran last: this layer measured
+    // 37,120 against its true 3,584, the extra 33,536 being a cached [1,3,16,16] input and a
+    // [1,128,16,16] output. It also made a model appear to change size once a forward had run.
+    [Scratch]
     private Tensor<T> _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline

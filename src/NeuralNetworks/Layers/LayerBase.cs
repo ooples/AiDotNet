@@ -1308,8 +1308,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Conv/Deconv whose OutputShape carries the full per-sample output dims. Layers
         // with a different shape contract (e.g. a rank-agnostic Dense that maps only the
         // last axis) override this.
-        int batch = input.Shape.Length > 0 ? input.Shape[0] : 1;
         int[] outShape = OutputShape;
+
+        // An input of the SAME rank as OutputShape carries no batch axis, and the real Forward
+        // returns OutputShape unchanged for it. Prepending regardless -- and reading
+        // input.Shape[0] as the batch size -- turned an unbatched [C, H, W] into
+        // [C, outC, outH, outW]: rank inflated, with the CHANNEL count standing in for the
+        // batch. Measured on a plain conv, input [8,8,8] inferred [8,16,8,8] where the real
+        // forward returns [16,8,8], so inference disagreed with the pass it exists to model.
+        //
+        // Rank EQUALITY, deliberately, not 'rank != outShape.Length + 1': a rank-agnostic layer
+        // maps only the last axis, so a Dense with a rank-1 OutputShape legitimately takes
+        // rank-3 [batch, seq, features], and treating that as unbatched would drop two axes.
+        if (input.Shape.Length == outShape.Length)
+        {
+            return new Tensor<T>(outShape);
+        }
+
+        int batch = input.Shape.Length > 0 ? input.Shape[0] : 1;
         var full = new int[outShape.Length + 1];
         full[0] = batch;
         System.Array.Copy(outShape, 0, full, 1, outShape.Length);
