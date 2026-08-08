@@ -69,6 +69,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
     [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
 public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Lazy weights, same reasoning as UNetNoisePredictor.</remarks>
+    protected override void EnsureParametersReady()
+    {
+        TriggerLazyShapeResolution();
+    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>
@@ -196,28 +203,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
-
-    /// <inheritdoc />
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the SAME layer enumeration <see cref="GetParameters"/> walks, so the two cannot
-    /// disagree. It used to call a hand-written arithmetic estimate over channel multipliers, which
-    /// described nothing that existed: it reported 32,385,924 against a real vector of 295,840,220,
-    /// a factor of nine out. SetParameters pairs the two by length, so a checkpoint restored into
-    /// the wrong tensors and the model silently kept its initial weights.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in EnumerateLayersInParameterOrder())
-            {
-                if (layer is not null) total += layer.ParameterCount;
-            }
-            return total;
-        }
-    }
 
     /// <inheritdoc />
     public override bool SupportsCFG => true;
@@ -1319,106 +1304,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         yield return block.Upsample;
     }
 
-    /// <summary>
-    /// Flat-free per-layer chunked parameter read (#1715). VideoUNetPredictor extends
-    /// <see cref="NoisePredictorBase"/> directly, so without this override it would fall to the base
-    /// default that materialises the WHOLE flat <see cref="GetParameters"/> aggregate — which OOMs at
-    /// foundation video-diffusion scale. Here each layer's parameters are yielded as one bounded chunk
-    /// in the SAME canonical order as <see cref="GetParameters"/> / <see cref="Clone"/>
-    /// (<see cref="EnumerateLayersInParameterOrder"/>), so the peak is one layer, never the model.
-    /// </summary>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // Engage weight streaming first (no-op below the size/memory threshold) so materialising each
-        // layer's lazy weights here routes through the bounded streaming pool rather than accumulating
-        // the full weight set — mirrors DiT/MMDiT/UNet.
-        MaybeEngageWeightStreaming();
-
-        foreach (var layer in EnumerateLayersInParameterOrder())
-        {
-            if (layer is null) continue; // null slots (disabled attention / non-sampling block) hold no params
-            var p = layer.GetParameters();
-            if (p.Length == 0) continue;  // parameterless layers (e.g. some Down/Upsample) — skip in BOTH Get and Set
-            yield return new Tensor<T>(new[] { p.Length }, p);
-        }
-    }
-
-    /// <summary>
-    /// Flat-free per-layer counterpart to <see cref="GetParameterChunks"/> (#1715): consumes one chunk
-    /// per parameterised layer in the same canonical order and assigns it in place, without buffering a
-    /// flat aggregate. Rejects a chunk stream that is too short or too long (a caller framing bug) and a
-    /// per-layer length mismatch, so a scrambled round-trip fails loudly instead of silently corrupting.
-    /// </summary>
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        MaybeEngageWeightStreaming();
-
-        using var e = chunks.GetEnumerator();
-        // Validate the ENTIRE stream (count, null, per-layer length) into a layer/chunk pair list
-        // BEFORE mutating any layer, so a scrambled or mis-framed chunk stream fails atomically
-        // instead of leaving earlier layers already overwritten with later ones untouched. The list
-        // holds only layer + tensor REFERENCES (no flat aggregate), so this stays flat-free — matching
-        // the fix applied to NoisePredictorBase.SetParameterChunks.
-        var pairs = new List<(ILayer<T> Layer, Tensor<T> Src)>();
-        foreach (var layer in EnumerateLayersInParameterOrder())
-        {
-            if (layer is null) continue;
-            var current = layer.GetParameters();
-            if (current.Length == 0) continue; // must skip the SAME layers GetParameterChunks skips
-            if (!e.MoveNext())
-                throw new ArgumentException(
-                    "SetParameterChunks received fewer chunks than Video U-Net has parameterised layers.",
-                    nameof(chunks));
-            var src = e.Current;
-            if (src is null)
-                throw new ArgumentException("SetParameterChunks received a null chunk.", nameof(chunks));
-            if (src.Length != current.Length)
-                throw new ArgumentException(
-                    $"SetParameterChunks chunk length {src.Length} does not match layer parameter length {current.Length}.",
-                    nameof(chunks));
-            pairs.Add((layer, src));
-        }
-        if (e.MoveNext())
-            throw new ArgumentException(
-                "SetParameterChunks received more chunks than Video U-Net has parameterised layers.",
-                nameof(chunks));
-        // All chunks validated — now apply. No exception can surface past this point, so the predictor
-        // is never left with a mix of old and new layer weights.
-        foreach (var (layer, src) in pairs)
-            layer.SetParameters(src.ToVector());
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        AddLayerParameters(parameters, _inputConv);
-        AddLayerParameters(parameters, _timeEmbedMlp1);
-        AddLayerParameters(parameters, _timeEmbedMlp2);
-        AddLayerParameters(parameters, _imageCondProjection);
-
-        foreach (var block in _encoderBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
-
-        foreach (var block in _middleBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
-
-        foreach (var block in _decoderBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
-
-        AddLayerParameters(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
     private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
     {
         if (layer == null) return;
@@ -1439,34 +1324,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         AddLayerParameters(parameters, block.CrossAttention);
         AddLayerParameters(parameters, block.Downsample);
         AddLayerParameters(parameters, block.Upsample);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-        SetLayerParameters(_timeEmbedMlp1, parameters, ref index);
-        SetLayerParameters(_timeEmbedMlp2, parameters, ref index);
-        SetLayerParameters(_imageCondProjection, parameters, ref index);
-
-        foreach (var block in _encoderBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        foreach (var block in _middleBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        foreach (var block in _decoderBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
     }
 
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)
