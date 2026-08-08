@@ -227,7 +227,7 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

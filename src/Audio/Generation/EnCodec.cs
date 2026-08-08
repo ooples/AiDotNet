@@ -236,7 +236,7 @@ public class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
