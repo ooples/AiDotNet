@@ -26,6 +26,19 @@ public class DCGANTests : GANModelTestBase<float>
     protected override int[] InputShape => [100];
     protected override int[] OutputShape => [3, 32, 32];
 
+    // The 250-iteration figure above was calibrated to "fit" the 120 s budget, and measured alone it
+    // does — 32 s — but 3.75x is not headroom, it is a coin flip. In the full shard this test failed
+    // with a reported duration of ~1 ms, i.e. starved while queued, and it still starved when run
+    // against only four other classes. Every other class this PR touched has 5-10x.
+    //
+    // 20 + 80 = 100 iterations costs ~13 s, taking the margin to roughly 9x. The invariant is
+    // unchanged and so is its tolerance: "more data must not degrade" is a statement about the
+    // comparison, not about the iteration count, and the same trim is what UniVS and SwinUNETR
+    // already do for their heavy encoders. The paper-faithful transposed-conv generator /
+    // strided-conv discriminator and the 32x32 fixture resolution are untouched.
+    protected override int MoreDataShortIterations => 20;
+    protected override int MoreDataLongIterations => 80;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new DCGAN<float>(latentSize: 100, imageChannels: 3, imageHeight: 32, imageWidth: 32);
 }

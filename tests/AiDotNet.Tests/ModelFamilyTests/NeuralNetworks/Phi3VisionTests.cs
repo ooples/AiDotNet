@@ -71,4 +71,10 @@ public class Phi3VisionTests : VisionLanguageTestBase<float>
         // Defaults intentional — see <remarks> above.
         return new Phi3Vision<float>(architecture, new Phi3VisionOptions());
     }
+
+    // Opt out of the finite-difference gradcheck (#1872): Phi3-Vision is a large VLM whose single
+    // forward at this 336x336 fixture already runs at/over the 120 s xUnit budget, so the
+    // multi-forward finite difference cannot complete. Its backward correctness is exercised by the
+    // training invariants; re-enable if a smaller CI fixture is introduced.
+    protected override bool GradientCheckApplicable => false;
 }

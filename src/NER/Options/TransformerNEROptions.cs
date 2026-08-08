@@ -67,6 +67,10 @@ public class TransformerNEROptions : NeuralNetworkOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
+        WarmupSteps = other.WarmupSteps;
+        WarmupInitialLearningRate = other.WarmupInitialLearningRate;
+        TotalTrainingSteps = other.TotalTrainingSteps;
+        EndLearningRate = other.EndLearningRate;
         DropoutRate = other.DropoutRate;
         LabelNames = [.. other.LabelNames];
     }
@@ -351,6 +355,84 @@ public class TransformerNEROptions : NeuralNetworkOptions
         }
     }
     private double _learningRate = 5e-5;
+
+    /// <summary>
+    /// Gets or sets the number of optimizer updates used to linearly warm the learning rate from zero.
+    /// </summary>
+    /// <remarks>
+    /// Set this to zero to disable warmup. Transformer fine-tuning commonly warms the learning rate
+    /// before applying the full rate; Template-NER's reference implementation uses Hugging Face's
+    /// linear warmup/decay schedule.
+    /// </remarks>
+    public int WarmupSteps
+    {
+        get => _warmupSteps;
+        set
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(nameof(WarmupSteps),
+                    $"Warmup steps cannot be negative. Got: {value}");
+            _warmupSteps = value;
+        }
+    }
+    private int _warmupSteps;
+
+    /// <summary>
+    /// Gets or sets the learning rate used for the first warmup update.
+    /// </summary>
+    /// <remarks>
+    /// The default is zero, matching the standard transformer schedule. A very small positive
+    /// value can be used when an execution backend requires the first optimizer update to be
+    /// non-zero before it records training state.
+    /// </remarks>
+    public double WarmupInitialLearningRate
+    {
+        get => _warmupInitialLearningRate;
+        set
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(nameof(WarmupInitialLearningRate),
+                    $"Warmup initial learning rate cannot be negative. Got: {value}");
+            _warmupInitialLearningRate = value;
+        }
+    }
+    private double _warmupInitialLearningRate;
+
+    /// <summary>
+    /// Gets or sets the total number of optimizer updates in the linear warmup/decay schedule.
+    /// </summary>
+    /// <remarks>
+    /// A value of zero keeps the learning rate constant after warmup. A positive value enables
+    /// linear decay from <see cref="LearningRate"/> to <see cref="EndLearningRate"/>.
+    /// </remarks>
+    public int TotalTrainingSteps
+    {
+        get => _totalTrainingSteps;
+        set
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(nameof(TotalTrainingSteps),
+                    $"Total training steps cannot be negative. Got: {value}");
+            _totalTrainingSteps = value;
+        }
+    }
+    private int _totalTrainingSteps;
+
+    /// <summary>
+    /// Gets or sets the learning rate reached at the end of linear decay.
+    /// </summary>
+    public double EndLearningRate
+    {
+        get => _endLearningRate;
+        set
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(nameof(EndLearningRate),
+                    $"End learning rate cannot be negative. Got: {value}");
+            _endLearningRate = value;
+        }
+    }
+    private double _endLearningRate;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization.

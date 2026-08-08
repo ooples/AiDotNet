@@ -720,7 +720,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             SetTrainingMode(true);
-            try { TrainWithTape(input, expectedOutput); }
+            try { TrainWithTape(input, expectedOutput, _optimizer); }
             finally { SetTrainingMode(false); }
         }
 

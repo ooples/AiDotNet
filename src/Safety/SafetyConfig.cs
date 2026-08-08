@@ -1,5 +1,7 @@
 using AiDotNet.Enums;
 
+using System;
+
 namespace AiDotNet.Safety;
 
 /// <summary>
@@ -326,12 +328,9 @@ public class VideoSafetyConfig
     /// Higher values are more thorough but slower. A value of 1.0 means one frame
     /// per second is checked. For short clips, consider higher values.
     /// </remarks>
-    public double? FrameSamplingRate { get; set; }
-
     // -- Internal defaults --
     internal bool EffectiveDeepfakeDetection => DeepfakeDetection ?? false;
-    internal bool EffectiveContentModeration => ContentModeration ?? false;
-    internal double EffectiveFrameSamplingRate => FrameSamplingRate ?? 1.0;
+    internal bool EffectiveContentModeration => ContentModeration ?? false;
 }
 
 /// <summary>

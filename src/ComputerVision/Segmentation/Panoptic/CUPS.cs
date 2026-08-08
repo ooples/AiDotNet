@@ -54,7 +54,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("CUPS: Comprehensive Use of Pixels and Semantics for Panoptic Segmentation", "https://arxiv.org/abs/2212.05920", Year = 2023, Authors = "Daan de Geus, Gijs Dubbelman")]
+// Citation was wrong in every field, including an INVENTED expansion of the acronym. CUPS does not
+// stand for "Comprehensive Use of Pixels and Semantics"; the paper is "Scene-Centric Unsupervised
+// Panoptic Segmentation" (CVPR 2025 highlight, arXiv 2504.01955, Hahn et al.). The recorded authors
+// (de Geus & Dubbelman) work on panoptic segmentation but did not write this, and the recorded id
+// 2212.05920 is a different paper again.
+//
+// IMPLEMENTATION NOTE: the real CUPS is UNSUPERVISED — it derives panoptic pseudo-labels from motion
+// and depth in stereo pairs, then trains a monocular panoptic network on them. Whether this class does
+// anything of the kind needs checking; a supervised panoptic head would not be this paper.
+[ResearchPaper("Scene-Centric Unsupervised Panoptic Segmentation",
+    "https://arxiv.org/abs/2504.01955",
+    Year = 2025,
+    Authors = "Oliver Hahn, Christoph Reich, Nikita Araslanov, Daniel Cremers, Christian Rupprecht, Stefan Roth")]
 public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly CUPSOptions _options;
@@ -117,9 +129,15 @@ public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [96, 192, 384, 768];
-        _depths = [2, 2, 6, 2];
-        _decoderDim = 256;
+        if (_options.ChannelDimensions.Length != 4 || _options.StageDepths.Length != 4)
+            throw new ArgumentException("CUPS requires exactly four encoder stage widths and depths.", nameof(options));
+        if (_options.ChannelDimensions.Any(d => d <= 0)
+            || _options.StageDepths.Any(d => d <= 0)
+            || _options.DecoderDimension <= 0)
+            throw new ArgumentException("CUPS encoder widths, depths, and decoder dimension must be positive.", nameof(options));
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
 
@@ -175,6 +193,10 @@ public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
     /// <summary>
     /// Performs one training step.
     /// </summary>
@@ -192,7 +214,7 @@ public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -320,9 +342,14 @@ public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new CUPS<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new CUPS<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var cloneOptions = new CUPSOptions(_options);
+        return _useNativeMode
+            ? new CUPS<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, dropRate: _dropRate, options: cloneOptions)
+            : new CUPS<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, cloneOptions);
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

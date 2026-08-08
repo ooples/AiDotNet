@@ -377,7 +377,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             SetTrainingMode(true);
             try
             {
-                TrainWithTape(input, expectedOutput);
+                TrainWithTape(input, expectedOutput, _optimizer);
             }
             finally
             {
