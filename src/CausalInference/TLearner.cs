@@ -433,12 +433,28 @@ public class TLearner<T> : CausalModelBase<T>
             for (int i = 0; i < weightsTreatedArr.Count; i++)
                 _weightsTreated[i] = NumOps.FromDouble(weightsTreatedArr[i].ToObject<double>());
         }
-
         if (modelDataObj["WeightsControl"] is Newtonsoft.Json.Linq.JArray weightsControlArr)
         {
             _weightsControl = new Vector<T>(weightsControlArr.Count);
             for (int i = 0; i < weightsControlArr.Count; i++)
                 _weightsControl[i] = NumOps.FromDouble(weightsControlArr[i].ToObject<double>());
+        }
+
+        // base.LoadAdditionalModelData restored IsFitted. Persisted state that claims to be fitted
+        // but omits or truncates either weight array leaves that vector at length zero, and
+        // PredictTreated / PredictControl / EstimateTreatmentEffect then index it once per feature
+        // and throw from deep inside prediction. Reject it here, where the message can say what is
+        // actually wrong with the file.
+        if (IsFitted)
+        {
+            if (_weightsTreated.Length != NumFeatures || _weightsControl.Length != NumFeatures)
+            {
+                throw new InvalidOperationException(
+                    $"Serialized {nameof(TLearner<T>)} is marked fitted but its weight vectors do not "
+                    + $"match its {NumFeatures} features: WeightsTreated has {_weightsTreated.Length} "
+                    + $"and WeightsControl has {_weightsControl.Length}. The model data is incomplete "
+                    + $"or was written by an incompatible version.");
+            }
         }
     }
 }
