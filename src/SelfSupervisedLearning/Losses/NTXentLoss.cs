@@ -324,50 +324,31 @@ public class NTXentLoss<T> : IContrastiveLoss<T>
     /// </remarks>
     Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        if (view1 is null) throw new ArgumentNullException(nameof(view1));
-        if (view2 is null) throw new ArgumentNullException(nameof(view2));
-        if (view1.Shape.Length != 2 || view2.Shape.Length != 2)
-        {
-            throw new ArgumentException(
-                $"NT-Xent expects rank-2 [batch, dim] embeddings; got ranks {view1.Shape.Length} "
-                + $"and {view2.Shape.Length}.", nameof(view1));
-        }
-        if (view1.Shape[0] != view2.Shape[0])
-        {
-            throw new ArgumentException(
-                $"Both views must carry the same batch size; got {view1.Shape[0]} and "
-                + $"{view2.Shape[0]}.", nameof(view2));
-        }
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            view1, view2, "NT-Xent", nameof(view1), nameof(view2));
 
         int batchSize = view1.Shape[0];
         int total = 2 * batchSize;
 
-        var z1 = _normalize ? L2NormalizeOnTape(view1) : view1;
-        var z2 = _normalize ? L2NormalizeOnTape(view2) : view2;
+        var z1 = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view1) : view1;
+        var z2 = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view2) : view2;
 
         var combined = Engine.Concat(new[] { z1, z2 }, 0);                     // [2N, dim]
         var similarity = Engine.TensorMatMul(combined, Engine.TensorPermute(combined, new[] { 1, 0 }));
         var logits = Engine.TensorMultiplyScalar(similarity, NumOps.FromDouble(1.0 / _temperature));
 
         var logProbabilities = Engine.TensorLogSoftmax(
-            Engine.TensorAdd(logits, SelfSimilarityMask(total)), axis: 1);
+            Engine.TensorAdd(logits, ContrastiveTapeOps<T>.SelfSimilarityMask(total)), axis: 1);
 
         // Each anchor's positive is its partner view: i <-> i + N.
         var positiveLogProbability = Engine.ReduceSum(
-            Engine.TensorMultiply(logProbabilities, PositivePairSelector(batchSize)),
+            Engine.TensorMultiply(logProbabilities, ContrastiveTapeOps<T>.PositivePairSelector(batchSize)),
             new[] { 1 }, keepDims: false);
 
         return Engine.TensorNegate(Engine.ReduceMean(positiveLogProbability, new[] { 0 }, keepDims: false));
     }
 
     /// <summary>Row-wise L2 normalization on the tape.</summary>
-    private static Tensor<T> L2NormalizeOnTape(Tensor<T> x)
-    {
-        var squaredNorm = Engine.ReduceSum(Engine.TensorMultiply(x, x), new[] { 1 }, keepDims: true);
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12)));
-
-        return Engine.TensorDivide(x, norm);
-    }
 
     /// <summary>
     /// Constant additive mask that removes each anchor's similarity with itself.
@@ -376,29 +357,9 @@ public class NTXentLoss<T> : IContrastiveLoss<T>
     /// Constant DATA, so building it by index costs no gradient. Finite rather than negative
     /// infinity: inf - inf is NaN, which a fully-masked row would produce.
     /// </remarks>
-    private static Tensor<T> SelfSimilarityMask(int total)
-    {
-        var mask = new Tensor<T>(new[] { total, total });
-        var blocked = NumOps.FromDouble(-1e9);
-        for (int i = 0; i < total; i++) mask[(i * total) + i] = blocked;
-
-        return mask;
-    }
 
     /// <summary>
     /// Constant one-hot selector picking each anchor's positive partner: row i selects column
     /// <c>i + batchSize</c> for the first view and <c>i - batchSize</c> for the second.
     /// </summary>
-    private static Tensor<T> PositivePairSelector(int batchSize)
-    {
-        int total = 2 * batchSize;
-        var selector = new Tensor<T>(new[] { total, total });
-        for (int i = 0; i < total; i++)
-        {
-            int positive = i < batchSize ? i + batchSize : i - batchSize;
-            selector[(i * total) + positive] = NumOps.One;
-        }
-
-        return selector;
-    }
 }

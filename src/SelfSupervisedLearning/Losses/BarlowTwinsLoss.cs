@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -357,9 +357,9 @@ public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
             Engine.TensorMatMul(Engine.TensorPermute(z1, new[] { 1, 0 }), z2),
             NumOps.FromDouble(1.0 / batchSize));
 
-        var deviation = Engine.TensorSubtract(crossCorrelation, IdentityMatrix(dim));
+        var deviation = Engine.TensorSubtract(crossCorrelation, ContrastiveTapeOps<T>.Identity(dim));
         var weighted = Engine.TensorMultiply(
-            Engine.TensorMultiply(deviation, deviation), DiagonalWeights(dim, _lambda));
+            Engine.TensorMultiply(deviation, deviation), ContrastiveTapeOps<T>.DiagonalWeights(dim, _lambda));
 
         return Engine.ReduceSum(weighted, new[] { 0, 1 }, keepDims: false);
     }
@@ -384,24 +384,8 @@ public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
     }
 
     /// <summary>Constant [dim, dim] identity. Constant DATA, so building it by index costs no gradient.</summary>
-    private static Tensor<T> IdentityMatrix(int dim)
-    {
-        var identity = new Tensor<T>(new[] { dim, dim });
-        for (int i = 0; i < dim; i++) identity[(i * dim) + i] = NumOps.One;
-        return identity;
-    }
 
     /// <summary>
     /// Constant [dim, dim] weights: 1 on the diagonal, <paramref name="lambda"/> off it.
     /// </summary>
-    private static Tensor<T> DiagonalWeights(int dim, double lambda)
-    {
-        var weights = new Tensor<T>(new[] { dim, dim });
-        var off = NumOps.FromDouble(lambda);
-        for (int i = 0; i < dim; i++)
-            for (int j = 0; j < dim; j++)
-                weights[(i * dim) + j] = i == j ? NumOps.One : off;
-
-        return weights;
-    }
 }

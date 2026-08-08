@@ -384,13 +384,17 @@ public class DINOLoss<T> : IContrastiveLoss<T>
     /// </remarks>
     Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        if (view1 is null) throw new ArgumentNullException(nameof(view1));
-        if (view2 is null) throw new ArgumentNullException(nameof(view2));
-        if (view1.Shape.Length != 2 || view2.Shape.Length != 2)
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            view1, view2, "DINO", nameof(view1), nameof(view2));
+
+        // The output width is checked against the CONFIGURED one too, because CenterRow() returns
+        // [1, _outputDim]: a mismatch would otherwise surface as an engine broadcast error that
+        // never mentions the DINO output dimension the caller actually got wrong.
+        if (view2.Shape[1] != _outputDim)
         {
             throw new ArgumentException(
-                $"DINO expects rank-2 [batch, outputDim] logits; got ranks {view1.Shape.Length} and "
-                + $"{view2.Shape.Length}.", nameof(view1));
+                $"DINO was configured for an output dimension of {_outputDim}, but the logits are "
+                + $"{view2.Shape[1]} wide.", nameof(view2));
         }
 
         // Student: sharpened log-softmax, on the tape.
@@ -398,9 +402,15 @@ public class DINOLoss<T> : IContrastiveLoss<T>
             Engine.TensorMultiplyScalar(view1, NumOps.FromDouble(1.0 / _studentTemperature)), axis: 1);
 
         // Teacher: centred and sharpened softmax, as constant data.
+        // Teacher: centred and sharpened softmax, DETACHED. The teacher is an EMA copy updated
+        // outside the optimizer and its centre is a running statistic, so neither is differentiated
+        // -- but saying so is not enough on its own. TensorSubtract, TensorMultiplyScalar and
+        // TensorSoftmax all record, so any tape history view2 arrived with would have leaked a
+        // gradient path into the teacher branch. StopGradient blocks it at the boundary.
+        var teacherLogits = Engine.StopGradient(view2);
         var teacherProbabilities = Engine.TensorSoftmax(
             Engine.TensorMultiplyScalar(
-                Engine.TensorSubtract(view2, CenterRow()),
+                Engine.TensorSubtract(teacherLogits, CenterRow()),
                 NumOps.FromDouble(1.0 / _teacherTemperature)),
             axis: 1);
 

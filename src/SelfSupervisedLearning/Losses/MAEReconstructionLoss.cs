@@ -333,6 +333,10 @@ public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
     {
         if (view1 is null) throw new ArgumentNullException(nameof(view1));
         if (view2 is null) throw new ArgumentNullException(nameof(view2));
+
+        // SHAPES, not just ranks. A rank-only check lets [8, 196, 1] through against [8, 196, 768],
+        // and the engine's implicit broadcasting then returns a finite loss computed against the
+        // wrong target, silently. Every sibling loss in this set compares the dimensions.
         if (view1.Shape.Length != view2.Shape.Length)
         {
             throw new ArgumentException(
@@ -340,11 +344,53 @@ public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
                 + $"{view2.Shape.Length}.", nameof(view2));
         }
 
-        var difference = Engine.TensorSubtract(view1, view2);
+        for (int axis = 0; axis < view1.Shape.Length; axis++)
+        {
+            if (view1.Shape[axis] != view2.Shape[axis])
+            {
+                throw new ArgumentException(
+                    $"Reconstruction and target must have the same shape; they differ on axis "
+                    + $"{axis} ({view1.Shape[axis]} vs {view2.Shape[axis]}).", nameof(view2));
+            }
+        }
+
+        // PER-PATCH NORMALIZATION IS APPLIED HERE TOO, on the tape. It defaults to true, and the
+        // three-argument ComputeLoss normalizes each target patch before the squared error -- so
+        // skipping it here meant a model constructed with the defaults optimized plain MSE against
+        // raw pixels through this surface while the same object measured through the direct API
+        // reported normalized-target MSE. The two numbers disagreed and nothing said why.
+        //
+        // The last axis is the patch, matching NormalizePatch's per-patch scope on the direct path.
+        var target = _perPatchNormalization ? NormalizePatchesOnTape(view2) : view2;
+
+        var difference = Engine.TensorSubtract(view1, target);
         var allAxes = new int[view1.Shape.Length];
         for (int axis = 0; axis < allAxes.Length; axis++) allAxes[axis] = axis;
 
         return Engine.ReduceMean(
             Engine.TensorMultiply(difference, difference), allAxes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Centres and scales each patch to zero mean and unit variance along the last axis, on the tape.
+    /// </summary>
+    /// <remarks>
+    /// The tape-connected counterpart of <c>NormalizePatch</c>. He et al. 2022 normalize the TARGET
+    /// patch, not the reconstruction, which is why only the target passes through here: the
+    /// objective is to predict the normalized patch, and normalizing both sides would compare two
+    /// quantities that have each had their own mean and scale removed.
+    ///
+    /// The epsilon sits inside the square root so a constant patch scales by a finite value rather
+    /// than dividing by zero, and its derivative stays finite there too.
+    /// </remarks>
+    private static Tensor<T> NormalizePatchesOnTape(Tensor<T> patches)
+    {
+        var lastAxis = new[] { patches.Shape.Length - 1 };
+        var mean = Engine.ReduceMean(patches, lastAxis, keepDims: true);
+        var centred = Engine.TensorSubtract(patches, mean);
+        var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), lastAxis, keepDims: true);
+        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-6)));
+
+        return Engine.TensorDivide(centred, scale);
     }
 }

@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -257,17 +257,11 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
     /// </remarks>
     Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        if (view1 is null) throw new ArgumentNullException(nameof(view1));
-        if (view2 is null) throw new ArgumentNullException(nameof(view2));
-        if (view1.Shape.Length != 2 || view2.Shape.Length != 2)
-        {
-            throw new ArgumentException(
-                $"BYOL expects rank-2 [batch, dim] tensors; got ranks {view1.Shape.Length} and "
-                + $"{view2.Shape.Length}.", nameof(view1));
-        }
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            view1, view2, "BYOL", nameof(view1), nameof(view2));
 
-        var p = _normalize ? L2NormalizeOnTape(view1) : view1;
-        var z = _normalize ? L2NormalizeOnTape(view2) : view2;
+        var p = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view1) : view1;
+        var z = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view2) : view2;
 
         // cos(p_i, z_i) per row, then 2 - 2*cos averaged over the batch.
         var perRowCosine = Engine.ReduceSum(
@@ -284,11 +278,4 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
     /// The epsilon sits inside the square root so a zero row scales by a finite value rather than
     /// dividing by zero, and its derivative stays finite there too.
     /// </remarks>
-    private static Tensor<T> L2NormalizeOnTape(Tensor<T> x)
-    {
-        var squaredNorm = Engine.ReduceSum(Engine.TensorMultiply(x, x), new[] { 1 }, keepDims: true);
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12)));
-
-        return Engine.TensorDivide(x, norm);
-    }
 }
