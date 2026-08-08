@@ -88,31 +88,6 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>
         return ApplyActivation(biased);
     }
 
-    /// <summary>
-    /// Returns the field-backed trainable tensors so the tape optimizer, the parameter-count walk,
-    /// and the copy-on-write clone all see the SAME instances the Forward reads. Overriding this
-    /// (rather than relying on the base <c>_registeredTensors</c> list) keeps GetTrainableParameters
-    /// consistent with <see cref="SetTrainableParameters"/> after a field re-point.
-    /// </summary>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => new[] { _weights, _biases };
-
-    /// <summary>
-    /// Re-points the field-backed weight/bias tensors to the supplied instances. The copy-on-write
-    /// DeepCopy/Clone path shares each source tensor into its clone through this method; because
-    /// <see cref="Forward"/> reads the <c>_weights</c>/<c>_biases</c> fields directly, they must be
-    /// rebound here (the base only updates its private registry), or the clone diverges from the
-    /// original (issue #1221 class).
-    /// </summary>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        if (parameters.Count != 2)
-        {
-            throw new ArgumentException($"Expected 2 parameter tensors (weights, biases), got {parameters.Count}.", nameof(parameters));
-        }
-
-        _weights = parameters[0];
-        _biases = parameters[1];
-    }
 
     public override Vector<T> GetParameters()
     {
