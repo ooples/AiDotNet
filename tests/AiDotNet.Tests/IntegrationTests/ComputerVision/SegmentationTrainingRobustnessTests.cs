@@ -274,9 +274,9 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
-    public async Task QueryMeldNet_MultiStepTrain_DoesNotThrow()
+    public async Task MixedQueryTransformer_MultiStepTrain_DoesNotThrow()
     {
-        var model = new QueryMeldNet<float>(Arch(), numClasses: 5, modelSize: QueryMeldNetModelSize.R50);
+        var model = new MixedQueryTransformer<float>(Arch(), numClasses: 5, modelSize: MixedQueryTransformerModelSize.R50);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

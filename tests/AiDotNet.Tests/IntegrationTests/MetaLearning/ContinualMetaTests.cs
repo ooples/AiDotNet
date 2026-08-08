@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Data.Structures;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning;
@@ -91,42 +92,49 @@ public class ContinualMetaTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MetaContinualAL_FiniteLossAndParamChange()
+    public async Task SparseMAML_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
-        var options = new MetaContinualALOptions<double, Matrix<double>, Vector<double>>(model)
+        var options = new SparseMAMLOptions<double, Matrix<double>, Vector<double>>(model)
         { InnerLearningRate = 0.01, OuterLearningRate = 0.01 };
-        var algorithm = new MetaContinualALAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        var algorithm = new SparseMAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
         var paramsBefore = model.GetParameters();
 
         var task = CreateTask(6749);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
 
         var loss = algorithm.MetaTrain(batch);
-        Assert.False(double.IsNaN(loss), "MetaContinualAL loss is NaN");
-        Assert.False(double.IsInfinity(loss), "MetaContinualAL loss is infinite");
-        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "MetaContinualAL params unchanged");
-        Assert.Equal(MetaLearningAlgorithmType.MetaContinualAL, algorithm.AlgorithmType);
+        Assert.False(double.IsNaN(loss), "SparseMAML loss is NaN");
+        Assert.False(double.IsInfinity(loss), "SparseMAML loss is infinite");
+        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "SparseMAML params unchanged");
+        Assert.Equal(MetaLearningAlgorithmType.SparseMAML, algorithm.AlgorithmType);
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MePo_FiniteLossAndParamChange()
+    public async Task MbPA_FiniteLossAndParamChange()
     {
         var model = new LinearVectorModel(3);
-        var options = new MePoOptions<double, Matrix<double>, Vector<double>>(model)
-        { InnerLearningRate = 0.01, OuterLearningRate = 0.01 };
-        var algorithm = new MePoAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        var options = new MbPAOptions<double, Matrix<double>, Vector<double>>(model)
+        {
+            InnerLearningRate = 0.01,
+            OuterLearningRate = 0.01,
+            FeatureDimension = 1,   // LinearVectorModel emits one value per row
+            OutputDimension = 1,
+            OutputDistribution = MbPAOutputDistribution.Gaussian,
+        };
+        var algorithm = new MbPAAlgorithm<double, Matrix<double>, Vector<double>>(options);
         var paramsBefore = model.GetParameters();
 
         var task = CreateTask(876);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
 
         var loss = algorithm.MetaTrain(batch);
-        Assert.False(double.IsNaN(loss), "MePo loss is NaN");
-        Assert.False(double.IsInfinity(loss), "MePo loss is infinite");
-        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "MePo params unchanged");
-        Assert.Equal(MetaLearningAlgorithmType.MePo, algorithm.AlgorithmType);
+        Assert.False(double.IsNaN(loss), "MbPA loss is NaN");
+        Assert.False(double.IsInfinity(loss), "MbPA loss is infinite");
+        Assert.True(ParamsChanged(paramsBefore, model.GetParameters()), "MbPA params unchanged");
+        Assert.Equal(MetaLearningAlgorithmType.MbPA, algorithm.AlgorithmType);
+        Assert.True(algorithm.MemoryCount > 0, "MbPA wrote nothing to its episodic memory");
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 

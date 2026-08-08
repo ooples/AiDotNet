@@ -237,7 +237,7 @@ public class HrePaperAChainShapeValidatorTests
         public override long ParameterCount => 0;
         public override bool SupportsTraining => false;
 
-        public override Tensor<float> Forward(Tensor<float> input)
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             // Reshape the input flat-buffer to the declared output shape.
             // The declared output is [vocabSize] (rank 1) for the readout-mock
