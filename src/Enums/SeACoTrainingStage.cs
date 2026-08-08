@@ -5,11 +5,6 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>This enum was referenced from two files and declared in none.</b> <c>SeACoOptions.TrainingStage</c>
-/// and <c>SeACo.FreezeForStage</c> both named it, and its members are cited by name in nine doc comments,
-/// so the type was clearly designed; it simply never got written, and the project failed to compile on it.
-/// </para>
-/// <para>
 /// <b>The three members are the paper's recipe plus the default that is deliberately not it.</b> Shi et
 /// al. ("SeACo-Paraformer", arXiv:2308.03266, §3) train the ASR backbone first, then FREEZE it and train
 /// only the bias parameters, "separate from the ASR training" -- which is <see cref="Backbone"/> followed

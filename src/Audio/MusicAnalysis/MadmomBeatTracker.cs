@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -96,15 +96,20 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         // Fully user-overridable via the optimizer parameter and MadmomBeatTrackerOptions.LearningRate. (#1789)
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
+            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = _options.MaxGradientNorm });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
 
     /// <summary>
-    /// Routes tape training through the configured optimizer. Without this override the base trainer only
-    /// consults <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>, so the <c>_optimizer</c> field above
-    /// was stored but never used and training silently ran at the base Adam 1e-3 default. (#1789)
+    /// Routes tape training through the configured optimizer on the paths that do NOT pass one explicitly.
+    /// </summary>
+    /// <remarks>
+    /// The previous wording here said the field "was stored but never used" without this override. That is
+    /// not true and was worth correcting rather than leaving: <c>Train</c> passes <c>_optimizer</c> to
+    /// <c>TrainWithTape</c> directly. This override covers the other direction -- anything reaching the base
+    /// trainer without an explicit optimizer argument, which would otherwise fall back to the base Adam 1e-3
+    /// default and quietly undo the rate this model needs. (#1789)
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();

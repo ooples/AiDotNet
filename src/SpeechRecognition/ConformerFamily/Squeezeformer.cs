@@ -80,7 +80,35 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </para>
     /// </remarks>
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateSqueezeformerOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+    {
+        // VALIDATED HERE RATHER THAN LEFT TO THE OPTIMIZER, because each of these fails silently rather
+        // than loudly. A non-positive peak rate gives a model that runs a full training job and does not
+        // move; a negative weight decay is an anti-regularizer that grows the weights every step; and a
+        // negative WarmupSteps does not error -- it just misses the `> 0` test below, so warmup is
+        // quietly switched off and the paper's 2e-3 peak is applied flat from step 0, which the remark
+        // above this method identifies as precisely the unstable regime.
+        if (_options.PeakLearningRate <= 0.0 || double.IsNaN(_options.PeakLearningRate))
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.PeakLearningRate must be positive; got {_options.PeakLearningRate}. " +
+                "A non-positive rate trains for the full run and changes nothing.");
+        }
+
+        if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay))
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.WeightDecay must be non-negative; got {_options.WeightDecay}. " +
+                "A negative decay grows the weights every step instead of shrinking them.");
+        }
+
+        if (_options.WarmupSteps < 0)
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.WarmupSteps must be non-negative; got {_options.WarmupSteps}. " +
+                "Use 0 to disable warmup -- a negative value disables it too, but looks like a setting.");
+        }
+
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -100,6 +128,7 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 EnableGradientClipping = true,
                 MaxGradientNorm = 1.0
             });
+    }
 
     /// <summary>
     /// Transcribes audio using Squeezeformer's temporal U-Net encoder.
