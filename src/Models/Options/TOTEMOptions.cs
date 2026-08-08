@@ -41,6 +41,10 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     public TOTEMOptions(TOTEMOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength; ForecastHorizon = other.ForecastHorizon;
         HiddenDimension = other.HiddenDimension; NumLayers = other.NumLayers;
         NumHeads = other.NumHeads; CodebookSize = other.CodebookSize;
