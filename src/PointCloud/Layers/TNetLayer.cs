@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -39,7 +39,7 @@ namespace AiDotNet.PointCloud.Layers;
 /// - T-Net learns: "Rotate this cloud 45 degrees to align it"
 /// - Output: Aligned point cloud in standard orientation
 /// </remarks>
-public class TNetLayer<T> : LayerBase<T>
+public partial class TNetLayer<T> : LayerBase<T>
 {
     private readonly int _transformDim; // Dimension of transformation (e.g., 3 for XYZ, 64 for features)
     private readonly int _numFeatures;
@@ -121,8 +121,21 @@ public class TNetLayer<T> : LayerBase<T>
         Parameters = GetParameters();
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    // Sub-layer registration was hand-written here because this class was not partial, so
+    // TrainableParameterGenerator emitted no EnsureSubLayersRegistered() for it. It is partial now
+    // and the generator supplies that method, which collided with this copy (CS0102). The
+    // generated version registers the same children -- the _mlpLayers and _fcLayers collections and
+    // _maxPooling -- from EnsureInitialized, exactly as this did.
+    //
+    // The timing note this comment carried is preserved and still respected: registration must NOT
+    // happen in the constructor, because that puts the children in front of the pre-step
+    // buffer-view save/restore walk alongside the parent that already handles them, which silently
+    // breaks training. The generator registers lazily, never from a constructor.
+
+
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        EnsureInitializedFromInput(input);
         _lastInput = input;
 
         Tensor<T> features = input;

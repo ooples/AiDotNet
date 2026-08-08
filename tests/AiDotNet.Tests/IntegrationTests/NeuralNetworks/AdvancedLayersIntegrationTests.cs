@@ -317,6 +317,19 @@ public class AdvancedLayersIntegrationTests
         Assert.IsType<ResidualLayer<float>>(clone);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task ResidualLayer_Metadata_WithDynamicTrailingAxes_PreservesKnownLegacyOutputSize()
+    {
+        await Task.Yield();
+        var innerLayer = new ConvolutionalLayer<float>(outputDepth: 64, kernelSize: 3);
+        var layer = new ResidualLayer<float>(innerLayer, (IActivationFunction<float>?)null);
+
+        var metadata = layer.GetMetadata();
+
+        Assert.Equal("64,-1,-1", metadata["InnerLayerOutputShape"]);
+        Assert.Equal("64", metadata["InnerOutputSize"]);
+    }
+
     #endregion
 
     #region DeconvolutionalLayer Tests

@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for portfolio optimization models. Inherits financial model invariants
 /// and adds portfolio-specific: finite allocations and non-empty output.
 /// </summary>
-public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
+public abstract class PortfolioOptimizerTestBase<T> : FinancialModelTestBase<T>
 {
     [Fact(Timeout = 60000)]
     public async Task Allocations_ShouldBeFinite()
@@ -24,9 +24,10 @@ public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Allocation[{i}] is NaN.");
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Allocation[{i}] = {output[i]:E4} is unreasonable.");
+            double allocation = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(allocation), $"Allocation[{i}] is NaN.");
+            Assert.True(Math.Abs(allocation) < 1e6,
+                $"Allocation[{i}] = {allocation:E4} is unreasonable.");
         }
     }
 
@@ -42,3 +43,6 @@ public abstract class PortfolioOptimizerTestBase : FinancialModelTestBase
         Assert.True(output.Length > 0, "Portfolio optimizer produced empty allocation.");
     }
 }
+
+/// <summary>Non-generic &lt;double&gt; convenience base for portfolio optimizers.</summary>
+public abstract class PortfolioOptimizerTestBase : PortfolioOptimizerTestBase<double> { }

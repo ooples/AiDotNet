@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 
@@ -65,7 +66,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _visionDim;
     private readonly int _languageDim;
     private readonly int _visionLayers;
@@ -74,10 +75,29 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private readonly int _imageHeight;
     private readonly string _charset;
 
-    // Native mode layers
+    // Native mode layers. ABINet is a three-branch model (Fang et al., CVPR 2021), not a single
+    // chain: the vision model, the language model and the fusion each emit character
+    // probabilities and each carries its own loss term. These lists hold the branches so the
+    // training forward can supervise all three; every layer in them is also in Layers, so
+    // parameter enumeration, serialization and device transfer are unaffected.
     private readonly List<ILayer<T>> _visionModelLayers = [];
     private readonly List<ILayer<T>> _languageModelLayers = [];
     private readonly List<ILayer<T>> _fusionLayers = [];
+
+    /// <summary>Character head for the vision branch, supervised by L_v.</summary>
+    private readonly List<ILayer<T>> _visionHead = [];
+
+    /// <summary>Character head for the language branch, supervised by L_l.</summary>
+    private readonly List<ILayer<T>> _languageHead = [];
+
+    private int[]? _branchCounts;
+
+    /// <summary>
+    /// True when this instance built the paper's three-branch stack. False when the caller
+    /// supplied a flat <c>Architecture.Layers</c> chain, which has no branch structure to
+    /// supervise separately.
+    /// </summary>
+    private bool _branched;
 
     // Learnable embeddings
     private Tensor<T>? _charEmbeddings;
@@ -133,7 +153,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int languageLayers = 4,
         int numIterations = 3,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ABINetOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -154,7 +174,15 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _numIterations = numIterations;
         _imageHeight = imageHeight;
         _charset = charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                // "decayed to 1e-5 after 6 epochs" -- a single 10x step at epoch 6.
+                LearningRateScheduler = new MultiStepLRScheduler(
+                    _options.LearningRate, milestones: new[] { 6 }, gamma: 0.1),
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
+            });
 
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
@@ -187,13 +215,19 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int languageLayers = 4,
         int numIterations = 3,
         string? charset = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        ABINetOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ABINetOptions? options = null,
+        double? visionLossWeight = null,
+        double? languageLossWeight = null)
+        : base(architecture, BuildMultiTaskObjective(lossFunction, options, visionLossWeight, languageLossWeight), 1.0)
     {
         _options = options ?? new ABINetOptions();
         Options = _options;
+
+        // Record the resolved weights so GetOptions() reports what training actually used.
+        if (visionLossWeight.HasValue) _options.VisionLossWeight = visionLossWeight.Value;
+        if (languageLossWeight.HasValue) _options.LanguageLossWeight = languageLossWeight.Value;
 
         _useNativeMode = true;
         _visionDim = visionDim;
@@ -203,13 +237,48 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _numIterations = numIterations;
         _imageHeight = imageHeight;
         _charset = charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        // Adam at the paper's initial learning rate (Fang et al., CVPR 2021 §4.2: 1e-4, decayed
+        // to 1e-5). Constructing AdamOptimizer with no options left it at the optimizer's own
+        // 1e-3 default, 10x the paper's rate.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
 
         ImageSize = imageWidth;
         base.MaxSequenceLength = maxSequenceLength;
 
         InitializeLayers();
         InitializeEmbeddings();
+    }
+
+    /// <summary>
+    /// Builds ABINet's training objective: the paper's weighted sum of the vision, language and
+    /// fusion character losses (Fang et al., CVPR 2021, Eq. 5).
+    /// </summary>
+    /// <remarks>
+    /// A caller-supplied loss becomes the per-branch character loss rather than replacing the
+    /// multi-task structure, so overriding the loss still trains all three branches. A loss that
+    /// is not a <see cref="LossFunctionBase{T}"/> cannot expose the tape entry point the sum
+    /// needs, so it is used as-is and only the fused output is graded.
+    /// </remarks>
+    private static ILossFunction<T> BuildMultiTaskObjective(
+        ILossFunction<T>? lossFunction,
+        ABINetOptions? options,
+        double? visionLossWeight,
+        double? languageLossWeight)
+    {
+        var characterLoss = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        if (characterLoss is not LossFunctionBase<T> tapeCapable)
+            return characterLoss;
+
+        var resolved = options ?? new ABINetOptions();
+        return new ABINetMultiTaskLoss<T>(
+            tapeCapable,
+            visionLossWeight ?? resolved.VisionLossWeight,
+            languageLossWeight ?? resolved.LanguageLossWeight);
     }
 
     private static string GetDefaultCharset()
@@ -236,13 +305,107 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             return;
         }
 
-        Layers.AddRange(LayerHelper<T>.CreateDefaultABINetLayers(
+        // Build the paper's three branches separately so each can be supervised by its own loss
+        // term. Chained in this order for inference, they reproduce exactly the flat stack this
+        // used to create.
+        int charsetSize = _charset.Length + 1;
+
+        _visionModelLayers.AddRange(LayerHelper<T>.CreateDefaultABINetVisionLayers(
             imageWidth: ImageSize,
             imageHeight: _imageHeight,
+            visionDim: _visionDim));
+
+        _languageModelLayers.AddRange(LayerHelper<T>.CreateDefaultABINetLanguageLayers(
+            charsetSize: charsetSize,
             visionDim: _visionDim,
-            languageDim: _languageDim,
+            languageDim: _languageDim));
+
+        _fusionLayers.AddRange(LayerHelper<T>.CreateDefaultABINetFusionLayers(
+            visionDim: _visionDim,
             numIterations: _numIterations,
-            charsetSize: _charset.Length + 1));
+            charsetSize: charsetSize));
+
+        _visionHead.Add(LayerHelper<T>.CreateDefaultABINetBranchHead(charsetSize));
+        _languageHead.Add(LayerHelper<T>.CreateDefaultABINetBranchHead(charsetSize));
+
+        ResolveBranchShapes();
+
+        // Everything goes into Layers so parameter enumeration, serialization and device
+        // transfer see every weight. The two branch heads are appended last and are NOT part of
+        // the inference chain; Forward walks the three branches explicitly.
+        Layers.AddRange(_visionModelLayers);
+        Layers.AddRange(_languageModelLayers);
+        Layers.AddRange(_fusionLayers);
+        Layers.AddRange(_visionHead);
+        Layers.AddRange(_languageHead);
+
+        // Deserialization refills Layers with new objects; record the branch extents so
+        // RebindBranchLayers can re-point these lists at the restored ones.
+        _branchCounts = new[]
+        {
+            _visionModelLayers.Count, _languageModelLayers.Count, _fusionLayers.Count,
+            _visionHead.Count, _languageHead.Count
+        };
+
+        _branched = true;
+    }
+
+    /// <summary>
+    /// Resolves each branch's lazy layers, carrying the shape across the two forks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The character heads hang off the vision and language trunks rather than sitting in the
+    /// inference chain, so nothing else would ever size them: a deserialized model never runs
+    /// them, they would report a <c>ParameterCount</c> of 0, and <c>SetParameters</c> would then
+    /// hand every following layer the wrong slice of the flat parameter vector.
+    /// </para>
+    /// <para>
+    /// <see cref="LayerHelper{T}.ResolveChain"/> derives every layer's input from the previous
+    /// layer's actual <c>GetOutputShape()</c> and returns the shape leaving the branch, so the
+    /// fork points get real shapes instead of hand-written ones. Sizing the heads from a
+    /// hand-written <c>[1, 1, visionDim]</c> instead produced weights the forward never matched.
+    /// Each layer is skipped once resolved, so this is a no-op on an already-run model.
+    /// </para>
+    /// </remarks>
+    private void ResolveBranchShapes()
+    {
+        var rootShape = Architecture.GetInputShape();
+        if (rootShape is null || rootShape.Length == 0) return;
+
+        // KNOWN LIMITATION: resolution currently stops inside the vision trunk, at the
+        // ReshapeLayer between the convolutions and the transformer. The convolution layers
+        // report GetOutputShape() WITHOUT a batch axis ([512, 8, 32]), while
+        // ReshapeLayer.ResolveFromShape treats the leading axis as batch — so it reads that as
+        // 512 samples of 256 elements against its 131072-element target and rejects it. Chain
+        // resolution stops at the first such failure by design, leaving the rest of the stack
+        // lazy. Adding a batch axis to the root does not help: the convolutions report
+        // per-sample shapes regardless of what they were resolved from.
+        //
+        // Consequence: a freshly built ABINet reports 1,718,624 parameters where one that has
+        // run a forward reports 4,281,376, so restoring a trained parameter vector into a fresh
+        // clone misaligns (Clone_AfterTraining_ShouldPreserveLearnedWeights). The layers that DO
+        // resolve here still benefit, and everything else resolves on first forward as before.
+        //
+        // The real fix is to make the two conventions agree — either the convolutions report a
+        // batched output shape or ReshapeLayer accepts a per-sample one — which is a framework
+        // change affecting every model that chains a convolution into a reshape, not something
+        // to settle inside ABINet.
+
+        // Vision trunk -> vision head (character logits) -> language model -> language head.
+        // The language model is rooted at the HEAD's output, not the trunk's, because it
+        // consumes character probabilities.
+        var visionOut = LayerHelper<T>.ResolveChain(_visionModelLayers, rootShape);
+        var visionLogitsShape = LayerHelper<T>.ResolveChain(_visionHead, visionOut);
+
+        var languageOut = LayerHelper<T>.ResolveChain(_languageModelLayers, visionLogitsShape);
+        LayerHelper<T>.ResolveChain(_languageHead, languageOut);
+
+        // The fusion gate is rooted at [F_v, F_l] concatenated on the feature axis, so its
+        // input is the vision width doubled.
+        var fusionRoot = (int[])visionOut.Clone();
+        fusionRoot[fusionRoot.Length - 1] = visionOut[visionOut.Length - 1] + languageOut[languageOut.Length - 1];
+        LayerHelper<T>.ResolveChain(_fusionLayers, fusionRoot);
     }
 
     private void InitializeEmbeddings()
@@ -359,6 +522,15 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {
         var processed = EnsureBatchDimension(image);
+        if (processed.Shape[2] != _imageHeight || processed.Shape[3] != ImageSize)
+        {
+            processed = Engine.Interpolate(
+                processed,
+                [_imageHeight, ImageSize],
+                InterpolateMode.Bilinear,
+                alignCorners: false);
+        }
+
         var normalized = new Tensor<T>(processed._shape);
 
         for (int i = 0; i < processed.Data.Length; i++)
@@ -470,6 +642,38 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// Re-points the branch lists at the layers deserialization just rebuilt.
+    /// </summary>
+    /// <remarks>
+    /// Every branch is appended to <c>Layers</c>, so the weights round-trip correctly, but the
+    /// forward pass reads these private lists and deserialization never re-points them — they
+    /// still referenced the objects this instance built in its own constructor. The restored
+    /// weights landed in layers the model never evaluated, so a clone predicted from its
+    /// initialisation values while reporting success.
+    /// </remarks>
+    private void RebindBranchLayers()
+    {
+        if (_branchCounts is not { Length: 5 }) return;
+
+        int total = 0;
+        foreach (var count in _branchCounts) total += count;
+        if (total == 0 || Layers.Count < total) return;
+
+        var targets = new[]
+        {
+            _visionModelLayers, _languageModelLayers, _fusionLayers, _visionHead, _languageHead
+        };
+
+        int offset = Layers.Count - total;
+        for (int b = 0; b < targets.Length; b++)
+        {
+            targets[b].Clear();
+            for (int i = 0; i < _branchCounts[b]; i++) targets[b].Add(Layers[offset + i]);
+            offset += _branchCounts[b];
+        }
+    }
+
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         int visionDim = reader.ReadInt32();
@@ -485,6 +689,8 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         ImageSize = imageSize;
         base.MaxSequenceLength = maxSeqLen;
+    
+        RebindBranchLayers();
     }
 
     /// <inheritdoc/>
@@ -498,11 +704,125 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     #region NeuralNetworkBase Implementation
 
+    /// <summary>
+    /// Runs ABINet's explicit sequential graph without the document base
+    /// class's inference-only CNN-to-sequence auto-reshape. The default ABINet
+    /// graph contains its own tape-compatible ReshapeLayer so inference and
+    /// training follow the same shape transitions.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        if (_branched)
+            return ForwardBranches(input).Fusion;
+
+        Tensor<T> output = input;
+        foreach (var layer in Layers)
+            output = layer.Forward(output);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Runs the vision model, then the language model, then the fusion branch, returning all
+    /// three character predictions.
+    /// </summary>
+    /// <remarks>
+    /// The language branch begins with the gradient barrier, so language and fusion gradients
+    /// stop there and never reach the vision encoder — ABINet's AUTONOMOUS principle. The vision
+    /// encoder still learns, from its own <c>Vision</c> prediction's loss term.
+    /// </remarks>
+    private (Tensor<T> Vision, Tensor<T> Language, Tensor<T> Fusion) ForwardBranches(Tensor<T> input)
+    {
+        var visionFeatures = input;
+        foreach (var layer in _visionModelLayers)
+            visionFeatures = layer.Forward(visionFeatures);
+
+        // F_v -> character logits. These ARE the language model's input: the paper's LM is a
+        // spelling corrector over probability vectors, so the branch begins with the gradient
+        // barrier and a softmax rather than reading visual features.
+        var visionLogits = visionFeatures;
+        foreach (var layer in _visionHead)
+            visionLogits = layer.Forward(visionLogits);
+
+        // ITERATIVE correction, the third of the paper's three principles (Fang et al. 2021,
+        // sec. 3.3). The language model is executed M times: the first pass reads the VISION
+        // model's character probabilities, and every later pass reads the FUSION model's
+        // prediction from the previous iteration, so each round corrects the last round's
+        // spelling using bidirectional context. The paper measures M = 3 as the sweet spot and
+        // uses the final iteration's fused prediction as the output.
+        //
+        // Only one pass was run before this, which reduced the model to Autonomous +
+        // Bidirectional and silently dropped the principle the paper is named for. The iteration
+        // count was already threaded in as _numIterations and consumed only when constructing
+        // the language branch; nothing ever looped.
+        //
+        // Nothing carries across calls: every input restarts from its own vision prediction,
+        // matching the paper's "each new text instance starts fresh".
+        var languageInput = visionLogits;
+        Tensor<T> languageLogits = visionLogits;
+        Tensor<T> fused = visionFeatures;
+
+        int iterations = _numIterations > 0 ? _numIterations : 1;
+        for (int iteration = 0; iteration < iterations; iteration++)
+        {
+            var languageFeatures = languageInput;
+            foreach (var layer in _languageModelLayers)
+                languageFeatures = layer.Forward(languageFeatures);
+
+            languageLogits = languageFeatures;
+            foreach (var layer in _languageHead)
+                languageLogits = layer.Forward(languageLogits);
+
+            // Gated fusion consumes BOTH streams: G = sigmoid([F_v, F_l] W_f),
+            // F_f = G * F_v + (1 - G) * F_l. The gate layer takes them concatenated.
+            fused = Engine.TensorConcatenate(
+                new[] { visionFeatures, languageFeatures },
+                axis: visionFeatures.Shape.Length - 1);
+            foreach (var layer in _fusionLayers)
+                fused = layer.Forward(fused);
+
+            // The next round corrects this round's fused prediction.
+            languageInput = fused;
+        }
+
+        return (visionLogits, languageLogits, fused);
+    }
+
+    /// <summary>
+    /// Emits all three branch predictions stacked along axis 0 so the multi-task objective can
+    /// grade each of them.
+    /// </summary>
+    /// <remarks>
+    /// Pairs with <see cref="Train"/>, which repeats the character target three times to match,
+    /// and with <see cref="ABINetMultiTaskLoss{T}"/>, which splits both back into three blocks
+    /// and returns lambda_v * L_v + lambda_l * L_l + L_f.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_branched)
+            return base.ForwardForTraining(input);
+
+        // Subclasses that bypass the base forward must seed stochastic layers themselves.
+        EnsureLayerRandomSeedsWired();
+
+        var (vision, language, fusion) = ForwardBranches(input);
+        return Engine.TensorConcatenate(new[] { vision, language, fusion }, axis: 0);
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessTextImage(input);
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["ABINetOutput"] = PredictCore(input)
+        };
     }
 
     /// <inheritdoc/>
@@ -512,10 +832,24 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        try
+        {
+            // The branched forward returns the vision, language and fusion predictions stacked
+            // along axis 0, so the target is repeated three times to line up block-for-block.
+            // ABINetMultiTaskLoss splits both and returns lambda_v * L_v + lambda_l * L_l + L_f.
+            var target = _branched
+                ? Engine.TensorConcatenate(new[] { expectedOutput, expectedOutput, expectedOutput }, axis: 0)
+                : expectedOutput;
 
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+            TrainWithTape(
+                PreprocessTextImage(input),
+                target,
+                _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

@@ -118,7 +118,18 @@ public class GraphGenerationModelTests : GraphNNModelTestBase<float>
 
     protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var network = new GraphGenerationModel<float>(inputFeatures: 16, maxNodes: 10);
+        // Keep the deliberately conservative optimizer configuration documented
+        // by this stochastic-invariant fixture explicit. Production defaults stay
+        // faithful to Kipf & Welling (Adam at constant 0.01), while the test remains
+        // free to exercise AMSGrad plus decay as a supported customization.
+        var network = new GraphGenerationModel<float>(
+            inputFeatures: 16,
+            maxNodes: 10,
+            learningRateScheduler: new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(
+                baseLearningRate: 0.001,
+                gamma: 0.99),
+            learningRate: 0.001,
+            useAMSGrad: true);
         lock (_savedParamsLock)
         {
             if (_savedParams == null)

@@ -40,6 +40,7 @@ public class DiffusionModelOptions<T> : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        Seed = other.Seed;
         LearningRate = other.LearningRate;
         OptimizerFactory = other.OptimizerFactory;
         TrainTimesteps = other.TrainTimesteps;
@@ -51,6 +52,7 @@ public class DiffusionModelOptions<T> : ModelOptions
         DefaultInferenceSteps = other.DefaultInferenceSteps;
         LossFunction = other.LossFunction;
         UseGpuExecutionGraph = other.UseGpuExecutionGraph;
+        LatentChannels = other.LatentChannels;
     }
 
     /// <summary>
@@ -104,6 +106,32 @@ public class DiffusionModelOptions<T> : ModelOptions
     /// computation. The default of 1000 is standard for DDPM/DDIM models.</para>
     /// </remarks>
     public int TrainTimesteps { get; set; } = 1000;
+
+    /// <summary>
+    /// Gets or sets the number of latent channels the model's VAE and noise predictor operate on.
+    /// </summary>
+    /// <value>
+    /// The latent channel count, or <c>null</c> to use the model's own architectural default.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Nullable on purpose, following the options pattern: <c>null</c> means "use the value this
+    /// architecture was designed around" rather than forcing every caller to know it. Latent
+    /// diffusion models are not free to pick this arbitrarily — it must match the VAE and the
+    /// predictor's input/output channels — so a model that cannot honour an override should say so
+    /// rather than silently ignore it.
+    /// </para>
+    /// <para>
+    /// This exists because the count was previously a <c>private const int LATENT_CHANNELS = 4</c>
+    /// baked into each model, invisible and unreachable from the facade. Four is the Stable-Diffusion
+    /// value and a fine DEFAULT, but SDXL-class and audio latent models legitimately differ, and a
+    /// private const gives callers no way to say so.
+    /// </para>
+    /// <para><b>For Beginners:</b> A latent diffusion model does not work on pixels directly. It
+    /// first compresses the image into a smaller "latent" form; this is how many channels that
+    /// compressed form has. Leave it unset unless you know you need something else.</para>
+    /// </remarks>
+    public int? LatentChannels { get; set; }
 
     /// <summary>
     /// Gets or sets the starting beta value (noise variance at t=0).

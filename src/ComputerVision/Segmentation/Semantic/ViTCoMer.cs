@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Models.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -152,7 +153,13 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         _dropRate = dropRate;
         _useNativeMode = true;
         _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAdaptiveLearningRate = false
+            });
 
         (_embedDim, _cnnChannels, _depths, _decoderDim) = GetModelConfig(modelSize);
 
@@ -248,7 +255,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -303,18 +310,14 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         int[] newShape = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, newShape);
     }
 
     #endregion
@@ -337,25 +340,14 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Architecture.Layers.Count / 2;
+            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count;
         }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateViTCoMerEncoderLayers(
-                _channels, _height, _width, _embedDim, _cnnChannels, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count;
-            Layers.AddRange(encoderLayers);
-
-            int[] patchKernels = [7, 3, 3, 3]; int[] patchStrides = [4, 2, 2, 2]; int[] patchPaddings = [3, 1, 1, 1];
-            int featureH = _height, featureW = _width;
-            for (int stage = 0; stage < 4; stage++)
-            {
-                featureH = (featureH + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-                featureW = (featureW + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            }
-
-            Layers.AddRange(LayerHelper<T>.CreateViTCoMerDecoderLayers(
-                _cnnChannels[^1], _decoderDim, _numClasses, featureH, featureW));
+            Layers.AddRange(LayerHelper<T>.CreateViTCoMerLayers(
+                _channels, _height, _width, _embedDim, _cnnChannels, _depths,
+                _decoderDim, _numClasses, _dropRate));
+            _encoderLayerEnd = Layers.Count;
         }
     }
 
@@ -425,6 +417,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         writer.Write(_embedDim); writer.Write(_decoderDim); writer.Write(_dropRate);
         writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
         writer.Write(_encoderLayerEnd);
+        writer.Write(_options.LearningRate);
         writer.Write(_cnnChannels.Length);
         foreach (int c in _cnnChannels) writer.Write(c);
         writer.Write(_depths.Length);
@@ -447,6 +440,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble();
         _ = reader.ReadBoolean(); _ = reader.ReadString();
         _ = reader.ReadInt32();
+        _ = reader.ReadDouble();
         int cc = reader.ReadInt32(); for (int i = 0; i < cc; i++) _ = reader.ReadInt32();
         int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
     }
@@ -463,8 +457,8 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new ViTCoMer<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-            : new ViTCoMer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+            ? new ViTCoMer<T>(Architecture, optimizer: null, LossFunction, _numClasses, _modelSize, _dropRate, new ViTCoMerOptions(_options))
+            : new ViTCoMer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new ViTCoMerOptions(_options));
     }
 
     /// <summary>

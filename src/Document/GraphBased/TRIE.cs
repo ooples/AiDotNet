@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -67,7 +67,7 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _visualDim;
     private readonly int _textDim;
     private readonly int _graphDim;
@@ -135,7 +135,7 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         int graphDim = 256,
         int numEntityTypes = 10,
         int maxEntities = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TRIEOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -183,7 +183,7 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         int graphDim = 256,
         int numEntityTypes = 10,
         int maxEntities = 100,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TRIEOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -842,7 +842,7 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

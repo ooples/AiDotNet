@@ -183,7 +183,13 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
             LearningRateSchedule.Constant => InitialLearningRate,
             LearningRateSchedule.InverseScaling => InitialLearningRate / (1.0 + 0.0001 * SampleCount),
             LearningRateSchedule.Exponential => InitialLearningRate * Math.Pow(0.9999, SampleCount),
-            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, SampleCount / 10000),
+            // The truncation here is DELIBERATE and is what makes this a step decay:
+            // the rate halves once per 10,000 samples and is flat between steps.
+            // Written as an explicit integer division so it reads as intent rather
+            // than as the accidental int/int that a reviewer (and CodeQL) sees. Using
+            // 10000.0 would silently turn this into a smooth exponential decay and
+            // change every schedule that selects StepDecay.
+            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, (double)(SampleCount / 10000)),
             _ => InitialLearningRate
         };
 
@@ -234,11 +240,25 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     private byte[] SerializeInternalUnchecked()
     {
+        // Persist the trained parameters (weights + bias etc.) so DeepCopy/Clone and
+        // save/load actually round-trip the learned model. Previously only the scalar
+        // bookkeeping (NumFeatures/SampleCount/IsInitialized) was serialized, so a clone
+        // came back with null weights and PredictSingle threw "_weights has not been
+        // initialized". Parameters are stored as double[] (via NumOps) so the JSON is
+        // type-agnostic; deserialization rebuilds the Vector<T> and calls SetParameters.
+        var parameterVector = GetParameters();
+        var parameterValues = new double[parameterVector.Length];
+        for (int i = 0; i < parameterVector.Length; i++)
+        {
+            parameterValues[i] = NumOps.ToDouble(parameterVector[i]);
+        }
+
         var modelData = new Dictionary<string, object>
         {
             { "NumFeatures", NumFeatures },
             { "SampleCount", SampleCount },
-            { "IsInitialized", IsInitialized }
+            { "IsInitialized", IsInitialized },
+            { "Parameters", parameterValues }
         };
 
         var modelMetadata = GetModelMetadata();
@@ -283,6 +303,23 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
         NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         SampleCount = modelDataObj["SampleCount"]?.ToObject<long>() ?? 0;
         IsInitialized = modelDataObj["IsInitialized"]?.ToObject<bool>() ?? false;
+
+        // Restore the trained parameters (weights + bias etc.). SetParameters rebuilds the
+        // subclass's parameter storage and re-derives NumFeatures/IsInitialized; we restore
+        // SampleCount afterwards since SetParameters does not touch it. Absent (older data
+        // without the field) leaves the model parameter-less, matching the pre-fix behaviour.
+        var parametersToken = modelDataObj["Parameters"];
+        var parameterValues = parametersToken?.ToObject<double[]>();
+        if (parameterValues is { Length: > 0 })
+        {
+            var parameterVector = new Vector<T>(parameterValues.Length);
+            for (int i = 0; i < parameterValues.Length; i++)
+            {
+                parameterVector[i] = NumOps.FromDouble(parameterValues[i]);
+            }
+            SetParameters(parameterVector);
+            SampleCount = modelDataObj["SampleCount"]?.ToObject<long>() ?? SampleCount;
+        }
     }
 
     /// <summary>
