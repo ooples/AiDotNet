@@ -26,8 +26,51 @@ namespace AiDotNet.Models.Options;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("CausalDiscovery")]
-public class CausalDiscoveryOptions
+public class CausalDiscoveryOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values (all options null → each algorithm's own default applies).</summary>
+    public CausalDiscoveryOptions() { }
+
+    /// <summary>Initializes a new instance by copying every option from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public CausalDiscoveryOptions(CausalDiscoveryOptions other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        Algorithm = other.Algorithm;
+        SignificanceLevel = other.SignificanceLevel;
+        ConfoundingEvidenceCutoff = other.ConfoundingEvidenceCutoff;
+        SparsityPenalty = other.SparsityPenalty;
+        EdgeThreshold = other.EdgeThreshold;
+        MaxConditioningSetSize = other.MaxConditioningSetSize;
+        MaxIterations = other.MaxIterations;
+        AcyclicityTolerance = other.AcyclicityTolerance;
+        MaxPenalty = other.MaxPenalty;
+        FeatureNames = other.FeatureNames is null ? null : (string[])other.FeatureNames.Clone();
+        MaxParents = other.MaxParents;
+        UseForFeatureSelection = other.UseForFeatureSelection;
+        LossType = other.LossType;
+        LearningRate = other.LearningRate;
+        MaxLag = other.MaxLag;
+        HiddenUnits = other.HiddenUnits;
+        InnerIterations = other.InnerIterations;
+        MaxRank = other.MaxRank;
+        CorrelationThreshold = other.CorrelationThreshold;
+        DirectionalityAsymmetryThreshold = other.DirectionalityAsymmetryThreshold;
+        ConcavityParameter = other.ConcavityParameter;
+        SobolevWeight = other.SobolevWeight;
+        MaxSegments = other.MaxSegments;
+        InitScale = other.InitScale;
+        MaxEpochs = other.MaxEpochs;
+        InitialLogVariance = other.InitialLogVariance;
+        DefaultKlWeight = other.DefaultKlWeight;
+        MaxKlWeight = other.MaxKlWeight;
+        UseKlWarmUp = other.UseKlWarmUp;
+    }
+
     /// <summary>
     /// Which causal discovery algorithm to use. Default: null (auto-select based on data characteristics).
     /// </summary>
@@ -47,6 +90,37 @@ public class CausalDiscoveryOptions
     /// (fewer edges). Typical range: 0.01 to 0.10.</para>
     /// </remarks>
     public double? SignificanceLevel { get; set; }
+
+    /// <summary>
+    /// Fraction (0..1) of a candidate's direction-evidence that may point the "wrong" way before RCD
+    /// treats the remaining variables as latently confounded and stops. Default: null (0.05).
+    /// </summary>
+    /// <value>
+    /// A finite value in <c>[0, 1]</c>, or <see langword="null"/> to use the calibrated default of
+    /// <c>0.05</c>.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This knob controls how eagerly RCD declares "these variables share
+    /// a hidden common cause, stop here." Lower values stop sooner (more cautious about hidden
+    /// confounders); higher values demand stronger wrong-way evidence before stopping.</para>
+    /// <para><b>Reference:</b> Maeda &amp; Shimizu, "RCD: Repetitive Causal Discovery of Linear
+    /// Non-Gaussian Acyclic Models with Latent Confounders" (AISTATS 2020). The <c>0.05</c> default is
+    /// a conservative operating point on the scale-free confounding-ratio described below (a clean
+    /// root scores ≈ 0; a symmetric latently-confounded pair ≈ 0.5), leaving wide margin above the
+    /// clean-root floor while still flagging genuine common-cause structure.</para>
+    /// <para>Used by <c>RCDAlgorithm</c>. RCD scores each candidate root by the DirectLiNGAM entropy
+    /// criterion (<c>DiffMutualInfo</c>): positive evidence means the candidate is a cause, negative
+    /// means it is an effect. The confounding score is the SCALE-FREE ratio
+    /// <c>Σ min(0, DiffMI)² / Σ DiffMI²</c> — the fraction of the best candidate's squared
+    /// direction-evidence that indicates it is actually an effect of some other variable. A clean root
+    /// scores ≈ 0 (all evidence points outward); a latently-confounded set has no clean root, so even
+    /// the best candidate carries substantial wrong-way evidence (≈ 0.5 for a symmetric common-cause
+    /// pair). When the score exceeds this cutoff the remaining variables are flagged confounded and
+    /// left unordered (per RCD). Because it is a ratio in [0, 1] it needs no per-dataset rescaling —
+    /// unlike a raw <c>DiffMI²</c> sum, whose magnitude drifts with sample size and non-Gaussianity.
+    /// Lower values stop more eagerly (more conservative about confounding); typical range 0.02–0.20.</para>
+    /// </remarks>
+    public double? ConfoundingEvidenceCutoff { get; set; }
 
     /// <summary>
     /// L1 sparsity penalty (lambda1). Default: null (algorithm-specific default).
@@ -94,10 +168,7 @@ public class CausalDiscoveryOptions
     /// </summary>
     public double? MaxPenalty { get; set; }
 
-    /// <summary>
-    /// Random seed for reproducibility. Default: null (non-deterministic).
-    /// </summary>
-    public int? Seed { get; set; }
+    // Seed is inherited from ModelOptions (random seed for reproducibility; null = non-deterministic).
 
     /// <summary>
     /// Variable/feature names to label the graph nodes. Default: null (auto-generated X0, X1, ...).
@@ -184,6 +255,26 @@ public class CausalDiscoveryOptions
     /// before running conditional independence tests.</para>
     /// </remarks>
     public double? CorrelationThreshold { get; set; }
+
+    /// <summary>
+    /// Minimum relative asymmetry (in [0, 1]) between the two cross-map skills of a pair before CCM
+    /// prunes the weaker reverse direction as a reconstruction artifact. Default: null (0.2).
+    /// </summary>
+    /// <value>
+    /// A finite value in <c>[0, 1]</c>, or <see langword="null"/> to use CCM's default threshold of <c>0.2</c>.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Lower values remove weak reverse links more aggressively; higher values
+    /// retain more bidirectional links.</para>
+    /// <para><b>Reference:</b> Sugihara et al., "Detecting Causality in Complex Ecosystems," Science, 2012.</para>
+    /// <para>Used by <see cref="AiDotNet.CausalDiscovery.TimeSeries.CCMAlgorithm{T}"/>. For a pair
+    /// (X, Y) with forward/backward cross-map skills f and b, the relative asymmetry is
+    /// |f - b| / (max(f, b) + eps). When it meets or exceeds this threshold the dominant direction is
+    /// kept and the weaker one is zeroed; below it, both directions are retained as genuine
+    /// bidirectional coupling. Raising the value keeps only more strongly asymmetric edges (fewer
+    /// pruned reverse links); lowering it prunes more aggressively. Must be within [0, 1].</para>
+    /// </remarks>
+    public double? DirectionalityAsymmetryThreshold { get; set; }
 
     /// <summary>
     /// Concavity parameter (gamma) for MCP/SCAD penalty functions. Default: null (algorithm-specific).

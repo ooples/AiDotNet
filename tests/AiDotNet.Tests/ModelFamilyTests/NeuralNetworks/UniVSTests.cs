@@ -42,6 +42,18 @@ public class UniVSTests : SegmentationTestBase
     protected override int MoreDataShortIterations => 10;
     protected override int MoreDataLongIterations => 40;
 
+    // Measured in isolation, this class costs ~4 minutes, and the memorization probe alone is 84 s
+    // of it at the base default of 100 iterations — over 45 % of its 180 s budget with the runner
+    // otherwise idle. That leaves no headroom: in the serial shard, where one testhost accumulates
+    // pressure across classes, ForwardPass_ShouldBeFinite_AfterTraining (10 s standalone) hit the
+    // 120 s gate. The model is not at fault and is already at reduced scale; the probe's own cost is.
+    //
+    // 25 iterations is a measured cap, not a guess: R50 + Mask2Former on a single 64x64 pair drives
+    // the loss far below the 1 % strict-decrease bar well inside 25 steps, so the invariant catches
+    // exactly the same bug class (sign error, oscillation, first-step explosion) at a quarter of the
+    // wall clock. No tolerance is relaxed.
+    protected override int MemorizationTaskIterations => 25;
+
     protected override INeuralNetworkModel<double> CreateNetwork()
     {
         var architecture = new NeuralNetworkArchitecture<double>(

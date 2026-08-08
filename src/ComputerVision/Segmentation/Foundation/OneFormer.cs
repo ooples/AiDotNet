@@ -91,6 +91,10 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
+    private readonly int[] _attentionHeads;
+    private readonly int _windowSize;
+    private readonly int _patchSize;
+    private readonly int _mlpRatio;
     private readonly double _dropRate;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
@@ -150,7 +154,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
         double dropRate = 0.1,
         OneFormerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(classAxis: 1))
     {
         _options = options ?? new OneFormerOptions();
         Options = _options;
@@ -163,9 +167,10 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _dropRate = dropRate;
         _useNativeMode = true;
         _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = ResolveModelConfig(modelSize, _options);
+        (_attentionHeads, _windowSize, _patchSize, _mlpRatio) = ResolveEncoderConfig(_options, _channelDims);
         InitializeLayers();
     }
 
@@ -193,7 +198,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 150,
         OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
         OneFormerOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>(classAxis: 1))
     {
         _options = options ?? new OneFormerOptions();
         Options = _options;
@@ -214,7 +219,8 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _onnxModelPath = onnxModelPath;
         _optimizer = null;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = ResolveModelConfig(modelSize, _options);
+        (_attentionHeads, _windowSize, _patchSize, _mlpRatio) = ResolveEncoderConfig(_options, _channelDims);
 
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load OneFormer ONNX model: {ex.Message}", ex); }
@@ -261,10 +267,24 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
+        // Keep the training graph in the standard NCHW segmentation layout. PredictCore removes
+        // the synthetic batch dimension for a caller that supplies CHW, but doing that before the
+        // loss turns [C,H,W] into an ambiguous rank-3 tensor: a generic cross-entropy loss can then
+        // mistake W for the class axis (and W may be 1 at the final Swin stage, yielding zero loss).
+        // Batch the corresponding dense [C,H,W] or class-index [H,W] target as well so the loss sees
+        // [N,C,H,W] + [N,C,H,W]/[N,H,W], exactly like channel-first segmentation frameworks.
+        bool inputWasUnbatched = input.Rank == 3;
+        if (inputWasUnbatched)
+        {
+            input = AddBatchDimension(input);
+            if (expectedOutput.Rank is 2 or 3)
+                expectedOutput = AddLeadingBatchDimension(expectedOutput);
+        }
+
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -286,6 +306,68 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         };
     }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        if (_options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.LearningRate), "Learning rate must be positive.");
+        if (_options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.WeightDecay), "Weight decay cannot be negative.");
+        if (_options.MaxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.MaxGradientNorm), "Maximum gradient norm cannot be negative.");
+
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
+    }
+
+    private static (int[] ChannelDims, int[] Depths, int DecoderDim) ResolveModelConfig(
+        OneFormerModelSize modelSize, OneFormerOptions options)
+    {
+        var defaults = GetModelConfig(modelSize);
+        int[] channelDims = options.ChannelDimensions?.ToArray() ?? defaults.ChannelDims;
+        int[] depths = options.StageDepths?.ToArray() ?? defaults.Depths;
+        int decoderDim = options.DecoderDimension ?? defaults.DecoderDim;
+
+        ValidateFourPositive(channelDims, nameof(options.ChannelDimensions));
+        ValidateFourPositive(depths, nameof(options.StageDepths));
+        for (int i = 1; i < channelDims.Length; i++)
+        {
+            if (channelDims[i] != channelDims[i - 1] * 2)
+                throw new ArgumentException("Each OneFormer channel dimension must be twice the preceding stage.", nameof(options.ChannelDimensions));
+        }
+        if (decoderDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options.DecoderDimension), "Decoder dimension must be positive.");
+        return (channelDims, depths, decoderDim);
+    }
+
+    private static (int[] AttentionHeads, int WindowSize, int PatchSize, int MlpRatio) ResolveEncoderConfig(
+        OneFormerOptions options, int[] channelDims)
+    {
+        int[] heads = options.AttentionHeads?.ToArray() ?? [6, 12, 24, 48];
+        ValidateFourPositive(heads, nameof(options.AttentionHeads));
+        for (int i = 0; i < heads.Length; i++)
+        {
+            if (channelDims[i] % heads[i] != 0)
+                throw new ArgumentException($"Channel dimension {channelDims[i]} must be divisible by attention-head count {heads[i]} at stage {i}.", nameof(options.AttentionHeads));
+        }
+        if (options.WindowSize <= 0) throw new ArgumentOutOfRangeException(nameof(options.WindowSize));
+        if (options.PatchSize <= 0) throw new ArgumentOutOfRangeException(nameof(options.PatchSize));
+        if (options.MlpRatio <= 0) throw new ArgumentOutOfRangeException(nameof(options.MlpRatio));
+        return (heads, options.WindowSize, options.PatchSize, options.MlpRatio);
+    }
+
+    private static void ValidateFourPositive(int[] values, string parameterName)
+    {
+        if (values.Length != 4 || values.Any(value => value <= 0))
+            throw new ArgumentException("OneFormer requires exactly four positive stage values.", parameterName);
+    }
+
     private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
@@ -295,6 +377,26 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
         if (!hasBatch) features = RemoveBatchDimension(features);
         return features;
+    }
+
+    /// <summary>
+    /// Routes training through OneFormer's native NCHW path without removing the batch dimension.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode) return PredictOnnx(input);
+        if (input.Rank != 4) input = AddBatchDimension(input);
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Captures activations after applying OneFormer's required leading batch reshape.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode) return base.GetNamedLayerActivations(input);
+        if (input.Rank != 4) input = AddBatchDimension(input);
+        return base.GetNamedLayerActivations(input);
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
@@ -316,19 +418,21 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+        => Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
+
+    private Tensor<T> AddLeadingBatchDimension(Tensor<T> tensor)
     {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        var shape = new int[tensor.Rank + 1];
+        shape[0] = 1;
+        for (int i = 0; i < tensor.Rank; i++) shape[i + 1] = tensor.Shape[i];
+        return Engine.Reshape(tensor, shape);
     }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         int[] newShape = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        return Engine.Reshape(tensor, newShape);
     }
 
     #endregion
@@ -355,13 +459,13 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         else
         {
             var encoderLayers = LayerHelper<T>.CreateOneFormerEncoderLayers(
-                _height, _width, _channelDims, _depths, _dropRate).ToList();
+                _height, _width, _channelDims, _depths, _dropRate,
+                _attentionHeads, _windowSize, _patchSize, _mlpRatio).ToList();
             _encoderLayerEnd = encoderLayers.Count;
             Layers.AddRange(encoderLayers);
 
-            int[] pK = [7, 3, 3, 3]; int[] pS = [4, 2, 2, 2]; int[] pP = [3, 1, 1, 1];
-            int fH = _height, fW = _width;
-            for (int s = 0; s < 4; s++) { fH = (fH + 2 * pP[s] - pK[s]) / pS[s] + 1; fW = (fW + 2 * pP[s] - pK[s]) / pS[s] + 1; }
+            int fH = Math.Max(1, _height / (_patchSize * 8));
+            int fW = Math.Max(1, _width / (_patchSize * 8));
 
             Layers.AddRange(LayerHelper<T>.CreateOneFormerDecoderLayers(
                 _channelDims[^1], _decoderDim, _numClasses, fH, fW));
@@ -468,8 +572,10 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new OneFormer<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new OneFormer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
+            ? new OneFormer<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, numQueries: _numQueries, modelSize: _modelSize,
+                dropRate: _dropRate, options: new OneFormerOptions(_options))
+            : new OneFormer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, new OneFormerOptions(_options));
     }
 
     /// <summary>

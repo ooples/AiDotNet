@@ -66,10 +66,14 @@ namespace AiDotNet.NER.TransformerBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("ONNX: Open Neural Network Exchange",
-    "https://arxiv.org/abs/1901.05350",
-    Year = 2019,
-    Authors = "Junjie Bai, Fang Lu, Ke Zhang, et al.")]
+// Citation corrected. arXiv 1901.05350 is "TensorFlow.js: Machine Learning for the Web and Beyond" —
+// an unrelated paper. ONNX is not a research paper at all: it is an open specification and toolchain
+// with no accompanying publication, so the reference points at the canonical project instead of an
+// invented preprint. The year reflects the project's public release rather than a publication date.
+[ResearchPaper("ONNX: Open Neural Network Exchange (specification, not a publication)",
+    "https://github.com/onnx/onnx",
+    Year = 2017,
+    Authors = "ONNX Community")]
 public class ONNXNER<T> : TransformerNERBase<T>
 {
     /// <summary>

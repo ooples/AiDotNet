@@ -178,6 +178,10 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
+    /// <summary>Uses the native encoder/decoder graph for tape-based training.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
     /// <summary>
     /// Performs one training step.
     /// </summary>
@@ -199,7 +203,7 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

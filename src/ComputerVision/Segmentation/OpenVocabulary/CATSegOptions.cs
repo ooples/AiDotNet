@@ -23,6 +23,26 @@ public class CATSegOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        MaxGradientNorm = other.MaxGradientNorm;
     }
 
+    /// <summary>
+    /// Gets or sets the base AdamW learning rate.
+    /// </summary>
+    /// <value>Defaults to 0.0002, matching the official CAT-Seg training configuration.</value>
+    public double LearningRate { get; set; } = 2e-4;
+
+    /// <summary>
+    /// Gets or sets the decoupled AdamW weight decay.
+    /// </summary>
+    /// <value>Defaults to 0.0001, matching the official CAT-Seg training configuration.</value>
+    public double WeightDecay { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the maximum global gradient norm used by AdamW.
+    /// </summary>
+    /// <value>Defaults to 0.01, matching CAT-Seg's official full-model gradient clipping.</value>
+    public double MaxGradientNorm { get; set; } = 0.01;
 }
