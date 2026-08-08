@@ -39,13 +39,6 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>TEMPORARY, and deleted once every agent under this base registers its
-    /// components: an agent that has not been converted registers nothing, so the base
-    /// fold would answer 0 for it while its own GetParameters still returns real weights.
-    /// Deriving the count from that vector keeps the two in step during the conversion.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     /// <summary>
     /// Gets the global execution engine for hardware-accelerated vector operations.
     /// </summary>

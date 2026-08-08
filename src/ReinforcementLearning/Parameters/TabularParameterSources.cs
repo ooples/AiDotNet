@@ -318,3 +318,61 @@ public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>
         }
     }
 }
+
+/// <summary>
+/// A pair of per-arm integer counters exposed as one INTERLEAVED parameter vector:
+/// <c>[first[0], second[0], first[1], second[1], ...]</c>.
+/// </summary>
+/// <remarks>
+/// Thompson sampling keeps a Beta posterior per arm as a success and a failure count, and its
+/// hand-written surface interleaved them rather than concatenating the two arrays. That ordering is
+/// its serialization order, so it is preserved exactly here -- concatenating instead would still
+/// produce a vector of the right LENGTH while silently renumbering every existing checkpoint.
+///
+/// The counters are integers. Values round-trip through <typeparamref name="T"/> and are truncated
+/// back to int on restore, matching the original code; a fractional value written into this surface
+/// is floored, not rejected.
+/// </remarks>
+public sealed class InterleavedCountParameterSource<T> : IParameterSource<T>
+{
+    private readonly Vector<int> _first;
+    private readonly Vector<int> _second;
+    private readonly int _pairs;
+    private readonly INumericOperations<T> _ops = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Creates a source over <paramref name="pairs"/> (first, second) counter pairs.</summary>
+    public InterleavedCountParameterSource(Vector<int> first, Vector<int> second, int pairs)
+    {
+        _first = first ?? throw new ArgumentNullException(nameof(first));
+        _second = second ?? throw new ArgumentNullException(nameof(second));
+        _pairs = pairs;
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => (long)_pairs * 2;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var result = new Vector<T>(_pairs * 2);
+        int idx = 0;
+        for (int i = 0; i < _pairs; i++)
+        {
+            result[idx++] = _ops.FromDouble(_first[i]);
+            result[idx++] = _ops.FromDouble(_second[i]);
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int idx = 0;
+        for (int i = 0; i < _pairs && idx + 1 < parameters.Length; i++)
+        {
+            _first[i] = (int)_ops.ToDouble(parameters[idx++]);
+            _second[i] = (int)_ops.ToDouble(parameters[idx++]);
+        }
+    }
+}
