@@ -306,12 +306,139 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <summary>
     /// Gets the agent's parameters.
     /// </summary>
-    public abstract Vector<T> GetParameters();
+    /// <summary>
+    /// The components this agent's parameters live in, in registration order, which is also the
+    /// serialization order.
+    /// </summary>
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this agent's surface. Registration order is
+    /// serialization order, so keep it stable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Register only what is TRAINED. A target network is a periodically-refreshed copy of an
+    /// online network, not an independent parameter: registering one doubles the count and hands an
+    /// optimizer weights that are only ever meant to be copied into. The agents disagreed about
+    /// this -- DQNAgent excluded its target network from GetParameters while RainbowDQNAgent
+    /// included its own -- which is the drift a single registration point removes.
+    /// </para>
+    /// <para>Null is tolerated, so an agent may register a component a configuration did not build,
+    /// and registration is idempotent by reference.</para>
+    /// </remarks>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+    }
+
+    /// <summary>
+    /// Declare this agent's trainable components here with <see cref="RegisterParameterComponent"/>.
+    /// Called once, lazily, so it runs after the constructor has built the networks.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
+    /// to refresh anything DERIVED from them.
+    /// </summary>
+    /// <remarks>
+    /// Target-network syncs live here. DQNAgent, DoubleDQNAgent, DDPGAgent and SACAgent each copied
+    /// the online weights into a target network at the end of SetParameters. Dropping that would
+    /// fail no test -- the agent would simply train against a stale target and diverge quietly.
+    /// </remarks>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private IReadOnlyList<IParameterSource<T>> Components
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                _componentsRegistered = true;
+                RegisterComponents();
+            }
+            return _parameterComponents;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Concatenates the registered components in registration order, so the length is
+    /// <see cref="ParameterCount"/> by construction rather than by agreement.</remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        var components = Components;
+        if (components.Count == 0) return new Vector<T>(0);
+
+        var parts = new Vector<T>[components.Count];
+        int total = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            parts[i] = components[i].GetParameters();
+            total += parts[i].Length;
+        }
+
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            for (int j = 0; j < parts[i].Length; j++)
+            {
+                result[offset++] = parts[i][j];
+            }
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Sets the agent's parameters.
     /// </summary>
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <inheritdoc />
+    /// <remarks>The inverse of <see cref="GetParameters"/>: each component takes back the slice it
+    /// contributed, then <see cref="OnParametersRestored"/> refreshes whatever derives from them.
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        var components = Components;
+        long expected = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            expected += components[i].ParameterCount;
+        }
+
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        }
+
+        int offset = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            int n = checked((int)components[i].ParameterCount);
+            var slice = new Vector<T>(n);
+            for (int j = 0; j < n; j++)
+            {
+                slice[j] = parameters[offset++];
+            }
+            components[i].SetParameters(slice);
+        }
+
+        OnParametersRestored();
+    }
 
     /// <summary>
     /// Gets the number of parameters in the agent.
@@ -320,7 +447,21 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// Deep RL agents return parameter counts from neural networks.
     /// Classical RL agents (tabular, linear) may have different implementations.
     /// </remarks>
-    public abstract long ParameterCount { get; }
+    /// <inheritdoc />
+    /// <remarks>Sums the same components the vector concatenates, so the two cannot drift.</remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            var components = Components;
+            long total = 0;
+            for (int i = 0; i < components.Count; i++)
+            {
+                total += components[i].ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
