@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -114,12 +115,22 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = dropRate;
+        _numClasses = numClasses; _dropRate = options is null ? dropRate : _options.DropoutRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
+        _channelDims = _options.ChannelDimensions.ToArray();
+        _depths = _options.StageDepths.ToArray();
+        _decoderDim = _options.DecoderDimension;
+        if (_channelDims.Length != 4 || _depths.Length != 4)
+            throw new ArgumentException("SlimSAM requires four channel dimensions and four stage depths.", nameof(options));
+        if (_channelDims.Any(d => d <= 0) || _depths.Any(d => d <= 0) || _decoderDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "SlimSAM dimensions and depths must be positive.");
         InitializeLayers();
     }
 
@@ -153,9 +164,9 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [64, 128, 320, 768];
-        _depths = [2, 2, 4, 12];
-        _decoderDim = 256;
+        _channelDims = _options.ChannelDimensions.ToArray();
+        _depths = _options.StageDepths.ToArray();
+        _decoderDim = _options.DecoderDimension;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load SlimSAM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -196,7 +207,7 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -343,9 +354,14 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SlimSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new SlimSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new SlimSAMOptions(_options);
+        return _useNativeMode
+            ? new SlimSAM<T>(architecture: Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, dropRate: _dropRate, options: options)
+            : new SlimSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, options);
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.
