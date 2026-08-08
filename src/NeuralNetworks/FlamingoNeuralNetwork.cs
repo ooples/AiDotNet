@@ -1182,9 +1182,15 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             {
                 ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize }));
             }
-            catch (ArgumentException)
+            catch (ArgumentException ex)
             {
-                // Preserve the base fallback for callers supplying a custom architecture.
+                // Preserve the base fallback for callers supplying a custom architecture. The
+                // exception is expected on that path, but swallowing it silently meant a genuinely
+                // malformed architecture looked identical to a deliberately custom one -- the shape
+                // resolution just never happened and nothing said why.
+                System.Diagnostics.Debug.WriteLine(
+                    $"{nameof(FlamingoNeuralNetwork<T>)}: native-mode shape resolution declined a "
+                    + $"{_imageSize}x{_imageSize} probe, falling back to the base architecture. {ex.Message}");
             }
         }
 
