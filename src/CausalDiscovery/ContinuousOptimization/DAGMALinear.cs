@@ -109,7 +109,18 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
     private readonly double[] _sValues;
     private readonly int? _configuredMaxIterations;
-    private double _learningRate;
+
+    /// <summary>
+    /// The caller's learning rate, never written after construction.
+    /// </summary>
+    /// <remarks>
+    /// The step size DECAYS during a run: every M-matrix domain violation halves it. That decay has
+    /// to live in a per-run local, not in this field. Held here, a second DiscoverStructure call on
+    /// the same instance started from whatever the first call decayed it to -- possibly 1e-16 -- so
+    /// the same model object returned a different graph for identical data.
+    /// </remarks>
+    private readonly double _configuredLearningRate;
+
     private int _lastIterations;
     private double _lastH;
     private double _lastLoss;
@@ -138,8 +149,9 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
         _sValues = [1.0, 0.9, 0.8, 0.7, 0.6];
         _configuredMaxIterations = options?.MaxIterations;
-        _learningRate = options?.LearningRate ?? DEFAULT_LEARNING_RATE;
-        if (double.IsNaN(_learningRate) || double.IsInfinity(_learningRate) || _learningRate <= 0)
+        _configuredLearningRate = options?.LearningRate ?? DEFAULT_LEARNING_RATE;
+        if (double.IsNaN(_configuredLearningRate) || double.IsInfinity(_configuredLearningRate)
+            || _configuredLearningRate <= 0)
             throw new ArgumentException("LearningRate must be a positive finite value.", nameof(options));
     }
 
@@ -159,16 +171,28 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
         int T = Math.Min(DEFAULT_T, _sValues.Length);
 
+        // Per-RUN step size. It decays across the outer loop as inner solves hit the M-matrix
+        // boundary, which is intended within one run, and it starts from the configured value on
+        // every call, which is what makes repeated calls on one instance reproducible.
+        double learningRate = _configuredLearningRate;
+
         for (int t = 0; t < T; t++)
         {
             double s = _sValues[t];
+            // DEVIATION, stated explicitly: CausalDiscoveryOptions.MaxIterations documents an OUTER
+            // iteration budget, and the other continuous-optimization algorithms honour that. DAGMA
+            // fixes its outer loop at DEFAULT_T = 5 central-path steps -- that count is the schedule
+            // in _sValues, not a budget a caller can spend -- so the option is applied to the inner
+            // Adam loop instead, as a CAP on the reference's own inner counts rather than a target.
+            // Consequence to be aware of: MaxIterations = 100 permits up to 5 x 100 = 500 Adam steps
+            // in total, not 100.
             int defaultInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
             int maxInner = _configuredMaxIterations.HasValue
                 ? Math.Min(defaultInner, _configuredMaxIterations.Value)
                 : defaultInner;
 
             int actualIter;
-            (W, actualIter) = SolveInnerProblem(data, W, mu, s, d, maxInner);
+            (W, actualIter) = SolveInnerProblem(data, W, mu, s, d, maxInner, ref learningRate);
 
             mu *= DEFAULT_MU_FACTOR;
             _lastIterations += actualIter;
@@ -189,7 +213,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     /// Solves the inner optimization problem using Adam optimizer.
     /// Minimizes: score(W) + mu * h(W, s)
     /// </summary>
-    private (Matrix<T> W, int ActualIterations) SolveInnerProblem(Matrix<T> X, Matrix<T> W, double mu, double s, int d, int maxIter)
+    private (Matrix<T> W, int ActualIterations) SolveInnerProblem(Matrix<T> X, Matrix<T> W, double mu, double s, int d, int maxIter, ref double learningRate)
     {
         // Flatten W to double[] for Adam state management
         int vecLen = d * d;
@@ -239,7 +263,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                 double mHat = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
                 double vHat = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
 
-                w[i] -= _learningRate * mHat / (Math.Sqrt(vHat) + 1e-8);
+                w[i] -= learningRate * mHat / (Math.Sqrt(vHat) + 1e-8);
             }
 
             // Zero diagonal
@@ -266,7 +290,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             if (invCheck is null || HasNegativeEntry(invCheck, d))
             {
                 // Stepped outside M-matrix domain — halve learning rate and retry
-                double tempLr = _learningRate;
+                double tempLr = learningRate;
                 // Undo step
                 for (int i = 0; i < vecLen; i++)
                 {
@@ -274,14 +298,14 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                     double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
                     w[i] += tempLr * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
                 }
-                _learningRate *= 0.5;
-                if (_learningRate < 1e-16) break;
+                learningRate *= 0.5;
+                if (learningRate < 1e-16) break;
                 // Redo with smaller step
                 for (int i = 0; i < vecLen; i++)
                 {
                     double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
                     double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-                    w[i] -= _learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                    w[i] -= learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
                 }
                 for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
             }
