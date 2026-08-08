@@ -4,6 +4,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Engines.Autodiff;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -51,6 +53,12 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Generative Adversarial Nets", "https://arxiv.org/abs/1406.2661", Year = 2014, Authors = "Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio")]
 public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The generator then the discriminator, the order the hand-written concatenation used and therefore the serialization order. Both are trained -- unlike a target network, a GAN discriminator is a real parameter set, not a copy. Measured before converting: this model owns no Layers of its own, and each sub-network holds all of its weights in its Layers, so the base walk reproduces the previous vector exactly.</remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => Generator.Layers.Cast<LayerBase<T>?>()
+            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
     private const double DefaultGanAdamLearningRate = 0.0002;
     private const double DefaultGanAdamBeta1 = 0.5;
     private const double DefaultGanAdamBeta2 = 0.999;
@@ -1926,39 +1934,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Discriminator.Deserialize(discriminatorData);
     }
 
-    /// <summary>
-    /// Updates the parameters of both the Generator and Discriminator networks.
-    /// </summary>
-    /// <param name="parameters">A vector containing the combined parameters for both networks.</param>
-    /// <remarks>
-    /// <para>
-    /// This method splits the incoming parameter vector between the Generator and Discriminator,
-    /// updates each network accordingly, and adjusts the learning rate based on the magnitude
-    /// of parameter changes. It also includes a mechanism to reset the optimizer state if
-    /// exceptionally large changes are detected.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates both parts of the GAN at once.
-    /// 
-    /// The process:
-    /// - Splits the incoming parameters between Generator and Discriminator
-    /// - Updates each network with its respective parameters
-    /// - Adjusts the learning rate based on how big the changes are
-    /// - If changes are very large, it resets some internal values to stabilize training
-    /// 
-    /// This approach allows for efficient updating of the entire GAN structure.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Gets the total parameter count for both generator and discriminator.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            return Generator.GetParameterCount() + Discriminator.GetParameterCount();
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// Streams parameters from <c>Generator</c> followed by
@@ -2032,24 +2007,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 break;
             }
         }
-    }
-
-    /// <summary>
-    /// Gets the combined parameters from both the generator and discriminator networks.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var genParams = Generator.GetParameters();
-        var discParams = Discriminator.GetParameters();
-        int totalLength = genParams.Length + discParams.Length;
-
-        var combined = new Vector<T>(totalLength);
-        for (int i = 0; i < genParams.Length; i++)
-            combined[i] = genParams[i];
-        for (int i = 0; i < discParams.Length; i++)
-            combined[genParams.Length + i] = discParams[i];
-
-        return combined;
     }
 
     /// <summary>
