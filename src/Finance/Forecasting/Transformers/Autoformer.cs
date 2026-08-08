@@ -219,7 +219,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.LookbackWindow;
@@ -263,7 +263,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.LookbackWindow;
@@ -285,6 +285,19 @@ public class Autoformer<T> : ForecastingModelBase<T>
     #endregion
 
     #region Initialization
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        AutoformerOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
+    }
 
     /// <summary>
     /// Initializes the layers for native mode operation.
@@ -424,6 +437,19 @@ public class Autoformer<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
+    /// <summary>
+    /// Autoformer's forward mutates per-input RevIN statistics and progressive
+    /// trend/seasonal decomposition state. Those values are data-dependent and
+    /// cannot be captured once in a static compiled plan and safely replayed
+    /// for later training inputs. Use the eager tape path so each step records
+    /// the current decomposition and applies finite-gradient validation and
+    /// clipping before Adam updates the live parameters.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -481,22 +507,11 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new AutoformerOptions<T>
-        {
-            LookbackWindow = _sequenceLength,
-            ForecastHorizon = _predictionHorizon,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumAttentionHeads = _numHeads,
-            EmbeddingDim = _modelDimension,
-            MovingAverageKernel = _movingAverageKernel,
-            AutoCorrelationFactor = _topKFactor,
-            DropoutRate = _dropout
-        };
+        var options = new AutoformerOptions<T>(_options);
 
         return _useNativeMode
-            ? new Autoformer<T>(Architecture, options, _optimizer, _lossFunction)
-            : new Autoformer<T>(Architecture, OnnxModelPath!, options, _optimizer, _lossFunction);
+            ? new Autoformer<T>(Architecture, options, optimizer: null, lossFunction: _lossFunction)
+            : new Autoformer<T>(Architecture, OnnxModelPath!, options, optimizer: null, lossFunction: _lossFunction);
     }
 
     /// <inheritdoc/>
@@ -740,8 +755,18 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        SetTrainingMode(false);
-        return Forward(input);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining)
+            SetTrainingMode(false);
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            if (wasTraining)
+                SetTrainingMode(true);
+        }
     }
 
     /// <summary>

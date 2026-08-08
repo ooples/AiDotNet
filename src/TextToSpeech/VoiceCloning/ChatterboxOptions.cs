@@ -17,4 +17,10 @@ public class ChatterboxOptions : CodecTtsOptions
         LLMDim = 1024;
         NumLLMLayers = 16;
     }
+
+    /// <summary>Initializes a new instance by copying all Chatterbox settings.</summary>
+    public ChatterboxOptions(ChatterboxOptions other)
+        : base(other)
+    {
+    }
 }
