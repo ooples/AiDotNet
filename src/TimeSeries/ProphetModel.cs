@@ -40,6 +40,17 @@ namespace AiDotNet.TimeSeries;
 public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// The number of potential trend changepoints laid out across the history when the caller has
+    /// not supplied their own.
+    /// </summary>
+    /// <remarks>
+    /// Taylor and Letham's reference implementation uses <c>n_changepoints = 25</c>. It controls how
+    /// flexible the piecewise-linear trend is allowed to be: more changepoints fit sharper turns and
+    /// risk following noise, fewer produce a stiffer trend.
+    /// </remarks>
+    private const int DefaultChangepointCount = 25;
+
+    /// <summary>
     /// Stores the configuration options for the Prophet model.
     /// </summary>
     /// <remarks>
@@ -270,7 +281,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         int seasonalLen = 0;
         for (int pi = 0; pi < _effectiveSeasonalPeriods.Length; pi++)
         {
-            harmonicsPerPeriod[pi] = Math.Min(order, Math.Max(1, (int)Math.Floor(_effectiveSeasonalPeriods[pi] / 2.0)));
+            harmonicsPerPeriod[pi] = HarmonicCount(_effectiveSeasonalPeriods[pi], order);
             seasonalLen += 2 * harmonicsPerPeriod[pi];
         }
 
@@ -319,12 +330,20 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
                 }
             }
 
-            // Holiday indicators.
-            for (int hc = 0; hc < holidayCount; hc++)
+            // Holiday indicators. The row's time is converted ONCE and tested against a pre-built
+            // set, rather than converted again inside IsHoliday for every holiday: the old form did
+            // n x holidayCount conversions, each inside its own try/catch.
+            if (holidayCount > 0)
             {
-                design[i, col] = IsHoliday(ti, hc) ? NumOps.One : NumOps.Zero;
-                ridge[col] = holidayRidge;
-                col++;
+                DateTime? rowDate = TryToDate(ti);
+                for (int hc = 0; hc < holidayCount; hc++)
+                {
+                    bool onHoliday = rowDate.HasValue
+                        && rowDate.Value == _prophetOptions.Holidays[hc].Date;
+                    design[i, col] = onHoliday ? NumOps.One : NumOps.Zero;
+                    ridge[col] = holidayRidge;
+                    col++;
+                }
             }
 
             // Extra regressors (columns 1.. of the input).
@@ -350,9 +369,15 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             // Cholesky is fast and stable for the (regularized, PD) normal matrix.
             beta = new CholeskyDecomposition<T>(normal).Solve(rhs);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException
+            || ex is ArithmeticException)
         {
-            // Fall back to SVD if the matrix is ill-conditioned.
+            // Only the types a non-positive-definite matrix actually raises. A bare catch(Exception)
+            // here turned a NullReferenceException or an out-of-range index into a silent fallback,
+            // and the model then produced a wrong fit with no diagnostic at all. Reported before the
+            // fallback runs, matching the pattern already used in the optimizer catch below.
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProphetModel] Cholesky solve failed on the normal matrix; falling back to SVD. {ex}");
             beta = new SvdDecomposition<T>(normal).Solve(rhs);
         }
 
@@ -389,7 +414,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             return explicitCps;
         }
 
-        int count = Math.Min(25, Math.Max(0, n - 2));
+        int count = Math.Min(DefaultChangepointCount, Math.Max(0, n - 2));
         if (count <= 0) return new Vector<T>(0);
 
         double span = 0.8 * (tMax - tMin);
@@ -426,17 +451,44 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         return periods.ToArray();
     }
 
-    /// <summary>Returns whether the time value <paramref name="t"/> falls on the holiday at index <paramref name="holidayIndex"/>.</summary>
-    private bool IsHoliday(T t, int holidayIndex)
+    /// <summary>
+    /// How many Fourier harmonics a period of length <paramref name="period"/> contributes, given a
+    /// configured Fourier <paramref name="order"/>.
+    /// </summary>
+    /// <remarks>
+    /// ONE definition, called from both the design-matrix layout and the seasonal evaluation. The
+    /// mapping from (period, order) to positions in <c>_seasonalComponents</c> depends on both sites
+    /// producing the same count, and serialization stores the periods and the order rather than the
+    /// counts, so deserialization reproduces the layout through this formula too. If two copies ever
+    /// disagreed, the bounds check in the evaluation would not report it -- it would return a
+    /// truncated seasonal term and the model would forecast wrongly with no diagnostic.
+    ///
+    /// Capped at floor(period / 2) because harmonics above the Nyquist limit of the period are not
+    /// separately identifiable, and floored at 1 so a period shorter than 2 still contributes its
+    /// fundamental.
+    /// </remarks>
+    private static int HarmonicCount(double period, int order)
+        => Math.Min(order, Math.Max(1, (int)Math.Floor(period / 2.0)));
+
+    /// <summary>
+    /// Converts a model time value to its calendar date, or null when it is outside the OLE
+    /// Automation date range.
+    /// </summary>
+    /// <remarks>
+    /// Catches only ArgumentException, which is what DateTime.FromOADate raises for an
+    /// out-of-range value. The previous IsHoliday caught every exception type, so an out-of-range
+    /// holiday index was reported as "not a holiday" and the design matrix silently lost that
+    /// column's indicator instead of failing.
+    /// </remarks>
+    private static DateTime? TryToDate(T t)
     {
         try
         {
-            DateTime date = DateTime.FromOADate(Convert.ToDouble(t));
-            return date.Date == _prophetOptions.Holidays[holidayIndex].Date;
+            return DateTime.FromOADate(Convert.ToDouble(t)).Date;
         }
-        catch (Exception)
+        catch (ArgumentException)
         {
-            return false;
+            return null;
         }
     }
 
@@ -599,7 +651,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         for (int pi = 0; pi < _effectiveSeasonalPeriods.Length; pi++)
         {
             double period = _effectiveSeasonalPeriods[pi];
-            int harmonics = Math.Min(order, Math.Max(1, (int)Math.Floor(period / 2.0)));
+            int harmonics = HarmonicCount(period, order);
             for (int h = 1; h <= harmonics; h++)
             {
                 if (idx + 1 >= _seasonalComponents.Length) return seasonal;
