@@ -379,7 +379,24 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     {
         var priorVar = NumOps.Multiply(_priorSigma, _priorSigma);
         var half = NumOps.FromDouble(0.5);
+        // THE SAME TWO CHECKS UpdateParameters(T) ALREADY MAKES AGAINST THIS BUFFER. Without them a
+        // null or short buffer surfaces as a NullReferenceException or IndexOutOfRangeException from
+        // inside the innermost loop below, naming neither the buffer nor the layer.
         var gradients = GetParameterGradients();
+        if (gradients is null)
+        {
+            throw new InvalidOperationException(
+                "BayesianDenseLayer has no gradient buffer to add KL divergence gradients to; "
+                + "run a backward pass before calling AddKLDivergenceGradients.");
+        }
+
+        if (gradients.Length != ParameterCount)
+        {
+            throw new InvalidOperationException(
+                $"BayesianDenseLayer gradient buffer length {gradients.Length} "
+                + $"does not match ParameterCount {ParameterCount}.");
+        }
+
         int gradientIndex = 0;
 
         for (int i = 0; i < _outputSize; i++)
@@ -447,6 +464,13 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
                     parameter[i],
                     NumOps.Multiply(learningRate, ParameterGradients[gradientIndex++]));
             }
+
+            // A compiled tape retains the posterior parameter tensors by reference, exactly as it
+            // retains the epsilon tensors that FillSampleEpsilon invalidates for the same reason.
+            // These were mutated element by element with no invalidation, so a persistent-device
+            // backend replayed the cached pre-update contents and the compiled step kept training
+            // against stale weights. The eager backend hides this entirely.
+            Engine.InvalidatePersistentTensor(parameter);
         }
     }
 
@@ -517,6 +541,13 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         // Unpack bias log variances
         for (int i = 0; i < _outputSize; i++)
             _biasLogVar[i] = parameters[idx++];
+
+        // Same in-place mutation, same requirement: notify persistent-device backends that the
+        // retained posterior tensors changed, or a compiled replay serves the previous contents.
+        foreach (var parameter in GetTrainableParameters())
+        {
+            Engine.InvalidatePersistentTensor(parameter);
+        }
 
         _sampledWeightEpsilon = null;
         _sampledBiasEpsilon = null;

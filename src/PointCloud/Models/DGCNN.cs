@@ -665,7 +665,8 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 /// - Later layers: Neighbors are semantically similar points
 /// - Graph structure adapts as features evolve
 /// </remarks>
-public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// INTERNAL, AS ON master -- see the note on SetAbstractionLayer. Referenced only by DGCNN itself.
+internal partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly int _inputChannels;
     private readonly int _outputChannels;

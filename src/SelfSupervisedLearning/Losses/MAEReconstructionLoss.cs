@@ -356,9 +356,34 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
                 nameof(view1));
         }
 
+        // THE TWO VIEWS MUST AGREE. Every divisor below is taken from view2 while the difference is
+        // taken against view1, so mismatched shapes either threw from deep inside the element-wise
+        // subtract or -- where broadcasting applied -- silently normalized by the wrong patch count.
+        for (int axis = 0; axis < 3; axis++)
+        {
+            if (view1.Shape[axis] != view2.Shape[axis])
+            {
+                throw new ArgumentException(
+                    "MAE reconstruction loss requires both views to have the same shape; got "
+                    + $"[{string.Join(", ", view1.Shape)}] and [{string.Join(", ", view2.Shape)}].",
+                    nameof(view2));
+            }
+        }
+
         int patchDim = view2.Shape[2];
         int patchCount = view2.Shape[0] * view2.Shape[1];
         int lastAxis = view2.Shape.Length - 1;
+
+        // A ZERO DIVISOR PRODUCES NaN RATHER THAN THROWING for double and float, and that NaN then
+        // propagates through backpropagation and destroys every parameter in the model with nothing
+        // to show where it began. The masked overload already returns zero for this same degenerate
+        // input (no patch scored, so no loss), and these two paths must not diverge.
+        if (patchCount == 0 || (_perPatchNormalization && patchDim == 0))
+        {
+            // A fresh Tensor<T> is zero-filled, which is the value the masked overload returns for
+            // this input. Same idiom as SparseCategoricalCrossEntropyLoss.
+            return new Tensor<T>(new[] { 1 });
+        }
 
         var target = view2;
         if (_perPatchNormalization)

@@ -1051,7 +1051,11 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 /// - Input: Many points, basic features (XYZ)
 /// - Output: Fewer points, rich features (learned patterns)
 /// </remarks>
-public partial class SetAbstractionLayer<T> : LayerBase<T>
+// INTERNAL, AS ON master. This layer is referenced only by PointNetPlusPlus's own private fields,
+// constructors and deserialization pattern matches -- users compose PointNet++ through the model,
+// never by naming this type. `partial` is for the same-assembly generator extension; widening it to
+// public would freeze an implementation detail into the public API.
+internal partial class SetAbstractionLayer<T> : LayerBase<T>
 {
     private sealed class ScaleBranch
     {
