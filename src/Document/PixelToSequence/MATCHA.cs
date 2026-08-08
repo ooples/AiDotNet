@@ -748,42 +748,6 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (_useNativeMode)
-            {
-                EnsureNativeInitialized();
-            }
-
-            return base.ParameterCount;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        if (_useNativeMode)
-        {
-            EnsureNativeInitialized();
-        }
-
-        return base.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (_useNativeMode)
-        {
-            EnsureNativeInitialized();
-        }
-
-        base.SetParameters(parameters);
-    }
-
-    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);

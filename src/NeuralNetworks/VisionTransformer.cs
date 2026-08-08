@@ -805,66 +805,6 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Gets all model parameters in a single vector.
-    /// </summary>
-    /// <returns>A vector containing CLS token, positional embeddings, and all layer parameters in sequence.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns parameters in the exact order expected by UpdateParameters:
-    /// 1. CLS token vector
-    /// 2. Positional embeddings (flattened row-major)
-    /// 3. Parameters from each transformer layer in sequence
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        int totalCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalCount);
-        int currentIndex = 0;
-
-        // Pack CLS token
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            parameters[currentIndex++] = _clsToken[i];
-        }
-
-        // Pack positional embeddings (row-major)
-        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
-        {
-            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
-            {
-                parameters[currentIndex++] = _positionalEmbeddings[i, j];
-            }
-        }
-
-        // Pack layer parameters
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters[currentIndex++] = layerParams[i];
-            }
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Gets the total number of parameters in the model.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _clsToken.Length;
-            count += _positionalEmbeddings.Shape[0] * _positionalEmbeddings.Shape[1];
-            count += (int)Layers.Sum(layer => layer.ParameterCount);
-            return count;
-        }
-    }
-
-    /// <summary>
     /// Surfaces <see cref="_clsToken"/> and <see cref="_positionalEmbeddings"/>
     /// to the tape training path. These tensors are referenced directly in
     /// <see cref="Predict"/> via tape-tracked <c>Engine.Reshape</c>, so the
