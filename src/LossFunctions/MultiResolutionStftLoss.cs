@@ -242,7 +242,6 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
         return columns[k];
     }
 
-    /// <summary>A constant shaped like <paramref name="like"/>, filled with <paramref name="value"/>.</summary>
     /// <summary>A cached constant shaped like <paramref name="like"/>, filled with <paramref name="value"/>.</summary>
     private Tensor<T> Constant(Tensor<T> like, double value)
     {
@@ -269,13 +268,6 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
 
 
     private static int[] AllAxes(Tensor<T> x) => Enumerable.Range(0, x.Shape.Length).ToArray();
-
-    private Tensor<T> Scalar(double value)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = MathHelper.GetNumericOperations<T>().FromDouble(value);
-        return t;
-    }
 
     private static int LargestPowerOfTwoAtMost(int n)
     {
@@ -339,14 +331,26 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
         var gradient = new Vector<T>(predicted.Length);
         const double step = 1e-4;
 
+        // PERTURB A COPY, NOT THE CALLER'S VECTOR. The probe used to write into `predicted` and
+        // restore it afterwards, which left two holes: if CalculateLoss threw between the write and
+        // the restore, the caller was handed back a vector still holding a perturbed element; and a
+        // vector shared with another thread was observably wrong for the duration of every probe.
+        // Copying once costs one allocation per call and removes both, and the method no longer has
+        // a side effect on its own input.
+        var probe = new Vector<T>(predicted.Length);
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            probe[i] = predicted[i];
+        }
+
         for (int i = 0; i < predicted.Length; i++)
         {
             T original = predicted[i];
-            predicted[i] = ops.Add(original, ops.FromDouble(step));
-            double plus = Convert.ToDouble(CalculateLoss(predicted, actual));
-            predicted[i] = ops.Subtract(original, ops.FromDouble(step));
-            double minus = Convert.ToDouble(CalculateLoss(predicted, actual));
-            predicted[i] = original;
+            probe[i] = ops.Add(original, ops.FromDouble(step));
+            double plus = Convert.ToDouble(CalculateLoss(probe, actual));
+            probe[i] = ops.Subtract(original, ops.FromDouble(step));
+            double minus = Convert.ToDouble(CalculateLoss(probe, actual));
+            probe[i] = original;
             gradient[i] = ops.FromDouble((plus - minus) / (2.0 * step));
         }
 

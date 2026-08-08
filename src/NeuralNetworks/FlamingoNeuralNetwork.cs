@@ -327,10 +327,18 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         int gatedCrossAttnCount = _numLmLayers / 4;
         int requiredLayers = 1 + _numVisionLayers + (3 * _numPerceiverLayers)
             + gatedCrossAttnCount + 1 + _numLmLayers + 1;
-        if (Layers.Count < requiredLayers)
+        // EXACTLY requiredLayers, NOT "at least". The distribution loop below consumes exactly
+        // requiredLayers entries, so a surplus passed this guard and was then bound to nothing --
+        // yet stayed in the canonical Layers collection, so it was still serialized, still counted
+        // toward ParameterCount, and still updated by training, while contributing nothing to any
+        // forward path. A caller who supplied one layer too many got a model that trained weights
+        // it never used and reported a parameter count it could not explain.
+        if (Layers.Count != requiredLayers)
         {
             throw new InvalidOperationException(
-                $"Flamingo layer graph contains {Layers.Count} layers but {requiredLayers} are required.");
+                $"Flamingo layer graph contains {Layers.Count} layers but exactly {requiredLayers} are "
+                + "required; every layer is bound to a named execution branch, so a surplus would be "
+                + "trained and serialized without ever being used.");
         }
 
         // Distribute canonical layers to the private execution branches.
@@ -1164,9 +1172,20 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // try/finally: SetTrainingMode(false) used to run only on the success path, so any throw from
+        // TrainWithTape -- a shape mismatch, a non-finite gradient, an OOM -- escaped with the model
+        // still in training mode. Dropout then stayed stochastic and BatchNorm kept updating its
+        // running statistics on every later Predict, making inference silently non-deterministic long
+        // after the error that caused it was handled.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
