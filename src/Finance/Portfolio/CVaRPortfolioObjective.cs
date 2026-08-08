@@ -116,11 +116,16 @@ public class CVaRPortfolioObjective<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The tail is the worst <c>ceil((1 - alpha) * n)</c> observations. Sizing it from the tail
-    /// FRACTION is what makes this agree with the Rockafellar-Uryasev dual
-    /// <c>CVaR_alpha(Z) = min_nu ( nu + 1/(1-alpha) * E[(Z - nu)+] )</c>; an earlier revision instead
-    /// averaged everything from the VaR index onwards, which includes the threshold observation itself
-    /// and so averaged a 40% tail at alpha = 0.8 — reporting 0.16 where the dual gives 0.30.
+    /// The tail is the worst <c>(1 - alpha) * n</c> observations, INTERPOLATED: whole observations
+    /// beyond the boundary count fully, and the boundary observation contributes its fractional share.
+    /// That is what makes this agree with the Rockafellar-Uryasev dual
+    /// <c>CVaR_alpha(Z) = min_nu ( nu + 1/(1-alpha) * E[(Z - nu)+] )</c> for EVERY sample size, not
+    /// only when <c>(1 - alpha) * n</c> lands on an integer. Rounding the count up instead
+    /// over-weighted the boundary loss: with alpha = 0.75 and losses {0, 1, 2, 3, 4}, a whole-
+    /// observation tail of ceil(1.25) = 2 gives (3 + 4) / 2 = 3.5, while the dual at its optimal
+    /// nu = 3 gives 3 + 1 / (5 * 0.25) = 3.8. An earlier revision was further out still, averaging
+    /// everything from the VaR index onwards -- a 40% tail at alpha = 0.8, reporting 0.16 where the
+    /// dual gives 0.30.
     /// <see cref="DualObjective"/> and <see cref="OptimalNu"/> are kept public precisely so the two
     /// formulations can be cross-checked rather than trusted.
     /// </para>
@@ -138,14 +143,26 @@ public class CVaRPortfolioObjective<T>
         var sorted = (double[])losses.Clone();
         Array.Sort(sorted);
 
-        // At least one observation, so the worst loss is always in the tail; a tail averaging nothing
-        // would silently report zero risk.
-        int tailCount = (int)Math.Ceiling((1.0 - _alpha) * sorted.Length);
-        if (tailCount < 1) tailCount = 1;
-        if (tailCount > sorted.Length) tailCount = sorted.Length;
+        // The tail size is fractional in general. Averaging over ceil(tailSize) whole observations
+        // dilutes the boundary loss by counting it as a full observation, which is exactly where this
+        // used to disagree with DualObjective. Weighting it by its fractional share reproduces the
+        // dual at every sample size.
+        double tailSize = (1.0 - _alpha) * sorted.Length;
+        if (tailSize < 1.0) tailSize = 1.0;
+        if (tailSize > sorted.Length) tailSize = sorted.Length;
+
+        int wholeCount = (int)Math.Floor(tailSize);
+        double boundaryWeight = tailSize - wholeCount;
 
         double sum = 0.0;
-        for (int i = sorted.Length - tailCount; i < sorted.Length; i++) sum += sorted[i];
+        for (int i = sorted.Length - wholeCount; i < sorted.Length; i++) sum += sorted[i];
+
+        // The observation just inside the tail boundary, counted for the fraction of it that the tail
+        // actually covers.
+        int boundaryIndex = sorted.Length - wholeCount - 1;
+        if (boundaryWeight > 0.0 && boundaryIndex >= 0) sum += boundaryWeight * sorted[boundaryIndex];
+
+        return sum / tailSize;
         return sum / tailCount;
     }
 
