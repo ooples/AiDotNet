@@ -292,7 +292,10 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
+            MinImpurityDecrease = Options.MinImpurityDecrease,
+            // MaxFeatureCount overrides MaxFeatures in CalculateMaxFeatures, so omitting it here
+            // silently demoted an explicit feature count back to the MaxFeatures enum on every copy.
+            MaxFeatureCount = Options.MaxFeatureCount
         });
     }
 
@@ -312,7 +315,8 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
+            MinImpurityDecrease = Options.MinImpurityDecrease,
+            MaxFeatureCount = Options.MaxFeatureCount
         });
 
         clone.NumFeatures = NumFeatures;

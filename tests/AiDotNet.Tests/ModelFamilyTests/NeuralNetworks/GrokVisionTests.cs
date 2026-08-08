@@ -51,4 +51,10 @@ public class GrokVisionTests : NeuralNetworkModelTestBase<float>
                 inputSize: 1024,
                 outputSize: 8192),
             options: new GrokVisionOptions());
+
+    // Opt out of the finite-difference gradcheck (#1872): GrokVision is a large VLM whose single
+    // forward at this fixture scale already runs at/over the 120 s xUnit budget, so the multi-forward
+    // finite difference cannot complete. Its backward correctness is exercised by the training
+    // invariants; re-enable if a smaller CI fixture is introduced.
+    protected override bool GradientCheckApplicable => false;
 }
