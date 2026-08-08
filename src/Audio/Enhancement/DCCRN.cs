@@ -540,7 +540,21 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try { _ = ForwardNative(dummy); }
-        catch { /* best-effort; a genuine forward failure surfaces on the real Train/Predict */ }
+        catch (Exception ex)
+        {
+            // Best-effort by design: this is a warm-up forward whose only job is to materialize lazy
+            // shapes, and a genuine forward failure surfaces again on the real Train/Predict with a
+            // real input. What the bare `catch { }` cost was the ability to tell those two apart --
+            // a warm-up that fails for a REASON (a mis-sized dummy, a stage count the strides cannot
+            // support) looked identical to one that succeeded, and the model then failed later with
+            // no hint that shape resolution had already gone wrong here.
+            //
+            // Debug.WriteLine matches how the neighbouring audio models surface this class of
+            // diagnostic; the exception is still swallowed, which is the intended contract.
+            System.Diagnostics.Debug.WriteLine(
+                $"DCCRN warm-up forward failed on a [1, 2, {numBins}, {frames}] probe; lazy shapes " +
+                $"may be unresolved. {ex.GetType().Name}: {ex.Message}");
+        }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 
