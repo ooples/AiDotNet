@@ -316,10 +316,7 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         var current = PreprocessImage(input);
         if (IsOnnxMode && OnnxImageEncoder is not null)
             return OnnxImageEncoder.Run(current);
-        SetTrainingMode(false);
-        foreach (var l in Layers)
-            current = l.Forward(current);
-        return current;
+        return base.PredictCore(current);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -432,13 +429,14 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new BiomedCLIPOptions(_options);
         if (
             !_useNativeMode
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new BiomedCLIP<T>(Architecture, mp, _options);
-        return new BiomedCLIP<T>(Architecture, _options);
+            return new BiomedCLIP<T>(Architecture, mp, options);
+        return new BiomedCLIP<T>(Architecture, options);
     }
 
     private Tensor<T> TokenizeText(string text)

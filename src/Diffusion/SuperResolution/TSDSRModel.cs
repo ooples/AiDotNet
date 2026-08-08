@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Timestep Shifted Diffusion Schedule Towards Faster and Better Image Super-Resolution", "https://arxiv.org/abs/2411.18263", Year = 2025, Authors = "Dong et al.")]
+[ResearchPaper("TSD-SR: One-Step Diffusion with Target Score Distillation for Real-World Image Super-Resolution", "https://arxiv.org/abs/2411.18263", Year = 2025, Authors = "Dong et al.")]
 public class TSDSRModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

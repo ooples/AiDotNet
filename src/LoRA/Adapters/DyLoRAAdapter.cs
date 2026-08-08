@@ -275,7 +275,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - Can change rank without retraining
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Select rank for this forward pass
         int activeRank = _isTraining

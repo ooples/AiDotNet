@@ -168,7 +168,7 @@ public class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGraphConvol
     /// Together, they provide adapted graph representations.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (_adjacencyMatrix == null)
         {
