@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -141,7 +141,24 @@ public class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Paraformer-Native" : "Paraformer-ONNX", Description = "Paraformer: CIF + parallel Transformer (Alibaba DAMO, 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.LearningRate); w.Write(_options.WeightDecay); w.Write(_options.DecoderDim); w.Write(_options.NumDecoderLayers); w.Write(_options.FeedForwardDim); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); _options.LearningRate = r.ReadDouble(); _options.WeightDecay = r.ReadDouble(); if (r.BaseStream.Position < r.BaseStream.Length) _options.DecoderDim = r.ReadInt32(); if (r.BaseStream.Position < r.BaseStream.Length) _options.NumDecoderLayers = r.ReadInt32(); if (r.BaseStream.Position < r.BaseStream.Length) _options.FeedForwardDim = r.ReadInt32(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>Every field appended after the original layout is read only if bytes remain.</b>
+    /// <c>LearningRate</c> and <c>WeightDecay</c> were appended alongside the three decoder fields but
+    /// read unconditionally, so a checkpoint written before they existed -- which ends after
+    /// <c>Language</c> -- threw <see cref="EndOfStreamException"/> on the first <c>ReadDouble</c> and
+    /// could not be loaded at all. Anything absent keeps the option's default, which is the value the
+    /// build that wrote the payload was using.
+    /// </para>
+    /// <para>
+    /// The remaining-bytes test is sound HERE specifically because this payload owns its stream end:
+    /// <c>NeuralNetworkBase.Serialize</c> writes it last, and the clone path hands it a dedicated
+    /// <see cref="MemoryStream"/>. It would NOT be sound for a field inserted mid-stream, where there
+    /// is no shortage of bytes -- only a misalignment -- and a version marker is required instead.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble(); if (r.BaseStream.Position < r.BaseStream.Length) _options.WeightDecay = r.ReadDouble(); if (r.BaseStream.Position < r.BaseStream.Length) _options.DecoderDim = r.ReadInt32(); if (r.BaseStream.Position < r.BaseStream.Length) _options.NumDecoderLayers = r.ReadInt32(); if (r.BaseStream.Position < r.BaseStream.Length) _options.FeedForwardDim = r.ReadInt32(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         var options = new ParaformerOptions(_options);

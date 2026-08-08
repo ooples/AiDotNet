@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -189,8 +189,38 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             ["Language"] = _options.Language
         }
     };
+    /// <summary>
+    /// Marks a payload as carrying a version number, distinguishing it from the unversioned layout.
+    /// </summary>
+    /// <remarks>
+    /// <b>0xFF is a value the first byte of a v1 payload cannot hold.</b> That payload began with a
+    /// <see cref="bool"/>, which <see cref="BinaryWriter"/> writes as exactly 0x00 or 0x01, so a leading
+    /// 0xFF is an unambiguous discriminator rather than a guess. Without one there is no way to tell the
+    /// two layouts apart at all: both are opaque byte streams that begin with a plausible value.
+    /// </remarks>
+    private const byte SerializationVersionMarker = 0xFF;
+
+    /// <summary>
+    /// Version 2 inserted <c>NumSubBlocks</c>, <c>KernelSize</c> and <c>WidthScaling</c>.
+    /// </summary>
+    private const int SerializationVersion = 2;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>The three v2 fields were inserted MID-STREAM, not appended, which is why this needs a version
+    /// rather than a length check.</b> A v1 payload runs ... EncoderDim, NumBlocks,
+    /// SqueezeExcitationRatio, NumMels ...; reading the v2 layout against it consumes
+    /// SqueezeExcitationRatio as NumSubBlocks and then misaligns every remaining field, including the
+    /// <see cref="double"/> and the length-prefixed string. The result is not an exception -- it is a
+    /// model that loads successfully with silently wrong architecture options.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
+        w.Write(SerializationVersionMarker);
+        w.Write(SerializationVersion);
+
         w.Write(_useNativeMode);
         w.Write(_options.ModelPath ?? string.Empty);
         w.Write(_options.SampleRate);
@@ -207,9 +237,31 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         w.Write(_options.Language);
     }
 
+    /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
     {
-        _useNativeMode = r.ReadBoolean();
+        // The first byte decides the layout. 0xFF means a versioned payload; 0x00 or 0x01 is the v1
+        // bool that used to lead, and is consumed as that bool rather than re-read.
+        byte lead = r.ReadByte();
+        int version;
+        if (lead == SerializationVersionMarker)
+        {
+            version = r.ReadInt32();
+            if (version > SerializationVersion)
+            {
+                throw new InvalidOperationException(
+                    $"This ContextNet payload was written by a newer AiDotNet (serialization version " +
+                    $"{version}); this build reads up to version {SerializationVersion}. Upgrade AiDotNet " +
+                    $"to load it. Refusing rather than reading it as version {SerializationVersion}, which " +
+                    $"would load a model configured with whatever the extra bytes happened to decode to.");
+            }
+            _useNativeMode = r.ReadBoolean();
+        }
+        else
+        {
+            version = 1;
+            _useNativeMode = lead != 0;
+        }
 
         string mp = r.ReadString();
         if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
@@ -218,9 +270,16 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _options.MaxAudioLengthSeconds = r.ReadInt32();
         _options.EncoderDim = r.ReadInt32();
         _options.NumBlocks = r.ReadInt32();
-        _options.NumSubBlocks = r.ReadInt32();
-        _options.KernelSize = r.ReadInt32();
-        _options.WidthScaling = r.ReadDouble();
+
+        // Absent from v1. Left at their defaults there, which is the closest thing to the truth
+        // available: the payload was written by a build for which these were not configurable.
+        if (version >= 2)
+        {
+            _options.NumSubBlocks = r.ReadInt32();
+            _options.KernelSize = r.ReadInt32();
+            _options.WidthScaling = r.ReadDouble();
+        }
+
         _options.SqueezeExcitationRatio = r.ReadInt32();
         _options.NumMels = r.ReadInt32();
         _options.VocabSize = r.ReadInt32();
