@@ -120,7 +120,8 @@ public class SeACoOptions : ModelOptions
     public double MaeWeight { get; set; } = 1.0;
 
     /// <summary>
-    /// Token id substituted at non-hotword positions when computing SeACo's bias loss. Default: 0.
+    /// Token id substituted at non-hotword positions when computing SeACo's bias loss. Defaults to
+    /// <c>null</c>, which resolves to <see cref="VocabSize"/> -- the appended no-bias slot.
     /// </summary>
     /// <remarks>
     /// SeACo §3.1 states that "an additional token (counted as #, means no-bias) is appended to the ASR

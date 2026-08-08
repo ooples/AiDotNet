@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -51,7 +51,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SeACo(NeuralNetworkArchitecture<T> architecture, string modelPath, SeACoOptions? options = null) : base(architecture) { _options = options ?? new SeACoOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public SeACo(NeuralNetworkArchitecture<T> architecture, string modelPath, SeACoOptions? options = null) : base(architecture) { _options = options ?? new SeACoOptions(); _useNativeMode = false; _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
     // Paraformer / SeACo-Paraformer (Gao et al., arXiv 2206.08317; Shi et al., arXiv 2308.03266) train
     // the token head with CROSS-ENTROPY over the vocabulary (alongside CTC and the predictor's MAE),
     // never a regression loss. AudioNeuralNetworkBase defaults to MeanSquaredErrorLoss, so this model
@@ -59,7 +59,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     // paper never uses and one that cannot be fitted, which is why extra training made the measured
     // loss RISE (0.99 -> 44.38) while parameters barely moved (L2 195.796 -> 195.852). The head emits
     // raw logits, so use the fused log-softmax/NLL form, matching the other logit-head models here.
-    public SeACo(NeuralNetworkArchitecture<T> architecture, SeACoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SeACoOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateParaformerOptimizer(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); InstallParaformerObjective(); }
+    public SeACo(NeuralNetworkArchitecture<T> architecture, SeACoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SeACoOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateParaformerOptimizer(); _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); InstallParaformerObjective(); }
 
     /// <summary>
     /// Builds the optimizer Paraformer / SeACo-Paraformer specify.
@@ -444,11 +444,17 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             return Transcribe(audio, language, includeTimestamps);
         }
 
+        // PREPROCESSED, LIKE EVERY OTHER INFERENCE PATH. This passed the raw waveform straight into
+        // PredictCore while the sibling Transcribe overload calls PreprocessAudio first, so the biased
+        // and unbiased paths read from different input domains -- one mel features, one audio samples --
+        // through the same encoder. Whichever of the two does not throw on the shape is the more
+        // dangerous outcome: it returns a transcription computed from noise.
         Tensor<T> biased;
+        var biasedFeatures = PreprocessAudio(audio);
         _activeHotwordIds = BuildHotwordIds(hotwords);
         try
         {
-            biased = PredictCore(audio);
+            biased = PredictCore(biasedFeatures);
         }
         finally
         {
@@ -838,7 +844,14 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         // r_b: this batch may be inactive entirely, in which case the default <blank> hotword applies
         // and NO position is treated as a hotword.
-        var rng = RandomHelper.CreateSeededRandom(HotwordSamplingSeed);
+        //
+        // ONE GENERATOR PER MODEL, NOT ONE PER CALL. Constructing a fresh seeded generator here meant
+        // every training step replayed the identical draw sequence: the r_b gate below always compared
+        // the SAME first value against HotwordBatchRatio, so it was not a ratio at all -- it either
+        // admitted every step or none of them for the whole run -- and every admitted step then selected
+        // the identical spans. SeACo's criterion depends on the sampling varying across steps; frozen,
+        // the bias branch sees one fixed masking pattern and the ratio options do nothing.
+        var rng = _hotwordRng;
         if (rng.NextDouble() >= _options.HotwordBatchRatio)
         {
             return _ => false;
@@ -867,9 +880,19 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     /// <summary>
-    /// Fixed seed for hotword sampling so each training step is reproducible.
+    /// The default hotword-sampling seed, used when the caller sets no <see cref="ModelOptions.Seed"/>.
     /// </summary>
+    /// <remarks>
+    /// Seeding is still the default so a run is reproducible end to end. What changed is the SCOPE: the
+    /// generator advances across the whole run instead of being rebuilt per step, so successive steps
+    /// draw different spans while the sequence as a whole stays deterministic.
+    /// </remarks>
     private const int HotwordSamplingSeed = 1337;
+
+    /// <summary>
+    /// The hotword sampler's generator, created once and advanced across training steps.
+    /// </summary>
+    private readonly Random _hotwordRng;
 
     /// <summary>
     /// Applies SeACo's hotword-position-aware criterion to a label tensor.
