@@ -20,6 +20,8 @@ namespace AiDotNet.Models.Options;
 public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
 {
     /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
     public TimeBridgeOptions() { }
 
     public TimeBridgeOptions(TimeBridgeOptions<T> other)

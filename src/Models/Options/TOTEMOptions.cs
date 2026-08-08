@@ -134,6 +134,16 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
+    /// Gets or sets the Adam learning rate.
+    /// </summary>
+    /// <value>Defaults to 1e-3, the rate the TOTEM paper trains with.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
+    /// training becomes unstable.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
+
+    /// <summary>
     /// Gets or sets the commitment loss weight for VQ training.
     /// </summary>
     /// <value>Defaults to 0.25.</value>
@@ -142,14 +152,5 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     /// their nearest codebook entry. Higher values produce tighter clusters. The original
     /// VQ-VAE paper recommends 0.25.</para>
     /// </remarks>
-    /// <summary>
-    /// Gets or sets the Adam learning rate. Defaults to the paper's 1e-3.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
-    /// training becomes unstable.</para>
-    /// </remarks>
-    public double LearningRate { get; set; } = 1e-3;
-
     public double CommitmentWeight { get; set; } = 0.25;
 }

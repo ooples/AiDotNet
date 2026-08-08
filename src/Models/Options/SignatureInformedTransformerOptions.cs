@@ -41,6 +41,12 @@ public class SignatureInformedTransformerOptions<T> : NeuralNetworkOptions
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
+        // INHERITED PROPERTIES COUNT TOO. Seed comes from ModelOptions and EncoderLayerCount from
+        // NeuralNetworkOptions, so neither appears in this file's declarations -- which is how both
+        // were missed. Losing Seed on a clone silently changes deterministic initialization.
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+
         NumAssets = other.NumAssets;
         LookbackWindow = other.LookbackWindow;
         Horizon = other.Horizon;

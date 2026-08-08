@@ -44,6 +44,12 @@ public class StockformerOptions<T> : ModelOptions
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
+        // INHERITED PROPERTIES COUNT TOO. Seed is declared on ModelOptions rather than here, so an
+        // audit that reads only this file's declarations misses it -- which is exactly how it was
+        // missed. Losing it on a clone changes deterministic initialization and training behaviour
+        // silently, which is the same failure mode as any other dropped property.
+        Seed = other.Seed;
+
         NumAssets = other.NumAssets;
         NumFeatures = other.NumFeatures;
         HiddenDimension = other.HiddenDimension;
