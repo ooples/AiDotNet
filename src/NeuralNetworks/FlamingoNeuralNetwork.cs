@@ -259,6 +259,16 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         double learningRate = 1e-3)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
+        // Validated here, at the public entry point, rather than where it is first used. ConvertToTensor
+        // divides by the channel count, and InitializeNativeLayers sizes the patch embedding from it, so
+        // a zero or negative value surfaces as a DivideByZeroException or an invalid tensor shape from
+        // somewhere well downstream of the argument that caused it.
+        if (channels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(channels), channels, "The channel count must be positive.");
+        }
+
         _options = options ?? new FlamingoOptions();
         Options = _options;
         _useNativeMode = true;
@@ -1368,8 +1378,20 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 textEmbeddingDim: Architecture.TextEmbeddingDim,
                 inputFrames: Architecture.InputFrames)
             {
-                RandomSeed = Architecture.RandomSeed
+                RandomSeed = Architecture.RandomSeed,
+
+                // Carried explicitly, because it is settable rather than a constructor parameter and so
+                // is not covered by the rebuild above. Left off, the clone silently reverted to the
+                // architecture default (false) and trained its gradients through a different code path
+                // than the original -- a divergence with no error attached to it.
+                UseAutodiff = Architecture.UseAutodiff
             };
+
+            // Layers is deliberately NOT carried over, and that is not the same omission: the source's
+            // Layers holds this instance's LIVE layer objects. Copying the list would have the clone
+            // share them, which is what the COW clone path then rebinds tensor-by-tensor. The clone
+            // rebuilds its own layer instances from the blueprint above and the caller re-binds the
+            // shared weights, so the layer graph is reproduced without aliasing the originals.
 
             return new FlamingoNeuralNetwork<T>(
                 freshArchitecture,
@@ -1390,6 +1412,9 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 _tokenizer,
                 freshOptimizer,
                 _lossFunction,
+                // Same class of drop as UseAutodiff: skipping this optional parameter handed the clone a
+                // default FlamingoOptions() rather than the one the original was configured with.
+                _options,
                 learningRate: _learningRate);
         }
         else
