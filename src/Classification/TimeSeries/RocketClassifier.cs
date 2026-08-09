@@ -473,6 +473,10 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     }
 
     /// <inheritdoc />
+    /// <remarks>Same as MiniRocketClassifier: the inherited NumFeatures * NumClasses formula reported 0 against a 6-element vector.</remarks>
+    public override long ParameterCount => GetParameters().Length;
+
+    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         return _internalWeights?.Clone() ?? new Vector<T>(0);
