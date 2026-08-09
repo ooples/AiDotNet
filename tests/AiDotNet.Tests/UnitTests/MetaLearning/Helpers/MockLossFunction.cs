@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using System;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -41,38 +43,36 @@ public class MockLossFunction<T> : ILossFunction<T>
         return NumOps.Zero;
     }
 
-    /// <summary>
-    /// Calculates the derivative of the loss function.
-    /// </summary>
-    public Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        int length = Math.Min(predicted.Length, actual.Length);
-        var derivative = new Vector<T>(length);
-
-        if (length == 0)
-        {
-            return derivative;
-        }
-
-        T twoOverN = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(length));
-
-        for (int i = 0; i < length; i++)
-        {
-            T diff = NumOps.Subtract(predicted[i], actual[i]);
-            derivative[i] = NumOps.Multiply(twoOverN, diff);
-        }
-
-        return derivative;
-    }
 
     /// <summary>
     /// GPU loss and gradient calculation - not supported in mock.
     /// </summary>
     public (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
-        // CPU fallback for mock: compute MSE loss and gradient
-        var loss = CalculateLoss(predicted.ToVector(), actual.ToVector());
-        var gradient = CalculateDerivative(predicted.ToVector(), actual.ToVector());
-        return (loss, Tensor<T>.FromVector(gradient));
+        // Both the value and the gradient come from one differentiated forward.
+        return this.ComputeLossAndGradient(predicted, actual);
+    }
+
+    /// <summary>
+    /// Computes the loss as a tape-differentiable scalar tensor.
+    /// </summary>
+    /// <param name="predicted">The predicted tensor.</param>
+    /// <param name="target">The target tensor.</param>
+    /// <returns>A rank-0 scalar tensor holding the mean squared error.</returns>
+    /// <remarks>
+    /// Built from engine operations rather than an element-wise loop so the gradient tape can
+    /// differentiate it. The mock supplies no derivative of its own, exactly like a real loss.
+    /// </remarks>
+    public Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.TensorSubtract(predicted, target);
+        var squared = engine.TensorMultiply(diff, diff);
+
+        var axes = new int[squared.Shape.Length];
+        for (int i = 0; i < axes.Length; i++) axes[i] = i;
+
+        var summed = engine.ReduceSum(squared, axes, keepDims: false);
+        return engine.TensorDivideScalar(summed, NumOps.FromDouble(Math.Max(1, squared.Length)));
     }
 }

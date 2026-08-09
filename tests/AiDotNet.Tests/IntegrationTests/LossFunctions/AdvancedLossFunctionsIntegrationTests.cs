@@ -339,7 +339,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
         // Act & Assert
         Assert.Throws<NotSupportedException>(() => nceLoss.CalculateLoss(predicted, actual));
-        Assert.Throws<NotSupportedException>(() => nceLoss.CalculateDerivative(predicted, actual));
+        Assert.Throws<NotSupportedException>(() => nceLoss.ComputeGradient(predicted, actual));
     }
 
     [Fact(Timeout = 120000)]
@@ -487,7 +487,7 @@ public class AdvancedLossFunctionsIntegrationTests
 
         // Act & Assert
         Assert.Throws<NotSupportedException>(() => perceptualLoss.CalculateLoss(predicted, actual));
-        Assert.Throws<NotSupportedException>(() => perceptualLoss.CalculateDerivative(predicted, actual));
+        Assert.Throws<NotSupportedException>(() => perceptualLoss.ComputeGradient(predicted, actual));
     }
 
     [Fact(Timeout = 120000)]
@@ -574,7 +574,7 @@ public class AdvancedLossFunctionsIntegrationTests
         var expected = new Vector<double>(new[] { 1.0, 0.0, 0.0, 0.0 });
 
         // Act
-        var gradient = quantumLoss.CalculateDerivative(predicted, expected);
+        var gradient = quantumLoss.ComputeGradient(predicted, expected);
 
         // Assert
         Assert.Equal(predicted.Length, gradient.Length);

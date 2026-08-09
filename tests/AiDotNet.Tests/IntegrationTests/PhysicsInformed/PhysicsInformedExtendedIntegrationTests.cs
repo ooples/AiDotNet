@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Interfaces;
 using AiDotNet.PhysicsInformed;
 using AiDotNet.PhysicsInformed.Benchmarks;
 using AiDotNet.PhysicsInformed.Interfaces;
@@ -1445,7 +1446,10 @@ public class PhysicsInformedExtendedIntegrationTests
         var predictions = new double[] { 1.0, 2.0, 3.0 };
         var targets = new double[] { 1.5, 1.5, 2.5 };
 
-        var derivative = loss.ComputeDerivative(predictions, targets);
+        // The analytic derivative is gone; the same quantity now comes from differentiating
+        // ComputeTapeLoss, which is what every gradient in the library is built from.
+        var derivative = loss.ComputeGradient(
+            new Vector<double>(predictions), new Vector<double>(targets));
 
         Assert.Equal(3, derivative.Length);
         // MSE derivative = 2/N * (pred - target)

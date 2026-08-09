@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -59,7 +60,7 @@ public class LossFunctionDeepMathIntegrationTests
         // dMSE/dp_i = 2*(p_i - a_i)/n
         // = [2*(3-1)/2, 2*(5-2)/2] = [2.0, 3.0]
         var loss = new MeanSquaredErrorLoss<double>();
-        var grad = loss.CalculateDerivative(V(3, 5), V(1, 2));
+        var grad = loss.ComputeGradient(V(3, 5), V(1, 2));
         Assert.Equal(2.0, grad[0], Tolerance);
         Assert.Equal(3.0, grad[1], Tolerance);
     }
@@ -137,7 +138,7 @@ public class LossFunctionDeepMathIntegrationTests
         // delta=1.0, error=0.5 (< delta)
         // Derivative = diff / n = 0.5 / 1 = 0.5
         var loss = new HuberLoss<double>(delta: 1.0);
-        var grad = loss.CalculateDerivative(V(1.5), V(1.0));
+        var grad = loss.ComputeGradient(V(1.5), V(1.0));
         Assert.Equal(0.5, grad[0], Tolerance);
     }
 
@@ -147,7 +148,7 @@ public class LossFunctionDeepMathIntegrationTests
         // delta=1.0, error=3.0 (> delta), sign=+1
         // Derivative = delta * sign(diff) / n = 1.0 * 1 / 1 = 1.0
         var loss = new HuberLoss<double>(delta: 1.0);
-        var grad = loss.CalculateDerivative(V(4.0), V(1.0));
+        var grad = loss.ComputeGradient(V(4.0), V(1.0));
         Assert.Equal(1.0, grad[0], Tolerance);
     }
 
@@ -213,7 +214,7 @@ public class LossFunctionDeepMathIntegrationTests
         // = (0.8 - 1.0) / (0.8 * 0.2) / 1
         // = -0.2 / 0.16 = -1.25
         var loss = new BinaryCrossEntropyLoss<double>();
-        var grad = loss.CalculateDerivative(V(0.8), V(1.0));
+        var grad = loss.ComputeGradient(V(0.8), V(1.0));
         Assert.Equal(-1.25, grad[0], 1e-4);
     }
 
@@ -270,7 +271,7 @@ public class LossFunctionDeepMathIntegrationTests
         // P=[0.4, 0.6], Q=[0.5, 0.5]
         // derivative = [-0.4/0.5, -0.6/0.5] = [-0.8, -1.2]
         var loss = new KullbackLeiblerDivergence<double>();
-        var grad = loss.CalculateDerivative(V(0.5, 0.5), V(0.4, 0.6));
+        var grad = loss.ComputeGradient(V(0.5, 0.5), V(0.4, 0.6));
         Assert.Equal(-0.8, grad[0], 1e-6);
         Assert.Equal(-1.2, grad[1], 1e-6);
     }
@@ -536,7 +537,7 @@ public class LossFunctionDeepMathIntegrationTests
         // diff = 5-3 = 2 > 0 → underestimation
         // derivative = -quantile / n = -0.75 / 1 = -0.75
         var loss = new QuantileLoss<double>(quantile: 0.75);
-        var grad = loss.CalculateDerivative(V(3), V(5));
+        var grad = loss.ComputeGradient(V(3), V(5));
         Assert.Equal(-0.75, grad[0], Tolerance);
     }
 
@@ -547,7 +548,7 @@ public class LossFunctionDeepMathIntegrationTests
         // diff = 5-7 = -2 <= 0 → overestimation
         // derivative = (1-quantile) / n = 0.25 / 1 = 0.25
         var loss = new QuantileLoss<double>(quantile: 0.75);
-        var grad = loss.CalculateDerivative(V(7), V(5));
+        var grad = loss.ComputeGradient(V(7), V(5));
         Assert.Equal(0.25, grad[0], Tolerance);
     }
 
@@ -600,7 +601,7 @@ public class LossFunctionDeepMathIntegrationTests
         // d/dx log(cosh(x)) = tanh(x)
         // error=0.5 → tanh(0.5) ≈ 0.46212
         var loss = new LogCoshLoss<double>();
-        var grad = loss.CalculateDerivative(V(1.5), V(1.0));
+        var grad = loss.ComputeGradient(V(1.5), V(1.0));
         Assert.Equal(Math.Tanh(0.5), grad[0], 1e-6);
     }
 
@@ -649,7 +650,7 @@ public class LossFunctionDeepMathIntegrationTests
         // predicted=3.0, actual=2.0
         // = (1 - 2/3) / 1 = 1/3 ≈ 0.3333
         var loss = new PoissonLoss<double>();
-        var grad = loss.CalculateDerivative(V(3.0), V(2.0));
+        var grad = loss.ComputeGradient(V(3.0), V(2.0));
         Assert.Equal(1.0 / 3.0, grad[0], 1e-6);
     }
 
@@ -658,7 +659,7 @@ public class LossFunctionDeepMathIntegrationTests
     {
         // At optimal: d/dp = (1 - actual/predicted) = 0 when predicted = actual
         var loss = new PoissonLoss<double>();
-        var grad = loss.CalculateDerivative(V(5.0), V(5.0));
+        var grad = loss.ComputeGradient(V(5.0), V(5.0));
         Assert.Equal(0.0, grad[0], 1e-6);
     }
 
@@ -702,7 +703,7 @@ public class LossFunctionDeepMathIntegrationTests
         // derivative = diff / sqrt(diff² + ε²) / n
         // at diff=0: 0 / sqrt(0 + ε²) = 0
         var loss = new CharbonnierLoss<double>(epsilon: 1e-6);
-        var grad = loss.CalculateDerivative(V(5.0), V(5.0));
+        var grad = loss.ComputeGradient(V(5.0), V(5.0));
         Assert.Equal(0.0, grad[0], 1e-6);
     }
 
@@ -713,7 +714,7 @@ public class LossFunctionDeepMathIntegrationTests
         // diff = 2, diffSquared = 4
         // derivative = 2 / sqrt(4 + 1e-12) / 1 ≈ 2/2 = 1.0
         var loss = new CharbonnierLoss<double>(epsilon: 1e-6);
-        var grad = loss.CalculateDerivative(V(3.0), V(1.0));
+        var grad = loss.ComputeGradient(V(3.0), V(1.0));
         Assert.Equal(2.0 / Math.Sqrt(4.0 + 1e-12), grad[0], 1e-6);
     }
 
@@ -959,7 +960,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new MeanSquaredErrorLoss<double>();
         var pred = V(2.0, 4.0);
         var actual = V(1.0, 3.0);
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -980,7 +981,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new HuberLoss<double>(delta: 1.0);
         var pred = V(2.0, 4.0);
         var actual = V(1.5, 1.0); // 0.5 (quadratic) and 3.0 (linear)
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -1001,7 +1002,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new LogCoshLoss<double>();
         var pred = V(2.5, 0.5);
         var actual = V(1.0, 3.0);
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -1022,7 +1023,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new PoissonLoss<double>();
         var pred = V(2.0, 5.0);
         var actual = V(3.0, 4.0);
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -1043,7 +1044,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new CharbonnierLoss<double>(epsilon: 1e-3);
         var pred = V(2.0, 0.5);
         var actual = V(1.0, 3.0);
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -1064,7 +1065,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new DiceLoss<double>();
         var pred = V(0.8, 0.3, 0.6);
         var actual = V(1.0, 0.0, 1.0);
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -1085,7 +1086,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new CosineSimilarityLoss<double>();
         var pred = V(3.0, 4.0);
         var actual = V(1.0, 2.0);
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -1106,7 +1107,7 @@ public class LossFunctionDeepMathIntegrationTests
         var loss = new KullbackLeiblerDivergence<double>();
         var pred = V(0.4, 0.6);
         var actual = V(0.3, 0.7);
-        var analyticalGrad = loss.CalculateDerivative(pred, actual);
+        var analyticalGrad = loss.ComputeGradient(pred, actual);
 
         double h = 1e-7;
         for (int i = 0; i < pred.Length; i++)
@@ -1148,7 +1149,7 @@ public class LossFunctionDeepMathIntegrationTests
     {
         var loss = new ContrastiveLoss<double>();
         Assert.Throws<NotSupportedException>(() => loss.CalculateLoss(V(1), V(2)));
-        Assert.Throws<NotSupportedException>(() => loss.CalculateDerivative(V(1), V(2)));
+        Assert.Throws<NotSupportedException>(() => loss.ComputeGradient(V(1), V(2)));
     }
 
     [Fact(Timeout = 120000)]
@@ -1156,7 +1157,7 @@ public class LossFunctionDeepMathIntegrationTests
     {
         var loss = new TripletLoss<double>();
         Assert.Throws<NotSupportedException>(() => loss.CalculateLoss(V(1), V(2)));
-        Assert.Throws<NotSupportedException>(() => loss.CalculateDerivative(V(1), V(2)));
+        Assert.Throws<NotSupportedException>(() => loss.ComputeGradient(V(1), V(2)));
     }
 
     [Fact(Timeout = 120000)]

@@ -50,7 +50,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var actual = new Vector<double>(new[] { 2.0, 4.0, 6.0 });
 
-        var derivative = mse.CalculateDerivative(predicted, actual);
+        var derivative = mse.ComputeGradient(predicted, actual);
 
         // derivative = 2*(predicted - actual)/n
         // = 2*[1-2, 2-4, 3-6]/3
@@ -68,7 +68,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 1.5, 2.5, 3.5 });
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
 
-        var analyticalGradient = mse.CalculateDerivative(predicted, actual);
+        var analyticalGradient = mse.ComputeGradient(predicted, actual);
 
         // Numerical gradient check
         for (int i = 0; i < predicted.Length; i++)
@@ -119,7 +119,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 5.0, 1.0, 3.0 });
         var actual = new Vector<double>(new[] { 2.0, 4.0, 3.0 });
 
-        var derivative = mae.CalculateDerivative(predicted, actual);
+        var derivative = mae.ComputeGradient(predicted, actual);
 
         // sign(predicted - actual)/n
         // signs = [sign(3), sign(-3), sign(0)] = [1, -1, 0]
@@ -180,7 +180,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.7, 0.3 });
         var actual = new Vector<double>(new[] { 1.0, 0.0 });
 
-        var analyticalGradient = bce.CalculateDerivative(predicted, actual);
+        var analyticalGradient = bce.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -228,7 +228,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.6, 0.3, 0.1 });
         var actual = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
 
-        var analyticalGradient = ce.CalculateDerivative(predicted, actual);
+        var analyticalGradient = ce.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -292,7 +292,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.5, 2.0 });
         var actual = new Vector<double>(new[] { 0.0, 0.0 });
 
-        var analyticalGradient = huber.CalculateDerivative(predicted, actual);
+        var analyticalGradient = huber.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -424,7 +424,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.5, 1.5 });
         var actual = new Vector<double>(new[] { 0.0, 1.0 });
 
-        var analyticalGradient = logCosh.CalculateDerivative(predicted, actual);
+        var analyticalGradient = logCosh.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -814,7 +814,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.5, 0.3, 0.2 });
         var actual = new Vector<double>(new[] { 1.0, 0.0, 0.0 });
 
-        var gradient = cce.CalculateDerivative(predicted, actual);
+        var gradient = cce.ComputeGradient(predicted, actual);
 
         // Analytical: dL/dp_i = -a_i / p_i.
         Assert.Equal(-1.0 / 0.5, gradient[0], Tolerance); // = -2
@@ -913,7 +913,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.3, 1.5, -0.5 });
         var actual = new Vector<double>(new[] { 1.0, 1.0, -1.0 });
 
-        var analyticalGradient = sqHinge.CalculateDerivative(predicted, actual);
+        var analyticalGradient = sqHinge.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -989,7 +989,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.5, -0.5 });
         var actual = new Vector<double>(new[] { 1.0, -1.0 });
 
-        var analyticalGradient = exp.CalculateDerivative(predicted, actual);
+        var analyticalGradient = exp.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -1129,7 +1129,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
         var actual = new Vector<double>(new[] { 5.0, 10.0, 15.0 });
 
-        var derivative = mbe.CalculateDerivative(predicted, actual);
+        var derivative = mbe.ComputeGradient(predicted, actual);
 
         // Derivative of MBE w.r.t. predicted is -1/n for all elements
         double expected = -1.0 / 3.0;
@@ -1258,7 +1258,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 1.0, -1.0 });
         var actual = new Vector<double>(new[] { 1.0, -1.0 });
 
-        var analyticalGradient = wass.CalculateDerivative(predicted, actual);
+        var analyticalGradient = wass.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -1626,7 +1626,7 @@ public class LossFunctionsMathematicalTests
         var predicted = new Vector<double>(new[] { 0.3, 0.5, 0.2 });
         var actual = new Vector<double>(new[] { 1.0 }); // Class index 1
 
-        var gradient = scce.CalculateDerivative(predicted, actual);
+        var gradient = scce.ComputeGradient(predicted, actual);
 
         // Gradient should be -1/p for the correct class, 0 for others
         // For class 1 (index 1): gradient = -1 / 0.5 = -2

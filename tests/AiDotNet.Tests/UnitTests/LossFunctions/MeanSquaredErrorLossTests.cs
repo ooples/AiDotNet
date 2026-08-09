@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -93,7 +94,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             Assert.All(result, item => Assert.Equal(0.0, item, 10));
@@ -108,7 +109,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative = 2*(predicted-actual)/n = 2*[1,2,3]/3 = [2/3, 4/3, 6/3]
@@ -126,7 +127,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 2.0, 4.0, 6.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative = 2*(predicted-actual)/n = 2*[-1,-2,-3]/3 = [-2/3, -4/3, -6/3]
@@ -144,7 +145,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0 });
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
+            Assert.Throws<ArgumentException>(() => loss.ComputeGradient(predicted, actual));
         }
 
         [Fact(Timeout = 60000)]
@@ -172,7 +173,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative = 2*(predicted-actual)/n = 2*[1,2,3]/3

@@ -55,7 +55,7 @@ public class LossFunctionsIntegrationTests
         var actual = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
 
         // Act
-        var derivative = mse.CalculateDerivative(predicted, actual);
+        var derivative = mse.ComputeGradient(predicted, actual);
 
         // Assert - derivative is 2*(predicted-actual)/n
         Assert.Equal(3, derivative.Length);
@@ -125,7 +125,7 @@ public class LossFunctionsIntegrationTests
         var actual = new Vector<double>(new[] { 3.0, 2.0, 3.0 });
 
         // Act
-        var derivative = mae.CalculateDerivative(predicted, actual);
+        var derivative = mae.ComputeGradient(predicted, actual);
 
         // Assert
         Assert.Equal(3, derivative.Length);
@@ -190,7 +190,7 @@ public class LossFunctionsIntegrationTests
         var actual = new Vector<double>(new[] { 1.0, 0.0 });
 
         // Act
-        var derivative = bce.CalculateDerivative(predicted, actual);
+        var derivative = bce.ComputeGradient(predicted, actual);
 
         // Assert
         Assert.Equal(2, derivative.Length);
@@ -258,7 +258,7 @@ public class LossFunctionsIntegrationTests
         var actual = new Vector<double>(new[] { 0.0, 0.0 });
 
         // Act
-        var derivative = huber.CalculateDerivative(predicted, actual);
+        var derivative = huber.ComputeGradient(predicted, actual);
 
         // Assert
         Assert.Equal(2, derivative.Length);
@@ -322,7 +322,7 @@ public class LossFunctionsIntegrationTests
         var actual = new Vector<double>(new[] { 1.0, -1.0 });
 
         // Act
-        var derivative = hinge.CalculateDerivative(predicted, actual);
+        var derivative = hinge.ComputeGradient(predicted, actual);
 
         // Assert
         Assert.Equal(2, derivative.Length);
@@ -590,7 +590,7 @@ public class LossFunctionsIntegrationTests
         // Act & Assert
         foreach (var loss in losses)
         {
-            var derivative = loss.CalculateDerivative(predicted, actual);
+            var derivative = loss.ComputeGradient(predicted, actual);
             Assert.Equal(predicted.Length, derivative.Length);
         }
     }

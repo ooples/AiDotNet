@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -129,7 +130,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 2.0 }); // class index 2
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Gradient should be 0 for classes 0, 1, 3
@@ -151,7 +152,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 0.0, 0.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Gradient for class 0: -1/0.7 = -1.4285... (accumulated twice, then averaged)
@@ -171,7 +172,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 0.0, 1.0, 2.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Gradient for class 0: -1/0.5 / 3 = -0.6666...
@@ -191,7 +192,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 3.0 }); // out of bounds
 
             // Act & Assert
-            var exception = Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
+            var exception = Assert.Throws<ArgumentException>(() => loss.ComputeGradient(predicted, actual));
             Assert.Contains("out of bounds", exception.Message);
         }
 
@@ -220,7 +221,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<float>(new float[] { 2.0f });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             Assert.Equal(0.0f, result[0], 5);
