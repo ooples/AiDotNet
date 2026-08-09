@@ -6,6 +6,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class OrpheusTTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a copy that preserves every inherited customization.</summary>
+    public OrpheusTTSOptions(OrpheusTTSOptions other)
+        : base(other)
+    {
+    }
+
     public OrpheusTTSOptions()
     {
         SampleRate = 24000;

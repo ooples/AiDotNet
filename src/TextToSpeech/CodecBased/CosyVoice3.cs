@@ -190,7 +190,8 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }
@@ -201,11 +202,7 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        return base.PredictCore(input);
     }
 
     /// <inheritdoc />
@@ -216,7 +213,7 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

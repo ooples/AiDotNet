@@ -8,6 +8,12 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 public class SpeechGPTOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a copy of an existing SpeechGPT configuration.</summary>
+    public SpeechGPTOptions(SpeechGPTOptions other)
+        : base(other)
+    {
+    }
+
     public SpeechGPTOptions()
     {
         TextEncoderDim = 256;
