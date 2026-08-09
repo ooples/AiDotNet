@@ -8,6 +8,7 @@ using AiDotNet.Validation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.MultiLabel;
 
 /// <summary>
@@ -74,6 +75,17 @@ namespace AiDotNet.Classification.MultiLabel;
 [ResearchPaper("Classifier Chains for Multi-Label Classification", "https://doi.org/10.1007/s10994-011-5256-5", Year = 2011, Authors = "Jesse Read, Bernhard Pfahringer, Geoff Holmes, Eibe Frank")]
 public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The classifiers along the chain, in chain order. That order is load-bearing twice over: each link sees the previous links' predictions as features, and it is also the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        if (_chainClassifiers is null) return;
+        foreach (var classifier in _chainClassifiers)
+        {
+            RegisterParameterComponent(classifier as IParameterSource<T>);
+        }
+    }
     #region Fields
 
     /// <summary>
@@ -535,36 +547,6 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     #region Abstract Method Implementations
 
     /// <summary>
-    /// Gets all learnable parameters of the model as a single vector.
-    /// </summary>
-    /// <returns>A concatenated vector of all chain classifiers' parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Classifier Chain contains multiple classifiers in a chain.
-    /// This method collects all parameters from all classifiers into a single vector.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        if (_chainClassifiers is null || _chainClassifiers.Length == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        var allParams = new List<T>();
-        foreach (var classifier in _chainClassifiers)
-        {
-            var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
-            for (int i = 0; i < classifierParams.Length; i++)
-            {
-                allParams.Add(classifierParams[i]);
-            }
-        }
-
-        return new Vector<T>(allParams.ToArray());
-    }
-
-    /// <summary>
     /// Creates a new instance of the model with the specified parameters.
     /// </summary>
     /// <param name="parameters">The parameters to use.</param>
@@ -580,37 +562,6 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
         var clone = (ClassifierChainClassifier<T>)Clone();
         clone.SetParameters(parameters);
         return clone;
-    }
-
-    /// <summary>
-    /// Sets the parameters of this model.
-    /// </summary>
-    /// <param name="parameters">The parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This distributes the provided parameters among all chain classifiers.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (_chainClassifiers is null || _chainClassifiers.Length == 0)
-        {
-            return;
-        }
-
-        int paramIndex = 0;
-        foreach (var classifier in _chainClassifiers)
-        {
-            var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
-            var newParams = new Vector<T>(classifierParams.Length);
-
-            for (int i = 0; i < classifierParams.Length && paramIndex < parameters.Length; i++)
-            {
-                newParams[i] = parameters[paramIndex++];
-            }
-
-            ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).SetParameters(newParams);
-        }
     }
 
     /// <summary>
