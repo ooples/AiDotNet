@@ -21,6 +21,44 @@ namespace AiDotNet.Tests.IntegrationTests.Safety;
 /// </remarks>
 public class TemporalSegmentNetworkModeratorTests
 {
+    /// <summary>
+    /// Frames whose pixels genuinely satisfy the classifier's skin-tone predicate, alternating
+    /// between two shades so the temporal detectors also have something to see.
+    /// </summary>
+    /// <remarks>
+    /// SEPARATE FROM <see cref="Frames"/>, WHICH MUST STAY BENIGN. The sampling-cost and
+    /// empty-input tests depend on Frames() producing nothing, so the harmful content lives here
+    /// instead of being folded into the shared helper. Uniform 0-1 noise never trips
+    /// CLIPImageSafetyClassifier -- skin needs r>95, g>40, b>20 of 255 with r>g>b -- so tests
+    /// asserting that findings ARE produced were asserting against an empty collection. Both shades
+    /// are inside the predicate, so the skin fraction stays 1.0 and clears the 0.8 NSFW bar.
+    /// </remarks>
+    private static List<Tensor<double>> HarmfulFrames(int count)
+    {
+        var frames = Frames(count);
+        for (int f = 0; f < frames.Count; f++)
+        {
+            var t = frames[f];
+            bool alternate = f % 2 == 1;
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 8; x++)
+                {
+                    int r = (0 * 8 + y) * 8 + x;
+                    int g = (1 * 8 + y) * 8 + x;
+                    int b = (2 * 8 + y) * 8 + x;
+                    if (b >= t.Length) continue;
+
+                    t[r] = alternate ? 0.45 : 0.85;
+                    t[g] = alternate ? 0.30 : 0.65;
+                    t[b] = alternate ? 0.22 : 0.55;
+                }
+            }
+        }
+
+        return frames;
+    }
+
     private static List<Tensor<double>> Frames(int count, int seed = 3)
     {
         var rng = new Random(seed);
@@ -79,7 +117,7 @@ public class TemporalSegmentNetworkModeratorTests
     {
         // Consensus precedes the decision, so a category yields at most ONE video-level finding —
         // not one per flagged frame, which is what the previous per-frame pipeline emitted.
-        var frames = Frames(120);
+        var frames = HarmfulFrames(120);
         var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 5);
 
         var findings = moderator.EvaluateVideo(frames, 30.0);
@@ -114,7 +152,7 @@ public class TemporalSegmentNetworkModeratorTests
     [Fact]
     public void EveryConsensusFunction_IsAccepted_AndDeterministic()
     {
-        var frames = Frames(60);
+        var frames = HarmfulFrames(60);
         var perMode = new Dictionary<SegmentalConsensus, IReadOnlyList<SafetyFinding>>();
 
         foreach (SegmentalConsensus consensus in (SegmentalConsensus[])Enum.GetValues(typeof(SegmentalConsensus)))
