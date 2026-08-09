@@ -1379,21 +1379,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         const long FlattenBudget = 5_000_000;
         if (count > FlattenBudget) return;
 
-        int length;
-        try
-        {
-            length = network.GetParameters().Length;
-        }
-        catch (NotSupportedException)
-        {
-            // An explicit, documented refusal to expose a flat vector -- the detection backbones
-            // (ResNet, CSPDarknet, EfficientNet, SwinTransformer) and NeckBase all round-trip
-            // through WriteParameters/ReadParameters instead. That is a design decision, not a
-            // contract violation, and a model that says so plainly is not what this test is looking
-            // for: the defect it exists to catch is a count and a vector that BOTH answer and
-            // disagree.
-            return;
-        }
+        // No NotSupportedException exemption here, deliberately. One was added on the belief
+        // that a model refusing to expose a flat vector was a documented design decision. It is
+        // not: PyTorch has no module that declines to enumerate its parameters, and every model
+        // that refused -- ResNet, CSPDarknet, EfficientNet, SwinTransformer -- turned out to be
+        // unfinished plumbing. They now report 23,481,472 / 6,785,152 / 160,765,424 / 8,210,592
+        // and round-trip. Exempting the refusal made this gate excuse the exact defect it exists
+        // to catch.
+        int length = network.GetParameters().Length;
 
         Assert.True(
             count == length,
