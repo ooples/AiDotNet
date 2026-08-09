@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.CausalInference;
 
 /// <summary>
@@ -738,10 +740,30 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
 
     #region IFullModel Implementation
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The propensity coefficients followed by both outcome models, packed exactly as before --
+    /// PackParameters and UnpackParameters ARE the previous GetParameters and SetParameters,
+    /// renamed rather than rewritten, so the layout is byte-for-byte unchanged.
+    /// <para>
+    /// What changes is where the COUNT comes from. It was inherited from CausalModelBase as
+    /// NumFeatures, which the restore derives from a third of the vector length, so the estimator
+    /// reported 1 parameter while holding 6 and a saved vector could not be reloaded. All three
+    /// surfaces now read this one component.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
+
     /// <summary>
     /// Gets the model parameters (propensity + outcome coefficients).
     /// </summary>
-    public override Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         if (_propensityCoefficients is null ||
             _outcomeCoefficients1 is null ||
@@ -770,7 +792,7 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// <summary>
     /// Sets the model parameters.
     /// </summary>
-    public override void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         if (parameters.Length == 0) return;
 
