@@ -91,6 +91,27 @@ public class TabTransformer<T> : RiskModelBase<T>
     {
     }
 
+    /// <summary>
+    /// Builds the default optimizer from the model's own configured settings.
+    /// </summary>
+    /// <remarks>
+    /// AdamW, not Adam, and constructed from <paramref name="options"/> rather than default-built.
+    /// <c>TabTransformerOptions.LearningRate</c> and <c>WeightDecay</c> previously existed as public,
+    /// documented, copy-constructed settings that NOTHING read: the default optimizer was
+    /// <c>new AdamOptimizer(this)</c>, which takes Adam's own 0.01 learning rate and has no weight
+    /// decay at all. A user setting either one saw no change and got no error. AdamW is the type that
+    /// can carry the decay, and it is what the transformer literature uses -- decoupled decay rather
+    /// than Adam's L2-into-the-gradient.
+    ///
+    /// A caller-supplied optimizer still wins; this only fills the default.
+    /// </remarks>
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(TabTransformerOptions<T> options)
+        => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = options.LearningRate,
+            WeightDecay = options.WeightDecay
+        });
+
     public TabTransformer(
         NeuralNetworkArchitecture<T> architecture,
         TabTransformerOptions<T>? options = null,
@@ -106,7 +127,13 @@ public class TabTransformer<T> : RiskModelBase<T>
         _options = options ?? new TabTransformerOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(_options);
+        // Wire it into the base slot, or the field is assigned and never read: Train routes through
+        // FinancialModelBase -> TrainWithTape(.., TrainingOptimizer), which defaults to null and lets
+        // the framework default optimizer win. Without this the LearningRate and WeightDecay now
+        // flowing into CreateDefaultOptimizer would reach an optimizer that never runs -- the same
+        // dead dependency YingLong had, fixed the same way.
+        SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
     }
@@ -141,7 +168,13 @@ public class TabTransformer<T> : RiskModelBase<T>
         _options = options ?? new TabTransformerOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(_options);
+        // Wire it into the base slot, or the field is assigned and never read: Train routes through
+        // FinancialModelBase -> TrainWithTape(.., TrainingOptimizer), which defaults to null and lets
+        // the framework default optimizer win. Without this the LearningRate and WeightDecay now
+        // flowing into CreateDefaultOptimizer would reach an optimizer that never runs -- the same
+        // dead dependency YingLong had, fixed the same way.
+        SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
     }

@@ -168,14 +168,12 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
                (options ?? new StockformerOptions<T>()).PredictionHorizon,
                (options ?? new StockformerOptions<T>()).NumFeatures)
     {
+        // Already validated: BuildArchitecture, called in the base initializer above, runs
+        // options.Validate() before any layer is constructed. The two hand-written checks that used to
+        // live here (HiddenDimension, NumDirectionClasses) are part of that now, alongside the rest --
+        // every dimension, the head/width divisibility, and the non-finite doubles that an ordinary
+        // range comparison lets through.
         _options = options ?? new StockformerOptions<T>();
-
-        if (_options.HiddenDimension <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), _options.HiddenDimension,
-                "HiddenDimension must be positive.");
-        if (_options.NumDirectionClasses <= 1)
-            throw new ArgumentOutOfRangeException(nameof(options), _options.NumDirectionClasses,
-                "NumDirectionClasses must be at least 2 for the classification task to be meaningful.");
 
         _bands = new StockformerBands<T>(_options.WaveletOrder, _options.WaveletLevels);
 
@@ -536,14 +534,23 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
         // each layer initialised from an unseeded RNG and two models built from identical options
         // disagreed from the first prediction, so StockformerOptions' documented "reference seed of 1"
         // applied to nothing. Mirrors FactorVAE, the sibling in this folder.
-        => new(inputType: InputType.TwoDimensional,
-               taskType: NeuralNetworkTaskType.Regression,
-               inputHeight: Math.Max(2, options.SequenceLength),
-               inputWidth: Math.Max(1, options.NumFeatures),
-               outputSize: Math.Max(1, options.NumAssets))
+    {
+        // THE FIRST THING THAT TOUCHES THE OPTIONS. This runs from the constructor's base initializer,
+        // so it precedes both the architecture and every layer built from it -- which is the only
+        // placement that turns a bad option into a message naming that option, rather than into a
+        // shape error thrown from inside a layer, or a NaN that only appears after training starts.
+        options.Validate();
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: options.SequenceLength,
+            inputWidth: options.NumFeatures,
+            outputSize: options.NumAssets)
         {
             RandomSeed = options.Seed ?? 1,
         };
+    }
 
 
     /// <summary>Projects the D input factors to the model width, through the lift layer.</summary>
