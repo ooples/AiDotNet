@@ -1270,6 +1270,84 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         foreach (var sub in exposed) CheckReachable(sub, offenders);
     }
+    /// <summary>
+    /// After a forward pass has materialized the weights, the count and the vector must describe
+    /// the same parameter set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other checks read ParameterCount WITHOUT materializing, deliberately, because
+    /// materializing a foundation-scale model just to count it is multi-GB. The cost of that is a
+    /// blind spot: before any forward a lazily-shaped model answers 0 from BOTH surfaces, they
+    /// "agree", and nothing is verified. ACGAN, Pix2Pix and StyleGAN each summed their
+    /// sub-networks into ParameterCount but never overrode GetParameters, so the vector walked
+    /// their own EMPTY Layers -- 49,605 / 49,345 / 68,265 parameters against a vector of length 0,
+    /// not one of them reachable, and this suite stayed green.
+    /// </para>
+    /// <para>
+    /// This uses the same bounded forward every other test in this class already runs rather than
+    /// forcing materialization artificially, and skips models too large to flatten so CI is never
+    /// asked to allocate a multi-gigabyte vector for a contract check. The models this defect
+    /// hides in are small in these fixtures; the threshold is generous by two orders of magnitude.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public virtual async Task Parameters_CountShouldMatchVector_AfterForward()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        SetEvalMode(network);
+
+        // Prefer a real forward: it is what brings lazily-shaped weights into being, and it is the
+        // same bounded call the rest of this class already makes. But a model whose forward needs a
+        // SPECIALISED input -- token indices for an embedding table, a particular rank -- throws on
+        // the generic random tensor, and that is a fixture concern, not a parameter one. Falling
+        // back to explicit materialization keeps the parameter contract under test for those models
+        // instead of letting an unrelated forward failure decide whether it is checked at all.
+        try
+        {
+            network.Predict(CreateRandomTensor(InputShape, rng));
+        }
+        catch
+        {
+            if (network is NeuralNetworkBase<T> lazyNetwork) lazyNetwork.MaterializeParameters();
+        }
+
+        long count = network.ParameterCount;
+
+        // Flattening costs O(parameters) in memory; past this size the check costs more than it is
+        // worth, and the model is far outside the range where this defect has been found.
+        const long FlattenBudget = 5_000_000;
+        if (count > FlattenBudget) return;
+
+        int length;
+        try
+        {
+            length = network.GetParameters().Length;
+        }
+        catch (NotSupportedException)
+        {
+            // An explicit, documented refusal to expose a flat vector -- the detection backbones
+            // (ResNet, CSPDarknet, EfficientNet, SwinTransformer) and NeckBase all round-trip
+            // through WriteParameters/ReadParameters instead. That is a design decision, not a
+            // contract violation, and a model that says so plainly is not what this test is looking
+            // for: the defect it exists to catch is a count and a vector that BOTH answer and
+            // disagree.
+            return;
+        }
+
+        Assert.True(
+            count == length,
+            $"After a forward pass, ParameterCount ({count:N0}) and GetParameters().Length " +
+            $"({length:N0}) describe different parameter sets. Callers pair these by length, so the " +
+            $"difference is weights that cannot be saved, restored or optimized through the flat " +
+            $"surface. A count that sums sub-components the vector never walks is the usual cause: " +
+            $"declare them through GetExtraTrainableLayers / GetExtraTrainableTensors so both " +
+            $"surfaces fold one enumeration.");
+    }
+
 
     [Fact(Timeout = 120000)]
     public virtual async Task Parameters_ShouldBeNonEmpty()
