@@ -112,11 +112,14 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // True sparse implementation: gather log-probabilities at target indices
-        // instead of one-hot encoding (avoids O(batch * numClasses) allocation).
-        var softmaxed = Engine.Softmax(predicted);
-        var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));
-        var logP = Engine.TensorLog(safeSoftmax);
+        // `predicted` holds class PROBABILITIES, not logits. This applied Engine.Softmax first,
+        // so the tape forward and CalculateLoss were computing different losses: CalculateLoss
+        // takes -log(p[class]) of the values it is given, while this re-normalized them and took
+        // -log(softmax(p)[class]). The library keeps the logit convention in separate
+        // *WithLogitsLoss classes precisely so these do not have to be guessed at, and
+        // CrossEntropyWithLogitsLoss is the one to use for unnormalized scores.
+        var safeP = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-12));
+        var logP = Engine.TensorLog(safeP);
 
         // If target has the same shape as predicted, treat as one-hot/dense targets
         if (target.Rank == predicted.Rank && target._shape.SequenceEqual(predicted._shape))
@@ -128,10 +131,18 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             return Engine.TensorNegate(mean);
         }
 
-        // Sparse path: target contains integer class indices
+        // Sparse path: target contains integer class indices.
+        //
+        // The selection is expressed as a constant one-hot MASK multiplied into logP, rather than
+        // by indexing logP element-by-element into a fresh tensor. Indexing severs the tape: the
+        // gathered values become a leaf constant with no path back to `predicted`, so the loss had
+        // no gradient at all and anything training on the sparse path silently learned nothing.
+        // A mask keeps logP itself in the graph, and the selection carries no gradient of its own
+        // because the indices are data, not parameters.
         int batchSize = target.Length;
         int numClasses = predicted.Shape[^1];
-        var gatheredLogP = new Tensor<T>(target._shape);
+
+        var selection = new Tensor<T>(predicted._shape);
         for (int i = 0; i < batchSize; i++)
         {
             double rawIdx = NumOps.ToDouble(target[i]);
@@ -141,17 +152,22 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
                     $"Target at position {i} is {rawIdx}, expected an integer class index.",
                     nameof(target));
             if (classIdx < 0 || classIdx >= numClasses)
-                throw new ArgumentOutOfRangeException(nameof(target),
-                    $"Target index {classIdx} at position {i} is out of range [0, {numClasses}).");
-            gatheredLogP[i] = predicted.Rank == 1
-                ? logP[classIdx]
-                : logP[i * numClasses + classIdx];
+                throw new ArgumentException(
+                    $"Class index {classIdx} at position {i} is out of bounds. " +
+                    $"Expected value between 0 and {numClasses - 1}.",
+                    nameof(target));
+
+            // Accumulate rather than assign: a rank-1 prediction scored against several target
+            // indices can name the same class twice, and that sample must count twice.
+            int slot = predicted.Rank == 1 ? classIdx : (i * numClasses) + classIdx;
+            selection[slot] = NumOps.Add(selection[slot], NumOps.One);
         }
 
-        // loss = -mean(gathered log-probs)
-        var sum = Engine.ReduceSum(gatheredLogP, null, keepDims: false);
-        var batchT = new Tensor<T>(new[] { 1 });
-        batchT[0] = NumOps.FromDouble(batchSize);
-        return Engine.TensorNegate(Engine.TensorDivide(sum, batchT));
+        // loss = -(1 / batch) * sum_over_all(selection * logP)
+        var selected = Engine.TensorMultiply(logP, selection);
+        var selectedAxes = Enumerable.Range(0, selected.Shape.Length).ToArray();
+        var sum = Engine.ReduceSum(selected, selectedAxes, keepDims: false);
+
+        return Engine.TensorNegate(Engine.TensorDivideScalar(sum, NumOps.FromDouble(batchSize)));
     }
 }

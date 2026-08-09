@@ -70,7 +70,13 @@ public class MeanBiasErrorLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        var diff = Engine.TensorSubtract(predicted, target);
+        // MBE = mean(actual - predicted), matching CalculateLoss above. This subtracted in the
+        // opposite order, so the tape forward and the vector forward were the same loss with
+        // opposite SIGNS: the value the model reported and the value it trained against
+        // disagreed, and gradient descent on this loss ascended it. The mismatch was invisible
+        // while gradients came from a hand-written derivative that happened to agree with
+        // CalculateLoss rather than with the tape.
+        var diff = Engine.TensorSubtract(target, predicted);
         var allAxes = Enumerable.Range(0, diff.Shape.Length).ToArray();
         return Engine.ReduceMean(diff, allAxes, keepDims: false);
     }
