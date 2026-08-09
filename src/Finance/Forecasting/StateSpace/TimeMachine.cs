@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -100,11 +100,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private int _forecastHorizon;
     private int _modelDimension;
     private int _stateDimension;
-    private int _numScales;
-    private int _numLayers;
     private int _expandFactor;
     private int _convKernelSize;
-    private bool _useMultiScaleAttention;
     private bool _useReversibleNormalization;
 
     /// <summary>
@@ -116,7 +113,6 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// RevIN form (Kim et al. 2022), which is better conditioned on a constant series.
     /// </remarks>
     private const double TimeMachineRevInEpsilon = 1e-8;
-    private string _decompositionMethod;
     private int _numFeatures;
 
     // RevIN reverse-step statistics (Kim et al. 2022). ApplyInstanceNormalization
@@ -180,25 +176,14 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// </remarks>
     public override bool SupportsTraining => _useNativeMode;
 
-    /// <summary>
-    /// Gets the retained legacy branch-count setting.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The paper graph has exactly four Mambas arranged as
-    /// two outer and two inner branches. This value remains for configuration compatibility.
-    /// </para>
-    /// </remarks>
-    public int NumScales => _numScales;
-
-    /// <summary>
-    /// Gets the retained legacy multi-scale-attention setting.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The published graph uses addition and concatenation,
-    /// not attention; this value does not alter the paper-faithful default architecture.
-    /// </para>
-    /// </remarks>
-    public bool UseMultiScaleAttention => _useMultiScaleAttention;
+    // REMOVED: NumScales, NumLayers, UseMultiScaleAttention and the decomposition-method label.
+    //
+    // All four were public, settable, documented and read by nothing. TimeMachine's graph is fixed by
+    // the paper -- exactly four Mambas in a two-outer/two-inner arrangement, combined by addition and
+    // concatenation rather than attention -- so a caller who set any of them configured a model and
+    // got the same one back, with no error and no way to notice. Keeping a mutable setting that
+    // silently does nothing is worse than a compile error telling the caller it is gone, which is what
+    // they now get. See the migration note on TimeMachineOptions<T>.
 
     /// <summary>
     /// Gets whether reversible instance normalization is used.
@@ -253,13 +238,9 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         _forecastHorizon = _options.ForecastHorizon;
         _modelDimension = _options.ModelDimension;
         _stateDimension = _options.StateDimension;
-        _numScales = _options.NumScales;
-        _numLayers = _options.NumLayers;
         _expandFactor = _options.ExpandFactor;
         _convKernelSize = _options.ConvKernelSize;
-        _useMultiScaleAttention = _options.UseMultiScaleAttention;
         _useReversibleNormalization = _options.UseReversibleNormalization;
-        _decompositionMethod = _options.TemporalDecompositionMethod;
         _numFeatures = 1;
     }
 
@@ -295,13 +276,9 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         _forecastHorizon = _options.ForecastHorizon;
         _modelDimension = _options.ModelDimension;
         _stateDimension = _options.StateDimension;
-        _numScales = _options.NumScales;
-        _numLayers = _options.NumLayers;
         _expandFactor = _options.ExpandFactor;
         _convKernelSize = _options.ConvKernelSize;
-        _useMultiScaleAttention = _options.UseMultiScaleAttention;
         _useReversibleNormalization = _options.UseReversibleNormalization;
-        _decompositionMethod = _options.TemporalDecompositionMethod;
         _numFeatures = numFeatures;
 
         InitializeLayers();
@@ -340,11 +317,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
                 _forecastHorizon,
                 _modelDimension,
                 _stateDimension,
-                _numScales,
-                _numLayers,
                 _expandFactor,
                 _convKernelSize,
-                _useMultiScaleAttention,
                 _numFeatures,
                 _options.DropoutRate));
 
@@ -513,13 +487,9 @@ public class TimeMachine<T> : ForecastingModelBase<T>
                 { "ForecastHorizon", _forecastHorizon },
                 { "ModelDimension", _modelDimension },
                 { "StateDimension", _stateDimension },
-                { "NumScales", _numScales },
-                { "NumLayers", _numLayers },
                 { "ExpandFactor", _expandFactor },
                 { "ConvKernelSize", _convKernelSize },
-                { "UseMultiScaleAttention", _useMultiScaleAttention },
                 { "UseReversibleNormalization", _useReversibleNormalization },
-                { "DecompositionMethod", _decompositionMethod },
                 { "UseNativeMode", _useNativeMode },
                 { "SupportsTraining", SupportsTraining }
             }
@@ -555,13 +525,9 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         writer.Write(_forecastHorizon);
         writer.Write(_modelDimension);
         writer.Write(_stateDimension);
-        writer.Write(_numScales);
-        writer.Write(_numLayers);
         writer.Write(_expandFactor);
         writer.Write(_convKernelSize);
-        writer.Write(_useMultiScaleAttention);
         writer.Write(_useReversibleNormalization);
-        writer.Write(_decompositionMethod);
     }
 
     /// <summary>
@@ -579,13 +545,9 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         _forecastHorizon = reader.ReadInt32();
         _modelDimension = reader.ReadInt32();
         _stateDimension = reader.ReadInt32();
-        _numScales = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
         _expandFactor = reader.ReadInt32();
         _convKernelSize = reader.ReadInt32();
-        _useMultiScaleAttention = reader.ReadBoolean();
         _useReversibleNormalization = reader.ReadBoolean();
-        _decompositionMethod = reader.ReadString();
     }
 
     #endregion
@@ -825,8 +787,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
             ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon),
             ["ModelDimension"] = NumOps.FromDouble(_modelDimension),
             ["StateDimension"] = NumOps.FromDouble(_stateDimension),
-            ["NumScales"] = NumOps.FromDouble(_numScales),
-            ["NumLayers"] = NumOps.FromDouble(_numLayers)
+            ["ExpandFactor"] = NumOps.FromDouble(_expandFactor)
         };
     }
 

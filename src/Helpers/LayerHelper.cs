@@ -15595,11 +15595,8 @@ public static class LayerHelper<T>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
     /// <param name="stateDim">The SSM state dimension (default: 256).</param>
-    /// <param name="numScales">Legacy branch-count setting; the paper graph always contains four Mambas.</param>
-    /// <param name="numLayers">Legacy per-scale depth setting retained for API compatibility.</param>
     /// <param name="expandFactor">Expansion factor for the Mamba inner dimension (default: 1).</param>
     /// <param name="convKernelSize">Mamba convolution kernel size (default: 2).</param>
-    /// <param name="useMultiScaleAttention">Legacy setting retained for API compatibility; the paper uses addition and concatenation.</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
     /// <param name="dropoutRate">Dropout applied after E1 and E2 (default: 0.05).</param>
     /// <returns>A collection of layers forming the TimeMachine architecture.</returns>
@@ -15623,11 +15620,8 @@ public static class LayerHelper<T>
         int forecastHorizon = 96,
         int modelDim = 256,
         int stateDim = 256,
-        int numScales = 4,
-        int numLayers = 2,
         int expandFactor = 1,
         int convKernelSize = 2,
-        bool useMultiScaleAttention = true,
         int numFeatures = 1,
         double dropoutRate = 0.05)
     {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace AiDotNet.Models.Options;
 
@@ -26,6 +26,19 @@ namespace AiDotNet.Models.Options;
 /// <para>
 /// <b>Reference:</b> Ahamed et al., "TimeMachine: A Time Series is Worth 4 Mambas for Long-term Forecasting", 2024.
 /// https://arxiv.org/abs/2403.09898
+/// </para>
+/// <para>
+/// <b>MIGRATION — four properties were removed:</b> <c>NumScales</c>, <c>NumLayers</c>,
+/// <c>UseMultiScaleAttention</c> and <c>TemporalDecompositionMethod</c>. Each was public, settable
+/// and read by nothing. The published graph is fixed — exactly four Mambas in the two-outer /
+/// two-inner arrangement, combined by addition and concatenation rather than attention — so setting
+/// any of them produced the identical model with no error and no signal. Delete the assignments;
+/// there is no replacement, because there was never a behavior to replace. A build error naming the
+/// property is the point: it tells you the setting was doing nothing, which the old code did not.
+/// The dimensions that DO change the model — <see cref="ModelDimension"/>,
+/// <see cref="StateDimension"/>, <see cref="ExpandFactor"/>, <see cref="ConvKernelSize"/>,
+/// <see cref="ContextLength"/>, <see cref="ForecastHorizon"/> and <see cref="DropoutRate"/> —
+/// are unchanged.
 /// </para>
 /// </remarks>
 public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
@@ -60,14 +73,10 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
         ForecastHorizon = other.ForecastHorizon;
         ModelDimension = other.ModelDimension;
         StateDimension = other.StateDimension;
-        NumScales = other.NumScales;
-        NumLayers = other.NumLayers;
         ExpandFactor = other.ExpandFactor;
         ConvKernelSize = other.ConvKernelSize;
         DropoutRate = other.DropoutRate;
-        UseMultiScaleAttention = other.UseMultiScaleAttention;
         UseReversibleNormalization = other.UseReversibleNormalization;
-        TemporalDecompositionMethod = other.TemporalDecompositionMethod;
     }
 
     /// <summary>
@@ -114,29 +123,6 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
     public int StateDimension { get; set; } = 256;
 
     /// <summary>
-    /// Gets or sets the legacy branch-count setting.
-    /// </summary>
-    /// <value>Four, matching the fixed four-Mamba architecture.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The paper defines exactly four Mamba blocks: two outer
-    /// branches and two inner branches. The default native architecture therefore always uses four.
-    /// This property remains for compatibility with previously serialized configurations.
-    /// </para>
-    /// </remarks>
-    public int NumScales { get; set; } = 4;
-
-    /// <summary>
-    /// Gets or sets the legacy per-scale layer setting.
-    /// </summary>
-    /// <value>The number of layers per scale, defaulting to 2.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The paper graph has a fixed depth rather than repeated
-    /// per-scale stacks. This property remains for compatibility with older configurations.
-    /// </para>
-    /// </remarks>
-    public int NumLayers { get; set; } = 2;
-
-    /// <summary>
     /// Gets or sets the expansion factor for SSM inner dimension.
     /// </summary>
     /// <value>The expansion factor, defaulting to 1 as in the TimeMachine experiments.</value>
@@ -169,18 +155,6 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
     public double DropoutRate { get; set; } = 0.05;
 
     /// <summary>
-    /// Gets or sets the legacy multi-scale-attention setting.
-    /// </summary>
-    /// <value>Retained compatibility value; the paper-faithful default graph does not use attention.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The published TimeMachine architecture combines its
-    /// branches with addition and concatenation, not attention. This property remains for
-    /// compatibility and does not alter the paper-faithful default graph.
-    /// </para>
-    /// </remarks>
-    public bool UseMultiScaleAttention { get; set; } = true;
-
-    /// <summary>
     /// Gets or sets whether to use reversible instance normalization.
     /// </summary>
     /// <value>True for reversible normalization; false for standard. Default: true.</value>
@@ -192,15 +166,4 @@ public class TimeMachineOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public bool UseReversibleNormalization { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the legacy temporal-decomposition label.
-    /// </summary>
-    /// <value>The retained compatibility label, defaulting to "moving_avg".</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Older AiDotNet TimeMachine configurations exposed a
-    /// decomposition choice that is not part of the published architecture. The setting
-    /// remains so those configurations can still be loaded, but the default graph ignores it.
-    /// </para>
-    /// </remarks>
-    public string TemporalDecompositionMethod { get; set; } = "moving_avg";
 }
