@@ -374,7 +374,9 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
     private double ProbabilityAxisScore(Tensor<T> target, int axis)
     {
-        int[] shape = target.Shape.ToArray();
+        // _shape, not Shape.ToArray(): every read below is read-only, so the defensive copy was
+        // pure allocation on a per-call scoring path (ADNPERF001).
+        int[] shape = target._shape;
         int axisSize = shape[axis];
         int inner = 1;
         for (int i = axis + 1; i < shape.Length; i++)
