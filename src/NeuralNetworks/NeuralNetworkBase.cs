@@ -3729,9 +3729,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 nameof(target));
         }
 
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                "TrainWithGradientAccumulation requires a LossFunctionBase<T> for ComputeTapeLoss.");
+        var loss = LossFunction;
 
         // Collect any network-level trainable tensors so models with
         // raw trainable parameters on the network (not on a layer) keep
@@ -6901,9 +6899,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
         bool useStreamingDefaults)
     {
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
+        var loss = LossFunction;
 
         // Global grad-norm clipping (MaxGradNorm > 0, the default) needs the TOTAL
         // gradient norm before any parameter is updated, which a single
@@ -7405,8 +7401,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 extraTrainableTensors.Add(t);
             }
 
-            var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-                ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
+            var loss = LossFunction;
 
             // ---------------- Mixed-precision (#1354) — pre-forward setup ----------------
             // When _mixedPrecisionContext != null we are running mixed-precision
@@ -8416,9 +8411,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (trainableLayers.Length == 0)
             return EmitFusedMissAndFallback("no trainable layers");
 
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
-        if (loss is null)
-            return EmitFusedMissAndFallback("loss function not derived from LossFunctionBase<T>");
+        var loss = LossFunction;
 
         // Mirror the eager path's bidirectional shape alignment exactly:
         // (a) forward has extra leading dim → reshape FORWARD to target shape
@@ -9155,7 +9148,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Correctness-necessary gates (apply even when forced): a batch big enough to chunk, a tape loss,
         // and no cross-batch normalization (else accumulation ≠ full-batch step).
         if (input.Rank < 1 || input.Shape[0] <= MicroBatchChunkSize) return false;
-        if (LossFunction is not LossFunctions.LossFunctionBase<T>) return false;
         if (HasCrossBatchNormalization()) return false;
 
         // Must have something tape-trainable to accumulate over. Check trainable LAYERS (which exist even
@@ -11544,15 +11536,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 "The loss function cannot be changed after training has begun; construct a new model instead.");
         }
 
-        if (lossFunction is not LossFunctions.LossFunctionBase<T>)
-        {
-            throw new ArgumentException(
-                $"Loss function '{lossFunction.GetType().Name}' must derive from LossFunctionBase<T> " +
-                "to be used for tape-based training. Implementing ILossFunction<T> alone is not " +
-                "sufficient: the tape path needs ComputeTapeLoss, which the interface does not declare.",
-                nameof(lossFunction));
-        }
-
         // Architecture-specific gate: models whose objective is intrinsic (a specific likelihood or a
         // fixed-shape output head) override this to reject an incompatible loss up front rather than failing
         // deep inside training.
@@ -11648,7 +11631,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // producing zero gradients from a disconnected scalar tensor.
             var predVec = prediction.ToVector();
             var targetVec = target.ToVector();
-            var derivVec = resolved.CalculateDerivative(predVec, targetVec);
+            var derivVec = resolved.ComputeGradient(predVec, targetVec);
             lossTensor = new Tensor<T>(prediction._shape, derivVec);
         }
 

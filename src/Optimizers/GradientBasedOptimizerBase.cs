@@ -1106,11 +1106,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                         tensorY = tensorY.Reshape(tensorPredictions.Shape.ToArray());
                     }
                 }
-                gradient = LossFunction.CalculateDerivative(tensorPredictions.ToVector(), tensorY.ToVector());
+                gradient = LossFunction.ComputeGradient(tensorPredictions.ToVector(), tensorY.ToVector());
             }
             else if (predictions is Vector<T> vectorPredictions && y is Vector<T> vectorY)
             {
-                gradient = LossFunction.CalculateDerivative(vectorPredictions, vectorY);
+                gradient = LossFunction.ComputeGradient(vectorPredictions, vectorY);
             }
             else
             {

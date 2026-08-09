@@ -77,6 +77,43 @@ public static class LossFunctionExtensions
     }
 
     /// <summary>
+    /// Computes the gradient of the loss with respect to <paramref name="predicted"/> for callers
+    /// working in vector shape.
+    /// </summary>
+    /// <param name="lossFunction">The loss function to differentiate.</param>
+    /// <param name="predicted">The predicted values; the gradient is taken with respect to these.</param>
+    /// <param name="actual">The actual (target) values, treated as a constant.</param>
+    /// <returns>A vector holding d(loss)/d(predicted), the same length as <paramref name="predicted"/>.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is null.</exception>
+    /// <remarks>
+    /// A shape adapter over <see cref="ComputeGradient{T}(ILossFunction{T}, Tensor{T}, Tensor{T})"/>,
+    /// not a second implementation — the gradient still comes from differentiating
+    /// <see cref="ILossFunction{T}.ComputeTapeLoss"/>. This exists for the hand-rolled backward chains
+    /// that consume the loss gradient as a vector and propagate it through layers themselves.
+    /// </remarks>
+    public static Vector<T> ComputeGradient<T>(
+        this ILossFunction<T> lossFunction,
+        Vector<T> predicted,
+        Vector<T> actual)
+    {
+        if (predicted == null)
+        {
+            throw new ArgumentNullException(nameof(predicted));
+        }
+        if (actual == null)
+        {
+            throw new ArgumentNullException(nameof(actual));
+        }
+
+        var gradient = ComputeGradient(
+            lossFunction,
+            Tensor<T>.FromVector(predicted),
+            Tensor<T>.FromVector(actual));
+
+        return gradient.ToVector();
+    }
+
+    /// <summary>
     /// Computes the loss value and its gradient with respect to <paramref name="predicted"/> from a
     /// <b>single</b> tape recording.
     /// </summary>

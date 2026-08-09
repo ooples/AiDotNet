@@ -281,9 +281,7 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         // the whole pipeline back into _inputProjection, the residual
         // stack, and _outputProjection.
 
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                "LossFunction must derive from LossFunctionBase<T> for CSDI tape-based training.");
+        var loss = LossFunction;
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
