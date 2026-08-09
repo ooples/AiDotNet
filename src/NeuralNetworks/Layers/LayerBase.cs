@@ -2,6 +2,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Graph;
 using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -2189,9 +2190,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Virtual rather than abstract purely so the migration off <see cref="Forward"/> can proceed one
     /// layer at a time without a broken build in between. The default throws, because a layer that
     /// implements neither has no computation at all - that is a bug, not a default worth inventing.
+    /// <see cref="NotSupportedException"/> rather than <see cref="NotImplementedException"/>: the type
+    /// does not support this call at all, and never will without an override; NotImplementedException
+    /// promises a later implementation that is not coming.
     /// </remarks>
     protected virtual Tensor<T> ForwardTraced(Tensor<T> input)
-        => throw new NotImplementedException(
+        => throw new NotSupportedException(
             $"{GetType().Name} implements neither Forward nor ForwardTraced. Layers must override "
             + "ForwardTraced with their computation.");
 
