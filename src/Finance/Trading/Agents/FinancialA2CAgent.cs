@@ -53,6 +53,14 @@ namespace AiDotNet.Finance.Trading.Agents;
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class FinancialA2CAgent<T> : TradingAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Actor then critic, the order all three hand-written surfaces used. Advantage actor-critic trains both, so both belong in the surface.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_actor);
+        RegisterParameterComponent(_critic);
+    }
     #region Fields
 
     private readonly FinancialA2CAgentOptions<T> _options;
@@ -71,9 +79,6 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _actor.ParameterCount + _critic.ParameterCount;
 
     #endregion
 
@@ -324,44 +329,6 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
         _actor.Deserialize(reader.ReadBytes(actorLen));
         int criticLen = reader.ReadInt32();
         _critic.Deserialize(reader.ReadBytes(criticLen));
-    }
-
-    /// <summary>
-    /// Executes GetParameters for the FinancialA2CAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, GetParameters performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var actorParams = _actor.GetParameters();
-        var criticParams = _critic.GetParameters();
-        var combined = new Vector<T>(actorParams.Length + criticParams.Length);
-        
-        for (int i = 0; i < actorParams.Length; i++)
-            combined[i] = actorParams[i];
-            
-        for (int i = 0; i < criticParams.Length; i++)
-            combined[actorParams.Length + i] = criticParams[i];
-            
-        return combined;
-    }
-
-    /// <summary>
-    /// Executes SetParameters for the FinancialA2CAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, SetParameters performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int actorCount = checked((int)_actor.ParameterCount);
-        _actor.SetParameters(parameters.Slice(0, actorCount));
-        _critic.SetParameters(parameters.Slice(actorCount, (int)_critic.ParameterCount));
     }
 
     #endregion
