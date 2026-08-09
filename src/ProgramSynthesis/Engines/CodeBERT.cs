@@ -90,24 +90,38 @@ public class CodeBERT<T> : CodeModelBase<T>
         ITokenizer? tokenizer = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), tokenizer)
     {
-        // AdamW (Loshchilov & Hutter 2019) at lr=1e-5 with weight decay 0.01 (the low end of
-        // the BERT fine-tuning range, Devlin 2018 App. A.3) —
-        // the standard BERT / RoBERTa optimizer (Devlin 2018; Liu 2019). With the
-        // final LayerNorm bounding the residual stream the gross blow-up is gone,
-        // but plain Adam still let the weights (and the loss) slowly drift up on
-        // longer runs. Decoupled weight decay regularizes the weights so training
-        // stays stable, and AMSGrad keeps the effective step shrinking near
-        // convergence.
+        // Feng et al. use task-specific fine-tuning rates: 1e-5 for code search
+        // and 5e-5 for sequence generation (code summarization, Appendix B.2-B.4).
+        // Completion is a generative task, so applying the code-search rate to it
+        // made the optimizer needlessly under-step. Keep the published 1e-5 rate
+        // for discriminative/retrieval tasks and the published 5e-5 rate for tasks
+        // whose output is generated token-by-token.
+        double learningRate = UsesGenerativeFineTuning(CodeArchitecture.CodeTaskType)
+            ? 5e-5
+            : 1e-5;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 1e-5,
+                InitialLearningRate = learningRate,
                 WeightDecay = 0.01,
                 UseAMSGrad = true
             });
         InitializeLayersCore();
     }
+
+    private static bool UsesGenerativeFineTuning(CodeTask task) => task switch
+    {
+        CodeTask.Completion or
+        CodeTask.Generation or
+        CodeTask.Translation or
+        CodeTask.Summarization or
+        CodeTask.BugFixing or
+        CodeTask.Refactoring or
+        CodeTask.TestGeneration or
+        CodeTask.Documentation => true,
+        _ => false
+    };
 
     /// <summary>
     /// Initializes the layers of the CodeBERT model.

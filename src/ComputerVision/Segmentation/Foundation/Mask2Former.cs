@@ -297,7 +297,7 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(processedInput, processedTarget);
+            TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally
         {

@@ -181,6 +181,22 @@ internal static class ModelTestHelpers
     }
 
     /// <summary>
+    /// Precision-agnostic <see cref="AllFinite(Vector{double})"/> for fixtures generated at
+    /// <c>&lt;float&gt;</c> (or any other numeric type). Values are widened to double before the
+    /// NaN/Infinity check, so a float Infinity is still reported as non-finite.
+    /// </summary>
+    public static bool AllFinite<T>(Vector<T> v)
+    {
+        for (int i = 0; i < v.Length; i++)
+        {
+            double d = Convert.ToDouble(v[i]);
+            if (double.IsNaN(d) || double.IsInfinity(d))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Creates a deterministic, cryptographically secure random instance.
     /// </summary>
     public static Random CreateSeededRandom(int seed = 42)

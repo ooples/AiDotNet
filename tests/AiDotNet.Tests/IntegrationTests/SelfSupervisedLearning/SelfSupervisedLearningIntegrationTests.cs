@@ -41,7 +41,7 @@ public class SelfSupervisedLearningIntegrationTests
         var z2 = new Tensor<double>(z2Data, [batchSize, dim]);
 
         // Act
-        var lossValue = loss.ComputeLoss(z1, z2);
+        var lossValue = loss.ComputeLoss(z1, z2)[0];
 
         // Assert - Loss should be low for identical pairs (after normalization, cos_sim = 1)
         Assert.True(lossValue >= 0, "Loss should be non-negative");
@@ -58,8 +58,8 @@ public class SelfSupervisedLearningIntegrationTests
         var z2 = CreateRandomTensor(4, 8, seed: 43);
 
         // Act
-        var lossLowTemp = lowTempLoss.ComputeLoss(z1, z2);
-        var lossHighTemp = highTempLoss.ComputeLoss(z1, z2);
+        var lossLowTemp = lowTempLoss.ComputeLoss(z1, z2)[0];
+        var lossHighTemp = highTempLoss.ComputeLoss(z1, z2)[0];
 
         // Assert - Both should compute valid losses
         Assert.True(lossLowTemp > 0, "Low temperature loss should be positive");
@@ -217,7 +217,7 @@ public class SelfSupervisedLearningIntegrationTests
         var target = CopyTensor(prediction);
 
         // Act
-        var lossValue = loss.ComputeLoss(prediction, target);
+        var lossValue = loss.ComputeLoss(prediction, target)[0];
 
         // Assert - For identical normalized vectors, cos_sim = 1, so loss = 2 - 2*1 = 0
         Assert.True(Math.Abs(lossValue) < 0.01, $"Loss should be near zero for identical vectors, got {lossValue}");
@@ -237,7 +237,7 @@ public class SelfSupervisedLearningIntegrationTests
         var target = new Tensor<double>(targetData, [1, 8]);
 
         // Act
-        var lossValue = loss.ComputeLoss(prediction, target);
+        var lossValue = loss.ComputeLoss(prediction, target)[0];
 
         // Assert - For orthogonal vectors, cos_sim = 0, so loss = 2 - 2*0 = 2
         Assert.True(Math.Abs(lossValue - 2.0) < 0.01, $"Loss should be 2.0 for orthogonal vectors, got {lossValue}");
@@ -254,11 +254,11 @@ public class SelfSupervisedLearningIntegrationTests
         var proj1 = CreateRandomTensor(4, 8, seed: 45);
 
         // Act
-        var symmetricLoss = loss.ComputeSymmetricLoss(pred1, proj2, pred2, proj1);
+        var symmetricLoss = loss.ComputeSymmetricLoss(pred1, proj2, pred2, proj1)[0];
 
         // Also compute individual losses
-        var loss1 = loss.ComputeLoss(pred1, proj2);
-        var loss2 = loss.ComputeLoss(pred2, proj1);
+        var loss1 = loss.ComputeLoss(pred1, proj2)[0];
+        var loss2 = loss.ComputeLoss(pred2, proj1)[0];
         var expectedSymmetric = 0.5 * (loss1 + loss2);
 
         // Assert
