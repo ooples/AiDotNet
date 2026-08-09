@@ -93,6 +93,15 @@ public class Bark<T> : TtsModelBase<T>, ICodecTts<T>
     public int MaxTextLength => _options.MaxTextLength;
     public int NumCodebooks => _options.NumCodebooks;
     public int CodebookSize => _options.CodebookSize;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// TRACED, not read off an observed shape: InitializeLayers passes
+    /// <c>NumCodebooks * CodebookSize</c> as the codec vocabulary to CreateDefaultCodecLMLayers, and
+    /// that is the width the last layer emits. Recording the 8192 the sweep measured would have been
+    /// right for the default options and wrong for any other codebook configuration.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. Bark uses hierarchical GPT transformers: semantic tokens -> coarse acoustic -> fine acoustic -> EnCodec decoder.</summary>
