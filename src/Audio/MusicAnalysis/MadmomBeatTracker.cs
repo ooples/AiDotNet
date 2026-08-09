@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -90,10 +90,28 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
     {
         _options = options ?? new MadmomBeatTrackerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Honor the model's configured LearningRate and clip gradients. The bare AdamWOptimizer(this) dropped
+        // both: it ran at Adam's own 1e-3 default, which blew the beat-activation regressor into a high-loss
+        // region on the very first step (LossStrictlyDecreasesOnMemorizationTask: step 1 = 1.59, step 2 = 24.45).
+        // Fully user-overridable via the optimizer parameter and MadmomBeatTrackerOptions.LearningRate. (#1789)
+        _optimizerIsDefault = optimizer is null;
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Routes tape training through the configured optimizer on the paths that do NOT pass one explicitly.
+    /// </summary>
+    /// <remarks>
+    /// The previous wording here said the field "was stored but never used" without this override. That is
+    /// not true and was worth correcting rather than leaving: <c>Train</c> passes <c>_optimizer</c> to
+    /// <c>TrainWithTape</c> directly. This override covers the other direction -- anything reaching the base
+    /// trainer without an explicit optimizer argument, which would otherwise fall back to the base Adam 1e-3
+    /// default and quietly undo the rate this model needs. (#1789)
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     internal static async Task<MadmomBeatTracker<T>> CreateAsync(MadmomBeatTrackerOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
@@ -214,7 +232,7 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -244,12 +262,35 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         return m;
     }
 
+    /// <summary>Whether <c>_optimizer</c> is the one this class built rather than the caller's.</summary>
+    private bool _optimizerIsDefault;
+
+    /// <summary>
+    /// Builds the default optimizer from the CURRENT options.
+    /// </summary>
+    /// <remarks>
+    /// Factored out because it has to run twice: once at construction and again after deserialization.
+    /// The constructor bakes LearningRate and MaxGradientNorm into the optimizer, so a checkpoint that
+    /// restores different values leaves the optimizer still holding the constructor's -- the restored
+    /// model then trains at a rate the saved configuration explicitly did not choose, and nothing
+    /// reports the discrepancy because the options object reads correctly.
+    /// </remarks>
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
+
     protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
         w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
         w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
         w.Write(_options.NumBands); w.Write(_options.RnnHiddenSize); w.Write(_options.NumRnnLayers);
         w.Write(_options.PeakThreshold); w.Write(_options.MinBeatInterval); w.Write(_options.DropoutRate);
+        w.Write(_options.LearningRate); w.Write(_options.MaxGradientNorm);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
@@ -258,6 +299,14 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
         _options.NumBands = r.ReadInt32(); _options.RnnHiddenSize = r.ReadInt32(); _options.NumRnnLayers = r.ReadInt32();
         _options.PeakThreshold = r.ReadDouble(); _options.MinBeatInterval = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
+        // Appended, so guarded: absent from payloads written before these were configurable.
+        if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble();
+        if (r.BaseStream.Position < r.BaseStream.Length) _options.MaxGradientNorm = r.ReadDouble();
+
+        // Rebuilt from the RESTORED options. Only when we own it -- an injected optimizer is the
+        // caller's object and replacing it here would discard their configuration on every load.
+        if (_useNativeMode && _optimizerIsDefault) _optimizer = CreateDefaultOptimizer();
+
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 

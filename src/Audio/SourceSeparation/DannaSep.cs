@@ -226,7 +226,7 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
