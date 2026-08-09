@@ -74,15 +74,9 @@ namespace AiDotNet.Classification.TimeSeries;
 [ResearchPaper("A Time Series Forest for Classification and Feature Extraction", "https://doi.org/10.1016/j.ins.2013.01.006", Year = 2013, Authors = "Houtao Deng, George Runger, Eugene Tuv, Martyanov Vladimir")]
 public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
 
+    // Returned the tree count, its own comment calling it "simplified". An honest zero replaces a
+    // placeholder.
     private readonly TimeSeriesForestOptions<T> _options;
 
     /// <inheritdoc/>
@@ -317,19 +311,6 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
         }
 
         return PredictSequences(tensor);
-    }
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        // Serialize tree structure (simplified - just returns tree count)
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_trees?.Count ?? 0) };
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Trees are structural - cannot be set from simple parameters
     }
 
     /// <inheritdoc />

@@ -9,6 +9,7 @@ using AiDotNet.Validation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.Calibration;
 
 /// <summary>
@@ -56,14 +57,20 @@ namespace AiDotNet.Classification.Calibration;
 public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
     /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
+    /// <remarks>All four calibration coefficients -- Platt A and B, then beta A and B. Registering the two Platt scalars by hand missed the beta pair and made a restore throw "Expected 2 parameters, got 4"; keeping the original packing cannot miss anything. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
 
     /// <summary>
     /// The base classifier being calibrated.
@@ -835,7 +842,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // Return calibration parameters
         return new Vector<T>(new[]
@@ -850,7 +857,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         if (parameters.Length < 6)
         {

@@ -90,15 +90,8 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
     Authors = "Chao Chen, Andy Liaw, Leo Breiman")]
 public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
 
+    // Returned _trees.Count. Same as BalancedBaggingClassifier: a count is not a weight.
     /// <summary>
     /// The ensemble of decision trees.
     /// </summary>
@@ -600,31 +593,6 @@ public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
             }
         }
         return node.PredictedClass;
-    }
-
-    /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector with tree count (simplified representation).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree ensembles don't fit neatly into a parameter vector.
-    /// Use serialization for full model persistence.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_trees.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (limited support).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree models are better loaded via serialization.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for tree models
     }
 
     /// <summary>

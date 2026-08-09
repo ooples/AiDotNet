@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification;
 
 /// <summary>
@@ -80,6 +81,20 @@ namespace AiDotNet.Classification;
 public class OrdinalRegression<T> : ClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The coefficients followed by the ordinal thresholds. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     /// <summary>
     /// Configuration options for the ordinal regression model.
     /// </summary>
@@ -659,7 +674,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
     /// This packages all the model's learned values into a single list.
     /// </para>
     /// </remarks>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         int numParams = NumFeatures + Math.Max(0, NumClasses - 1);
         if (numParams <= 0) return new Vector<T>(0);
@@ -694,7 +709,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
     /// Sets all the model's learned values from a single list. Useful for loading a saved model.
     /// </para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // If model is untrained, infer dimensions from parameters
         int expectedLength = NumFeatures + NumClasses - 1;

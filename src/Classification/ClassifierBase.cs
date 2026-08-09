@@ -1,4 +1,6 @@
 global using AiDotNet.Factories;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -635,12 +637,88 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
+    /// <summary>
+    /// The components this classifier's parameters live in. Empty until it registers some.
+    /// </summary>
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
 
     /// <summary>
-    /// Gets the expected number of parameters for this classifier.
-    /// Used by subclasses that implement IParameterizable.
+    /// Declares a component whose parameters belong to this classifier's surface. Registration
+    /// order is serialization order, so keep it stable.
     /// </summary>
-    public virtual long ParameterCount => ExpectedParameterCount;
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+        => _parameterRegistry.Register(component);
+
+    /// <summary>
+    /// Declare the trainable components of this classifier here. Called once, lazily, so it runs
+    /// after fitting has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private ParameterComponentRegistry<T> Registry
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+                _componentsRegistered = _parameterRegistry.HasComponents;
+            }
+            return _parameterRegistry;
+        }
+    }
+
+    /// <summary>
+    /// Gets this classifier's parameters as a flat vector.
+    /// </summary>
+    /// <remarks>
+    /// Folds the registered components. A classifier that registers none -- a k-NN index, a fitted
+    /// tree, an ensemble whose structure is not a vector -- reports an empty vector, and the count
+    /// below reports zero to match. That is the honest answer, and it replaces a family of
+    /// overrides that returned things like the NUMBER OF TREES as if a count were a parameter.
+    /// </remarks>
+    public virtual Vector<T> GetParameters() => Registry.GetParameters();
+
+    /// <summary>
+    /// Restores this classifier's parameters from a flat vector.
+    /// </summary>
+    /// <remarks>The inverse of <see cref="GetParameters"/>, down the same enumeration.</remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (!Registry.HasComponents) return;
+        Registry.SetParameters(parameters);
+        OnParametersRestored();
+    }
+
+    /// <summary>
+    /// Gets the number of parameters this classifier serializes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Folds the SAME enumeration <see cref="GetParameters"/> does, so the two cannot disagree.
+    /// It used to be <see cref="ExpectedParameterCount"/> -- NumFeatures * NumClasses -- which
+    /// describes the classifier's SHAPE rather than what it saves, and nothing forced the two to
+    /// change together. Seven of the 25 types under this base had already hand-overridden it with
+    /// GetParameters().Length, which is the tell; of the eighteen that had not, MiniRocket and
+    /// Rocket reported 0 against a six-element vector and OrdinalRegression reported 10.
+    /// </para>
+    /// <para>
+    /// <see cref="ExpectedParameterCount"/> remains for subclasses that want to state a shape
+    /// expectation; it is simply no longer mistaken for the count of what is serialized.
+    /// </para>
+    /// </remarks>
+    public virtual long ParameterCount => Registry.ParameterCount;
 
     /// <summary>
     /// Whether this classifier supports parameter initialization.

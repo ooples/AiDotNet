@@ -78,15 +78,10 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
     Authors = "Shohei Hido, Hisashi Kashima")]
 public class BalancedBaggingClassifier<T> : ClassifierBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
 
+    // Returned _baseClassifiers.Count -- the NUMBER of estimators, not a parameter. No restore
+    // could rebuild an ensemble from that one value, and it pushed the count away from anything
+    // the vector could mean. The base fold now reports an empty vector and a count of zero.
     /// <summary>
     /// The ensemble of base classifiers.
     /// </summary>
@@ -554,31 +549,6 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
             }
         }
         return node.PredictedClass;
-    }
-
-    /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector with base classifier count.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Ensemble models don't fit neatly into parameter vectors.
-    /// Use serialization for full persistence.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_baseClassifiers.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (limited support).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use serialization to save/load ensemble models.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for ensemble models
     }
 
     /// <summary>

@@ -2,6 +2,8 @@ using AiDotNet.Classification;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.SVM;
 
 /// <summary>
@@ -29,6 +31,15 @@ namespace AiDotNet.Classification.SVM;
 public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunctionClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The per-class intercepts, which is what the hand-written surface exposed. The support vectors and their coefficients are structural and were never in this vector; putting them in would change its length and invalidate existing checkpoints.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _intercept,
+            value => _intercept = value));
+    }
     /// <summary>
     /// Gets the SVM specific options.
     /// </summary>
@@ -225,13 +236,6 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
-    {
-        // Return intercepts as parameters
-        return _intercept ?? new Vector<T>(0);
-    }
-
-    /// <inheritdoc/>
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = Clone();
@@ -240,18 +244,6 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
             svm.SetParameters(parameters);
         }
         return newModel;
-    }
-
-    /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (_intercept != null && parameters.Length == _intercept.Length)
-        {
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                _intercept[i] = parameters[i];
-            }
-        }
     }
 
     /// <inheritdoc/>

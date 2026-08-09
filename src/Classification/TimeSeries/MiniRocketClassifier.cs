@@ -8,6 +8,7 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.TimeSeries;
 
 /// <summary>
@@ -77,6 +78,15 @@ namespace AiDotNet.Classification.TimeSeries;
 public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The ridge weights fitted over the random convolutional kernels. The kernels themselves are random and fixed, so the weights are the whole of what is learned.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _weights,
+            value => _weights = value));
+    }
     private readonly MiniRocketOptions<T> _options;
 
     /// <inheritdoc/>
@@ -260,22 +270,6 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
         }
 
         return predictions;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>The count came from ClassifierBase as NumFeatures * NumClasses, which is unrelated to what this classifier serializes -- measured 0 against a 6-element vector after a restore, so a saved vector could not be reloaded. Derived from the vector instead, as AdaptiveRandomForestClassifier, BalancedBaggingClassifier, CalibratedClassifier and four other siblings already do.</remarks>
-    public override long ParameterCount => GetParameters().Length;
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        return _weights?.Clone() ?? new Vector<T>(0);
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        _weights = parameters.Clone();
     }
 
     /// <inheritdoc />

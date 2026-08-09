@@ -53,6 +53,8 @@ namespace AiDotNet.Classification.Neighbors;
     [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
 public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 {
+
+    // A lazy learner: it stores training data, not parameters, as its own comment says.
     /// <summary>
     /// Gets the KNN specific options.
     /// </summary>
@@ -413,26 +415,11 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
-    {
-        // KNN is a lazy learner - it doesn't have traditional model parameters
-        // Return an empty vector for compatibility
-        return new Vector<T>(0);
-    }
-
-    /// <inheritdoc/>
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = (KNeighborsClassifier<T>)Clone();
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // KNN is a lazy learner - it doesn't have traditional model parameters
-        // This is a no-op for compatibility
     }
 
     /// <inheritdoc/>

@@ -72,6 +72,8 @@ namespace AiDotNet.Classification.Online;
 [ResearchPaper("Mining High-Speed Data Streams", "https://doi.org/10.1145/347090.347107", Year = 2000, Authors = "Pedro Domingos, Geoff Hulten")]
 public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
+
+    // Its own comment: "Tree-based model - structure cannot be set from flat parameters".
     private readonly HoeffdingTreeOptions<T> _options;
 
     /// <inheritdoc/>
@@ -719,20 +721,6 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
 
         // Clear leaf statistics (no longer needed)
         leaf.FeatureStatistics = null;
-    }
-
-    /// <summary>
-    /// Returns an empty vector — Hoeffding trees learn structure during training, not flat parameter vectors.
-    /// </summary>
-    public Vector<T> GetParameters()
-        => new Vector<T>(0);
-
-    /// <summary>
-    /// No-op — Hoeffding trees learn structure during training, not flat parameter vectors.
-    /// </summary>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Tree-based model — structure cannot be set from flat parameters
     }
 
     /// <summary>
