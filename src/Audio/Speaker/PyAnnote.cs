@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Speaker;
@@ -238,6 +239,23 @@ public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 
     #region NeuralNetworkBase
 
+    /// <summary>
+    /// Serializes native execution, so only one caller at a time is inside a forward or a training
+    /// step on this instance.
+    /// </summary>
+    /// <remarks>
+    /// IsTrainingMode is state SHARED BY EVERY LAYER of the instance, and both <c>PredictCore</c> and
+    /// <c>Train</c> write it and then restore it. Two concurrent calls interleave those writes:
+    /// <c>Train</c>'s <c>finally</c> can set the mode back while a <c>PredictCore</c> is midway through
+    /// its layer loop, so dropout switches on partway through an inference and the result depends on
+    /// timing. <c>DiarizeAsync</c> makes that reachable -- nothing stops a caller from awaiting several
+    /// diarizations of the same model at once.
+    ///
+    /// A <c>NoGradScope</c> does not help here: it governs whether the tape records, not what mode the
+    /// layers are in. The gate has to be a real lock, and it has to be the SAME lock for both methods.
+    /// </remarks>
+    private readonly object _executionGate = new();
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
@@ -252,20 +270,51 @@ public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+
+        // Predict means inference: flip to eval mode so stateful layers behave deterministically. The
+        // default PyAnnote stack (CreateDefaultPyAnnoteLayers) includes Dropout, and IsTrainingMode is
+        // true on construction, so without this two Predict calls on the same input return different
+        // embeddings (SameInput_SameEmbedding). The base PredictCore applies this guard, but this
+        // override replaces it, so it must repeat it. Restore the prior mode so a Predict mid-training
+        // does not permanently flip the network out of training mode. Mirrors PyTorch nn.Module.eval().
+        // Under _executionGate for the reason in its declaration: IsTrainingMode is per-instance
+        // state, so the save/restore below is only safe if nothing else is executing on this instance.
+        // NoGradScope does not cover it -- that governs tape recording, not layer mode.
+        lock (_executionGate)
+        {
+            using var _noGrad = new NoGradScope<T>();
+            bool wasTraining = IsTrainingMode;
+            if (wasTraining) SetTrainingMode(false);
+            try
+            {
+                var c = input;
+                foreach (var l in Layers) c = l.Forward(c);
+                return c;
+            }
+            finally
+            {
+                if (wasTraining) SetTrainingMode(true);
+            }
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+
+        // Same gate as PredictCore. These two are the only writers of IsTrainingMode on this type,
+        // and they must not interleave.
+        lock (_executionGate)
         {
-            TrainWithTape(input, expected);
-        }
-        finally
-        {
-            SetTrainingMode(false);
+            SetTrainingMode(true);
+            try
+            {
+                TrainWithTape(input, expected, _optimizer);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
     }
 

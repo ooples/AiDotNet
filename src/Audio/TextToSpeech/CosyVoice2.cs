@@ -210,7 +210,7 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

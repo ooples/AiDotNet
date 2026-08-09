@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -586,13 +586,26 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
             return OnnxEncoder.Run(input);
         }
 
-        // Native mode: forward pass through layers
-        var current = input;
-        foreach (var layer in Layers)
+        // Inference must be deterministic (SameInput -> SameEmbedding). The model defaults to training
+        // mode on construction (NeuralNetworkBase.IsTrainingMode = true) and the embedding stack includes
+        // dropout (dropoutRate 0.1), so a fresh Predict would otherwise apply stochastic dropout and
+        // return a different embedding on each call. Force inference mode for the forward and restore the
+        // prior mode afterward so the training path (which sets training mode itself) is unaffected.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
         {
-            current = layer.Forward(current);
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return current;
         }
-        return current;
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     /// <summary>
@@ -630,11 +643,20 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
                 "without modelPath parameter to train natively.");
         }
 
+        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
+        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
+        // training mode when it did. The next Predict then runs with dropout live and stochastic
+        // batch-norm statistics, so it silently returns a different answer for the same input, and
+        // nothing about that failure points back at the exception that caused it.
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-
-        // Set inference mode
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
