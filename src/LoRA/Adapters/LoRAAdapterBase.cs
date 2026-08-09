@@ -1,6 +1,10 @@
 ﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
+
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -33,7 +37,18 @@ namespace AiDotNet.LoRA.Adapters;
 /// The result is parameter-efficient fine-tuning that works across different layer architectures!
 /// </para>
 /// </remarks>
-public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>
+// LoRA targets linear projections, so the shapes it sees are [Batch, Features] and, for attention
+// projections over a sequence, [Batch, Time, Features]. Declared on the BASE: TensorLayoutAttribute is
+// Inherited, and IShapeContract on a base is inherited by definition, so all 34 adapters in this family
+// are covered by this one declaration rather than 34 transcriptions of the same thing.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayerSerializationExtras<T>, IShapeContract
 {
     /// <summary>
     /// The base layer being adapted.
@@ -89,6 +104,24 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// </remarks>
     public ILayer<T> BaseLayer => _baseLayer;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A LoRA adapter adds a low-rank delta to the wrapped layer's output and returns it, so its shape
+    /// law IS the wrapped layer's shape law - the constructor says as much, passing
+    /// <c>baseLayer.GetOutputShape()</c> straight through as this layer's output shape. The contract
+    /// therefore delegates rather than restating anything.
+    /// </para>
+    /// <para>
+    /// This is only possible because <c>OutputAxesFor</c> is an INSTANCE method: the answer depends on
+    /// which layer this adapter was constructed around, which no type-level attribute could express.
+    /// Wrap a Dense and the feature axis is <c>Fixed</c> at that Dense's width; wrap something with no
+    /// contract and this declines, which is the honest answer rather than a guess.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => (_baseLayer as IShapeContract)?.OutputAxesFor(inputRank);
+
     /// <summary>
     /// Gets the LoRA layer providing the low-rank adaptation.
     /// </summary>
@@ -134,17 +167,6 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// Common practice: alpha = rank (scaling factor of 1.0)
     /// </remarks>
     public double Alpha => Convert.ToDouble(_loraLayer.Alpha);
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// If the base layer is frozen, this returns only the LoRA parameter count.
-    /// Otherwise, it returns the sum of base and LoRA parameters.
-    /// </remarks>
-    public override long ParameterCount => _freezeBaseLayer
-        ? _loraLayer.ParameterCount
-        : (_baseLayer.ParameterCount + _loraLayer.ParameterCount);
 
     /// <summary>
     /// Gets whether this adapter supports training.
@@ -263,65 +285,22 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
         // at the end of their constructor once their extra state is
         // initialized. Most derived adapters override GetParameters
         // and don't need this call.
-        // Match what PackBaseAndLoraParameters actually packs: base params
-        // are skipped when frozen (the optimizer doesn't update them, and
-        // they round-trip via ILayerSerializationExtras instead). Sizing
-        // against the unfrozen total when freezeBaseLayer=true would leave
-        // trailing unused elements in Parameters, breaking GetParameters()
-        // length and (de)serialization round-trip.
-        int baseAndLoraCount =
-            (_freezeBaseLayer ? 0 : _baseLayer.GetParameters().Length)
-            + _loraLayer.GetParameters().Length;
-        Parameters = new Vector<T>(baseAndLoraCount);
-        // Pack base + LoRA params directly (non-virtual) so the vector
-        // is initialized without invoking the derived
-        // UpdateParametersFromLayers override. Derived classes that
-        // need their own packing call RebuildParametersAfterDerivedInit
-        // which routes through the virtual UpdateParametersFromLayers.
-        PackBaseAndLoraParameters();
-    }
-
-    /// <summary>
-    /// Non-virtual pack of <see cref="_baseLayer"/> + <see cref="_loraLayer"/>
-    /// parameters into <see cref="LayerBase{T}.Parameters"/>. Used by the
-    /// base ctor where the derived <see cref="UpdateParametersFromLayers"/>
-    /// override would dereference uninitialised derived state.
-    /// </summary>
-    private void PackBaseAndLoraParameters()
-    {
-        int idx = 0;
-        if (!_freezeBaseLayer)
+        // Freezing is stated once, here. The generator discovers _baseLayer and _loraLayer as
+        // sub-layers and that discovered set is authoritative, so a frozen base cannot be
+        // expressed by declining to register it -- it is expressed by marking it frozen, which
+        // keeps it in Forward and in the serialized layout while taking its weights out of the
+        // parameter surface. ParameterCount, GetParameters and SetParameters then all fall out
+        // of the one fold, so the adapter no longer maintains a shadow copy that has to be
+        // re-packed after every update and can disagree with the count that describes it.
+        // Register unconditionally. Doing this only on the frozen path left an UNFROZEN adapter
+        // with no registered children at all, so its ParameterCount answered 0 instead of
+        // base + LoRA. The frozen case looked correct purely because freezing happened to force
+        // registration on the way past.
+        EnsureSubLayersRegistered();
+        if (_freezeBaseLayer)
         {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
+            FreezeSubLayerParameters(_baseLayer);
         }
-
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
-    }
-
-    /// <summary>
-    /// Derived adapter classes that override <see cref="LayerBase{T}.ParameterCount"/>
-    /// to include extra state (delta weights, importance scores, etc.) MUST
-    /// call this method at the end of their constructor body so the base
-    /// class's <see cref="LayerBase{T}.Parameters"/> vector is re-allocated
-    /// against the derived total. The base ctor calls
-    /// <c>UpdateParametersFromLayers</c> via this method, which in turn calls
-    /// the now-initialized derived <c>ParameterCount</c> via virtual dispatch.
-    /// Parameter count is cast to int because <c>Vector{T}.Length</c> is int
-    /// per the per-tensor &lt; 2.1 B contract; #1237's long aggregate applies
-    /// only to the model-level <c>ParameterCount</c> property.
-    /// </summary>
-    protected void RebuildParametersAfterDerivedInit()
-    {
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -625,105 +604,6 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
-        // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters (LoRA only if base is frozen, otherwise both).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateLayersFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the layers from the parameter vector.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the values from the parameter vector back to the base
-    /// and LoRA layers. If the base layer is frozen, only LoRA parameters are updated.
-    /// </para>
-    /// <para><b>For Beginners:</b> This does the opposite of UpdateParametersFromLayers.
-    /// It takes values from the big list and puts them back into the individual layers.
-    /// </para>
-    /// </remarks>
-    private void UpdateLayersFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack LoRA parameters
-        int loraParamCount = checked((int)_loraLayer.ParameterCount);
-        Vector<T> loraParams = new Vector<T>(loraParamCount);
-        for (int i = 0; i < loraParamCount; i++)
-        {
-            loraParams[i] = Parameters[idx++];
-        }
-        _loraLayer.SetParameters(loraParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method collects gradients from both layers into a single vector.
-    /// If the base layer is frozen, only LoRA gradients are included.
-    /// </para>
-    /// <para><b>For Beginners:</b> After backpropagation, this collects all the "improvement directions"
-    /// from both layers into one organized list for the optimizer to use.
-    /// </para>
-    /// </remarks>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
     }
 
     /// <summary>
@@ -862,39 +742,6 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
 
         // Use helper to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current base and LoRA layer states.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This helper method synchronizes the adapter's parameter vector with the current state
-    /// of the base and LoRA layers after updates. It packs parameters in the standard order:
-    /// base layer parameters (if not frozen) followed by LoRA parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This ensures the adapter's parameter vector stays in sync
-    /// with its component layers. Called after parameter updates.
-    /// </para>
-    /// </remarks>
-    protected virtual void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
     }
 
     /// <summary>
