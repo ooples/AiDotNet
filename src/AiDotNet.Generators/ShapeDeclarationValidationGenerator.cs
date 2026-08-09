@@ -47,6 +47,72 @@ namespace AiDotNet.Generators;
 public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
 {
     private const string LayoutAttributeName = "AiDotNet.Attributes.TensorLayoutAttribute";
+    private const string LayerPropertyAttributeName = "AiDotNet.Attributes.LayerPropertyAttribute";
+
+    /// <summary>
+    /// Marker for "this type belongs to a model family whose base carries a shape contract".
+    /// </summary>
+    /// <remarks>
+    /// Segmentation is the first family brought in, so the prefix names it explicitly rather than
+    /// guessing from interface naming. Widening this is a deliberate act - each family's law has to be
+    /// MEASURED first, and of the families measured since, forecasting, vision-language and the
+    /// vocoders all turned out NOT to share one law, which is a decline rather than a declaration.
+    /// </remarks>
+    private const string FamilyInterfacePrefix = "AiDotNet.Interfaces.ISegmentationModel";
+
+    private static readonly DiagnosticDescriptor ModelWithoutShapeContractDescriptor = new(
+        id: "ADNSHAPE007",
+        title: "Model implements a family interface but inherits no shape contract",
+        messageFormat: "'{0}' implements '{1}' but derives from no base that declares a shape contract, "
+                       + "so nothing can reason about its output shape. Derive from the family base "
+                       + "(SegmentationModelBase and its eight family bases carry the contract) and "
+                       + "override OutputAxesFor only where this model genuinely differs - as SAM does "
+                       + "for its /16 encoder and SegMamba for its volumetric "
+                       + "[Classes, Depth, Height, Width] output, both found by the conformance sweep.",
+        category: "AiDotNet.Shapes",
+        // Enforced as an ERROR via TreatWarningsAsErrors, and that is only safe because the rule is
+        // SCOPED to one family already at zero: all 70 concrete segmentation models derive from
+        // SegmentationModelBase. No backlog means no ladder - unlike ADNSHAPE006, which entered at
+        // 85 of ~270 layers and needed one.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description:
+            "A model contract is worth something only because the conformance sweep verifies it against "
+            + "a real Predict. This rule is the other half: it stops a NEW model silently opting out of "
+            + "a family law its siblings all satisfy, which is how the layer inventory drifted to 268 "
+            + "undeclared types before ADNSHAPE006 existed.");
+
+    private static readonly DiagnosticDescriptor LayerWithoutShapeContractDescriptor = new(
+        id: "ADNSHAPE006",
+        title: "Layer declares no shape contract, so nothing can reason about its output shape",
+        messageFormat: "'{0}' derives from LayerBase but declares neither [TensorLayout] + "
+                       + "IShapeContract nor [ElementWiseShape]. Shape inference, chain validation and "
+                       + "graph resolution all decline on it silently - it is not failing, it simply "
+                       + "cannot be reasoned about. If it preserves shape at any rank use "
+                       + "[ElementWiseShape]; otherwise declare its axis layouts and implement "
+                       + "OutputAxesFor (compute the relation from the layer's own fields where it "
+                       + "depends on a constructor argument, as DenseLayer and MaxPoolingLayer do).",
+        category: "AiDotNet.Shapes",
+        // THE BACKLOG CLEARED AND THIS IS AN ERROR. It entered as a Warning at 85 of ~270 layers
+        // declared and reached 0; removing its <WarningsNotAsErrors> entry is what makes it fail the
+        // build. A permanent warning is exactly what let 244 layers sit undeclared while the shape
+        // system was assumed to cover them.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor LayerPropertyContradictsLayoutDescriptor = new(
+        id: "ADNSHAPE005",
+        title: "[LayerProperty] shape metadata contradicts the declared [TensorLayout] ranks",
+        messageFormat: "'{0}' declares {1}, but its [TensorLayout(Direction = Input)] attributes cover "
+                       + "only rank(s) [{2}]. Two declarations of the same fact have drifted, and shape "
+                       + "inference trusts the layouts - so the rank the layer is actually exercised at "
+                       + "resolves to nothing. Add a layout for that rank, or correct whichever "
+                       + "declaration is wrong.",
+        category: "AiDotNet.Shapes",
+        // ERROR: fires only where two declarations on the SAME type disagree, so there is no backlog
+        // and no judgement call - one of them is simply wrong.
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
     private const string ShapeContractName = "AiDotNet.Interfaces.IShapeContract";
     private const string ElementWiseAttributeName = "AiDotNet.Attributes.ElementWiseShapeAttribute";
 
@@ -178,7 +244,12 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
                 .Where(l => l.Axes.Count > 0)
                 .ToList();
 
-            bool hasContract = type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName);
+            // The interface guard is load-bearing. IShapeContract's own opt-in interfaces
+            // (IBatchAwareShapeContract and friends) satisfy AllInterfaces, and reporting them told
+            // three interface DECLARATIONS to carry axis layouts, which is meaningless - an interface
+            // has no shape.
+            bool hasContract = type.TypeKind != TypeKind.Interface
+                && type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName);
 
             // INHERITED, to match how the contract itself is inherited. AllInterfaces walks the base
             // chain, so a subclass of an IShapeContract base "has a contract"; GetAttributes does NOT,
@@ -215,6 +286,90 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             {
                 spc.ReportDiagnostic(new ShapeFinding(
                     ContractWithoutInputLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
+            }
+
+            // ADNSHAPE005 and ADNSHAPE006 need this on its OWN, separately from declaresInputLayout
+            // above. That flag deliberately folds [ElementWiseShape] in and walks the base chain,
+            // which is right for "can this type resolve an input layout" - but these two rules ask a
+            // narrower question about the type itself: an element-wise layer has a contract without
+            // axis names, so it must be exempt from the rank cross-check and from the
+            // no-declaration report rather than merely counted as declared.
+            bool isElementWise = type.GetAttributes()
+                .Any(a => a.AttributeClass?.ToDisplayString() == ElementWiseAttributeName);
+
+            // ADNSHAPE005 - cross-check the layouts against the layer's OWN [LayerProperty] shape
+            // metadata. Both describe the rank a layer accepts, so they can drift; where they do, the
+            // layer is exercised at a rank its contract does not cover and inference silently declines
+            // on the working case.
+            if (!isElementWise && layouts.Any(l => l.IsInput))
+            {
+                // AcceptedRanks(), not Axes.Count: a BatchOptional layout also accepts the leading axis
+                // being absent, which is what TensorLayoutAttribute.AxesForRank does at runtime.
+                var declaredRanks = layouts.Where(l => l.IsInput)
+                    .SelectMany(l => l.AcceptedRanks())
+                    .Distinct()
+                    .ToList();
+
+                var layerProperty = type.GetAttributes().FirstOrDefault(
+                    a => a.AttributeClass?.ToDisplayString() == LayerPropertyAttributeName);
+
+                if (layerProperty is not null)
+                {
+                    var claims = new List<string>();
+
+                    foreach (var named in layerProperty.NamedArguments)
+                    {
+                        if (named.Key == "ExpectedInputRank" && named.Value.Value is int rank && rank > 0
+                            && !declaredRanks.Contains(rank))
+                        {
+                            claims.Add($"ExpectedInputRank = {rank}");
+                        }
+
+                        if (named.Key == "TestInputShape" && named.Value.Value is string shape
+                            && shape.Length > 0)
+                        {
+                            int testRank = shape.Split(',').Length;
+                            if (!declaredRanks.Contains(testRank))
+                                claims.Add($"TestInputShape = \"{shape}\" (rank {testRank})");
+                        }
+                    }
+
+                    if (claims.Count > 0)
+                    {
+                        spc.ReportDiagnostic(new ShapeFinding(
+                            LayerPropertyContradictsLayoutDescriptor,
+                            type.Locations.FirstOrDefault(),
+                            type.Name,
+                            string.Join(" and ", claims),
+                            string.Join(", ", declaredRanks.OrderBy(r => r))));
+                    }
+                }
+            }
+
+            // ADNSHAPE006 - a layer with NO shape declaration at all. Concrete layers only: an abstract
+            // base legitimately leaves the contract to its subclasses.
+            if (DerivesFromLayerBase(type) && !type.IsAbstract && !hasContract && !isElementWise)
+            {
+                spc.ReportDiagnostic(new ShapeFinding(
+                    LayerWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(), type.Name));
+            }
+
+            // ADNSHAPE007 - the MODEL-side counterpart. A model implementing a family interface while
+            // deriving from no contract-declaring base has silently opted out of its family's law. That
+            // is the exact defect the segmentation refactor fixed: 70 models implemented the family
+            // interfaces while deriving straight from NeuralNetworkBase, leaving SegmentationModelBase
+            // and its eight family bases with ZERO users.
+            if (!type.IsAbstract && !hasContract)
+            {
+                var familyInterface = type.AllInterfaces.FirstOrDefault(i =>
+                    i.ConstructedFrom.ToDisplayString().StartsWith(FamilyInterfacePrefix, System.StringComparison.Ordinal));
+
+                if (familyInterface is not null)
+                {
+                    spc.ReportDiagnostic(new ShapeFinding(
+                        ModelWithoutShapeContractDescriptor, type.Locations.FirstOrDefault(),
+                        type.Name, familyInterface.Name));
+                }
             }
 
             // A layer that overrides Forward is invisible to tracing. Caught at BUILD time because the
