@@ -77,6 +77,18 @@ public sealed class AxisRelation
         /// </remarks>
         ScaledRelation,
 
+        /// <summary>An input axis scaled by a ratio and then SHIFTED by a signed offset.</summary>
+        /// <remarks>
+        /// <see cref="Scaled"/> can only multiply, and <see cref="SumOfRelations"/> can only add terms
+        /// that are themselves relations - and <see cref="Fixed"/> rejects non-positive sizes, so a
+        /// NEGATIVE constant term cannot be written as a sum. Frame interpolation is exactly that
+        /// shape: <c>FrameInterpolationBase</c> computes
+        /// <c>outputFrames = (numFrames - 1) * TemporalScaleFactor + 1</c>, i.e. <c>F*k + (1-k)</c>,
+        /// whose offset is negative for every scale factor above 1. Twenty-seven models sat
+        /// undeclared because the vocabulary could multiply and could add, but could not subtract.
+        /// </remarks>
+        Affine,
+
         /// <summary>Genuinely not derivable from the input shape.</summary>
         Unknown,
     }
@@ -150,6 +162,30 @@ public sealed class AxisRelation
     {
         if (size <= 0) throw new ArgumentOutOfRangeException(nameof(size), size, "A fixed axis size must be positive.");
         return new AxisRelation(Form.Fixed, Array.Empty<TensorAxis>(), value: size);
+    }
+
+    /// <summary>
+    /// This output axis is an input axis scaled by <paramref name="numerator"/>/<paramref name="denominator"/>
+    /// and then shifted by <paramref name="offset"/>, which MAY be negative.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added for frame interpolation, which is the common law no other form can state:
+    /// <c>outputFrames = (numFrames - 1) * TemporalScaleFactor + 1</c>. Rearranged that is
+    /// <c>F*k + (1-k)</c>, and the offset is negative whenever k &gt; 1. <see cref="Scaled"/> only
+    /// multiplies; <see cref="SumOf"/> adds relations and <see cref="Fixed"/> refuses non-positive
+    /// sizes, so the constant term had nowhere to live.
+    /// </para>
+    /// <para>
+    /// The offset is applied AFTER the ratio, and the result must still be positive - an interpolation
+    /// that claims zero output frames is a declaration error, not a shape.
+    /// </para>
+    /// </remarks>
+    public static AxisRelation Affine(TensorAxis source, int numerator, int denominator, int offset)
+    {
+        if (numerator <= 0) throw new ArgumentOutOfRangeException(nameof(numerator), numerator, "Scale numerator must be positive.");
+        if (denominator <= 0) throw new ArgumentOutOfRangeException(nameof(denominator), denominator, "Scale denominator must be positive.");
+        return new AxisRelation(Form.Affine, new[] { source }, value: offset, numerator: numerator, denominator: denominator);
     }
 
     /// <summary>This output axis is an input axis scaled by <paramref name="numerator"/>/<paramref name="denominator"/>.</summary>
@@ -438,6 +474,19 @@ public sealed class AxisRelation
                 return size > 0;
             }
 
+            case Form.Affine:
+            {
+                if (!inputAxes.TryGetValue(_sources[0], out int from) || from <= 0) return false;
+                // Same exact-division rule as Form.Scaled: the ratio is applied first, and a ratio
+                // that does not divide evenly is a declaration error rather than something to round.
+                if ((long)from * Numerator % Denominator != 0) return false;
+                long scaled = (long)from * Numerator / Denominator;
+                long shifted = scaled + Value;
+                if (shifted <= 0 || shifted > int.MaxValue) return false;
+                size = (int)shifted;
+                return true;
+            }
+
             case Form.Window:
             {
                 if (!inputAxes.TryGetValue(_sources[0], out int from) || from <= 0) return false;
@@ -502,6 +551,10 @@ public sealed class AxisRelation
         Form.Scaled => Denominator == 1
             ? $"{Numerator} * in.{_sources[0]}"
             : $"{Numerator} * in.{_sources[0]} / {Denominator}",
+        Form.Affine => (Denominator == 1
+                ? $"{Numerator} * in.{_sources[0]}"
+                : $"{Numerator} * in.{_sources[0]} / {Denominator}")
+            + (Value < 0 ? $" - {-Value}" : $" + {Value}"),
         Form.Window => $"floor((in.{_sources[0]} + 2*{Padding} - {Dilation}*({Kernel}-1) - 1) / {Stride}) + 1",
         Form.Product => string.Join(" * ", Array.ConvertAll(_sources, a => $"in.{a}")),
         Form.ProductOfRelations => "(" + string.Join(") * (",

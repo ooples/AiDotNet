@@ -1,3 +1,8 @@
+using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -26,8 +31,96 @@ namespace AiDotNet.Video;
 /// The model "imagines" what the scene looks like at the intermediate time points.
 /// </para>
 /// </remarks>
-public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A frame SEQUENCE. There is deliberately no batch axis: PredictCore treats rank 4 as "
+         + "[N, C, H, W] and rejects a leading 1 as a mis-passed pair.")]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A channel-concatenated frame PAIR, [2C, H, W].")]
+[TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "The sequence with TemporalScaleFactor-1 frames inserted between each adjacent pair.")]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "One interpolated frame, so the doubled channel axis halves back.")]
+public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The interpolation family's law: <c>(F - 1) * TemporalScaleFactor + 1</c> output frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the relation that could not be written until <see cref="AxisRelation.Affine"/> existed.
+    /// The base itself computes <c>outputFrames = (numFrames - 1) * TemporalScaleFactor + 1</c>, which
+    /// rearranges to <c>F*k + (1-k)</c> - a scale with a NEGATIVE constant term. <c>Scaled</c> only
+    /// multiplies, and a sum could not carry the <c>-1</c> because <c>Fixed</c> rejects non-positive
+    /// sizes, so 27 models sat undeclared for want of a subtraction.
+    /// </para>
+    /// <para>
+    /// It matters that this is symbolic rather than measured. At k=2 the law gives 3 frames from 2 and
+    /// 5 from 3; a contract that recorded either observation as a constant would be wrong for the
+    /// other, and wrong again for every clip length a test never ran.
+    /// </para>
+    /// <para>
+    /// IT IS NOT THE DEFAULT, and the measurement that established that is the reason the affine form
+    /// was worth adding anyway: being able to STATE the law precisely is what let a forward pass
+    /// refute it. All 21 interpolation models were checked at two clip lengths and every one returned
+    /// the input frame count unchanged - <c>F=2 -&gt; 2</c> and <c>F=3 -&gt; 3</c>, never 3 and 5.
+    /// </para>
+    /// <para>
+    /// The cause is not a wrong formula. <see cref="InterpolateSequence"/> really does compute
+    /// <c>(F-1)*k + 1</c>, and <see cref="PredictCore"/> here really does route rank-4 input to it -
+    /// but every concrete model OVERRIDES PredictCore with pair interpolation instead
+    /// (<c>FILM.PredictCore =&gt; InterpolatePair(input)</c>, and the same across the family), so the
+    /// sequence path is unreachable from <c>Predict</c>. The law belongs to a public method nobody's
+    /// inference path calls, which is the same shape of defect VocoderBase had with zero subclasses.
+    /// </para>
+    /// <para>
+    /// One model diverges further: MoG returned <c>[2,3,128,128]</c> for a <c>[2,3,16,16]</c> input,
+    /// ignoring the requested spatial size entirely.
+    /// </para>
+    /// <para>
+    /// So this declines, and <see cref="SequenceInterpolationContract"/> is kept ready for whichever
+    /// resolution follows - either the models route their sequence input through the base again, or
+    /// the base's sequence path is retired as dead. Declaring the law today would attach a contract
+    /// to 21 models that every one of them contradicts.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <summary>
+    /// The sequence law <c>(F-1)*TemporalScaleFactor + 1</c>, exposed for the models that reach
+    /// <see cref="InterpolateSequence"/> rather than overriding <see cref="PredictCore"/>.
+    /// </summary>
+    protected IReadOnlyList<OutputAxisContract>? SequenceInterpolationContract(int inputRank)
+    {
+        int k = TemporalScaleFactor;
+        if (k < 2) return null;
+
+        return inputRank switch
+        {
+            // The pair form: [2C, H, W] -> [C, H, W].
+            3 =>
+            [
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Scaled(TensorAxis.Channels, 1, 2)),
+                new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+            ],
+
+            // The sequence form: [F, C, H, W] -> [(F-1)*k + 1, C, H, W].
+            4 =>
+            [
+                new OutputAxisContract(TensorAxis.Frames, AxisRelation.Affine(TensorAxis.Frames, k, 1, 1 - k)),
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+                new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+            ],
+
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets the temporal scale factor (e.g., 2 for doubling frame rate).
     /// </summary>
