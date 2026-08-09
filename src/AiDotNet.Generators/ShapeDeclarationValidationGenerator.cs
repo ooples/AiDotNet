@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -179,7 +179,30 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
 
             bool hasContract = type.AllInterfaces.Any(i => i.ToDisplayString() == ShapeContractName);
 
-            if (hasContract && !layouts.Any(l => l.IsInput))
+            // INHERITED, to match how the contract itself is inherited. AllInterfaces walks the base
+            // chain, so a subclass of an IShapeContract base "has a contract"; GetAttributes does NOT,
+            // so the same subclass looked as though it had declared no input layout. Every model
+            // deriving from AudioNeuralNetworkBase, ForecastingModelBase or SegmentationModelBase --
+            // 508 types -- was reported despite its base declaring the layout, and the only way to
+            // satisfy the rule was to restate each base's contract on every subclass, where a later
+            // change to the base would silently disagree with hundreds of stale copies.
+            //
+            // Only THIS check looks up the chain. The duplicate-axis and ambiguous-rank rules below
+            // keep using `layouts`, the type's own declarations, because a base's malformed layout
+            // should be reported once on the base and not again on each of its subclasses.
+            bool declaresInputLayout = false;
+            for (var t = type; t is not null && !declaresInputLayout; t = t.BaseType)
+            {
+                declaresInputLayout = t.GetAttributes()
+                    .Where(a => a.AttributeClass?.ToDisplayString() == LayoutAttributeName)
+                    .Select(Parse)
+                    .Any(l => l.Axes.Count > 0 && l.IsInput);
+            }
+
+            // Interfaces are excluded: IMultiPortShapeContract and friends REFINE IShapeContract
+            // rather than implement it for a concrete tensor, so there is no layout for them to
+            // declare. Reporting them asked for an input rank from a type that never has an input.
+            if (hasContract && !declaresInputLayout && type.TypeKind != TypeKind.Interface)
             {
                 spc.ReportDiagnostic(new ShapeFinding(
                     ContractWithoutInputLayoutDescriptor, type.Locations.FirstOrDefault(), type.Name));
