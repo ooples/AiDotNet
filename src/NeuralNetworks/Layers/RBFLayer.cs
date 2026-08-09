@@ -3,6 +3,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
+using AiDotNet.RadialBasisFunctions;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -38,6 +40,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
 public partial class RBFLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
     /// <summary>
     /// Tensor storing the center positions of each RBF neuron in the input space.
     /// </summary>
@@ -222,16 +227,22 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// Each creates a different pattern of responsiveness around the neuron centers.
     /// </para>
     /// </remarks>
-    public RBFLayer(int inputSize, int outputSize, IRadialBasisFunction<T> rbf,
+    public RBFLayer(
+        [LayerState] int inputSize,
+        [LayerState] int outputSize,
+        [LayerState] IRadialBasisFunction<T>? rbf = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize])
     {
+        _outputSize = outputSize;
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _inputSize = inputSize;
         _numCenters = outputSize;
         _centers = new Tensor<T>([outputSize, inputSize]);
         _widths = new Tensor<T>([outputSize]);
-        _rbf = rbf;
+        // Gaussian is the canonical kernel (Broomhead & Lowe 1988); the concrete type
+        // is recorded in metadata so a non-default kernel reloads as itself.
+        _rbf = rbf ?? new GaussianRBF<T>();
 
         InitializeParameters();
         _isInitialized = true;
@@ -246,10 +257,11 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// <param name="outputSize">Number of RBF neurons (centers).</param>
     /// <param name="rbf">Radial basis function implementation.</param>
     /// <param name="initializationStrategy">Optional weight init strategy.</param>
-    public RBFLayer(int outputSize, IRadialBasisFunction<T> rbf,
+    public RBFLayer(int outputSize, IRadialBasisFunction<T>? rbf = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([-1], [outputSize])
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size (number of RBF centers) must be positive.");
 
@@ -261,7 +273,9 @@ public partial class RBFLayer<T> : LayerBase<T>
         // intact for code paths that walk these fields unconditionally.
         _centers = new Tensor<T>([0, 0]);
         _widths = new Tensor<T>([0]);
-        _rbf = rbf;
+        // Gaussian is the canonical kernel (Broomhead & Lowe 1988); the concrete type
+        // is recorded in metadata so a non-default kernel reloads as itself.
+        _rbf = rbf ?? new GaussianRBF<T>();
         _isInitialized = false;
     }
 
@@ -334,7 +348,7 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// The layer saves the input and output for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputSize = -1; resolve from
         // input.Shape on first call, then materialize parameter tensors.

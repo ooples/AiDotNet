@@ -41,6 +41,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
 public partial class SpikingLayer<T> : LayerBase<T>
 {
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _outputSize;
+
+    /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
+    private readonly int _inputSize;
     /// <summary>
     /// The type of spiking neuron model to use.
     /// </summary>
@@ -663,10 +669,16 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
 #pragma warning disable CS8618 // T fields initialized via NumOps.FromDouble in constructor body
-    public SpikingLayer(int inputSize, int outputSize, SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
-        double tau = 10.0, double refractoryPeriod = 2.0)
+    public SpikingLayer(
+        [LayerState] int inputSize,
+        [LayerState] int outputSize,
+        SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
+        [LayerState] double tau = 10.0,
+        [LayerState] double refractoryPeriod = 2.0)
         : base([inputSize], [outputSize])
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
 #pragma warning restore CS8618
         if (inputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
@@ -762,7 +774,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// real neurons convert inputs into action potentials.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;

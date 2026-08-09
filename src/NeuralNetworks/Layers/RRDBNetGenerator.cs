@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
-public class RRDBNetGenerator<T> : LayerBase<T>
+public partial class RRDBNetGenerator<T> : LayerBase<T>
 {
     #region Fields
 
@@ -366,7 +366,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 

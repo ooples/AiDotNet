@@ -135,8 +135,11 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
         _gated = gated;
 
-        _norm1 = new RMSNormalizationLayer<T>();
-        _norm2 = new RMSNormalizationLayer<T>();
+        // hiddenSize is known here, so these parameters must exist before the
+        // first GetParameters()/serialization call. Leaving them lazy made a
+        // pre-forward parameter vector shorter than the post-forward layout.
+        _norm1 = new RMSNormalizationLayer<T>(hiddenSize);
+        _norm2 = new RMSNormalizationLayer<T>(hiddenSize);
 
         // DenseLayer(outputSize, activation): lazy-resolves input dim on first forward
         // and (with no init strategy) zero-inits biases, matching the bias-free FFN
@@ -155,6 +158,14 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         }
 
         _ffnDown = new DenseLayer<T>(outputSize: hiddenSize, activationFunction: new IdentityActivation<T>());
+
+        // The FFN input widths are also constructor-known. Resolve only the
+        // sublayers—not this block's sequence dimension—so sequence length stays
+        // dynamic while parameter enumeration is complete and stable from birth.
+        if (_ffnGate is not null)
+            _ffnGate.ResolveFromShape(new[] { hiddenSize });
+        _ffnUp.ResolveFromShape(new[] { hiddenSize });
+        _ffnDown.ResolveFromShape(new[] { ffnDim });
 
         // Register every sublayer so TapeTrainingStep<T>.CollectParameters
         // recursively discovers their trainable tensors. Without this the
@@ -176,8 +187,14 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     /// Forward pass. Routes every shape op through <see cref="LayerBase{T}.Engine"/>
     /// so the gradient tape records the residual additions and sublayer outputs.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        // Resolve the sequence-preserving block contract from the real tensor when a
+        // static chain walk could only provide the feature width. Composite layers
+        // override Forward directly, so they must opt into LayerBase's lazy-shape hook
+        // explicitly just like the leaf layers do.
+        EnsureInitializedFromInput(input);
+
         // Self-attention sublayer expects [B, S, H] (or [S, H]).
         var normed1 = _norm1.Forward(input);
         var attnOut = _attention.Forward(normed1);
@@ -218,9 +235,15 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Resolves every sublayer's shape without a data-carrying forward. This block overrides
-    /// <see cref="Forward"/> directly (bypassing the base lazy-init hook), so this runs ONLY via
-    /// <see cref="LayerBase{T}.ResolveFromShape"/> — the deserialization / shape-oracle path. The norms and
+    /// The block fixes its feature width and preserves the sequence axis, per the pre-LN residual
+    /// definition: every term of <c>x + Attn(LN(x))</c> and <c>x + FFN(LN(x))</c> keeps S.
+    /// </summary>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.FeatureOnly;
+
+    /// <summary>
+    /// Resolves every sublayer's shape without a data-carrying forward. This runs both through
+    /// <see cref="LayerBase{T}.ResolveFromShape"/> (the deserialization / shape-oracle path) and from
+    /// the first real <see cref="Forward"/> when a static chain could not preserve the sequence axis. The norms and
     /// FFN DenseLayers are lazy (input dim resolved on first use), so without this the reconstructed block
     /// reported a too-small <see cref="ParameterCount"/> and <c>SetParameters</c> rejected the saved vector.
     /// Sublayers resolve in forward order so any RNG-based weight init consumes the stream exactly as a
@@ -237,8 +260,17 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         if (!_ffnUp.IsShapeResolved) _ffnUp.ResolveFromShape(hiddenShape);
         if (!_ffnDown.IsShapeResolved) _ffnDown.ResolveFromShape(new[] { 1, _ffnDim });
 
-        int seq = input.Shape.Length >= 2 ? input.Shape[input.Shape.Length - 2] : 1;
-        ResolveShapes(new[] { seq, hidden }, new[] { seq, hidden });
+        // The sequence axis stays dynamic, whatever this particular input carried. A pre-LN block
+        // is x + Attn(LN(x)) then x + FFN(LN(x)): every term preserves S exactly, and none of its
+        // parameters are sized by it, so S is not this block's to fix. Pinning whichever length
+        // arrived first made the block's own metadata contradict every later batch of a different
+        // length -- it declared [8, 16] while correctly producing [S, 16] for the real S -- which
+        // is the ordinary case for variable-length text, not an edge case.
+        //
+        // The rank-1 probe reaches here too: T5's embedding intentionally omits its data-dependent
+        // sequence axis, so the shape walk can arrive with just [hiddenSize]. Both paths now want
+        // the same declaration, so there is no longer a case to split on.
+        ResolveShapes(new[] { -1, hidden }, new[] { -1, hidden });
     }
 
     /// <summary>

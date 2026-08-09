@@ -261,7 +261,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
@@ -329,8 +329,12 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
                 Engine.TensorMatMul(x_t, _outputGateWeights),
                 Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })));
 
-            // Exponential input gate (xLSTM innovation)
-            var iGate = Engine.TensorExp(iGateRaw);
+            // Log-domain input-gate pre-activation. The exponential gate is applied in stabilized
+            // log-space below via the m_t running max (Beck et al. 2024, App. A.2); materializing
+            // exp(iGateRaw) here is unstabilized and overflows float to +Inf for iGateRaw > 88.7.
+            // This value only feeds the write-only _lastInputGates cache (never read — the layer has
+            // no Backward override), so keeping it in log domain changes no gradient or output.
+            var iGate = iGateRaw;
             // Sigmoid forget gate (stabilized)
             var fGate = Engine.Sigmoid(fGateRaw);
 

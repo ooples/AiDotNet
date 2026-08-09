@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
-public class RRDBLayer<T> : LayerBase<T>
+public partial class RRDBLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -239,7 +239,7 @@ public class RRDBLayer<T> : LayerBase<T>
     /// Forward pass: input -> RDB1 -> RDB2 -> RDB3 -> scale + input (global residual)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 

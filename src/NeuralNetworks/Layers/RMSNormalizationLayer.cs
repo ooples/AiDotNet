@@ -164,7 +164,7 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>
     /// <item><c>output = normalised · γ</c> (broadcast over the last axis)</item>
     /// </list>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 

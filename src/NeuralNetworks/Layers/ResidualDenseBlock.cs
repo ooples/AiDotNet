@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
-public class ResidualDenseBlock<T> : LayerBase<T>
+public partial class ResidualDenseBlock<T> : LayerBase<T>
 {
     #region Fields
 
@@ -319,7 +319,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     #region Forward Pass
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 

@@ -345,7 +345,7 @@ internal partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [..., seqLen, headDim].</param>
     /// <returns>Rotated tensor with the same shape.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : input.Shape[0];

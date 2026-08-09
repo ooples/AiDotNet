@@ -120,8 +120,8 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// <param name="outputFeatures">Number of output features (octonion-valued).</param>
     /// <param name="activationFunction">Optional activation function.</param>
     public OctonionLinearLayer(
-        int inputFeatures,
-        int outputFeatures,
+        [LayerState] int inputFeatures,
+        [LayerState] int outputFeatures,
         IActivationFunction<T>? activationFunction = null)
         : base(
             [inputFeatures * 8], // Input shape: inputFeatures octonions = inputFeatures * 8 reals
@@ -166,7 +166,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures * 8] or [batch, inputFeatures * 8].</param>
     /// <returns>Output tensor with shape [outputFeatures * 8] or [batch, outputFeatures * 8].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
 
