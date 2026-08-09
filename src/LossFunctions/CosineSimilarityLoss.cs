@@ -70,45 +70,6 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         return NumOps.Subtract(NumOps.One, cosineSimilarity);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Cosine Similarity Loss with respect to the predicted values.
-    /// </summary>
-    /// <param name="predicted">The predicted vector from the model.</param>
-    /// <param name="actual">The actual (target) vector.</param>
-    /// <returns>A vector containing the gradient of the loss with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        T dotProduct = Engine.DotProduct(predicted, actual);
-        T normPredicted = Engine.DotProduct(predicted, predicted);
-        T normActual = Engine.DotProduct(actual, actual);
-
-        T normPredSqrt = NumOps.Sqrt(normPredicted);
-        T normProduct = NumOps.Multiply(normPredSqrt, NumOps.Sqrt(normActual));
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(p·a)) / (||p||^3 * ||a||)
-            T numerator = NumOps.Subtract(
-                NumOps.Multiply(actual[i], normPredicted),
-                NumOps.Multiply(predicted[i], dotProduct)
-            );
-
-            // ||p||^3 * ||a|| = ||p|| * ||p||^2 * ||a|| / ||p|| ...
-            // normPredSqrt = ||p||, normPredicted = ||p||^2
-            // normPredSqrt * normPredicted = ||p||^3
-            T normPredCubed = NumOps.Multiply(normPredSqrt, normPredicted);
-            T denominator = NumOps.Multiply(normPredCubed, NumOps.Sqrt(normActual));
-
-            // Derivative of the loss is negative of the derivative of cosine similarity
-            derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon));
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

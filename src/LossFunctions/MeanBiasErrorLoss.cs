@@ -67,33 +67,6 @@ public class MeanBiasErrorLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Mean Bias Error loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of MBE for each prediction.</returns>
-    /// <remarks>
-    /// The derivative is constant: d(MBE)/d(predicted) = -1/n for all elements.
-    /// This means each prediction contributes equally to reducing bias, regardless of the current error.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // The derivative of MBE with respect to predicted is -1/n for all elements
-        T derivativeValue = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.FromDouble(predicted.Length)));
-
-        // Create a vector filled with this constant derivative
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            derivative[i] = derivativeValue;
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

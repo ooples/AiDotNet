@@ -70,53 +70,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         return NumOps.Negate(loss);
     }
 
-    /// <summary>
-    /// Calculates the derivative of cross-entropy loss with respect to logits.
-    /// </summary>
-    /// <param name="predicted">Raw logits.</param>
-    /// <param name="actual">One-hot encoded target vector.</param>
-    /// <returns>Gradient: softmax(logits) - targets.</returns>
-    /// <remarks>
-    /// <para>
-    /// The gradient of cross-entropy loss with respect to logits has the elegant form:
-    ///   d(loss)/d(logit_i) = softmax(logit_i) - target_i
-    ///
-    /// This is one of the key advantages of combining softmax and cross-entropy:
-    /// the gradient is simply the difference between the predicted probabilities
-    /// and the targets, which is both easy to compute and numerically stable.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // Compute softmax probabilities
-        T maxLogit = predicted[0];
-        for (int i = 1; i < predicted.Length; i++)
-        {
-            if (NumOps.GreaterThan(predicted[i], maxLogit))
-                maxLogit = predicted[i];
-        }
-
-        var expValues = new Vector<T>(predicted.Length);
-        T sumExp = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            expValues[i] = NumOps.Exp(NumOps.Subtract(predicted[i], maxLogit));
-            sumExp = NumOps.Add(sumExp, expValues[i]);
-        }
-
-        // Gradient = softmax(logits) - targets
-        var derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T softmaxI = NumOps.Divide(expValues[i], sumExp);
-            derivative[i] = NumOps.Subtract(softmaxI, actual[i]);
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

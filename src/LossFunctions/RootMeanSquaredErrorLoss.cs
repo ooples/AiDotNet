@@ -38,33 +38,6 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
         return StatisticsHelper<T>.CalculateRootMeanSquaredError(predicted, actual);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the RMSE loss with respect to predicted values.
-    /// </summary>
-    /// <param name="predicted">The predicted values.</param>
-    /// <param name="actual">The actual (ground truth) values.</param>
-    /// <returns>A vector of gradients for each predicted value.</returns>
-    /// <exception cref="ArgumentException">Thrown when predicted and actual vectors have different lengths.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var diff = predicted - actual;
-        var mse = diff.PointwiseMultiply(diff).Average();
-        var rmse = NumOps.Sqrt(mse);
-
-        if (NumOps.Equals(rmse, NumOps.Zero))
-        {
-            var zeros = new T[predicted.Length];
-            for (int i = 0; i < zeros.Length; i++)
-                zeros[i] = NumOps.Zero;
-            return new Vector<T>(zeros);
-        }
-
-        var n = NumOps.FromDouble(predicted.Length);
-        return diff.Divide(NumOps.Multiply(rmse, n));
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

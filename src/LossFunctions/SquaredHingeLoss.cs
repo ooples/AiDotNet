@@ -66,40 +66,6 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Squared Hinge Loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (ground truth) values vector, typically -1 or 1.</param>
-    /// <returns>A vector containing the derivatives of the squared hinge loss with respect to each predicted value.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var result = new T[predicted.Length];
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T margin = NumOps.Subtract(NumOps.One, NumOps.Multiply(actual[i], predicted[i]));
-
-            if (NumOps.GreaterThan(margin, NumOps.Zero))
-            {
-                // Derivative is -2 * margin * y when margin > 0
-                result[i] = NumOps.Multiply(
-                    NumOps.FromDouble(-2.0),
-                    NumOps.Multiply(margin, actual[i])
-                );
-            }
-            else
-            {
-                // Derivative is 0 when margin <= 0
-                result[i] = NumOps.Zero;
-            }
-        }
-
-        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Squared Hinge loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

@@ -161,21 +161,6 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// This method is not used for NCE Loss as it requires specific input formats.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (target) values vector.</param>
-    /// <returns>Throws NotSupportedException.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as NCE Loss requires specific input formats.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "NCE Loss requires specific input formats. " +
-            "Use the CalculateDerivative(Vector<T>, Matrix<T>) method instead."
-        );
-    }
-
-    /// <summary>
     /// Applies the sigmoid function to a scalar value.
     /// </summary>
     /// <param name="x">The input value.</param>

@@ -75,40 +75,6 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the gradient of DETR loss with respect to predicted values.
-    /// </summary>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var gradient = new Vector<T>(predicted.Length);
-        double eps = 1e-5;
-
-        // Create a copy for perturbation to avoid mutating the original input
-        var perturbedPredicted = new Vector<T>(predicted.Length);
-        for (int j = 0; j < predicted.Length; j++)
-        {
-            perturbedPredicted[j] = predicted[j];
-        }
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double original = NumOps.ToDouble(perturbedPredicted[i]);
-
-            perturbedPredicted[i] = NumOps.FromDouble(original + eps);
-            double lossPlus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, actual));
-
-            perturbedPredicted[i] = NumOps.FromDouble(original - eps);
-            double lossMinus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, actual));
-
-            perturbedPredicted[i] = NumOps.FromDouble(original);
-            gradient[i] = NumOps.FromDouble((lossPlus - lossMinus) / (2 * eps));
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Calculates the DETR set loss.
     /// </summary>
     /// <param name="predicted">Predicted tensor containing class logits and boxes.</param>

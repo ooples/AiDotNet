@@ -149,22 +149,6 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// This method is not used for Contrastive Loss as it requires two input vectors and a similarity label.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (target) values vector.</param>
-    /// <returns>Throws NotSupportedException.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as ContrastiveLoss requires two input vectors and a similarity label.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "ContrastiveLoss requires two input vectors and a similarity label. " +
-            "Use the CalculateDerivative(Vector<T>, Vector<T>, T) method instead."
-        );
-    }
-
-
-    /// <summary>
     /// Calculates Contrastive Loss on GPU for batched input tensors.
     /// </summary>
     /// <param name="output1">The first output GPU tensor.</param>

@@ -71,43 +71,6 @@ public class DIoULoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the gradient of DIoU loss with respect to predicted boxes.
-    /// </summary>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var gradient = new Vector<T>(predicted.Length);
-        double eps = 1e-7;
-
-        // Create a copy of predicted for perturbation to avoid mutating the input
-        var perturbedPredicted = new Vector<T>(predicted.Length);
-        for (int j = 0; j < predicted.Length; j++)
-        {
-            perturbedPredicted[j] = predicted[j];
-        }
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double original = NumOps.ToDouble(predicted[i]);
-
-            // Forward perturbation (on copy)
-            perturbedPredicted[i] = NumOps.FromDouble(original + eps);
-            double lossPlus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, actual));
-
-            // Backward perturbation (on copy)
-            perturbedPredicted[i] = NumOps.FromDouble(original - eps);
-            double lossMinus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, actual));
-
-            // Restore copy and compute gradient
-            perturbedPredicted[i] = NumOps.FromDouble(original);
-            gradient[i] = NumOps.FromDouble((lossPlus - lossMinus) / (2 * eps));
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Calculates the DIoU loss between predicted and target bounding boxes.
     /// </summary>
     /// <param name="predicted">Predicted boxes tensor [batch, num_boxes, 4] in XYXY format.</param>

@@ -79,52 +79,6 @@ public class JaccardLoss<T> : LossFunctionBase<T>
         return NumOps.Subtract(NumOps.One, NumericalStabilityHelper.SafeDiv(intersection, union, NumericalStabilityHelper.SmallEpsilon));
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Jaccard loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (ground truth) values vector.</param>
-    /// <returns>A vector containing the derivatives of the Jaccard loss with respect to each predicted value.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // Soft IoU derivative: d(1 - IoU)/d(p_i)
-        // IoU = intersection / union
-        // intersection = Σ(p*a), union = Σp + Σa - Σ(p*a)
-        // d(IoU)/d(p_i) = (a_i * union - intersection * (1 - a_i)) / union²
-        // d(loss)/d(p_i) = -d(IoU)/d(p_i)
-        T intersection = NumOps.Zero;
-        T sumPredicted = NumOps.Zero;
-        T sumActual = NumOps.Zero;
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
-            sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
-            sumActual = NumOps.Add(sumActual, actual[i]);
-        }
-
-        T union = NumOps.Subtract(NumOps.Add(sumPredicted, sumActual), intersection);
-        T unionSquared = NumOps.Multiply(union, union);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // d(IoU)/d(p_i) = (a_i * union - intersection * (1 - a_i)) / union²
-            T numerator = NumOps.Subtract(
-                NumOps.Multiply(actual[i], union),
-                NumOps.Multiply(intersection, NumOps.Subtract(NumOps.One, actual[i]))
-            );
-            // loss = 1 - IoU, so derivative is negated
-            derivative[i] = NumOps.Negate(
-                NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon)
-            );
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

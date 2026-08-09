@@ -60,37 +60,6 @@ public class HingeLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Hinge loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values, typically -1 or 1.</param>
-    /// <returns>A vector containing the derivatives of Hinge loss for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var result = new T[predicted.Length];
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T margin = NumOps.Subtract(NumOps.One, NumOps.Multiply(actual[i], predicted[i]));
-
-            if (NumOps.GreaterThan(margin, NumOps.Zero))
-            {
-                // Derivative is -y when margin > 0
-                result[i] = NumOps.Negate(actual[i]);
-            }
-            else
-            {
-                // Derivative is 0 when margin <= 0
-                result[i] = NumOps.Zero;
-            }
-        }
-
-        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Hinge loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

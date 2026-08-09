@@ -71,48 +71,6 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Modified Huber Loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (ground truth) values vector, typically -1 or 1.</param>
-    /// <returns>A vector containing the derivatives of the modified huber loss with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // z = y * f(x)
-            T z = NumOps.Multiply(actual[i], predicted[i]);
-
-            if (NumOps.GreaterThanOrEquals(z, NumOps.FromDouble(-1)))
-            {
-                if (NumOps.LessThan(z, NumOps.One))
-                {
-                    // For -1 = z < 1: -2 * y * (1 - z)
-                    derivative[i] = NumOps.Multiply(
-                        NumOps.Multiply(NumOps.FromDouble(-2), actual[i]),
-                        NumOps.Subtract(NumOps.One, z)
-                    );
-                }
-                else
-                {
-                    // For z = 1: 0
-                    derivative[i] = NumOps.Zero;
-                }
-            }
-            else
-            {
-                // For z < -1: -4 * y
-                derivative[i] = NumOps.Multiply(NumOps.FromDouble(-4), actual[i]);
-            }
-        }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Modified Huber loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

@@ -193,22 +193,6 @@ public class TripletLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// This method is not used for Triplet Loss as it requires multiple input vectors.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (target) values vector.</param>
-    /// <returns>Throws NotSupportedException.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as TripletLoss requires three input matrices.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "TripletLoss requires three input matrices (anchor, positive, negative). " +
-            "Use the CalculateDerivative(Matrix<T>, Matrix<T>, Matrix<T>) method instead."
-        );
-    }
-
-
-    /// <summary>
     /// Calculates Triplet Loss on GPU for batched input tensors.
     /// </summary>
     /// <param name="anchor">The anchor GPU tensor (batch of embeddings).</param>

@@ -84,42 +84,6 @@ public class MarginLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Margin loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of Margin loss for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T v = predicted[i];
-            T y = actual[i];
-
-            T term1 = NumOps.Multiply(y, NumOps.Subtract(_mPlus, v));
-            T term2 = NumOps.Multiply(NumOps.Subtract(NumOps.One, y), NumOps.Subtract(v, _mMinus));
-
-            if (NumOps.GreaterThan(term1, NumOps.Zero))
-            {
-                derivative[i] = NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(2), term1));
-            }
-            else if (NumOps.GreaterThan(term2, NumOps.Zero))
-            {
-                derivative[i] = NumOps.Multiply(_lambda, NumOps.Multiply(NumOps.FromDouble(2), term2));
-            }
-            else
-            {
-                derivative[i] = NumOps.Zero;
-            }
-        }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
