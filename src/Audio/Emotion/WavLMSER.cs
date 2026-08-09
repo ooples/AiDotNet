@@ -3,10 +3,12 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Audio.Classification;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Emotion;
@@ -64,7 +66,7 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     #region Constructors
 
     public WavLMSER(NeuralNetworkArchitecture<T> architecture, string modelPath, WavLMSEROptions? options = null)
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WavLMSEROptions();
         _useNativeMode = false;
@@ -76,13 +78,41 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 
     public WavLMSER(NeuralNetworkArchitecture<T> architecture, WavLMSEROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WavLMSEROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        ValidateOptions(_options);
+        // Train raw logits with the classifier objective and honor the public optimization options.
+        // A caller-supplied optimizer remains the full-customization path for alternate schedules.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
+    }
+
+    private static void ValidateOptions(WavLMSEROptions options)
+    {
+        if (options.HiddenDim <= 0) throw new ArgumentOutOfRangeException(nameof(options.HiddenDim));
+        if (options.NumLayers <= 0) throw new ArgumentOutOfRangeException(nameof(options.NumLayers));
+        if (options.NumAttentionHeads <= 0) throw new ArgumentOutOfRangeException(nameof(options.NumAttentionHeads));
+        if (options.HiddenDim % options.NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDim must be divisible by NumAttentionHeads.", nameof(options));
+        if (options.FeedForwardDim <= 0) throw new ArgumentOutOfRangeException(nameof(options.FeedForwardDim));
+        if (options.FeatureEncoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(options.FeatureEncoderDim));
+        if (options.NumClasses <= 0) throw new ArgumentOutOfRangeException(nameof(options.NumClasses));
+        if (options.EmotionLabels is null || options.EmotionLabels.Length != options.NumClasses)
+            throw new ArgumentException("EmotionLabels must contain exactly NumClasses labels.", nameof(options));
+        if (options.LearningRate <= 0 || double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options.LearningRate));
+        if (options.WeightDecay < 0 || double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options.WeightDecay));
+        if (options.DropoutRate < 0 || options.DropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options.DropoutRate));
     }
 
     internal static async Task<WavLMSER<T>> CreateAsync(WavLMSEROptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
@@ -124,7 +154,11 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        Tensor<T> logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        // PredictCore now applies the softmax head (PostprocessOutput) for BOTH native and ONNX modes,
+        // so Predict already returns a normalized probability distribution. Route both modes through it
+        // and read the probabilities directly — re-running softmax here (as the old native path did on
+        // Predict's already-softmax'd output) would double-softmax and flatten the distribution.
+        var probsTensor = Predict(features);
 
         if (_options.NumClasses <= 0)
             throw new InvalidOperationException("NumClasses must be positive.");
@@ -132,22 +166,9 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
             throw new InvalidOperationException("EmotionLabels must be non-empty.");
 
         var probs = new Dictionary<string, T>();
-        int numClasses = Math.Min(_options.NumClasses, Math.Min(_options.EmotionLabels.Length, logits.Length));
-        double maxLogit = double.NegativeInfinity;
+        int numClasses = Math.Min(_options.NumClasses, Math.Min(_options.EmotionLabels.Length, probsTensor.Length));
         for (int i = 0; i < numClasses; i++)
-        {
-            double val = NumOps.ToDouble(logits[i]);
-            if (val > maxLogit) maxLogit = val;
-        }
-        double sumExp = 0;
-        var expValues = new double[numClasses];
-        for (int i = 0; i < numClasses; i++)
-        {
-            expValues[i] = Math.Exp(NumOps.ToDouble(logits[i]) - maxLogit);
-            sumExp += expValues[i];
-        }
-        for (int i = 0; i < numClasses; i++)
-            probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / numClasses);
+            probs[_options.EmotionLabels[i]] = probsTensor[i];
 
         return probs;
     }
@@ -234,7 +255,13 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        // Route BOTH modes through Predict so the returned vector has one consistent contract: the
+        // emotion-class distribution PredictCore/PostprocessOutput produce (native runs the softmax head;
+        // the ONNX branch applies PostprocessOutput to OnnxEncoder.Run). The old code special-cased ONNX
+        // to return OnnxEncoder.Run directly — bypassing PostprocessOutput — so this method silently
+        // returned probabilities for native models but raw ONNX logits for ONNX models. Mirrors the
+        // sibling GetEmotionProbabilities, which likewise reads Predict(features) for both modes.
+        Tensor<T> output = Predict(features);
         return output.ToVector();
     }
 
@@ -256,8 +283,39 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        if (IsOnnxMode && OnnxEncoder is not null) return PostprocessOutput(OnnxEncoder.Run(input));
+        // Public inference returns a probability distribution; training uses RunLayersRaw directly so
+        // CrossEntropyWithLogitsLoss applies its stable softmax exactly once.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return PostprocessOutput(RunLayersRaw(input));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    /// <summary>Runs the WavLM encoder and emotion head without inference softmax.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunLayersRaw(input);
+
+    private Tensor<T> RunLayersRaw(Tensor<T> input)
+    {
+        var output = input;
+        foreach (var layer in Layers) output = layer.Forward(output);
+
+        // WavLM downstream classification pools frame representations into one utterance-level
+        // prediction. Reduce every leading axis while preserving the final class axis.
+        if (output.Shape.Length >= 2)
+        {
+            int classAxis = output.Shape.Length - 1;
+            int[] poolAxes = Enumerable.Range(0, classAxis).ToArray();
+            output = Engine.ReduceMean(output, poolAxes, keepDims: false);
+        }
+
+        return output;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -266,7 +324,7 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -286,7 +344,7 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return rawAudio;
     }
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => Engine.Softmax(o, axis: -1);
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -323,9 +381,10 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var copiedOptions = new WavLMSEROptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WavLMSER<T>(Architecture, mp, _options);
-        return new WavLMSER<T>(Architecture, _options);
+            return new WavLMSER<T>(Architecture, mp, copiedOptions);
+        return new WavLMSER<T>(Architecture, copiedOptions);
     }
 
     #endregion

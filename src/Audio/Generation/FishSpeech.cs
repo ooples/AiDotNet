@@ -99,9 +99,15 @@ public class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Creates a Fish Speech model in native training mode.
     /// </summary>
+    // Fish-Speech (Liao et al., arXiv 2411.01156) trains its dual-AR semantic stage with
+    // CROSS-ENTROPY over codebook tokens, not a regression loss. AudioNeuralNetworkBase defaults to
+    // MeanSquaredErrorLoss, which this model silently inherited, so it was descending MSE on codebook
+    // LOGITS -- Training_ShouldReduceLoss measured the loss EXPLODING 5.513819 -> 250.439310. Same
+    // defect already fixed on SeACo / SALMONN / SALM; the head emits raw logits, so use the fused
+    // log-softmax/NLL form.
     public FishSpeech(NeuralNetworkArchitecture<T> architecture, FishSpeechOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new FishSpeechOptions();
         _useNativeMode = true;
@@ -266,7 +272,7 @@ public class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
