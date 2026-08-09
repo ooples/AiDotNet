@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
@@ -133,7 +133,13 @@ public class TabTransformer<T> : RiskModelBase<T>
         // the framework default optimizer win. Without this the LearningRate and WeightDecay now
         // flowing into CreateDefaultOptimizer would reach an optimizer that never runs -- the same
         // dead dependency YingLong had, fixed the same way.
-        SetBaseTrainOptimizer(_optimizer);
+        //
+        // base., not this.: SetBaseTrainOptimizer is internal VIRTUAL (Transformer overrides it) and
+        // this class is not sealed, so an unqualified call would dispatch into a subclass override
+        // before that subclass's constructor has run -- handing it a half-built object. Qualifying
+        // with base. makes the dispatch non-virtual, which is what a constructor needs and what this
+        // line always meant. Behavior is identical for every existing caller, none of which override it.
+        base.SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
     }
@@ -174,7 +180,13 @@ public class TabTransformer<T> : RiskModelBase<T>
         // the framework default optimizer win. Without this the LearningRate and WeightDecay now
         // flowing into CreateDefaultOptimizer would reach an optimizer that never runs -- the same
         // dead dependency YingLong had, fixed the same way.
-        SetBaseTrainOptimizer(_optimizer);
+        //
+        // base., not this.: SetBaseTrainOptimizer is internal VIRTUAL (Transformer overrides it) and
+        // this class is not sealed, so an unqualified call would dispatch into a subclass override
+        // before that subclass's constructor has run -- handing it a half-built object. Qualifying
+        // with base. makes the dispatch non-virtual, which is what a constructor needs and what this
+        // line always meant. Behavior is identical for every existing caller, none of which override it.
+        base.SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
     }
