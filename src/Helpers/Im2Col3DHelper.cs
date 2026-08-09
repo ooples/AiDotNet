@@ -53,11 +53,29 @@ internal static class Im2Col3DHelper
     /// checked rather than assumed because <typeparamref name="T"/> is unconstrained here: a custom
     /// numeric type whose default-constructed value is not its zero would be silently mis-cleared,
     /// and that is the kind of wrongness that shows up as a slightly wrong gradient rather than a
-    /// crash. The comparison is over two <typeparamref name="T"/> values, not a shape or a float
-    /// tolerance, so exact equality is the right test.
+    /// crash.
+    /// <para>
+    /// The equality goes through <c>INumericOperations&lt;T&gt;.Equals</c> - the library's own numeric
+    /// comparison, used this way across the codebase - rather than
+    /// <c>EqualityComparer&lt;T&gt;.Default</c>. That matters for correctness, not only for style: the
+    /// question being asked is whether the ELEMENT TYPE'S NUMERIC ZERO is the value
+    /// <c>Array.Clear</c> writes, and only the numeric abstraction knows what zero means for a custom
+    /// T. Routing it through the default comparer also fell foul of nullable analysis on net471,
+    /// because <c>default</c> for an unconstrained T is null-annotated - a symptom of asking the
+    /// wrong question rather than a quirk to suppress.
+    /// </para>
     /// </remarks>
-    private static bool ZeroIsDefault<T>(T zero) =>
-        System.Collections.Generic.EqualityComparer<T>.Default.Equals(zero, default);
+    private static bool ZeroIsDefault<T>(T zero)
+    {
+        // The pattern test carries the reference-type case rather than suppressing it. T is
+        // unconstrained, so default(T) is null for a reference T - and null is never a numeric zero,
+        // which means Array.Clear cannot stand in for a fill there. Failing the pattern returns false
+        // and takes the explicit-fill path, which is the correct answer rather than an evasion of the
+        // nullable warning.
+        if (default(T) is not T defaultValue) return false;
+
+        return MathHelper.GetNumericOperations<T>().Equals(zero, defaultValue);
+    }
 
     /// <summary>
     /// Fills <paramref name="m"/> from <paramref name="x"/> per the im2col 3D mapping
