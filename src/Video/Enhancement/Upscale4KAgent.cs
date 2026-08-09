@@ -89,7 +89,15 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new Upscale4KAgentOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The public SR options specify a conservative 1e-4 learning rate. AdamW's
+        // generic default is 1e-3, which is too aggressive for the residual
+        // pixel-shuffle reconstruction stack and can make repeated updates oscillate.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -144,7 +152,9 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Use the optimizer selected by this model (or injected by the caller),
+            // rather than silently falling back to NeuralNetworkBase's generic Adam.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -228,8 +238,12 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new Upscale4KAgent<T>(Architecture, p, _options);
-        return new Upscale4KAgent<T>(Architecture, _options, _optimizer);
+            return new Upscale4KAgent<T>(Architecture, p, new Upscale4KAgentOptions(_options));
+
+        // A clone needs optimizer state bound to the clone's parameters. Reusing this
+        // instance's optimizer would couple the two models and bypass its constructor's
+        // option-derived learning rate.
+        return new Upscale4KAgent<T>(Architecture, new Upscale4KAgentOptions(_options));
     }
 
     #endregion

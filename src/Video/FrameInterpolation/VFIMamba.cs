@@ -109,7 +109,11 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new VFIMambaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
@@ -163,7 +167,7 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

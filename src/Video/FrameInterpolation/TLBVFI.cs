@@ -49,10 +49,10 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("TLBVFI: Token-Level Bidirectional Video Frame Interpolation",
-    "https://arxiv.org/abs/2404.07547",
-    Year = 2024,
-    Authors = "Xiang Zhang, Zekun Xu, Fuhai Chen")]
+[ResearchPaper("TLB-VFI: Temporal-Aware Latent Brownian Bridge Diffusion for Video Frame Interpolation",
+    "https://arxiv.org/abs/2507.04984",
+    Year = 2025,
+    Authors = "Zonglin Lyu, Chen Chen")]
 public class TLBVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -141,7 +141,7 @@ public class TLBVFI<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
