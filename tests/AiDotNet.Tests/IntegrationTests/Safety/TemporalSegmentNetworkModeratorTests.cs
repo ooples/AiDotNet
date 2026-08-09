@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Safety;
 using AiDotNet.Safety.Video;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;

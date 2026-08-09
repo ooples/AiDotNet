@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -86,6 +86,18 @@ public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
     public int SegmentCount => _segmentCount;
 
     /// <summary>
+    /// Number of frames the last <see cref="EvaluateVideo"/> call actually classified.
+    /// </summary>
+    /// <remarks>
+    /// THE COST PROPERTY, OBSERVABLE. SegmentCount only reports what the constructor was handed; it
+    /// stays 3 even if the sampler degenerates into scanning every frame. This reports what was
+    /// really examined -- one snippet per segment, so min(SegmentCount, frames.Count) and NOT a
+    /// function of video length. That is the whole claim of sparse temporal sampling, and it is
+    /// otherwise untestable from outside.
+    /// </remarks>
+    public int LastSampledFrameCount { get; private set; }
+
+    /// <summary>
     /// Gets the segmental consensus function used to combine snippet scores.
     /// </summary>
     public SegmentalConsensus Consensus => _consensus;
@@ -155,6 +167,7 @@ public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
 
         // --- Sparse temporal sampling: K segments of equal duration, one snippet from each ---
         int segments = Math.Min(_segmentCount, frames.Count);
+        LastSampledFrameCount = segments;
         var snippetIndices = new int[segments];
         for (int k = 0; k < segments; k++)
         {
