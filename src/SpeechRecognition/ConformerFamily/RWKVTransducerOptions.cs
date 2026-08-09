@@ -38,6 +38,7 @@ public class RWKVTransducerOptions : ModelOptions
         LearningRate = other.LearningRate;
         NumAttentionHeads = other.NumAttentionHeads;
         CgmlpDim = other.CgmlpDim;
+        MaxEncoderFrames = other.MaxEncoderFrames;
         NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         ModelPath = other.ModelPath;
@@ -69,7 +70,27 @@ public class RWKVTransducerOptions : ModelOptions
     /// </remarks>
     public int NumEncoderLayers { get; set; } = 18;
     public int NumAttentionHeads { get; set; } = 8;
+    /// <summary>Width of the convolutional gating MLP branch.</summary>
+    /// <value>The cgMLP width. Default 3072.</value>
+    /// <remarks>
+    /// Retained for callers supplying their own Branchformer-style <c>Architecture.Layers</c>. The
+    /// native RWKV encoder has no cgMLP branch -- its blocks are time mixing plus channel mixing -- so
+    /// it does not read this.
+    /// </remarks>
     public int CgmlpDim { get; set; } = 3072;
+
+    /// <summary>Longest encoder frame count the RWKV blocks are built for.</summary>
+    /// <value>The frame ceiling. Default 750, matching 30 s of audio after stride-4 subsampling at 10 ms hops.</value>
+    /// <remarks>
+    /// <para>
+    /// <see cref="RWKVLayer{T}"/> takes a sequence length at construction, so the encoder needs one.
+    /// Its recurrent state is constant-size regardless, which is the whole point of the architecture;
+    /// this bounds the layer's own buffers, not the memory used per frame.
+    /// </para>
+    /// <para><b>For Beginners:</b> The longest utterance the encoder is sized for. Raise it if you
+    /// transcribe recordings longer than <see cref="MaxAudioLengthSeconds"/>.</para>
+    /// </remarks>
+    public int MaxEncoderFrames { get; set; } = 750;
     public int NumMels { get; set; } = 80;
     /// <summary>Output vocabulary size; must equal <see cref="Vocabulary"/>'s length.</summary>
     /// <value>The token count. Defaults to the built-in character tokenizer's size.</value>

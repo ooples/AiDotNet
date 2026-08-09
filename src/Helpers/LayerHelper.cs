@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.VAE;
+﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -22226,6 +22226,82 @@ public static class LayerHelper<T>
     #endregion
 
     #region ASR LayerHelper Methods
+
+    /// <summary>
+    /// Creates the RWKV-Transducer encoder: conv subsampling, N RWKV time-mixing blocks, and a CTC head.
+    /// </summary>
+    /// <param name="encoderDim">Model width of the RWKV blocks. Must divide evenly by <paramref name="numHeads"/>.</param>
+    /// <param name="numLayers">Number of stacked RWKV blocks.</param>
+    /// <param name="numHeads">Head count inside each block's time mixing.</param>
+    /// <param name="numMels">Mel filterbank channels of the acoustic front end.</param>
+    /// <param name="vocabSize">CTC output vocabulary size.</param>
+    /// <param name="dropoutRate">Dropout after subsampling and between blocks; 0 disables it.</param>
+    /// <param name="maxSequenceLength">Longest frame count a block is built for.</param>
+    /// <returns>The encoder layers, in order.</returns>
+    /// <remarks>
+    /// <para>
+    /// RWKV BLOCKS, NOT BRANCHFORMER BLOCKS. <c>RWKVTransducer</c> previously built its native encoder
+    /// from <see cref="CreateDefaultBranchformerLayers"/>, so the model named after RWKV contained no
+    /// RWKV at all: no time mixing ran, and the self-attention it used instead is the very thing the
+    /// architecture exists to remove. <see cref="RWKVLayer{T}"/> carries the real recurrence, with
+    /// trainable receptance/key/value/output projections, learned per-channel decay and bonus, and the
+    /// token-shift coefficients -- all registered as parameters, so they train.
+    /// </para>
+    /// <para>
+    /// The subsampling front end and CTC head match the Branchformer factory deliberately: the encoder
+    /// interior is the only thing that should differ between the two, so a comparison between them
+    /// measures the recurrence rather than the framing.
+    /// </para>
+    /// <para><b>For Beginners:</b> Attention re-reads the whole utterance for every frame, so it cannot
+    /// start until the speaker stops. These blocks keep a fixed-size running summary instead, updated
+    /// once per frame, which is what lets the model transcribe as the audio arrives.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKVTransducerLayers(
+        int encoderDim = 512,
+        int numLayers = 12,
+        int numHeads = 8,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        if (encoderDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(encoderDim), encoderDim, "Encoder dimension must be positive.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Layer count must be positive.");
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), numHeads, "Head count must be positive.");
+        if (encoderDim % numHeads != 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numHeads), numHeads,
+                $"numHeads must divide encoderDim ({encoderDim}); got {encoderDim} % {numHeads} != 0. " +
+                "RWKVLayer splits the width across heads, so an uneven split has no defined per-head size.");
+        }
+        if (maxSequenceLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxSequenceLength), maxSequenceLength, "Sequence length must be positive.");
+
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Conv subsampling (stride 4), same front end as the Branchformer encoder.
+        yield return new DenseLayer<T>(encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new DenseLayer<T>(encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // The encoder proper: stacked RWKV blocks, each one time mixing followed by channel mixing.
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new RWKVLayer<T>(maxSequenceLength, encoderDim, numHeads);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // CTC output head
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
 
     /// <summary>
     /// Creates default layers for a Branchformer encoder with parallel attention + cgMLP branches.

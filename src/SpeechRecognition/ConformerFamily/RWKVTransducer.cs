@@ -134,7 +134,7 @@ public class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             "probabilities. Set the language with RWKVTransducerOptions.Language.");
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new RWKVStreamingSession(this, language ?? _options.Language);
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultBranchformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, cgmlpDim: _options.CgmlpDim, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultRWKVTransducerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, maxSequenceLength: _options.MaxEncoderFrames)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
