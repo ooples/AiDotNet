@@ -11,6 +11,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
 /// <summary>
@@ -35,6 +37,14 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     Authors = "Alexey Bochkovskiy, Chien-Yao Wang, Hong-Yuan Mark Liao")]
 public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
+
+
+    // No GetExtraTrainableLayers here, deliberately. CSPDarknet ALREADY puts its stem and every
+    // stage into Layers, so the base walk reaches them; declaring them again listed every weight
+    // twice and the vector came back at exactly 2x the count (13,570,304 against 6,785,152).
+    // The refusals are still removed -- the automation was always going to work for this one, the
+    // model simply had nothing extra to declare.
+
     private readonly List<CSPBlock<T>> _stages;
     private readonly ConvolutionalLayer<T> _stem;
     private readonly int _depth;
@@ -163,20 +173,11 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return activations;
     }
 
-    /// <summary>
-    /// Sum across stem + every CSP stage. Inherited
-    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> delegates to this
-    /// virtual property, satisfying the <see cref="IDetectionBackbone{T}"/> contract.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _stem.ParameterCount;
-            for (int i = 0; i < _stages.Count; i++) count += _stages[i].GetParameterCount();
-            return count;
-        }
-    }
+    // ParameterCount is NOT overridden. It folds the same enumeration GetParameters
+    // does -- Layers, then GetExtraTrainableLayers() -- so the two cannot disagree. The
+    // override that was here summed the stem and blocks through GetParameterCount(),
+    // a SEPARATE source, and once the vector started folding the base enumeration the
+    // two drifted apart immediately.
 
     public void WriteParameters(BinaryWriter writer)
     {
@@ -264,17 +265,8 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: detection backbones train as part of a parent detector.");
 
-    public override Vector<T> GetParameters() =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not expose a flat parameter vector. Use WriteParameters/ReadParameters.");
 
-    public override void SetParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters.");
 
-    public override void UpdateParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter update vector.");
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
@@ -332,6 +324,21 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 [AutoParameters]
 public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        if (_downsample is not null) yield return _downsample;
+        yield return _cv1;
+        yield return _cv2;
+        yield return _cv3;
+        foreach (var b in _bottlenecks)
+        {
+            foreach (var l in b.EnumerateLayers()) yield return l;
+        }
+    }
+
     private readonly ConvolutionalLayer<T> _downsample;
     private readonly ConvolutionalLayer<T> _cv1;
     private readonly ConvolutionalLayer<T> _cv2;
@@ -506,6 +513,15 @@ public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
 [AutoParameters]
 public partial class CSPBottleneckBlock<T> : LayerBase<T>, IShapeContract
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _cv1;
+        yield return _cv2;
+    }
+
     private readonly ConvolutionalLayer<T> _cv1;
     private readonly ConvolutionalLayer<T> _cv2;
     private readonly bool _add;
