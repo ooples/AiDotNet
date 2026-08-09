@@ -516,23 +516,6 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         return count;
     }
 
-    /// <summary>
-    /// Gets all parameters as a vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     #region LoRA Fine-Tuning Support
 
     /// <summary>
