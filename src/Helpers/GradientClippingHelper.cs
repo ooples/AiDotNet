@@ -174,7 +174,11 @@ public static class GradientClippingHelper
         // preserve, so scaling is skipped rather than applied with a degenerate
         // factor. Returning the gradients untouched leaves the caller exactly as
         // well off as clipping being disabled.
-        if (IsUnusableNorm(norm, nameof(ClipByNorm)) || norm <= maxNorm || norm == 0.0)
+        // `norm <= 0.0` rather than `norm == 0.0`: the norm is a square root of a sum of squares, so
+        // it is never negative, which makes the two tests equivalent here -- without the exact
+        // float-equality that CodeQL flags. The clause is not redundant with `norm <= maxNorm`; it is
+        // what stops a caller-supplied negative maxNorm from producing a -Infinity scale.
+        if (IsUnusableNorm(norm, nameof(ClipByNorm)) || norm <= maxNorm || norm <= 0.0)
         {
             return gradients.Clone();
         }
@@ -209,7 +213,8 @@ public static class GradientClippingHelper
         double norm = Math.Sqrt(SumSquares(gradients, numOps));
 
         // No meaningful direction to preserve -- leave the gradients alone.
-        if (IsUnusableNorm(norm, nameof(ClipByNormInPlace)) || norm <= maxNorm || norm == 0.0)
+        // See ClipByNorm above for why this is `norm <= 0.0` and not `norm == 0.0`.
+        if (IsUnusableNorm(norm, nameof(ClipByNormInPlace)) || norm <= maxNorm || norm <= 0.0)
         {
             return false;
         }

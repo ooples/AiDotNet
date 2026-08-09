@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -250,10 +251,9 @@ internal static class CopyOnWriteCloneHelper
         }
 
         bool sawGeneric = false;
-        foreach (var iface in sequenceType.GetInterfaces())
+        foreach (var iface in sequenceType.GetInterfaces()
+                     .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
         {
-            if (!iface.IsGenericType || iface.GetGenericTypeDefinition() != typeof(IEnumerable<>))
-                continue;
             sawGeneric = true;
             if (!IsLeafType<T>(iface.GetGenericArguments()[0])) return true;
         }

@@ -1409,9 +1409,10 @@ public static class DeserializationHelper
             // string in the metadata.)
             var dsActivationType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? dsActivationObj = TryCreateActivationInstance(additionalParams, "ScalarActivationType", dsActivationType);
-            if (dsActivationObj is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+            if (dsActivationObj is null && additionalParams is not null
+                && additionalParams.TryGetValue("ScalarActivationType", out object? dsActivationTypeName))
                 throw new InvalidOperationException(
-                    $"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for DepthwiseSeparableConvolutionalLayer.");
+                    $"Failed to deserialize activation function of type '{dsActivationTypeName}' for DepthwiseSeparableConvolutionalLayer.");
 
             instance = new DepthwiseSeparableConvolutionalLayer<T>(
                 dsOutputDepth, dsKernelSize, dsStride, dsPadding, dsActivationObj as IActivationFunction<T>);
