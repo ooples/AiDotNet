@@ -5,6 +5,8 @@ using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -70,6 +72,13 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("A Style-Based Generator Architecture for Generative Adversarial Networks", "https://arxiv.org/abs/1812.04948", Year = 2019, Authors = "Tero Karras, Samuli Laine, Timo Aila")]
 public class StyleGAN<T> : NeuralNetworkBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Mapping network, synthesis network, then discriminator -- the order ParameterCount summed them. Same fix: measured 68,265 against a vector of length 0.</remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => MappingNetwork.Layers.Cast<LayerBase<T>?>()
+            .Concat(SynthesisNetwork.Layers.Cast<LayerBase<T>?>())
+            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
     private readonly StyleGANOptions _options;
 
     /// <inheritdoc/>
@@ -153,11 +162,6 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// Gets the discriminator network.
     /// </summary>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the StyleGAN.
-    /// </summary>
-    public override long ParameterCount => MappingNetwork.GetParameterCount() + SynthesisNetwork.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <summary>
     /// Enables style mixing during training.
