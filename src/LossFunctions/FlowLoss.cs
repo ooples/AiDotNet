@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.LinearAlgebra;
+﻿using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video;
 using AiDotNet.Video.Motion;
 
@@ -78,13 +78,20 @@ public class FlowLoss<T> : LossFunctionBase<T>
 
     /// <inheritdoc/>
     /// <param name="predicted">Reconstructed clip, rank-4 <c>[frames, channels, height, width]</c> or
-    /// rank-5 <c>[batch, frames, channels, height, width]</c>.</param>
+    /// rank-5 <c>[batch, frames, channels, height, width]</c>. Any batch size is accepted.</param>
     /// <param name="target">Ground-truth clip with the same shape.</param>
     /// <remarks>
+    /// <para>
     /// Averages the squared flow difference over every adjacent frame pair. The squared L2 norm is
     /// normalized per element rather than summed so the term's magnitude does not scale with patch
     /// size — the paper's weight for this term was tuned at a fixed 512x512 patch size, so a
     /// resolution-dependent magnitude would silently re-weight the objective at any other size.
+    /// </para>
+    /// <para>
+    /// A rank-5 clip is averaged over the batch as well, one sample at a time. Optical flow is
+    /// defined per sample, so the samples cannot be folded together into one estimate; the loop is
+    /// what makes the advertised rank-5 support real rather than rank-5-if-batch-is-1.
+    /// </para>
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
@@ -130,32 +137,78 @@ public class FlowLoss<T> : LossFunctionBase<T>
                 nameof(predicted));
         }
 
-        Tensor<T>? total = null;
-        int pairs = 0;
-        for (int t = 1; t < numFrames; t++)
+        if (ps.Length == 4) return ClipLoss(predicted, target, frameAxis, numFrames);
+
+        // Rank-5: one sample at a time, then average. Flow is defined per sample, so the batch cannot
+        // be folded into another axis; it has to be walked.
+        int batch = ps[0];
+        if (batch < 1)
         {
-            var predCurr = FrameAt(predicted, frameAxis, t);
-            var predPrev = FrameAt(predicted, frameAxis, t - 1);
-            var gtCurr = FrameAt(target, frameAxis, t);
-            var gtPrev = FrameAt(target, frameAxis, t - 1);
-
-            var predFlow = _flowEstimator.EstimateFlow(predCurr, predPrev);
-
-            // The ground-truth flow is a fixed target: detaching it keeps the gradient path solely
-            // through the reconstruction, and stops the estimator being nudged to explain the GT.
-            var gtFlow = Engine.StopGradient(_flowEstimator.EstimateFlow(gtCurr, gtPrev));
-
-            var diff = Engine.TensorSubtract(predFlow, gtFlow);
-            var sq = Engine.TensorMultiply(diff, diff);
-            var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-            var pairLoss = Engine.ReduceMean(sq, axes, keepDims: false);
-
-            total = total is null ? pairLoss : Engine.TensorAdd(total, pairLoss);
-            pairs++;
+            throw new ArgumentException(
+                $"FlowLoss received a rank-5 clip with batch {batch}. The per-dimension check above only " +
+                "requires the two clips to agree, so an empty batch reaches here as a shape both sides " +
+                "share; there is nothing to average over.",
+                nameof(predicted));
         }
 
-        // `pairs` is at least 1 because numFrames >= 2 was enforced above.
-        return Engine.TensorMultiplyScalar(total!, NumOps.FromDouble(1.0 / pairs));
+        Tensor<T> batchTotal = SampleLoss(predicted, target, frameAxis, numFrames, 0);
+        for (int b = 1; b < batch; b++)
+        {
+            batchTotal = Engine.TensorAdd(batchTotal, SampleLoss(predicted, target, frameAxis, numFrames, b));
+        }
+
+        return Engine.TensorMultiplyScalar(batchTotal, NumOps.FromDouble(1.0 / batch));
+    }
+
+    /// <summary>Narrows both clips to sample <paramref name="sample"/> and measures that sample alone.</summary>
+    private Tensor<T> SampleLoss(Tensor<T> predicted, Tensor<T> target, int frameAxis, int numFrames, int sample)
+    {
+        var onePredicted = Engine.TensorNarrow(predicted, 0, sample, 1);
+        var oneTarget = Engine.TensorNarrow(target, 0, sample, 1);
+
+        return ClipLoss(onePredicted, oneTarget, frameAxis, numFrames);
+    }
+
+    /// <summary>
+    /// The mean squared flow difference over every adjacent frame pair of a single clip.
+    /// </summary>
+    /// <remarks>
+    /// Split out from <see cref="ComputeTapeLoss"/> so the rank-4 path and each sample of the rank-5
+    /// path run exactly the same computation. Two copies of a frame loop is how the two ranks drift
+    /// into meaning different things.
+    /// </remarks>
+    private Tensor<T> ClipLoss(Tensor<T> predicted, Tensor<T> target, int frameAxis, int numFrames)
+    {
+        // numFrames >= 2 was enforced by the caller, so there is at least one pair and the
+        // accumulator can start from a real value rather than from null.
+        Tensor<T> total = PairLoss(predicted, target, frameAxis, 1);
+        for (int t = 2; t < numFrames; t++)
+        {
+            total = Engine.TensorAdd(total, PairLoss(predicted, target, frameAxis, t));
+        }
+
+        return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(1.0 / (numFrames - 1)));
+    }
+
+    /// <summary>The squared flow difference between frame <paramref name="t"/> and the one before it.</summary>
+    private Tensor<T> PairLoss(Tensor<T> predicted, Tensor<T> target, int frameAxis, int t)
+    {
+        var predCurr = FrameAt(predicted, frameAxis, t);
+        var predPrev = FrameAt(predicted, frameAxis, t - 1);
+        var gtCurr = FrameAt(target, frameAxis, t);
+        var gtPrev = FrameAt(target, frameAxis, t - 1);
+
+        var predFlow = _flowEstimator.EstimateFlow(predCurr, predPrev);
+
+        // The ground-truth flow is a fixed target: detaching it keeps the gradient path solely
+        // through the reconstruction, and stops the estimator being nudged to explain the GT.
+        var gtFlow = Engine.StopGradient(_flowEstimator.EstimateFlow(gtCurr, gtPrev));
+
+        var diff = Engine.TensorSubtract(predFlow, gtFlow);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+
+        return Engine.ReduceMean(sq, axes, keepDims: false);
     }
 
     /// <summary>
@@ -181,9 +234,10 @@ public class FlowLoss<T> : LossFunctionBase<T>
             if (d == frameAxis) continue;
             if (frameAxis == 1 && d == 0)
             {
-                // Rank-5: fold the batch into the channel axis is NOT valid, so require batch 1 here
-                // and drop it. A larger batch is handled by the caller looping, not by silently
-                // mixing samples' motion together.
+                // Rank-5: folding the batch into the channel axis is NOT valid, so this drops a
+                // singleton batch axis and nothing else. ComputeTapeLoss narrows to one sample before
+                // calling in, so a larger batch arriving here means that loop was bypassed -- an
+                // internal invariant rather than a caller error.
                 if (shape[0] != 1)
                 {
                     throw new NotSupportedException(

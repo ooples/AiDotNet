@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Enums;
 
@@ -194,7 +194,12 @@ public sealed class AxisRelation
                 // Integer division deliberately: a scale that does not divide evenly is a declaration
                 // error, not something to round past silently.
                 if ((long)from * Numerator % Denominator != 0) return false;
-                size = (int)((long)from * Numerator / Denominator);
+                long scaled = (long)from * Numerator / Denominator;
+                // Same guard Product carries below: the arithmetic is done in long precisely because
+                // it can leave int range, so the cast back has to be checked or it wraps to a
+                // plausible positive number and TryResolve reports success on a shape that is wrong.
+                if (scaled > int.MaxValue) return false;
+                size = (int)scaled;
                 return size > 0;
             }
 
@@ -204,7 +209,9 @@ public sealed class AxisRelation
                 long effective = (long)Dilation * (Kernel - 1) + 1;
                 long numerator = from + (2L * Padding) - effective;
                 if (numerator < 0) return false;   // the window does not fit; not a shape, an error
-                size = (int)(numerator / Stride) + 1;
+                long windowed = (numerator / Stride) + 1;
+                if (windowed > int.MaxValue) return false;
+                size = (int)windowed;
                 return size > 0;
             }
 

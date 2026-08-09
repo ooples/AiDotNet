@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.Gpu;
+﻿using AiDotNet.Tensors.Engines.Gpu;
 
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -53,6 +53,18 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     /// <para>
     /// <see cref="LayerShape.TryGetConcrete"/> and <see cref="LayerShape.RequireConcrete"/> make
     /// that choice explicit, so consuming a dynamic axis by accident stops being possible.
+    /// </para>
+    /// <para>
+    /// <b>MIGRATION -- this member is new and required.</b> A layer implemented outside the library
+    /// will not compile until it supplies this method. There is no default implementation because
+    /// <c>net471</c> is a target framework and default interface members do not exist there. A layer
+    /// whose output shape is fully known can satisfy it from the existing <see cref="GetOutputShape"/>:
+    /// <code>
+    /// public LayerShape GetOutputLayerShape() =&gt; new LayerShape(GetOutputShape());
+    /// </code>
+    /// That is the correct implementation for every layer with no dynamic axis, which is most of
+    /// them. Only a layer that genuinely cannot fix an axis -- a decoder whose length is the target
+    /// length -- needs to build a shape with a dynamic axis instead.
     /// </para>
     /// </remarks>
     /// <returns>The output shape, possibly with dynamic axes.</returns>
