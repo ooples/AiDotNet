@@ -58,6 +58,21 @@ public sealed class ScalarParameterSource<T> : IParameterSource<T>
 }
 
 /// <summary>
+/// A component whose width is decided BY the vector it is restored from, not checked against it.
+/// </summary>
+/// <remarks>
+/// For models that genuinely do not know their own size until they are fitted -- a propensity
+/// model has no coefficients yet, a Kaplan-Meier curve has as many points as the data had event
+/// times. A fresh instance of one declares zero parameters, and restoring a checkpoint INTO a
+/// fresh instance is the whole point of a checkpoint, so a strict length check made every such
+/// load throw. The registry gives a component marked this way whatever the fixed-size components
+/// leave; at most one may be registered, and it must be last.
+/// </remarks>
+public interface IVariableLengthParameterSource<T> : IParameterSource<T>
+{
+}
+
+/// <summary>
 /// A whole <see cref="Vector{T}"/> field exposed as a parameter surface.
 /// </summary>
 /// <remarks>
@@ -65,7 +80,7 @@ public sealed class ScalarParameterSource<T> : IParameterSource<T>
 /// vector on restore rather than writing into it. A source that only read the field would restore
 /// into a vector the model no longer references.
 /// </remarks>
-public sealed class VectorFieldParameterSource<T> : IParameterSource<T>
+public sealed class VectorFieldParameterSource<T> : IVariableLengthParameterSource<T>
 {
     private readonly Func<Vector<T>?> _get;
     private readonly Action<Vector<T>> _set;

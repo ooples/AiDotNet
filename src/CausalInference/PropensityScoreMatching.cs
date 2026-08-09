@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.CausalInference;
 
 /// <summary>
@@ -66,6 +68,19 @@ namespace AiDotNet.CausalInference;
     [ResearchPaper("The Central Role of the Propensity Score in Observational Studies for Causal Effects", "https://doi.org/10.1093/biomet/70.1.41")]
 public class PropensityScoreMatching<T> : CausalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The propensity-score coefficients, and the same off-by-one fix as CausalForest.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _propensityCoefficients,
+            value =>
+            {
+                _propensityCoefficients = value;
+                NumFeatures = value.Length - 1;
+            }));
+    }
     /// <summary>
     /// Stores the logistic regression coefficients for propensity score estimation.
     /// </summary>
@@ -691,31 +706,6 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     }
 
     #region IFullModel Implementation
-
-    /// <summary>
-    /// Gets the model parameters (propensity score coefficients).
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        if (_propensityCoefficients is null)
-        {
-            return new Vector<T>(0);
-        }
-
-        return _propensityCoefficients;
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length > 0)
-        {
-            _propensityCoefficients = parameters;
-            NumFeatures = parameters.Length - 1; // -1 for intercept
-        }
-    }
 
     /// <summary>
     /// Creates a new instance with specified parameters.
