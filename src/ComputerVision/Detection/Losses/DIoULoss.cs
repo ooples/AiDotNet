@@ -134,13 +134,48 @@ public class DIoULoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        if (predicted.Shape.Length != 2 || predicted.Shape[1] != 4)
-            throw new ArgumentException("Predicted must be [N, 4] in (x1, y1, x2, y2) format.", nameof(predicted));
-        if (target.Shape.Length != 2 || target.Shape[1] != 4 || target.Shape[0] != predicted.Shape[0])
-            throw new ArgumentException("Target must be [N, 4] matching predicted batch size.", nameof(target));
+        // Accept the FLAT layout CalculateLoss(Vector, Vector) takes -- a rank-1 run of boxes whose
+        // length is a multiple of 4 -- by folding it to [N, 4]. Without this the two forwards
+        // disagreed about what they accept: the vector API validated "multiple of 4" and the tape
+        // API rejected anything that was not already rank 2, so the same input was valid for the
+        // loss and invalid for its gradient.
+        predicted = NormalizeBoxes(predicted, nameof(predicted));
+        target = NormalizeBoxes(target, nameof(target));
+
+        if (target.Shape[0] != predicted.Shape[0])
+        {
+            throw new ArgumentException(
+                $"Target batch size ({target.Shape[0]}) must match predicted ({predicted.Shape[0]}).",
+                nameof(target));
+        }
 
         var perBoxLoss = Engine.TensorDIoULoss(predicted, target);
         var allAxes = Enumerable.Range(0, perBoxLoss.Shape.Length).ToArray();
         return Engine.ReduceMean(perBoxLoss, allAxes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Folds a flat run of box coordinates into the [N, 4] layout the IoU kernels require.
+    /// </summary>
+    /// <param name="boxes">Either an [N, 4] tensor or a rank-1 run of 4N coordinates.</param>
+    /// <param name="parameterName">Name used when reporting an invalid shape.</param>
+    /// <returns>The tensor as [N, 4].</returns>
+    /// <exception cref="ArgumentException">Thrown when the shape is neither form.</exception>
+    private Tensor<T> NormalizeBoxes(Tensor<T> boxes, string parameterName)
+    {
+        if (boxes.Shape.Length == 2 && boxes.Shape[1] == 4)
+        {
+            return boxes;
+        }
+
+        if (boxes.Shape.Length == 1 && boxes.Length % 4 == 0 && boxes.Length > 0)
+        {
+            return Engine.Reshape(boxes, new[] { boxes.Length / 4, 4 });
+        }
+
+        throw new ArgumentException(
+            $"Boxes must be [N, 4] in (x1, y1, x2, y2) format, or a flat run of 4N coordinates, "
+            + $"but were [{string.Join(", ", boxes.Shape.ToArray())}].",
+            parameterName);
     }
 }
