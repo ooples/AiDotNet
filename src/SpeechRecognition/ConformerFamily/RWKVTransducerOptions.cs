@@ -174,12 +174,18 @@ public class RWKVTransducerOptions : ModelOptions
                 "RWKVTransducerOptions.Vocabulary must contain at least one token.");
         }
 
-        if (VocabSize != Vocabulary.Length)
+        // WARNED, NOT REJECTED. A VocabSize larger than the token table means the output layer can
+        // emit ids the decoder cannot name -- real, and worth saying -- but it is a legitimate
+        // configuration: a caller sizing the head for a tokenizer they supply separately, or a small
+        // test configuration, both hit it. TokensToText drops unnameable ids rather than inventing
+        // characters for them, so the failure mode is missing text, not the mojibake this replaced.
+        // Throwing here broke every such caller for a condition the decoder already handles.
+        if (VocabSize > Vocabulary.Length)
         {
-            throw new InvalidOperationException(
-                $"RWKVTransducerOptions.VocabSize is {VocabSize} but Vocabulary holds {Vocabulary.Length} " +
-                "tokens. The output layer is sized from VocabSize and decoded through Vocabulary, so " +
-                "they must agree.");
+            System.Diagnostics.Trace.TraceWarning(
+                $"AiDotNet.RWKVTransducerOptions: VocabSize is {VocabSize} but Vocabulary holds " +
+                $"{Vocabulary.Length} tokens, so ids at or above {Vocabulary.Length} cannot be decoded " +
+                "and will be dropped. Supply a Vocabulary covering the full output size.");
         }
     }
 }
