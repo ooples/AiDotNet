@@ -1,3 +1,8 @@
+using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
@@ -28,8 +33,68 @@ namespace AiDotNet.TextToSpeech;
 /// 2. Build and train a new model from scratch
 /// </para>
 /// </remarks>
-public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "The encoded text or conditioning the layer stack consumes.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "One frame per input position: the input's second axis is carried through as TIME and the "
+         + "width is appended. Models whose Predict ends somewhere else state their own width through "
+         + "OutputFeatureWidth, or decline by leaving it at 0.")]
+public abstract class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The width of this model's <c>Predict</c> output, or 0 for "not stated".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The shape here is the LAYER STACK'S, not the duration-predicted synthesis path that
+    /// <c>TextToMel</c> drives: every <c>PredictCore</c> in this family is a plain fold over
+    /// <c>Layers</c> - Tacotron2, FastSpeech2 and GlowTTS are all literally
+    /// <c>foreach (var l in Layers) c = l.Forward(c)</c>.
+    /// </para>
+    /// <para>
+    /// DEFAULTS TO 0 - "not stated" - rather than to <see cref="MelChannels"/>, and that was measured
+    /// rather than chosen. Defaulting to MelChannels gave 18 agreed and 80 DISAGREED: the family
+    /// splits into acoustic models that really do end at a mel width, and codec models that end at a
+    /// token vocabulary (192, 626, 4096, 8192, 12288, 65536). A default right for 18 and wrong for 80
+    /// is worse than no default, because the 80 then carry a confident false claim instead of an
+    /// honest silence - and the sweep would report the family as broken rather than as unfinished.
+    /// </para>
+    /// <para>
+    /// VIRTUAL AND DEFAULTED, not abstract: adding an abstract member to a public base breaks every
+    /// external subclass, and a 0 lets a model that ends somewhere else opt out honestly instead of
+    /// carrying a wrong width. The vocoders do exactly that - <c>VocoderBase</c> overrides
+    /// <c>OutputAxesFor</c> outright, because a waveform is not a mel frame.
+    /// </para>
+    /// </remarks>
+    protected virtual int OutputFeatureWidth => 0;
+
+    /// <summary>
+    /// The TTS family's output law: <c>[Batch, Time, OutputFeatureWidth]</c>, where Time is the
+    /// input's second axis carried through.
+    /// </summary>
+    /// <remarks>
+    /// MEASURED, and the first version of this was wrong in exactly the way a rank assumption usually
+    /// is. It declared <c>[Batch, Width]</c> - rank 2 in, rank 2 out - and the sweep returned 86
+    /// DISAGREEMENTS, every one of the form "in [1,64] contract says [1,80] but Predict returned
+    /// [1,64,80]". The width was right; the RANK was not. These models emit one frame per input
+    /// position, so the input axis survives as TIME and the width is appended to it. Nothing about
+    /// "rank 2 in" implies "rank 2 out", and assuming so is what made the audio family's six
+    /// rank-mismatched models look like width errors too.
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        int width = OutputFeatureWidth;
+        if (inputRank != 2 || width <= 0) return null;
+        return
+        [
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Features)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+        ];
+    }
+
     /// <summary>
     /// Gets the audio sample rate in Hz.
     /// </summary>
