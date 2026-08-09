@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -123,7 +124,18 @@ public abstract class ContrastiveLossTestBase
                 noiseLogits[i, j] = -0.5;
         }
 
-        var (targetGrad, noiseGrad) = loss.CalculateDerivative(targetLogits, noiseLogits);
+        // NCE's tape forward already takes the target logits and the noise-logit matrix, so the
+        // two gradients come straight off one backward pass.
+        using var tape = new GradientTape<double>();
+
+        var targetT = Tensor<double>.FromVector(targetLogits);
+        var noiseT = Tensor<double>.FromMatrix(noiseLogits);
+
+        var scalar = loss.ComputeTapeLoss(targetT, noiseT);
+        var gradients = tape.ComputeGradients(scalar, new[] { targetT, noiseT });
+
+        var targetGrad = gradients[targetT].ToVector();
+        var noiseGrad = gradients[noiseT].ToMatrix();
 
         for (int i = 0; i < batchSize; i++)
         {

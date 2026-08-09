@@ -120,39 +120,6 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the gradient of the DETR loss.
-    /// </summary>
-    public Tensor<T> CalculateDerivative(Tensor<T> predicted, Tensor<T> targets)
-    {
-        // Numerical gradient for now - analytical gradients are complex for Hungarian matching
-        var gradient = new Tensor<T>(predicted._shape);
-        double eps = 1e-5;
-
-        // Create a copy for perturbation to avoid mutating the original input
-        var perturbedPredicted = new Tensor<T>(predicted._shape);
-        for (int j = 0; j < predicted.Length; j++)
-        {
-            perturbedPredicted[j] = predicted[j];
-        }
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double original = NumOps.ToDouble(perturbedPredicted[i]);
-
-            perturbedPredicted[i] = NumOps.FromDouble(original + eps);
-            double lossPlus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, targets));
-
-            perturbedPredicted[i] = NumOps.FromDouble(original - eps);
-            double lossMinus = NumOps.ToDouble(CalculateLoss(perturbedPredicted, targets));
-
-            perturbedPredicted[i] = NumOps.FromDouble(original);
-            gradient[i] = NumOps.FromDouble((lossPlus - lossMinus) / (2 * eps));
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Performs Hungarian matching between predictions and ground truth.
     /// </summary>
     /// <param name="predBoxes">Predicted bounding boxes.</param>

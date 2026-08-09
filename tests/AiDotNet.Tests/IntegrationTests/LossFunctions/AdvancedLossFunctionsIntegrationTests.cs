@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Xunit;
@@ -296,7 +297,16 @@ public class AdvancedLossFunctionsIntegrationTests
         }
 
         // Act
-        var (targetGradient, noiseGradient) = nceLoss.CalculateDerivative(targetLogits, noiseLogits);
+        using var tape = new GradientTape<double>();
+
+        var targetT = Tensor<double>.FromVector(targetLogits);
+        var noiseT = Tensor<double>.FromMatrix(noiseLogits);
+
+        var scalar = nceLoss.ComputeTapeLoss(targetT, noiseT);
+        var gradients = tape.ComputeGradients(scalar, new[] { targetT, noiseT });
+
+        var targetGradient = gradients[targetT].ToVector();
+        var noiseGradient = gradients[noiseT].ToMatrix();
 
         // Assert
         Assert.Equal(targetLogits.Length, targetGradient.Length);

@@ -81,57 +81,6 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         return NumOps.Add(similarTerm, dissimilarTerm);
     }
 
-    /// <summary>
-    /// Calculates the gradients of the Contrastive Loss function for both output vectors.
-    /// </summary>
-    /// <param name="output1">The first output vector.</param>
-    /// <param name="output2">The second output vector.</param>
-    /// <param name="similarityLabel">A value of 1 indicates similar pairs, 0 indicates dissimilar pairs.</param>
-    /// <returns>A tuple containing the gradients for both output vectors.</returns>
-    public (Vector<T>, Vector<T>) CalculateDerivative(Vector<T> output1, Vector<T> output2, T similarityLabel)
-    {
-        T distance = VectorHelper.EuclideanDistance(output1, output2);
-        Vector<T> grad1 = new Vector<T>(output1.Length);
-        Vector<T> grad2 = new Vector<T>(output2.Length);
-
-        for (int i = 0; i < output1.Length; i++)
-        {
-            T diff = NumOps.Subtract(output1[i], output2[i]);
-
-            if (NumOps.Equals(similarityLabel, NumOps.One))
-            {
-                // Gradient for similar pairs: 2 * (output1 - output2)
-                grad1[i] = NumOps.Multiply(NumOps.FromDouble(2), diff);
-                grad2[i] = NumOps.Multiply(NumOps.FromDouble(-2), diff);
-            }
-            else
-            {
-                // For dissimilar pairs, only apply gradient if they're closer than the margin
-                if (NumOps.LessThan(distance, _margin))
-                {
-                    // Gradient: -2 * (margin - distance) * (output1 - output2) / distance
-                    T scaleFactor = NumOps.Multiply(
-                        NumOps.FromDouble(-2),
-                        NumOps.Divide(
-                            NumOps.Subtract(_margin, distance),
-                            distance
-                        )
-                    );
-
-                    grad1[i] = NumOps.Multiply(scaleFactor, diff);
-                    grad2[i] = NumOps.Multiply(NumOps.Negate(scaleFactor), diff);
-                }
-                else
-                {
-                    // If distance >= margin, gradient is zero
-                    grad1[i] = NumOps.Zero;
-                    grad2[i] = NumOps.Zero;
-                }
-            }
-        }
-
-        return (grad1, grad2);
-    }
 
     /// <summary>
     /// This method is not used for Contrastive Loss as it requires two input vectors and a similarity label.
@@ -211,5 +160,65 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         var result = Engine.TensorAdd(positivePart, negativePart);
         var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
         return Engine.ReduceMean(result, allAxes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Computes the contrastive loss as a tape-differentiable scalar from an embedding PAIR and
+    /// its similarity label.
+    /// </summary>
+    /// <param name="output1">First embedding of the pair.</param>
+    /// <param name="output2">Second embedding of the pair, same shape.</param>
+    /// <param name="similarityLabel">1 for a similar pair, 0 for a dissimilar one.</param>
+    /// <returns>A rank-0 scalar tensor holding y*d^2 + (1-y)*max(0, margin - d)^2.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either embedding is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the two shapes differ.</exception>
+    /// <remarks>
+    /// <para>
+    /// Only the DISTANCE is computed here; the pair rule itself is the two-argument
+    /// <see cref="ComputeTapeLoss(Tensor{T}, Tensor{T})"/>, which already consumes a distance and a
+    /// label. Keeping the rule in one place means the pair API and the pointwise API cannot
+    /// disagree about what the loss is.
+    /// </para>
+    /// <para>
+    /// The label carries no gradient -- it is data, not a parameter -- so the backward pass reaches
+    /// both embeddings and nothing else.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> ComputeTapeLoss(Tensor<T> output1, Tensor<T> output2, T similarityLabel)
+    {
+        if (output1 is null) throw new ArgumentNullException(nameof(output1));
+        if (output2 is null) throw new ArgumentNullException(nameof(output2));
+
+        if (!output1._shape.SequenceEqual(output2._shape))
+        {
+            throw new ArgumentException(
+                "Both embeddings must have the same shape, but were "
+                + $"[{string.Join(", ", output1.Shape.ToArray())}] and "
+                + $"[{string.Join(", ", output2.Shape.ToArray())}].",
+                nameof(output2));
+        }
+
+        var delta = Engine.TensorSubtract(output1, output2);
+        var squared = Engine.TensorMultiply(delta, delta);
+        var featureAxis = new[] { squared.Shape.Length - 1 };
+        var summed = Engine.ReduceSum(squared, featureAxis, keepDims: false);
+
+        // A single un-batched pair reduces to rank 0 here, and the pointwise overload below then
+        // calls ReduceMean over an EMPTY axis list, whose backward rejects the empty shape. Keeping
+        // one sample as [1] makes the un-batched case take the same path as a batch of one.
+        if (summed.Shape.Length == 0)
+        {
+            summed = Engine.Reshape(summed, new[] { 1 });
+        }
+
+        // Offset under the root: d(sqrt(x))/dx is unbounded at x = 0, and a similar pair converges
+        // to exactly zero distance, so without it the gradient becomes NaN precisely when training
+        // is succeeding.
+        var distance = Engine.TensorSqrt(Engine.TensorAddScalar(summed, NumOps.FromDouble(1e-12)));
+
+        var label = new Tensor<T>(distance._shape);
+        label.Fill(similarityLabel);
+
+        return ComputeTapeLoss(distance, label);
     }
 }
