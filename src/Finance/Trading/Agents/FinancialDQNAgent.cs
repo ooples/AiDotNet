@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
-public class FinancialDQNAgent<T> : TradingAgentBase<T>
+public class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     #region Fields
 
@@ -414,7 +414,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return _qNetwork.ComputeGradients(Tensor<T>.FromVector(input), Tensor<T>.FromVector(target), lossFunction);
     }
@@ -425,7 +425,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _qNetwork.ApplyGradients(gradients, learningRate);
         UpdateTargetNetwork();

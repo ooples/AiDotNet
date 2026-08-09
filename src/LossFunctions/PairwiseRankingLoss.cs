@@ -228,113 +228,78 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the gradient of the (tail-weighted) pairwise RankNet loss with respect to each
-    /// predicted score.
-    /// </summary>
-    /// <param name="predicted">The predicted scores, one per item in the ranking group.</param>
-    /// <param name="actual">The true relevance/return values, one per item.</param>
-    /// <returns>A vector of partial derivatives dL/ds_k, one per item.</returns>
-    /// <remarks>
-    /// For a single pair (i, j) with i the true winner, dloss/ds_i = -sigma(-(s_i - s_j)) and
-    /// dloss/ds_j = +sigma(-(s_i - s_j)). These contributions accumulate over every pair an item
-    /// participates in, each scaled by the pair weight and divided by the total weight so the
-    /// gradient matches the averaged loss above.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        int n = predicted.Length;
-        var extremity = ComputeExtremities(actual);
-        var grad = new double[n];
-
-        double weightSum = 0.0;
-
-        for (int i = 0; i < n; i++)
-        {
-            double ai = NumOps.ToDouble(actual[i]);
-            double si = NumOps.ToDouble(predicted[i]);
-            for (int j = 0; j < n; j++)
-            {
-                double aj = NumOps.ToDouble(actual[j]);
-                if (ai <= aj) continue;
-
-                double sj = NumOps.ToDouble(predicted[j]);
-                double w = PairWeight(extremity, i, j);
-
-                // d/ds_i log(1+exp(-(s_i - s_j))) = -sigmoid(-(s_i - s_j))
-                double g = Sigmoid(-(si - sj));
-                grad[i] += w * (-g);
-                grad[j] += w * (g);
-                weightSum += w;
-            }
-        }
-
-        var result = new T[n];
-        if (weightSum <= 0.0)
-        {
-            for (int k = 0; k < n; k++) result[k] = NumOps.Zero;
-            return new Vector<T>(result);
-        }
-
-        for (int k = 0; k < n; k++)
-        {
-            // Per-item normalization (÷ n), consistent with CalculateLoss — the RankNet per-pair gradient
-            // accumulation, scaled so the per-item gradient is O(1) at any group size rather than O(1/n).
-            result[k] = NumOps.FromDouble(grad[k] / n);
-        }
-
-        return new Vector<T>(result);
-    }
-
-    /// <summary>
     /// Computes the loss as a tape-differentiable scalar tensor for automatic backpropagation.
     /// </summary>
     /// <param name="predicted">The predicted scores tensor from the forward pass.</param>
     /// <param name="target">The true relevance/return tensor.</param>
-    /// <returns>A scalar tensor whose gradient w.r.t. <paramref name="predicted"/> equals the analytic RankNet gradient.</returns>
+    /// <returns>A rank-0 scalar tensor holding the weighted RankNet loss.</returns>
     /// <remarks>
     /// <para>
-    /// The pairwise RankNet objective is not a pointwise function of the predictions, so it cannot
-    /// be expressed directly with the broadcasting tensor primitives. Instead this builds a
-    /// first-order surrogate scalar
+    /// RankNet is a genuinely pairwise objective, so the forward is built over the full n x n grid of
+    /// score differences rather than element-wise. The grid is formed with two rank-1 matrix products
+    /// against constant one-vectors -- <c>A[i,j] = s_i</c> and <c>B[i,j] = s_j</c> -- because the
+    /// element-wise engine operations require matching shapes and do not broadcast.
     /// </para>
     /// <para>
-    /// L_tape = &#931;_k predicted_k * stopgrad(g_k)
+    /// L = (1/n) * sum_ij W[i,j] * softplus(-(s_i - s_j))
     /// </para>
     /// <para>
-    /// where g_k is the exact analytic gradient from <see cref="CalculateDerivative"/> treated as a
-    /// constant (no gradient flows through the target side). Because dL_tape/dpredicted_k = g_k,
-    /// the gradient that flows back through the tape is exactly the RankNet gradient, which is all
-    /// the optimizer needs. The reported scalar value is the true RankNet loss for monitoring.
+    /// <c>W</c> depends only on the targets -- it is the tail weight where <c>a_i &gt; a_j</c> and zero
+    /// elsewhere, so ties and reversed pairs drop out -- which makes it a constant with respect to the
+    /// predictions and therefore safe to materialize outside the tape.
+    /// </para>
+    /// <para>
+    /// Normalization is per ITEM (divide by n), not per pair. Dividing by the pair count (~n^2) shrinks
+    /// the per-item gradient to O(1/n), which is too weak for the optimizer to learn from on larger
+    /// groups and collapses the model to a constant output.
     /// </para>
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        var predVec = predicted.ToVector();
         var targetVec = target.ToVector();
+        int n = targetVec.Length;
 
-        // Constant analytic gradient (the target side carries no gradient).
-        var g = CalculateDerivative(predVec, targetVec);
-        var gradConst = new Tensor<T>(predicted._shape, g);
-
-        // L_tape = sum(predicted * g)  =>  dL_tape/dpredicted = g  (g is a leaf constant).
-        var weighted = Engine.TensorMultiply(predicted, gradConst);
-        var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
-        var surrogate = Engine.ReduceSum(weighted, allAxes, keepDims: false);
-
-        // Add the true loss as a detached constant so GetLastLoss reports a meaningful value
-        // without changing the gradient (constant => zero gradient contribution).
-        double trueLoss = NumOps.ToDouble(CalculateLoss(predVec, targetVec));
-        double surrogateValue = 0.0;
-        for (int k = 0; k < predVec.Length; k++)
+        if (predicted.Length != n)
         {
-            surrogateValue += NumOps.ToDouble(predVec[k]) * NumOps.ToDouble(g[k]);
+            throw new ArgumentException(
+                $"Predicted length ({predicted.Length}) must match target length ({n}).",
+                nameof(predicted));
         }
 
-        // surrogate currently equals surrogateValue; shift it to report trueLoss while keeping
-        // the same gradient (adding a scalar constant does not change the derivative).
-        var shift = NumOps.FromDouble(trueLoss - surrogateValue);
-        return Engine.TensorAddScalar(surrogate, shift);
+        // Pair weights are a function of the targets alone, so they are a tape constant.
+        var extremity = ComputeExtremities(targetVec);
+        var weights = new Tensor<T>(new[] { n, n });
+        for (int i = 0; i < n; i++)
+        {
+            double ai = NumOps.ToDouble(targetVec[i]);
+            for (int j = 0; j < n; j++)
+            {
+                // Only ordered pairs where i is the true winner contribute; ties contribute nothing.
+                if (ai <= NumOps.ToDouble(targetVec[j])) continue;
+                weights[(i * n) + j] = NumOps.FromDouble(PairWeight(extremity, i, j));
+            }
+        }
+
+        var onesRow = new Tensor<T>(new[] { 1, n });
+        var onesCol = new Tensor<T>(new[] { n, 1 });
+        for (int k = 0; k < n; k++)
+        {
+            onesRow[k] = NumOps.One;
+            onesCol[k] = NumOps.One;
+        }
+
+        var scoreCol = Engine.Reshape(predicted, new[] { n, 1 });
+        var scoreRow = Engine.Reshape(predicted, new[] { 1, n });
+
+        var sI = Engine.TensorMatMul(scoreCol, onesRow);   // [n,n], sI[i,j] = s_i
+        var sJ = Engine.TensorMatMul(onesCol, scoreRow);   // [n,n], sJ[i,j] = s_j
+
+        var negDiff = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(sI, sJ), NumOps.FromDouble(-1.0));
+
+        var perPair = Engine.TensorMultiply(Engine.Softplus(negDiff), weights);
+        var summed = Engine.ReduceSum(perPair, new[] { 0, 1 }, keepDims: false);
+
+        return Engine.TensorDivideScalar(summed, NumOps.FromDouble(n));
     }
 }

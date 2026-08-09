@@ -1154,7 +1154,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ComputeGradient(Tensor<T> predictions, Tensor<T> targets)
     {
-        var gradVector = LossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
+        var gradVector = LossFunction.ComputeGradient(predictions.ToVector(), targets.ToVector());
         return Tensor<T>.FromVector(gradVector, predictions._shape);
     }
 

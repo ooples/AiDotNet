@@ -271,15 +271,6 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
         }
         return clone;
     }
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        var pred = Predict(input);
-        var lf = lossFunction ?? LossFunction;
-        var loss = lf.CalculateLoss(pred, target);
-        var gradients = lf.CalculateDerivative(pred, target);
-        return gradients;
-    }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

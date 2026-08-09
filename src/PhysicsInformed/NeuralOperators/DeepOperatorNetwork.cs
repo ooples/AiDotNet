@@ -606,7 +606,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                         var predictions = Engine.TensorMatMul(trunkOutput2D, branchOutputT);
 
                         // Compute loss under the same tape
-                        var lossTensor = ((LossFunctions.LossFunctionBase<T>)lossFunction)
+                        var lossTensor = lossFunction
                             .ComputeTapeLoss(predictions, targets);
                         T lossVal = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
                         totalLoss = NumOps.Add(totalLoss, lossVal);
@@ -620,7 +620,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                             allParams, grads, lossVal,
                             branchInput, targets,
                             (inp, _) => ForwardForTraining(inp),
-                            (pred, tgt) => ((LossFunctions.LossFunctionBase<T>)lossFunction).ComputeTapeLoss(pred, tgt),
+                            (pred, tgt) => lossFunction.ComputeTapeLoss(pred, tgt),
                             null);
                         opt.Step(context);
                     }

@@ -47,25 +47,6 @@ public class BornRuleMseLoss<T> : LossFunctionBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var derivative = new Vector<T>(predicted.Length);
-        T fourOverN = NumOps.FromDouble(4.0 / predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T a = predicted[i];
-            T p = NumOps.Multiply(a, a);
-            T diff = NumOps.Subtract(p, actual[i]);
-            // d/da mean((a² − t)²) = (4/n) · a · (a² − t)
-            derivative[i] = NumOps.Multiply(fourOverN, NumOps.Multiply(a, diff));
-        }
-
-        return derivative;
-    }
-
-    /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
         // measured = predicted²  (Born's rule), then MSE(measured, target).

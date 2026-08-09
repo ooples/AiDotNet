@@ -539,7 +539,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Vector<T> CalculateOutputGradient(Tensor<T> prediction, Tensor<T> expectedOutput)
     {
-        return _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        return _lossFunction.ComputeGradient(prediction.ToVector(), expectedOutput.ToVector());
     }
 
     /// <summary>

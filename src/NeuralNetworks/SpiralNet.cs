@@ -451,9 +451,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                 var loss = _lossFunction.CalculateLoss(output.ToVector(), target);
                 epochLoss += NumOps.ToDouble(loss);
 
-                var lossGrad = _lossFunction.CalculateDerivative(output.ToVector(), target);
-                var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output._shape);
-
                 UpdateParameters(learningRate);
             }
 

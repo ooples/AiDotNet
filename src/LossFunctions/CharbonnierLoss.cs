@@ -103,39 +103,6 @@ public class CharbonnierLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Charbonnier loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of Charbonnier loss for each prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// The derivative is: (predicted - actual) / sqrt((predicted - actual)² + ε²)
-    ///
-    /// This derivative is always well-defined (unlike L1 loss) because the denominator
-    /// is always at least ε, avoiding division by zero.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        T n = NumOps.FromDouble(predicted.Length);
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Subtract(predicted[i], actual[i]);
-            T diffSquared = NumOps.Multiply(diff, diff);
-            // diff / sqrt(diff² + ε²)
-            T denominator = NumOps.Sqrt(NumOps.Add(diffSquared, _epsilonSquared));
-            derivative[i] = NumOps.Divide(NumOps.Divide(diff, denominator), n);
-        }
-
-        return derivative;
-    }
-
-    /// <summary>
     /// Calculates both Charbonnier loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

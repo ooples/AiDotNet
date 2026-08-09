@@ -1089,42 +1089,6 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     }
 
     /// <summary>
-    /// Computes gradients for gradient-based optimization.
-    /// </summary>
-    /// <param name="input">The input features.</param>
-    /// <param name="target">The target labels.</param>
-    /// <param name="lossFunction">The loss function (optional).</param>
-    /// <returns>An empty gradient vector as Label Propagation doesn't use gradients.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Label Propagation is not trained with gradient descent like neural
-    /// networks. Instead, it uses graph-based iterative label spreading. Therefore, there are
-    /// no gradients to compute.
-    /// </para>
-    /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Label Propagation is not gradient-based
-        return new Vector<T>(0);
-    }
-
-    /// <summary>
-    /// Applies gradients to update model parameters.
-    /// </summary>
-    /// <param name="gradients">The gradients to apply (ignored).</param>
-    /// <param name="learningRate">The learning rate (ignored).</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Since Label Propagation doesn't use gradient-based learning,
-    /// this method does nothing.
-    /// </para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Non-parametric model - no gradients to apply
-    }
-
-    /// <summary>
     /// Creates a new instance of this classifier with default configuration.
     /// </summary>
     /// <returns>A new LabelPropagation instance.</returns>

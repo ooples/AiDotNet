@@ -536,9 +536,6 @@ public class PatchTST<T> : ForecastingModelBase<T>
     {
         SetTrainingMode(true);
 
-        // Backward pass
-        var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-
         // Update parameters
         _optimizer.UpdateParameters(Layers);
 

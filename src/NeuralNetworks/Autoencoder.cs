@@ -545,7 +545,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         Vector<T> expectedVector = expected.ToVector();
 
         // Calculate the derivative of the loss function
-        Vector<T> gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
+        Vector<T> gradientVector = _lossFunction.ComputeGradient(predictedVector, expectedVector);
 
         // Reshape the gradient back to the original tensor shape
         return new Tensor<T>(predicted._shape, gradientVector);

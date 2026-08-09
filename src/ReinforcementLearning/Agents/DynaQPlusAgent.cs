@@ -329,13 +329,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 
         return clone;
     }
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Dyna-Q+ uses model-based planning with Q-learning updates, not gradient-based optimization
-        // This method is not applicable for tabular Q-learning methods
-        throw new NotSupportedException("Dyna-Q+ uses model-based planning with Q-learning updates, not gradient-based optimization. Use StoreExperience for updates.");
-    }
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

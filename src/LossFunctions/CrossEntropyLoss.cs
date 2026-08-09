@@ -62,29 +62,6 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Cross-Entropy loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted probability distribution.</param>
-    /// <param name="actual">The actual (target) probability distribution.</param>
-    /// <returns>A vector containing the derivative of Cross-Entropy loss for each element.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Clamp predicted values to prevent division by zero using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-
-            // -actual_i / predicted_i with safe division
-            derivative[i] = NumericalStabilityHelper.SafeDiv(NumOps.Negate(actual[i]), p, NumericalStabilityHelper.SmallEpsilon);
-        }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Cross-Entropy loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor (probability distribution).</param>

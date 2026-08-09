@@ -82,14 +82,6 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                 "The loss function cannot be changed after training; construct a new model instead.");
         }
 
-        if (lossFunction is not LossFunctions.LossFunctionBase<T>)
-        {
-            throw new ArgumentException(
-                $"Loss function '{lossFunction.GetType().Name}' must derive from LossFunctionBase<T>: " +
-                "tape-based training needs ComputeTapeLoss, which ILossFunction<T> does not declare.",
-                nameof(lossFunction));
-        }
-
         _defaultLossFunction = lossFunction;
 
         // Mirror onto the options so a TrainCore that reads Options.LossFunction and the
@@ -107,11 +99,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// surfacing from inside a backward pass. Defaults to the model's configured loss, which is
     /// mean squared error unless the caller supplied another.
     /// </remarks>
-    protected LossFunctions.LossFunctionBase<T> TrainingLoss =>
-        DefaultLossFunction as LossFunctions.LossFunctionBase<T>
-        ?? throw new InvalidOperationException(
-            $"Loss function '{DefaultLossFunction.GetType().Name}' must derive from LossFunctionBase<T> " +
-            "for tape-based training; ILossFunction<T> alone does not provide ComputeTapeLoss.");
+    protected ILossFunction<T> TrainingLoss => DefaultLossFunction;
 
     /// <inheritdoc />
     public Func<TrainingProgress<T>, bool>? TrainingEpochCallback { get; set; }
@@ -2185,7 +2173,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         {
             var predicted = Predict(input);
 
-            var lossGrad = loss.CalculateDerivative(predicted, target);
+            var lossGrad = loss.ComputeGradient(predicted, target);
             var lossGradTensor = Tensor<T>.FromVector(lossGrad);
 
             BackpropagateLayers(lossGradTensor);

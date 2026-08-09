@@ -52,7 +52,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
-public class FinancialPPOAgent<T> : TradingAgentBase<T>
+public class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     #region Fields
 
@@ -941,7 +941,7 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialPPOAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return _actor.ComputeGradients(
             CreateStateTensor(NormalizeObservation(input, updateStatistics: false)),
@@ -957,7 +957,7 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialPPOAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _actor.ApplyGradients(gradients, learningRate);
     }

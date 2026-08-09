@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
@@ -139,8 +140,9 @@ public abstract class PairedContrastiveLossTestBase
         var v1 = new Vector<double>(new[] { 0.5, 1.0, -0.3 });
         var v2 = new Vector<double>(new[] { 0.6, 0.9, -0.2 });
 
-        var (grad1Similar, grad2Similar) = loss.CalculateDerivative(v1, v2, 1.0);
-        var (grad1Dissimilar, grad2Dissimilar) = loss.CalculateDerivative(v1, v2, 0.0);
+        // One gradient per embedding, from the tape rather than a hand-written derivative.
+        var (grad1Similar, grad2Similar) = PairGradients(loss, v1, v2, 1.0);
+        var (grad1Dissimilar, grad2Dissimilar) = PairGradients(loss, v1, v2, 0.0);
 
         for (int i = 0; i < v1.Length; i++)
         {
@@ -149,5 +151,22 @@ public abstract class PairedContrastiveLossTestBase
             Assert.False(double.IsNaN(grad1Dissimilar[i]), $"Dissimilar grad1[{i}] is NaN.");
             Assert.False(double.IsNaN(grad2Dissimilar[i]), $"Dissimilar grad2[{i}] is NaN.");
         }
+    }
+
+    /// <summary>
+    /// Differentiates the pair loss with respect to BOTH embeddings in a single backward pass.
+    /// </summary>
+    private static (Vector<double> Grad1, Vector<double> Grad2) PairGradients(
+        ContrastiveLoss<double> loss, Vector<double> v1, Vector<double> v2, double similarityLabel)
+    {
+        using var tape = new GradientTape<double>();
+
+        var t1 = Tensor<double>.FromVector(v1);
+        var t2 = Tensor<double>.FromVector(v2);
+
+        var scalar = loss.ComputeTapeLoss(t1, t2, similarityLabel);
+        var gradients = tape.ComputeGradients(scalar, new[] { t1, t2 });
+
+        return (gradients[t1].ToVector(), gradients[t2].ToVector());
     }
 }
