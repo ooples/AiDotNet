@@ -165,8 +165,15 @@ public class FinMA<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinMALayers(
-                Architecture, MaxSequenceLength, VocabularySize, _numAgents,
-                HiddenDimension, 12, 12, _dropout));
+                Architecture,
+                vocabularySize: VocabularySize,
+                maxSequenceLength: MaxSequenceLength,
+                hiddenDimension: HiddenDimension,
+                numAttentionHeads: _options.NumAttentionHeads,
+                intermediateDimension: _options.IntermediateDimension,
+                numLayers: _options.NumLayers,
+                numClasses: _options.NumClasses,
+                dropoutRate: _dropout));
 
             ExtractLayerReferences();
         }

@@ -401,6 +401,28 @@ public class PatchTST<T> : ForecastingModelBase<T>
             // Initialize positional encoding
             int numPatches = CalculateNumPatches();
             _positionalEncoding = CreatePositionalEncoding(numPatches, _modelDimension);
+
+            // PatchTST knows every native layer shape at construction time. Resolve the
+            // otherwise-lazy Dense/Transformer chain now so the first user forecast runs
+            // through exactly the same materialized graph as every later forecast. Leaving
+            // resolution inside the first Forward produced a repeatable one-ULP first-call
+            // drift in float (the second and third calls were bit-identical), violating the
+            // deterministic inference contract even though weights never changed.
+            ResolveNativeLayerShapes(numPatches);
+        }
+    }
+
+    private void ResolveNativeLayerShapes(int numPatches)
+    {
+        int[] currentShape = [numPatches, _patchSize];
+        foreach (var layer in Layers)
+        {
+            if (layer is LayerBase<T> layerBase && !layerBase.IsShapeResolved)
+            {
+                layerBase.ResolveFromShape(currentShape);
+            }
+
+            currentShape = layer.GetOutputShape();
         }
     }
 

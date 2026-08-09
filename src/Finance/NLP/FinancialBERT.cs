@@ -163,7 +163,7 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinancialBERTLayers(
                 Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
-                12, 12, _dropout));
+                _options.NumAttentionHeads, _options.NumLayers, _dropout));
 
             ExtractLayerReferences();
         }
