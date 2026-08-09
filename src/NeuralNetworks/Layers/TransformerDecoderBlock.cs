@@ -182,7 +182,7 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>
     /// attends over the encoder output (Vaswani 2017 §3.2.3) — feeding the decoder's own
     /// stream as the cross context silently discards the encoder entirely.
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input) => ForwardCore(input, encoderOutput: null);
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => ForwardCore(input, encoderOutput: null);
 
     /// <summary>
     /// Pre-LN forward pass with a true encoder-decoder cross-attention sublayer:

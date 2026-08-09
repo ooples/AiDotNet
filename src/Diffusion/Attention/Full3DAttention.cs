@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -30,7 +30,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Uses Flash Attention implementation for O(N) memory
 /// </para>
 /// </remarks>
-public class Full3DAttention<T> : LayerBase<T>
+public partial class Full3DAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _numHeads;
@@ -102,7 +102,7 @@ public class Full3DAttention<T> : LayerBase<T>
     /// <summary>
     /// Applies full 3D attention across all spatio-temporal positions.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
         _lastInput = ShouldCacheForBackward ? input : null;

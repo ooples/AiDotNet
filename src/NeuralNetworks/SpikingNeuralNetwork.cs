@@ -1596,7 +1596,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _vectorActivation,
-                LossFunction);
+                LossFunction,
+                _options);
         }
         else
         {
@@ -1606,7 +1607,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _scalarActivation,
-                LossFunction);
+                LossFunction,
+                _options);
         }
     }
 

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -26,7 +26,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// Each sub-layer uses adaptive layer normalization (adaLN-Zero) for timestep conditioning.
 /// </para>
 /// </remarks>
-public class STDiTBlock<T> : LayerBase<T>
+public partial class STDiTBlock<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _numHeads;
@@ -150,7 +150,7 @@ public class STDiTBlock<T> : LayerBase<T>
     /// <summary>
     /// Applies the STDiT block: spatial attn -> temporal attn -> cross attn -> FFN.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // The residual-stream checkpoints below double as forward locals (each stage
         // feeds the next), so compute them into locals and only mirror them into the

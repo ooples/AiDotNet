@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Helpers;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -27,7 +27,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DiffusionResBlock<T> : LayerBase<T>
+public partial class DiffusionResBlock<T> : LayerBase<T>
 {
     private readonly int _inChannels;
     private readonly int _outChannels;
@@ -255,7 +255,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <summary>
     /// Forward pass implementing the DDPM residual block.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
         // Only retain the per-layer backward-activation caches when an eager manual

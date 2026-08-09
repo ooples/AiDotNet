@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -37,7 +37,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// ```
 /// </para>
 /// </remarks>
-public class DiffusionAttention<T> : LayerBase<T>
+public partial class DiffusionAttention<T> : LayerBase<T>
 {
     /// <summary>
     /// Number of channels.
@@ -196,7 +196,7 @@ public class DiffusionAttention<T> : LayerBase<T>
     /// for attention computation, then reshaped back to image format.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Retain the backward-activation cache only when an eager manual Backward
         // will read it; skip in inference/under tape so the denoise-loop arena can
@@ -349,7 +349,7 @@ public class DiffusionAttention<T> : LayerBase<T>
 /// This enables the model to generate images that match the text description.
 /// </para>
 /// </remarks>
-public class DiffusionCrossAttention<T> : LayerBase<T>
+public partial class DiffusionCrossAttention<T> : LayerBase<T>
 {
     /// <summary>
     /// Query dimension (spatial channels).
@@ -439,7 +439,7 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor (query) of shape [batch, channels, height, width].</param>
     /// <returns>Output tensor of the same shape.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // This version uses null context - use ForwardWithContext for actual cross-attention
         return ForwardWithContext(input, null);
