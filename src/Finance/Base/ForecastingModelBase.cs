@@ -1,5 +1,9 @@
 using System;
 using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
@@ -25,8 +29,69 @@ namespace AiDotNet.Finance.Base;
 /// library can treat them consistently.
 /// </para>
 /// </remarks>
-public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecastingModel<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A window of history: SequenceLength past steps, NumFeatures variables per step.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "The forecast: PredictionHorizon future steps, NumFeatures variables per step.")]
+public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecastingModel<T>, IShapeContract
 {
+    /// <summary>
+    /// The forecasting family's output law: <c>[Batch, PredictionHorizon, NumFeatures]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is one declaration for the whole family because the two quantities it needs are already
+    /// on the base - <see cref="FinancialModelBase{T}.PredictionHorizon"/> and
+    /// <see cref="FinancialModelBase{T}.NumFeatures"/> - and 71 of the concrete finance models
+    /// OVERRIDE them with their own option values (Chronos returns <c>_forecastHorizon</c> and a
+    /// NumFeatures of 1; TFT, Informer, PatchTST and the rest do the same). So the same declaration
+    /// resolves to a different, correct pair per model without any of them writing a contract.
+    /// </para>
+    /// <para>
+    /// Evidence for the layout, from this class's own code rather than inference:
+    /// <see cref="ConcatenatePredictions"/> builds
+    /// <c>new Tensor&lt;T&gt;([batchSize, totalSteps, features])</c>, and
+    /// <see cref="FinancialModelBase{T}.PredictCore"/> is a straight delegation to <c>Forecast</c>,
+    /// so the inference path and that constructor are the same shape.
+    /// </para>
+    /// <para>
+    /// IT IS NOT THE DEFAULT, because measurement says it cannot be. Sweeping all 71 finance models
+    /// against it gave 3 agreed and <b>34 DISAGREED</b>, and the disagreements are not noise - the
+    /// horizon is usually RIGHT and the RANK is wrong, four different ways:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><c>[1,24,1]</c> vs <c>[1,24]</c> - CCDM, LagLlama, MGTSD, NHiTSFinance,
+    /// DeepState: the feature axis is dropped when NumFeatures is 1.</description></item>
+    /// <item><description><c>[1,24,1]</c> vs <c>[24]</c> - DiffusionTS, Chronos, GraphWaveNet, MTGNN,
+    /// STGNN: batch AND feature dropped.</description></item>
+    /// <item><description><c>[1,96,7]</c> vs <c>[1,64,7]</c> - FEDformer returns SequenceLength steps,
+    /// not PredictionHorizon steps.</description></item>
+    /// <item><description><c>[1,96,1]</c> vs <c>[1,64,96]</c> - FlowState transposes the two.</description></item>
+    /// </list>
+    /// <para>
+    /// Models in ONE family, all implementing <c>IForecastingModel</c>, answer the same question at
+    /// four different ranks. That is a finding about the family, not about this contract, and the
+    /// honest response is to decline by default and let each model that has been MEASURED opt in by
+    /// overriding this with <see cref="ForecastHorizonContract"/>. Making the majority law the default
+    /// would attach a false contract to 34 models to gain 3.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <summary>The family law, as a helper so a model with a different rank can still reuse it.</summary>
+    protected IReadOnlyList<OutputAxisContract>? ForecastHorizonContract(int inputRank)
+    {
+        if (inputRank != 3 || PredictionHorizon <= 0 || NumFeatures <= 0) return null;
+        return
+        [
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Fixed(PredictionHorizon)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(NumFeatures)),
+        ];
+    }
+
     /// <summary>
     /// Initializes a new forecasting model with deferred configuration.
     /// </summary>

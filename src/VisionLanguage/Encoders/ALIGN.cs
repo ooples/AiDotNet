@@ -72,6 +72,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 )]
 public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// MEASURED: one pooled embedding per sample, and only the batch axis tracks the input -
+    /// <c>[1,3,8,8] -&gt; [1,640]</c>, <c>[3,3,8,8] -&gt; [3,640]</c>, and moving either spatial axis
+    /// (<c>[1,3,12,8]</c>, <c>[1,3,8,12]</c>) leaves the 640 unchanged. 640 is this model's
+    /// EmbeddingDim, so the width is parameterised rather than a literal.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => PooledEmbeddingContract(inputRank);
+
     private readonly ALIGNOptions _options;
 
     public override ModelOptions GetOptions() => _options;

@@ -64,6 +64,17 @@ public class ModelContractConformanceTests
         // real configuration and are what CI runs; this only lets a developer split one long pass into
         // several short ones on a machine that cannot hold a ten-minute run open. It never reduces
         // what a default run covers.
+        // Optional namespace filter, for checking ONE family's freshly-declared law without paying for
+        // the whole inventory. Same rule as the window below: empty is the real configuration.
+        string? nsFilter = Environment.GetEnvironmentVariable("ADNSHAPE_CONF_NAMESPACE");
+        if (!string.IsNullOrWhiteSpace(nsFilter))
+        {
+            models = models
+                .Where(t => t.Namespace is not null
+                            && t.Namespace.Contains(nsFilter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         int offset = EnvInt("ADNSHAPE_CONF_OFFSET", 0, 0);
         int budget = EnvInt("ADNSHAPE_CONF_BUDGET", models.Count, 1);
         if (offset > 0) models = models.Skip(offset).ToList();
@@ -91,7 +102,14 @@ public class ModelContractConformanceTests
             int[]? shape = null;
             string? lastNote = null;
 
-            foreach (var inputType in new[] { InputType.ThreeDimensional, InputType.OneDimensional })
+            // TwoDimensional is here because its per-sample shape is [Height, Width] - rank 3 once
+            // batched - and NOTHING else in this list produces rank 3. Without it the whole forecasting
+            // family reported 71 declared / 0 agreed / 71 DECLINED, which reads as "no model conforms"
+            // when the truth was that the harness never asked them a rank-3 question. A sweep that can
+            // only pose two of the three ranks the library uses cannot tell a wrong contract from an
+            // unasked one.
+            foreach (var inputType in new[]
+                     { InputType.ThreeDimensional, InputType.TwoDimensional, InputType.OneDimensional })
             {
                 object? candidate = null;
                 try { candidate = Construct(closed, inputType); }
@@ -191,13 +209,22 @@ public class ModelContractConformanceTests
 
         var pars = ctor.GetParameters();
         var args = new object?[pars.Length];
-        args[0] = inputType == InputType.OneDimensional
-            ? new NeuralNetworkArchitecture<double>(
+        args[0] = inputType switch
+        {
+            InputType.OneDimensional => new NeuralNetworkArchitecture<double>(
                 InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-                inputSize: Extent, outputSize: Classes)
-            : new NeuralNetworkArchitecture<double>(
+                inputSize: Extent, outputSize: Classes),
+
+            // [Height, Width] per sample, so [1, Extent, Extent] batched. For a sequence family that
+            // reads as [Batch, SequenceLength, NumFeatures].
+            InputType.TwoDimensional => new NeuralNetworkArchitecture<double>(
+                InputType.TwoDimensional, NeuralNetworkTaskType.Regression,
+                inputHeight: Extent, inputWidth: Extent, outputSize: Classes),
+
+            _ => new NeuralNetworkArchitecture<double>(
                 InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
-                inputDepth: 3, inputHeight: Extent, inputWidth: Extent, outputSize: Classes);
+                inputDepth: 3, inputHeight: Extent, inputWidth: Extent, outputSize: Classes),
+        };
 
         for (int i = 1; i < pars.Length; i++)
         {

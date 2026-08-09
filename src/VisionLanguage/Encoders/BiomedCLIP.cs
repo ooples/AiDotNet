@@ -67,6 +67,18 @@ namespace AiDotNet.VisionLanguage.Encoders;
 )]
 public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    // NO SHAPE CONTRACT, and the reason is measured rather than assumed.
+    //
+    // This model returns per-patch tokens: [1,3,8,8] -> [1,64,512] and [1,3,12,8] -> [1,96,512].
+    // 64 = 8*8 and 96 = 12*8, so Product(Height, Width) fits both, and 512 was this model's
+    // EmbeddingDim. The conformance sweep at extent 64 refuted BOTH halves at once: the contract said
+    // [1,4096,768] and Predict returned [1,256,512]. The token count is not H*W (4096) - 256 is a
+    // 16x16 grid - and the width is not EmbeddingDim (768) either.
+    //
+    // A rule that fits 64 and 96 but not 256 is not the rule. Two extents that happen to agree can
+    // still both be special cases, which is the same way a Fixed(1) once fitted two spatial probes
+    // that were simply both flooring to 1.
+
     private readonly BiomedCLIPOptions _options;
 
     public override ModelOptions GetOptions() => _options;
