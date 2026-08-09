@@ -36,8 +36,92 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 0, 1, 0, 0 }, new[] { 0, 1, 0, 0 }, new[] { 0, 0, 1, 0 }, new[] { 0, 0, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class CroppingLayer<T> : LayerBase<T>
+// Roles from this layer's own guard - "requires at least 3D tensor [H, W, C]" - and from
+// ForwardTraced's comment "input4D is NHWC [batch, H, W, C]". Ranks 3 and 4 are declared; ForwardTraced
+// also accepts rank > 4 by folding the leading axes into batch, but those axes have no roles to name.
+[TensorLayout(TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Derived from <see cref="ForwardTraced"/>, which is what actually runs, NOT from
+    /// <c>OnFirstForward</c>. The two do not say the same thing, and the difference matters here.
+    /// The forward crops exactly two axes:
+    /// <c>hDim = input4D.Shape[1] - _cropTop[hCropIdx] - _cropBottom[hCropIdx]</c> and
+    /// <c>wDim = input4D.Shape[2] - _cropLeft[wCropIdx] - _cropRight[wCropIdx]</c> - so top/bottom
+    /// reach HEIGHT only, left/right reach WIDTH only, and batch and channels are never touched.
+    /// <c>OnFirstForward</c> instead subtracts all four arrays from every axis. Those agree only under
+    /// the intended convention (each array zero wherever it does not apply), which is why the loop
+    /// below re-derives that convention and DECLINES rather than picking a winner when it does not
+    /// hold - a config that crops channels is one the two disagree about, and no single contract is
+    /// right for it.
+    /// </para>
+    /// <para>
+    /// A constant trim looks like it needs an offset form the vocabulary does not have. It does not:
+    /// <c>in - c</c> is <c>Window(kernel: c + 1, stride: 1, padding: 0)</c>, which evaluates to
+    /// <c>floor((in - c - 1) / 1) + 1 = in - c</c>. An uncropped axis falls out of the same expression
+    /// as <c>kernel: 1</c>, but is written as <c>Same</c> because that is what it means.
+    /// </para>
+    /// <para>
+    /// The crop arrays are indexed the way the layer indexes them: <c>hCropIdx</c>/<c>wCropIdx</c> are
+    /// chosen from the ARRAY length, not the input rank, so a 3-long crop array addresses
+    /// <c>[H, W, C]</c> whether it is applied to a rank-3 or a rank-4 input. Array lengths outside
+    /// {3, 4} decline, because that index selection stops tracking the axes beyond them.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 && inputRank != 4) return null;
+
+        int cropRank = _cropTop.Length;
+        if (cropRank != 3 && cropRank != 4) return null;
+        if (cropRank > inputRank) return null;
+        if (_cropBottom.Length != cropRank || _cropLeft.Length != cropRank || _cropRight.Length != cropRank)
+            return null;
+
+        // Exactly the indices ForwardTraced computes for itself.
+        int hCropIdx = _cropTop.Length >= 4 ? 1 : 0;
+        int wCropIdx = _cropLeft.Length >= 4 ? 2 : 1;
+
+        int hTrim = _cropTop[hCropIdx] + _cropBottom[hCropIdx];
+        int wTrim = _cropLeft[wCropIdx] + _cropRight[wCropIdx];
+        if (hTrim < 0 || wTrim < 0) return null;
+
+        // The convention the two shape paths must share for either to be right: the axes the forward
+        // ignores must carry no crop, and the axes it does crop must be reached by one pair only.
+        for (int j = 0; j < cropRank; j++)
+        {
+            int total = _cropTop[j] + _cropBottom[j] + _cropLeft[j] + _cropRight[j];
+            bool agrees =
+                j == hCropIdx ? total == hTrim
+                : j == wCropIdx ? total == wTrim
+                : total == 0;
+            if (!agrees) return null;
+        }
+
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, hTrim + 1, stride: 1, padding: 0));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, wTrim + 1, stride: 1, padding: 0));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+
+        return inputRank == 3
+            ? new[] { height, width, channels }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                height, width, channels,
+            };
+    }
 
     /// <summary>
     /// The amount to crop from the top of each dimension.
@@ -491,57 +575,6 @@ public partial class CroppingLayer<T> : LayerBase<T>
     private int[]? _gpuCachedInputShape;
 
     /// <summary>
-    /// Updates the layer's parameters using the specified learning rate.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the update.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a no-operation for cropping layers, as they have no trainable parameters to update.
-    /// It is implemented to satisfy the abstract method requirement from the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because cropping layers don't learn.
-    /// 
-    /// Since cropping layers:
-    /// - Have no adjustable parameters
-    /// - Always perform the same fixed operation
-    /// - Don't change their behavior based on training
-    ///
-    /// This method exists but does nothing. It's like having a bike pedal
-    /// that's not connected to the chain - you can push it, but it won't change anything.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in a cropping layer
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector, as cropping layers have no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector for cropping layers, as they have no trainable parameters.
-    /// It is implemented to satisfy the abstract method requirement from the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because there are no values to learn.
-    /// 
-    /// Since cropping layers:
-    /// - Have no weights or biases
-    /// - Don't learn from data
-    /// - Just perform a fixed cropping operation
-    ///
-    /// The method returns an empty vector (list) to indicate there's nothing to adjust.
-    /// This is like a recipe that has no ingredients that can be changed - it's always the same.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Cropping layer has no trainable parameters
-        return Vector<T>.Empty();
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -567,28 +600,4 @@ public partial class CroppingLayer<T> : LayerBase<T>
         _gpuCachedInputShape = null;
     }
 
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a no-operation for cropping layers, as they have no trainable parameters to set.
-    /// It is implemented to satisfy the abstract method requirement from the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because cropping layers don't have adjustable values.
-    /// 
-    /// Since cropping layers:
-    /// - Have no weights or biases to update
-    /// - Perform a fixed operation that doesn't change
-    /// - Don't learn from training
-    ///
-    /// There's nothing to set. It's like trying to change the color settings
-    /// on a black and white printer - the feature doesn't exist.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Cropping layer has no parameters to set
-    }
 }

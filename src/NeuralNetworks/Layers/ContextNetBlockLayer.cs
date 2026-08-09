@@ -25,7 +25,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // declares ChannelsFirst. Left at the default Infer, the layer decides by testing whether the
 // TRAILING axis equals the parameter count -- true by coincidence whenever T == C -- and then
 // normalizes across channels at each time index instead of across the batch per channel.
-internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+//
+// Roles are the block's own [B, C, T], enforced by ForwardTraced's guard "requires rank-3 [B, C, T]
+// input" -- rank 3 and nothing else, matching [LayerProperty(ExpectedInputRank = 3)], so exactly one
+// layout is declared and BatchOptional would be a lie. OutputAxesFor below is HAND-WRITTEN: the channel
+// count is re-projected and the temporal axis takes a folded window, neither of which a probe can see.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
+public partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
     private readonly int _inputChannels;
     private readonly int _outputChannels;
@@ -139,14 +148,53 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
 
     public override bool SupportsTraining => true;
 
-    public override long ParameterCount
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Channels are <c>Fixed(_outputChannels)</c>, not <c>Same</c>: every pointwise stage is built as
+    /// <c>Conv1DLayer(channels, outputChannels, kernelSize: 1, ...)</c>, so the block re-projects the
+    /// channel axis to the width it was constructed for. The input side is not free either — the guard
+    /// in <see cref="ForwardTraced"/> says so directly: "the channel count is fixed at construction;
+    /// only the batch and sequence length are free."
+    /// </para>
+    /// <para>
+    /// The temporal axis is the whole convolution STACK folded into one window. Each of the
+    /// <c>_numConvolutions</c> depthwise stages is built with <c>padding: null</c>, which
+    /// <see cref="DepthwiseConv1DLayer{T}"/> resolves to <c>(kernelSize-1)/2</c>, and each contributes a
+    /// per-stage length delta <c>d = 2*((k-1)/2) - k + 1</c> — exactly 0 for an odd kernel, and -1 for an
+    /// even one, since the integer halving loses a frame it cannot pad back. The pointwise stages are
+    /// <c>k=1, s=1, p=0</c> and so leave the length alone. Only the LAST convolution carries the stride
+    /// ("ContextNet applies temporal downsampling on the LAST convolution in the block"), which puts the
+    /// total at <c>floor((T + n*d - 1) / stride) + 1</c>. That is the sliding-window formula with
+    /// <c>padding = 0</c> and <c>kernel = 1 - n*d</c>, which is what is declared below.
+    /// </para>
+    /// <para>
+    /// For the odd kernels the paper uses this collapses to <c>kernel = 1</c>, and it then agrees exactly
+    /// with the independent residual path (<c>_residualProjection</c> is <c>k=1</c> at the same stride),
+    /// which is the cross-check that the fold is right — the two must agree or <c>TensorAdd</c> could not
+    /// combine them. They diverge only for an EVEN kernel, a configuration in which a residual block
+    /// cannot work at all; the main-path form declared here stays correct for the residual-free C0/C22
+    /// blocks, which are the only ones that can reach it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
-        get
+        // ForwardTraced accepts rank 3 and throws on everything else, so no other rank is declarable.
+        if (inputRank != 3 || _stride <= 0 || _kernelSize <= 0 || _numConvolutions <= 0 || _outputChannels <= 0)
+            return null;
+
+        // Per-depthwise-stage length delta under DepthwiseConv1DLayer's default "same" padding.
+        int perStageDelta = 2 * ((_kernelSize - 1) / 2) - _kernelSize + 1;   // 0 (odd k) or -1 (even k)
+        int foldedKernel = 1 - _numConvolutions * perStageDelta;             // 1 when k is odd
+
+        return new[]
         {
-            long total = 0;
-            foreach (var layer in TrainableSubLayers()) total += layer.ParameterCount;
-            return total;
-        }
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.Window(TensorAxis.Time, foldedKernel, _stride, padding: 0)),
+        };
     }
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
@@ -204,32 +252,6 @@ internal sealed partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSeri
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in TrainableSubLayers()) layer.UpdateParameters(learningRate);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var parameters = Vector<T>.Empty();
-        foreach (var layer in TrainableSubLayers())
-            parameters = Vector<T>.Concatenate(parameters, layer.GetParameters());
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters for ContextNetBlockLayer, but got {parameters.Length}.");
-        }
-
-        int offset = 0;
-        foreach (var layer in TrainableSubLayers())
-        {
-            int count = (int)layer.ParameterCount;
-            layer.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
     }
 
     public override void SetTrainingMode(bool isTraining)

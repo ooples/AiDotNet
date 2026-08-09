@@ -36,7 +36,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
-public partial class LogVarianceLayer<T> : LayerBase<T>
+// Rank 2 [Batch, Features] per [LayerProperty(TestInputShape = "2, 4")]; the output is rank 1 because
+// one axis is reduced away. OutputAxesFor below computes which one from Axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Gets the axis along which the variance is calculated.
@@ -57,6 +62,22 @@ public partial class LogVarianceLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public int Axis { get; private set; }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Same shape behaviour as <c>MeanLayer</c>: the forward reduces <see cref="Axis"/> with
+    /// <c>keepDims: false</c>, so that axis disappears and the surviving one keeps its role and size.
+    /// Which axis survives is a constructor decision, so this is computed rather than generated.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 2 [Batch, Features] per [LayerProperty(TestInputShape = "2, 4")]; higher ranks unclaimed.
+        if (inputRank != 2 || Axis < 0 || Axis >= 2) return null;
+
+        var survivor = Axis == 0 ? TensorAxis.Features : TensorAxis.Batch;
+
+        return new[] { new OutputAxisContract(survivor, AxisRelation.Same(survivor)) };
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -399,28 +420,6 @@ public partial class LogVarianceLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer based on the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is empty because the LogVarianceLayer has no trainable parameters to update.
-    /// However, it must be implemented to satisfy the base class contract.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update the layer's internal values during training.
-    /// 
-    /// However, since this layer doesn't have any trainable parameters:
-    /// - There's nothing to update
-    /// - The method exists but doesn't do anything
-    /// - This is normal for layers that perform fixed mathematical operations
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // LogVarianceLayer has no learnable parameters, so this method is empty
-    }
-
-    /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since this layer has no trainable parameters.</returns>
@@ -442,12 +441,6 @@ public partial class LogVarianceLayer<T> : LayerBase<T>
         var metadata = base.GetMetadata();
         metadata["Axis"] = Axis.ToString();
         return metadata;
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        // LogVarianceLayer has no trainable parameters
-        return new Vector<T>(0);
     }
 
     /// <summary>

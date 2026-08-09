@@ -1,4 +1,7 @@
 ﻿using AiDotNet.ActivationFunctions;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -47,8 +50,85 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// trainable — the tape treats them as input data.
 /// </para>
 /// </remarks>
-public partial class NoisyDenseLayer<T> : LayerBase<T>
+// FEATURE-LAST, exactly like DenseLayer - the noise is applied to the WEIGHTS (W = mu + sigma . eps),
+// never to the shape, so this layer's geometry is a plain projection. ForwardTraced says so in one line:
+// `int featureSize = input.Rank == 1 ? input.Length : input.Shape[input.Rank - 1]`, checked against
+// _inputSize, and the tail of the same method rebuilds the output as `outShape[i] = input.Shape[i]` for
+// every leading axis with `outShape[^1] = _outputSize`.
+//
+// Ranks 1 to 4 are declared because the forward handles each (`if (input.Rank == 1) ... else if
+// (input.Rank == 2) ... else` flattens the leading axes and restores them afterwards). Rank 0 is the one
+// form it rejects outright - "expects an input with at least one dimension" - so it is not declared.
+// Higher ranks run too, but each extra leading axis would need a DISTINCT role to be named by a
+// relation, and the roles run out; OutputAxesFor declines there rather than guessing a name.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: the leading axes are carried through untouched.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+// Rank 4 is named [Batch, Channels, Height, Features] rather than with anonymous placeholders because
+// that is precisely the convolution hand-off, and naming it makes the consequence legible: fed a feature
+// map, this layer maps WIDTH as the feature axis. That is rarely what an author means - it is why
+// conv -> dense normally needs an explicit flatten - but the layer does accept it, so declining here
+// would only make the contract decline on a case that works.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the trailing axis is RESIZED to <c>_outputSize</c> while every leading axis
+    /// is carried through - the rule is "the last axis, whatever the rank", which no fixed-rank
+    /// attribute can state. Read straight off the end of <c>ForwardTraced</c>, which builds the output
+    /// shape by copying <c>input.Shape[i]</c> for <c>i &lt; Rank-1</c> and setting the last entry to
+    /// <c>_outputSize</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputSize)</c> is a genuine claim here rather than a restatement of the input: the
+    /// constructor sizes <c>_muWeights</c> and <c>_sigmaWeights</c> as <c>[inputSize, outputSize]</c>,
+    /// so the output width is set by configuration and is independent of what is fed in. The INPUT width
+    /// is separately pinned to <c>_inputSize</c> by the guard at the top of the forward, which is a
+    /// constraint on the caller and not a relation this method can express.
+    /// </para>
+    /// <para>
+    /// The exploration noise is deliberately absent from this contract. Training mode resamples
+    /// <c>eps</c> per forward and evaluation mode zeroes <c>sigma</c>, but both paths run the same
+    /// matmul against the same <c>[inputSize, outputSize]</c> weights, so the shape is identical in
+    /// either mode - a contract that varied with <c>IsTrainingMode</c> would be describing values, not
+    /// dimensions.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0 || inputRank < 1) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        // Enumerated rather than generated, because every leading axis needs a DISTINCT role: axis roles
+        // are how a relation refers to its input, so two anonymous placeholders in one layout cannot be
+        // told apart. Ranks beyond four decline honestly rather than guessing a name.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), Pass(TensorAxis.Channels), Pass(TensorAxis.Height), features,
+            },
+            _ => null,
+        };
+    }
+
     private readonly int _inputSize;
     private readonly int _outputSize;
     private readonly double _sigmaInit;
@@ -130,9 +210,6 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>
 
         InitializeParameters();
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 2L * _inputSize * _outputSize + 2L * _outputSize;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -361,31 +438,6 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>
             u2 = 1.0 - _rng.NextDouble();
         }
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var p = new Vector<T>((int)ParameterCount);
-        int idx = 0;
-        for (int i = 0; i < _muWeights.Length; i++) p[idx++] = _muWeights[i];
-        for (int i = 0; i < _sigmaWeights.Length; i++) p[idx++] = _sigmaWeights[i];
-        for (int j = 0; j < _muBiases.Length; j++) p[idx++] = _muBiases[j];
-        for (int j = 0; j < _sigmaBiases.Length; j++) p[idx++] = _sigmaBiases[j];
-        return p;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
-        int idx = 0;
-        for (int i = 0; i < _muWeights.Length; i++) _muWeights[i] = parameters[idx++];
-        for (int i = 0; i < _sigmaWeights.Length; i++) _sigmaWeights[i] = parameters[idx++];
-        for (int j = 0; j < _muBiases.Length; j++) _muBiases[j] = parameters[idx++];
-        for (int j = 0; j < _sigmaBiases.Length; j++) _sigmaBiases[j] = parameters[idx++];
     }
 
     /// <inheritdoc/>

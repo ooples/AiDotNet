@@ -1051,12 +1051,52 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 /// - Input: Many points, basic features (XYZ)
 /// - Output: Fewer points, rich features (learned patterns)
 /// </remarks>
-// INTERNAL, AS ON master. This layer is referenced only by PointNetPlusPlus's own private fields,
-// constructors and deserialization pattern matches -- users compose PointNet++ through the model,
-// never by naming this type. `partial` is for the same-assembly generator extension; widening it to
-// public would freeze an implementation detail into the public API.
-internal partial class SetAbstractionLayer<T> : LayerBase<T>
+// Rank 2 ONLY, quoted from this layer's own guard: ForwardTraced opens with
+// `if (input.Shape.Length != 2 || input.Shape[1] != _inputChannels) throw`, naming the shape
+// [N, _inputChannels]. The leading axis is Other because it counts POINTS of an unordered set - the
+// same call PointConvolutionLayer and MeshPoolLayer make for their point and edge axes.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the point count; a point cloud is unordered, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The channel axis is a real claim; the point axis deliberately is not.
+    /// </para>
+    /// <para>
+    /// Channels: <c>Fixed(_outputChannels)</c>. Every branch's mini-PointNet ends at its own
+    /// <c>MlpDimensions[^1]</c> and the multi-scale path concatenates them, which is exactly what
+    /// <c>_outputChannels</c> is computed as (<c>_branches.Sum(b =&gt; b.OutputChannels)</c>). The
+    /// forward then shapes its result with that same field - <c>[numCentroids, _outputChannels]</c> -
+    /// so this reads the layer's own arithmetic rather than a width observed once.
+    /// </para>
+    /// <para>
+    /// Points: <c>Unknown</c>, and that is the accurate answer rather than a cautious one. The count is
+    /// <c>Math.Min(_numPoints, numPoints)</c> - it SATURATES, because farthest-point sampling cannot
+    /// produce more centroids than there are points. <c>Fixed(_numPoints)</c> would be wrong for any
+    /// cloud smaller than the target, and nothing in the vocabulary saturates: <c>Window</c>,
+    /// <c>Scaled</c> and <c>Product</c> are all monotonically unbounded in the input. This is the same
+    /// boundary MeshPoolLayer names for its <c>min(TargetEdges, numEdges)</c> pooling.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Other,
+                AxisRelation.Unknown(
+                    $"Centroid count is min({_numPoints}, numPoints) - farthest-point sampling saturates "
+                    + "at the point count, and no relation in the vocabulary saturates.")),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+        };
+    }
+
     private sealed class ScaleBranch
     {
         private readonly int[] _mlpDimensions;
@@ -1202,25 +1242,6 @@ internal partial class SetAbstractionLayer<T> : LayerBase<T>
         // Branches separated by ';', the widths within a branch by ','.
         metadata["SA_Mlp"] = string.Join(";",
             _branches.Select(b => string.Join(",", b.MlpDimensions.Select(d => d.ToString(ci)))));
-
-        // ALSO UNDER THE NAMES THE DESERIALIZER ACTUALLY LOOKS FOR. DeserializationHelper does not
-        // dispatch per layer type: it reflects over the constructor and looks each parameter up by
-        // its CAPITALISED PARAMETER NAME. None of the SA_ keys above matched, so every argument fell
-        // to a default -- mlpDimensions to literally new int[] { 1 } -- and Clone/DeepCopy rebuilt a
-        // layer with the wrong parameter count. The SA_ keys are kept because they are the readable
-        // form and other tooling may consume them; these are the ones reconstruction needs.
-        //
-        // Written for the MULTI-SCALE constructor (numPoints, radii, inputChannels, mlpDimensions,
-        // neighborSamples), because a single-scale layer is stored as a one-branch multi-scale layer
-        // and rebuilds identically through it -- one path instead of two. Separators match what the
-        // helper parses: "," within a group, ";" between groups.
-        metadata["NumPoints"] = _numPoints.ToString(ci);
-        metadata["InputChannels"] = _inputChannels.ToString(ci);
-        metadata["Radii"] = string.Join(",", _branches.Select(b => b.Radius.ToString(ci)));
-        metadata["NeighborSamples"] = string.Join(",", _branches.Select(b => b.NeighborSamples.ToString(ci)));
-        metadata["MlpDimensions"] = string.Join(";",
-            _branches.Select(b => string.Join(",", b.MlpDimensions.Select(d => d.ToString(ci)))));
-
         return metadata;
     }
 
@@ -1297,30 +1318,6 @@ internal partial class SetAbstractionLayer<T> : LayerBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int offset = 0;
-
-        foreach (var branch in _branches)
-        {
-            foreach (var layer in branch.MlpLayers)
-            {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameters.Length; i++)
-                {
-                    parameters[offset + i] = layerParameters[i];
-                }
-
-                offset += layerParameters.Length;
-            }
-        }
-
-        Parameters = parameters;
-        return parameters;
-    }
-
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -1333,40 +1330,6 @@ internal partial class SetAbstractionLayer<T> : LayerBase<T>
                 {
                     var layerParameters = parameters.SubVector(offset, layerParameterCount);
                     layer.UpdateParameters(layerParameters);
-                    offset += layerParameterCount;
-                }
-            }
-        }
-
-        Parameters = parameters;
-    }
-
-    /// <summary>
-    /// Restores the flat parameter vector into the per-branch MLP sub-layers,
-    /// which is where this layer's weights actually live. The base SetParameters
-    /// would set only the inert Parameters field, so a deserialized clone kept its
-    /// freshly-initialised sub-layer weights and predicted differently from the
-    /// trained original (#1789 clone-parity failure — "SetParameters skipped
-    /// silently on an unresolved layer"). This mirrors GetParameters: it slices
-    /// the vector back across the same sub-layers, in the same order, so a
-    /// round-trip through GetParameters/SetParameters is exact.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
-        }
-
-        int offset = 0;
-        foreach (var branch in _branches)
-        {
-            foreach (var layer in branch.MlpLayers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    layer.SetParameters(parameters.SubVector(offset, layerParameterCount));
                     offset += layerParameterCount;
                 }
             }
@@ -1390,26 +1353,6 @@ internal partial class SetAbstractionLayer<T> : LayerBase<T>
             branch.NeighborCounts = null;
             branch.NeighborIndices = null;
             branch.MaxIndices = null;
-        }
-    }
-
-    public override long ParameterCount
-    {
-        get
-        {
-            // Accumulate in long; SetAbstraction branches over high-resolution
-            // point clouds can have MLP layers whose individual ParameterCount
-            // approaches int.MaxValue. (int) cast on each addend used to
-            // wrap before the sum widened to long for the property's return.
-            long total = 0;
-            foreach (var branch in _branches)
-            {
-                foreach (var layer in branch.MlpLayers)
-                {
-                    total += layer.ParameterCount;
-                }
-            }
-            return total;
         }
     }
 

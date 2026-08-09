@@ -37,8 +37,63 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2")]
-public partial class Upsample3DLayer<T> : LayerBase<T>
+// Roles taken verbatim from this layer's own guard in OnFirstForward - "requires rank-4 [C,D,H,W] or
+// rank-5 [B,C,D,H,W] input" - which is also the only pair of ranks it resolves shapes for. Batch is
+// marked optional rather than declared as a second layout because the layer is tested at rank 4
+// ([LayerProperty(TestInputShape = "1, 4, 4, 4")]) and runs the same code one rank up; ForwardTraced
+// reshapes the unbatched form to [1,C,D,H,W] and reshapes the result straight back.
+// OutputAxesFor below is HAND-WRITTEN, not generated: the three scale factors are constructor arguments.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Depth, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Derived from <c>OnFirstForward</c>, which resolves
+    /// <c>ResolveShapes(new[] { c, d, h, w }, new[] { c, d * ScaleDepth, h * ScaleHeight, w * ScaleWidth })</c>.
+    /// Channels pass through; each of the three volumetric axes is multiplied by its own scale factor,
+    /// so the relations are per-axis and NOT interchangeable - the three-argument constructor exists
+    /// precisely so they can differ.
+    /// </para>
+    /// <para>
+    /// <c>Scaled</c> and not <c>Window</c>: a window relation shrinks an axis, and this is
+    /// nearest-neighbour upsampling - each voxel becomes a
+    /// <c>ScaleDepth</c> x <c>ScaleHeight</c> x <c>ScaleWidth</c> block, so each extent grows by exactly
+    /// its factor with no rounding.
+    /// </para>
+    /// <para>
+    /// Ranks 4 and 5 only, because those are the only ranks <c>OnFirstForward</c> accepts - it throws
+    /// for anything else. <c>ForwardTraced</c> does contain a rank&gt;=6 path that folds the leading axes
+    /// into the batch, but that path is unreachable through the normal entry point, and each extra
+    /// leading axis would need a distinct role to be named by a relation anyway.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (4 or 5)) return null;
+        if (ScaleDepth <= 0 || ScaleHeight <= 0 || ScaleWidth <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
+        var depth = new OutputAxisContract(
+            TensorAxis.Depth, AxisRelation.Scaled(TensorAxis.Depth, ScaleDepth));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Scaled(TensorAxis.Height, ScaleHeight));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Scaled(TensorAxis.Width, ScaleWidth));
+
+        return inputRank == 4
+            ? new[] { channels, depth, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, depth, height, width,
+            };
+    }
+
     #region Properties
 
     /// <summary>
@@ -95,12 +150,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>
     /// Upsample3D supports GPU execution via CUDA, OpenCL, and HIP backends using nearest neighbor interpolation.
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <value>Always 0 as this layer has no trainable parameters.</value>
-    public override long ParameterCount => 0;
 
     #endregion
 
@@ -387,33 +436,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>
     #endregion
 
     #region Parameter Management
-
-    /// <summary>
-    /// Updates parameters. This layer has no trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused).</param>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters to update
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters. This layer has none.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Sets parameters from a vector. This layer has no trainable parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (should be empty).</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // No parameters to set
-    }
 
     #endregion
 

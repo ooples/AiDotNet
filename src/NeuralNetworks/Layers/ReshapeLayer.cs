@@ -38,7 +38,26 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 2, 2 }")]
-public partial class ReshapeLayer<T> : LayerBase<T>
+// POSITIONAL roles on both sides. A general reshape has no intrinsic axis meanings - that is the whole
+// point of it - and an earlier pass declined to annotate it for exactly that reason, on the grounds
+// that several role-less axes would all have to be TensorAxis.Other, which ADNSHAPE002 forbids
+// repeating. But they do not have to be Other: distinct positional names work, and they are SAFE here
+// for a stronger reason than usual. Every non-batch output relation below is Fixed, read from the
+// constructor's target shape, so NO relation reads an input axis at all - the names cannot influence a
+// resolved size even in principle. This is the same reasoning [ElementWiseShape] and ConcatenateLayer
+// already rely on, applied where it is least ambiguous.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ReshapeLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The shape of the input tensor, excluding the batch dimension.
@@ -56,6 +75,52 @@ public partial class ReshapeLayer<T> : LayerBase<T>
     /// This array stores the dimensions of the output tensor not including the batch dimension (which is 
     /// always the first dimension). It defines the target shape for the reshaping operation.
     /// </remarks>
+    /// <summary>Positional roles, matching the layouts declared on the class.</summary>
+    private static readonly TensorAxis[] ReshapeRoles =
+    {
+        TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    };
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output is <c>[batch, .._outputShape]</c> - see <c>ForwardTraced</c>, which builds exactly
+    /// that target. So the batch axis carries through and every other axis is
+    /// <see cref="AxisRelation.Fixed"/> at the size the constructor was given. That is a legitimate
+    /// <c>Fixed</c> source under the annotation rules: it is a constructor argument, not an observed
+    /// constant.
+    /// </para>
+    /// <para>
+    /// THE OUTPUT RANK DOES NOT DEPEND ON THE INPUT RANK - it is <c>_outputShape.Length + 1</c>,
+    /// whatever came in, which is why the same list is returned for every accepted input rank. The
+    /// layer constrains its input only by per-sample element count (<c>OnFirstForward</c> multiplies
+    /// the non-batch dimensions and compares), and no relation in the vocabulary states "the product of
+    /// these axes equals the product of those" - but nothing needs to, because no output axis is
+    /// derived from an input axis.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank < 2 || inputRank > ReshapeRoles.Length) return null;
+
+        var target = _outputShape;
+        if (target is null || target.Length == 0) return null;
+        if (target.Length + 1 > ReshapeRoles.Length) return null;
+
+        var axes = new List<OutputAxisContract>(target.Length + 1)
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+        };
+
+        for (int i = 0; i < target.Length; i++)
+        {
+            if (target[i] <= 0) return null;
+            axes.Add(new OutputAxisContract(ReshapeRoles[i + 1], AxisRelation.Fixed(target[i])));
+        }
+
+        return axes;
+    }
+
     private int[] _outputShape;
 
     /// <summary>
@@ -210,57 +275,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>
         Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
 
         return Engine.Reshape(input, targetShape);
-    }
-
-    /// <summary>
-    /// Updates the parameters of the reshape layer.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is required by the LayerBase class but does nothing in the ReshapeLayer because this layer
-    /// has no trainable parameters to update. The ReshapeLayer only transforms the data structure without
-    /// applying any learned transformations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is empty because the layer has no internal values to update.
-    /// 
-    /// Unlike most layers in a neural network, the reshape layer doesn't have any
-    /// weights or biases that need to be adjusted during training. It's purely a 
-    /// geometric transformation of the data structure.
-    /// 
-    /// The actual learning happens in other layers of the network that have
-    /// trainable parameters like weights and biases.
-    /// 
-    /// This method exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // ReshapeLayer has no parameters to update
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the reshape layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector because the ReshapeLayer has no trainable parameters. The method
-    /// is required by the LayerBase class but is essentially a no-op for this layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because the layer has no learnable values.
-    /// 
-    /// As mentioned earlier, the reshape layer doesn't have any weights or biases
-    /// that it learns during training. It just reorganizes the data structure.
-    /// 
-    /// This method returns an empty vector to indicate that there are no parameters to retrieve.
-    /// It exists only because all layers in the network must implement it.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // ReshapeLayer has no trainable parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

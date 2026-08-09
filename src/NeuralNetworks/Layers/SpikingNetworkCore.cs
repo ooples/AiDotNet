@@ -44,8 +44,52 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = false, ChangesShape = true, UsesSurrogateGradient = true, ExpectedInputRank = 2, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 6")]
-public partial class SpikingNetworkCore<T> : LayerBase<T>
+// Feature-mapping, exactly like the dense readout it ends in. ForwardTraced's own summary states the
+// contract - "input current(s) [B, inputSize] (or [inputSize]) -> time-averaged readout membrane
+// [B, outputSize]" - and the code matches: rank 1 is promoted to [1, length], the loop accumulates into
+// outMembrane sized [batch, _outputSize], and a rank-1 caller gets its rank restored on the way out.
+//
+// TIME IS NOT AN AXIS HERE. _timeSteps drives an internal simulation loop whose result is AVERAGED
+// ("1.0 / _timeSteps") before returning, so the spiking dynamics never widen the tensor. A contract
+// that surfaced _timeSteps would describe the loop rather than the value the caller receives.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SpikingNetworkCore<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <c>Fixed(_outputSize)</c> is the constructor argument that sizes the final synapse -
+    /// <c>_synapses[_hiddenSizes.Length] = new DenseLayer&lt;T&gt;(_outputSize, ...)</c> - and the
+    /// readout accumulator <c>new Tensor&lt;T&gt;([batch, _outputSize])</c>. It is the layer's own
+    /// parameter, not a size read back from a probe.
+    /// </para>
+    /// <para>
+    /// <c>_hiddenSizes</c> is deliberately absent: those widths belong to intermediate membrane and
+    /// spike tensors that the final synapse projects away before anything is returned.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     private readonly int _inputSize;
     private readonly int[] _hiddenSizes;
     private readonly int _outputSize;
@@ -236,46 +280,6 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>
     {
         foreach (var syn in _synapses)
             yield return syn;
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = 0;
-            foreach (var layer in SubLayers())
-                total += layer.ParameterCount;
-            return total;
-        }
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        foreach (var layer in SubLayers())
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-                parameters.Add(p[i]);
-        }
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var layer in SubLayers())
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            var sub = new Vector<T>(count);
-            for (int i = 0; i < count && idx < parameters.Length; i++)
-                sub[i] = parameters[idx++];
-            layer.SetParameters(sub);
-        }
     }
 
     /// <inheritdoc />

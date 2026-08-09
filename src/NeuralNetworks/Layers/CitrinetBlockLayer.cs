@@ -52,7 +52,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // declares ChannelsFirst. Left at the default Infer, the layer decides by testing whether the
 // TRAILING axis equals the parameter count -- true by coincidence whenever T == C -- and then
 // normalizes across channels at each time index instead of across the batch per channel.
-public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+//
+// Roles are the block's own [B, C, T], enforced by ForwardTraced's guard "requires rank-3 [B, C, T]
+// input" -- rank 3 and nothing else, so exactly one layout is declared and BatchOptional would be a
+// lie. OutputAxesFor below is HAND-WRITTEN because the temporal axis takes a stride the probe cannot
+// know.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
+public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
@@ -159,14 +168,36 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override long ParameterCount
+    /// <remarks>
+    /// <para>
+    /// Derived from the RESIDUAL path, not the main path, because the residual add at the end of
+    /// <see cref="ForwardTraced"/> is what forces the two to agree: <c>_residualConv</c> is
+    /// <c>Conv1DLayer(channels, channels, kernelSize: 1, dilation: 1, stride: stride, padding: 0)</c>,
+    /// so the temporal axis is exactly one convolution window with <c>k = 1</c>, <c>s = _stride</c>,
+    /// <c>p = 0</c>. The main path's R depthwise sub-blocks use same-padding and carry the stride only
+    /// on <c>r == 0</c> (<c>int subStride = r == 0 ? stride : 1;</c>), which lands on the same length —
+    /// reading it off the single-conv skip path is simply the shorter derivation of the same number.
+    /// </para>
+    /// <para>
+    /// Channels are <c>Same</c> rather than <c>Fixed(_channels)</c> deliberately. The block does
+    /// require <c>C_in == _channels</c>, but the invariant the class documents is the stronger and more
+    /// useful one — "channel width C is constant across the block (the residual add requires
+    /// <c>C_out == C_in</c>)" — and stating it as <c>Same</c> keeps the contract about this layer's
+    /// behaviour rather than about one construction argument.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
-        get
+        // ForwardTraced accepts rank 3 and throws on everything else, so no other rank is declarable.
+        if (inputRank != 3 || _stride <= 0) return null;
+
+        return new[]
         {
-            long total = 0;
-            foreach (var l in TrainableSubLayers()) total += l.ParameterCount;
-            return total;
-        }
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)),
+            new OutputAxisContract(
+                TensorAxis.Time, AxisRelation.Window(TensorAxis.Time, kernel: 1, stride: _stride, padding: 0)),
+        };
     }
 
     /// <inheritdoc/>
@@ -212,37 +243,6 @@ public partial class CitrinetBlockLayer<T> : LayerBase<T>, ILayerSerializationEx
     public override void UpdateParameters(T learningRate)
     {
         foreach (var l in TrainableSubLayers()) l.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var l in TrainableSubLayers())
-            all = Vector<T>.Concatenate(all, l.GetParameters());
-        return all;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Validate the total length BEFORE slicing so a short vector throws the informative
-        // ArgumentException below instead of a generic ArgumentOutOfRangeException from Slice()
-        // mid-loop (mirrors DepthwiseConv1DLayer.SetParameters + SetExtraParameters).
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters for CitrinetBlockLayer, but got {parameters.Length}.");
-        }
-        int offset = 0;
-        foreach (var l in TrainableSubLayers())
-        {
-            int len = (int)l.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            l.SetParameters(slice);
-            offset += len;
-        }
     }
 
     /// <inheritdoc/>

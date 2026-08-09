@@ -27,7 +27,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public partial class NodeEnsembleLayer<T> : LayerBase<T>
+// Rank 2 only, and the restriction is real rather than cautious. ForwardTraced reads the feature count
+// off the LAST axis and folds everything else into a batch (`int batch = input.Length / features`), then
+// returns Engine.TensorConcatenate(outs, axis: 1) - a [batch, numTrees * treeOutputDim] tensor. The
+// output is therefore ALWAYS rank 2, so a rank-1 input would come back rank 2 with a leading 1 that no
+// relation can name without hardcoding it. BatchOptional is deliberately NOT set here for the same
+// reason: it would claim the unbatched form maps to an unbatched output, and it does not.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Every tree sees the full feature vector; the ensemble is parallel, not stacked.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class NodeEnsembleLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numTrees;
     private readonly int _treeDepth;
@@ -87,6 +97,34 @@ public partial class NodeEnsembleLayer<T> : LayerBase<T>
         _built = true;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the feature axis is RESIZED while keeping its role, which a generated
+    /// <c>Same(Features)</c> would flatten into a false claim. The width is read straight off
+    /// <c>BuildComponents</c>, which is the single place this layer states its own shape:
+    /// <c>ResolveShapes(new[] { numFeatures }, new[] { _numTrees * _treeOutputDim })</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed</c> rather than <c>Scaled</c>, because the output width has nothing to do with the input
+    /// width. Each of the <c>_numTrees</c> trees maps the WHOLE feature vector to <c>_treeOutputDim</c>
+    /// values and the results are concatenated, so a 12-feature and a 200-feature input both leave this
+    /// layer at <c>numTrees * treeOutputDim</c>. That independence is exactly why the layer can rebuild
+    /// itself for a different fed width without changing its output shape.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _numTrees <= 0 || _treeOutputDim <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(
+                TensorAxis.Features, AxisRelation.Fixed(_numTrees * _treeOutputDim)),
+        };
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
@@ -107,35 +145,6 @@ public partial class NodeEnsembleLayer<T> : LayerBase<T>
             outs[i] = _trees![i].Forward(x);
         }
         return Engine.TensorConcatenate(outs, axis: 1);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        foreach (var sub in GetSubLayers())
-        {
-            var p = sub.GetParameters();
-            for (int i = 0; i < p.Length; i++) all.Add(p[i]);
-        }
-        var result = new Vector<T>(all.Count);
-        for (int i = 0; i < all.Count; i++) result[i] = all[i];
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var sub in GetSubLayers())
-        {
-            int count = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
-            if (count == 0) continue;
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
-            sub.SetParameters(p);
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

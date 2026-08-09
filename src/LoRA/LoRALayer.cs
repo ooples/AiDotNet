@@ -2,6 +2,10 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
+
 namespace AiDotNet.LoRA;
 
 /// <summary>
@@ -33,8 +37,70 @@ namespace AiDotNet.LoRA;
 /// requires 8x1000 + 8x1000 = 16,000 parameters (98.4% reduction!).
 /// </para>
 /// </remarks>
-public partial class LoRALayer<T> : LayerBase<T>
+// The same two forms LoRAAdapterBase declares, and for the same reason: this is a linear projection, so
+// it sees [Batch, Features] for the classic dense case and [Batch, Time, Features] when it wraps an
+// attention or FFN sublayer. ForwardTraced states this itself - "Features live on the LAST axis; every
+// leading axis is batch-like" - and its tail explicitly restores the leading axes so a rank-3 input comes
+// back as [batch, seq, out].
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Feature-last, leading axes untouched - the same rule as <c>DenseLayer</c>, which is what LoRA is a
+    /// low-rank stand-in for. The output width is <c>_loraB.Shape[1]</c>, the <c>outputSize</c> constructor
+    /// argument: <c>ForwardTraced</c> computes <c>(input @ A) @ B</c>, so the trailing dim of the result
+    /// is B's column count by construction, not by convention.
+    /// </para>
+    /// <para>
+    /// The rank (r) never appears here. It is an INTERNAL bottleneck - <c>input @ A</c> is
+    /// <c>[.., r]</c> - and B expands straight back out, so no externally visible axis is ever sized by
+    /// it. Declaring the sequence length would be the other mistake: the matrices are sized by the
+    /// feature width alone, so any number of time steps is valid and pinning one would make a correct
+    /// layer look like it rejects valid input.
+    /// </para>
+    /// <para>
+    /// RANK 1 IS DELIBERATELY NOT DECLARED, and that is a defect of the layer rather than of the
+    /// contract. A rank-1 <c>[features]</c> input is reshaped to <c>[1, features]</c> for the matmul, but
+    /// the restore step is guarded by <c>if (input.Shape.Length &gt; 2)</c> - so it returns rank-2
+    /// <c>[1, out]</c>, changing the rank. Declaring rank 1 here would have to claim either the rank it
+    /// takes or the rank it returns; neither is true of both ends.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // _loraB is built as [rank, outputSize], so the trailing axis IS the output width. This reads
+        // Shape[1] rather than a Matrix-style .Columns because the parameter-automation refactor on
+        // this branch moved the LoRA factors from Matrix<T> to Tensor<T>.
+        int outputSize = _loraB.Shape[1];
+        if (outputSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(outputSize));
+
+        return inputRank switch
+        {
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Low-rank matrix A with dimensions (inputSize × rank).
     /// </summary>
@@ -48,7 +114,7 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// Think of it as compressing the input data into a smaller representation before expanding it again.
     /// </para>
     /// </remarks>
-    private Matrix<T> _loraA;
+    private Tensor<T> _loraA;
 
     /// <summary>
     /// Low-rank matrix B with dimensions (rank × outputSize).
@@ -63,7 +129,7 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// to full size. It starts at zero so the adapted model initially behaves exactly like the original.
     /// </para>
     /// </remarks>
-    private Matrix<T> _loraB;
+    private Tensor<T> _loraB;
 
     /// <summary>
     /// The rank of the low-rank decomposition.
@@ -105,19 +171,12 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// <summary>
     /// Gradients for matrix A computed during backpropagation.
     /// </summary>
-    // Cached Tensor wrappers around _loraA / _loraB so Forward doesn't allocate
-    // a fresh Tensor + int[] shape each call. Invalidated to null whenever the
-    // underlying matrices change — see UpdateMatricesFromParameters and the
-    // gradient-update paths.
-    private Tensor<T>? _loraATensor;
-    private Tensor<T>? _loraBTensor;
-
-    private Matrix<T>? _loraAGradient;
+    private Tensor<T>? _loraAGradient;
 
     /// <summary>
     /// Gradients for matrix B computed during backpropagation.
     /// </summary>
-    private Matrix<T>? _loraBGradient;
+    private Tensor<T>? _loraBGradient;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
@@ -128,17 +187,6 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// Stored pre-activation output from the forward pass, needed for activation derivative computation.
     /// </summary>
     private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (elements in A and B matrices).
-    /// </summary>
-    public override long ParameterCount =>
-        // Promote to long BEFORE the multiplication so a sufficiently
-        // large rank × dim doesn't overflow int32 mid-computation. The
-        // outer return type is already long, but the int*int product
-        // wraps before the implicit widening converts to long. Closes
-        // #1271.7Bnv.
-        ((long)_loraA.Rows * _loraA.Columns) + ((long)_loraB.Rows * _loraB.Columns);
 
     /// <summary>
     /// Gets whether this layer supports training (always true for LoRA).
@@ -200,29 +248,19 @@ public partial class LoRALayer<T> : LayerBase<T>
 
         // Initialize LoRA matrices
         // Matrix A: Random initialization (Gaussian with std = 1/sqrt(rank))
-        _loraA = new Matrix<T>(inputSize, rank);
+        _loraA = new Tensor<T>([inputSize, rank]);
         T stddev = NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(rank)));
-        for (int i = 0; i < _loraA.Rows; i++)
+        for (int i = 0; i < inputSize; i++)
         {
-            for (int j = 0; j < _loraA.Columns; j++)
+            for (int j = 0; j < rank; j++)
             {
                 _loraA[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextGaussian()), stddev);
             }
         }
 
-        // Matrix B: Zero initialization (so LoRA has no effect initially)
-        _loraB = new Matrix<T>(rank, outputSize);
-        for (int i = 0; i < _loraB.Rows; i++)
-        {
-            for (int j = 0; j < _loraB.Columns; j++)
-            {
-                _loraB[i, j] = NumOps.Zero;
-            }
-        }
-
-        // Initialize parameter vector
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromMatrices();
+        // Matrix B: Zero initialization (so LoRA has no effect initially). A fresh
+        // Tensor<T> is already zero-filled, so there is nothing left to write here.
+        _loraB = new Tensor<T>([rank, outputSize]);
     }
 
     /// <summary>
@@ -256,9 +294,9 @@ public partial class LoRALayer<T> : LayerBase<T>
         int inputSize = input.Shape.Length > 1 ? input.Shape[input.Shape.Length - 1] : input.Length;
         int batchSize = inputSize > 0 ? input.Length / inputSize : input.Shape[0];
 
-        if (inputSize != _loraA.Rows)
+        if (inputSize != _loraA.Shape[0])
         {
-            throw new ArgumentException($"Input size {inputSize} does not match expected input size {_loraA.Rows}");
+            throw new ArgumentException($"Input size {inputSize} does not match expected input size {_loraA.Shape[0]}");
         }
 
         // Reshape input to [batch, in] without per-element copy. Engine.Reshape
@@ -269,16 +307,13 @@ public partial class LoRALayer<T> : LayerBase<T>
         // forward).
         Tensor<T> input2D = input.Shape.Length == 2 ? input : Engine.Reshape(input, [batchSize, inputSize]);
 
-        // Wrap _loraA / _loraB Matrix<T> as Tensor<T> so Engine.TensorMatMul
-        // dispatches to the SIMD / BLAS-backed matmul that Dense / FCL /
-        // FusedLinear share. Matrix.ToTensor / new Tensor(matrix) is a thin
-        // wrapper over the same row-major contiguous storage Matrix<T>
-        // already uses — no element copy.
-        // Cache the tensor wrappers so high-frequency Forward calls (e.g.
-        // autoregressive decoding, batch streaming) don't pay the allocation
-        // cost on every invocation. Invalidated when matrices update.
-        Tensor<T> aTensor = _loraATensor ??= new Tensor<T>(new[] { _loraA.Rows, _loraA.Columns }, _loraA.ToVector());
-        Tensor<T> bTensor = _loraBTensor ??= new Tensor<T>(new[] { _loraB.Rows, _loraB.Columns }, _loraB.ToVector());
+        // _loraA / _loraB ARE tensors, so Engine.TensorMatMul dispatches straight to
+        // the SIMD / BLAS-backed matmul that Dense / FCL / FusedLinear share. They
+        // used to be Matrix<T> mirrored into cached Tensor wrappers that had to be
+        // invalidated whenever the weights changed; holding ONE representation drops
+        // both the copy and the chance of the mirror going stale.
+        Tensor<T> aTensor = _loraA;
+        Tensor<T> bTensor = _loraB;
 
         // (input @ A) @ B * scaling — chained matmuls dispatched through the
         // Engine. For T=float with a base-output tensor available, the
@@ -329,9 +364,9 @@ public partial class LoRALayer<T> : LayerBase<T>
         }
 
         // Update matrix A
-        for (int i = 0; i < _loraA.Rows; i++)
+        for (int i = 0; i < _loraA.Shape[0]; i++)
         {
-            for (int j = 0; j < _loraA.Columns; j++)
+            for (int j = 0; j < _loraA.Shape[1]; j++)
             {
                 T update = NumOps.Multiply(_loraAGradient[i, j], learningRate);
                 _loraA[i, j] = NumOps.Subtract(_loraA[i, j], update);
@@ -339,103 +374,14 @@ public partial class LoRALayer<T> : LayerBase<T>
         }
 
         // Update matrix B
-        for (int i = 0; i < _loraB.Rows; i++)
+        for (int i = 0; i < _loraB.Shape[0]; i++)
         {
-            for (int j = 0; j < _loraB.Columns; j++)
+            for (int j = 0; j < _loraB.Shape[1]; j++)
             {
                 T update = NumOps.Multiply(_loraBGradient[i, j], learningRate);
                 _loraB[i, j] = NumOps.Subtract(_loraB[i, j], update);
             }
         }
-
-        // Invalidate cached tensor wrappers — they snapshot the matrix data
-        // via Matrix.ToVector(), so they must be rebuilt next Forward.
-        _loraATensor = null;
-        _loraBTensor = null;
-
-        // Update parameter vector
-        UpdateParametersFromMatrices();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing all LoRA parameters (A and B matrices flattened).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all LoRA parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        }
-
-        Parameters = parameters.Clone();
-        UpdateMatricesFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current matrix values.
-    /// </summary>
-    private void UpdateParametersFromMatrices()
-    {
-        int idx = 0;
-
-        // Pack matrix A
-        for (int i = 0; i < _loraA.Rows; i++)
-        {
-            for (int j = 0; j < _loraA.Columns; j++)
-            {
-                Parameters[idx++] = _loraA[i, j];
-            }
-        }
-
-        // Pack matrix B
-        for (int i = 0; i < _loraB.Rows; i++)
-        {
-            for (int j = 0; j < _loraB.Columns; j++)
-            {
-                Parameters[idx++] = _loraB[i, j];
-            }
-        }
-    }
-
-    /// <summary>
-    /// Updates the matrices from the parameter vector.
-    /// </summary>
-    private void UpdateMatricesFromParameters()
-    {
-        int idx = 0;
-
-        // Unpack matrix A
-        for (int i = 0; i < _loraA.Rows; i++)
-        {
-            for (int j = 0; j < _loraA.Columns; j++)
-            {
-                _loraA[i, j] = Parameters[idx++];
-            }
-        }
-
-        // Unpack matrix B
-        for (int i = 0; i < _loraB.Rows; i++)
-        {
-            for (int j = 0; j < _loraB.Columns; j++)
-            {
-                _loraB[i, j] = Parameters[idx++];
-            }
-        }
-
-        // Invalidate cached tensor wrappers — they snapshot the matrix data
-        // via Matrix.ToVector(), so they must be rebuilt next Forward.
-        _loraATensor = null;
-        _loraBTensor = null;
     }
 
     /// <summary>
@@ -452,18 +398,18 @@ public partial class LoRALayer<T> : LayerBase<T>
         int idx = 0;
 
         // Pack matrix A gradients
-        for (int i = 0; i < _loraAGradient.Rows; i++)
+        for (int i = 0; i < _loraAGradient.Shape[0]; i++)
         {
-            for (int j = 0; j < _loraAGradient.Columns; j++)
+            for (int j = 0; j < _loraAGradient.Shape[1]; j++)
             {
                 ParameterGradients[idx++] = _loraAGradient[i, j];
             }
         }
 
         // Pack matrix B gradients
-        for (int i = 0; i < _loraBGradient.Rows; i++)
+        for (int i = 0; i < _loraBGradient.Shape[0]; i++)
         {
-            for (int j = 0; j < _loraBGradient.Columns; j++)
+            for (int j = 0; j < _loraBGradient.Shape[1]; j++)
             {
                 ParameterGradients[idx++] = _loraBGradient[i, j];
             }
@@ -493,8 +439,7 @@ public partial class LoRALayer<T> : LayerBase<T>
         // Compute W_lora = A * B * scaling
         // A: [inputSize, rank], B: [rank, outputSize]
         // Result: [inputSize, outputSize] - matches DenseLayer's industry standard convention
-        Matrix<T> merged = _loraA.Multiply(_loraB).Multiply(_scaling);
-        return merged;
+        return Engine.TensorMultiplyScalar(Engine.TensorMatMul(_loraA, _loraB), _scaling).ToMatrix();
     }
 
     /// <summary>
@@ -515,12 +460,12 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// <summary>
     /// Gets matrix A (for inspection or advanced use cases).
     /// </summary>
-    public Matrix<T> GetMatrixA() => _loraA.Clone();
+    public Matrix<T> GetMatrixA() => _loraA.ToMatrix();
 
     /// <summary>
     /// Gets matrix B (for inspection or advanced use cases).
     /// </summary>
-    public Matrix<T> GetMatrixB() => _loraB.Clone();
+    public Matrix<T> GetMatrixB() => _loraB.ToMatrix();
 
     /// <summary>
     /// Resets the internal state of the layer.

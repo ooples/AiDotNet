@@ -11,7 +11,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1, 1")]
-public sealed partial class InternImageBlockLayer<T> : LayerBase<T>
+// Shape-preserving on every axis, and each for a reason visible in ForwardCore rather than assumed:
+//   - Batch/Height/Width: the block is two residual adds, `Engine.TensorAdd(x, spatial)` and
+//     `Engine.TensorAdd(output, ffn)`, so each branch has to hand back the shape it was given. The
+//     deformable mixer is built kernelSize 3 / stride 1 / padding 1 - the window that leaves H and W
+//     alone - and both feed-forward convs are 1x1 stride 1 padding 0.
+//   - Channels: pinned at _channels. ForwardTraced rejects anything else outright
+//     (`if (x.Rank != 4 || x.Shape[1] != _channels) throw`), and the FFN's channels*4 expansion is
+//     undone by _project, which is constructed back at `channels`.
+// BatchOptional covers the unbatched [C, H, W] form the layer is tested at (ExpectedInputRank = 3),
+// which ForwardTraced handles explicitly: `bool unbatched = input.Rank == 3`, reshaped to a leading 1
+// on the way in and stripped again on the way out.
+// Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public sealed partial class InternImageBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _channels;
     private readonly int _groups;
@@ -105,35 +122,7 @@ public sealed partial class InternImageBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override long ParameterCount => _parameterLayers.Sum(layer => layer.ParameterCount);
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => Concatenate(_parameterLayers, gradients: false);
-
-    /// <inheritdoc />
     public override Vector<T> GetParameterGradients() => Concatenate(_parameterLayers, gradients: true);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _parameterLayers.Sum(layer => layer.GetParameters().Length);
-        if (_parameterLayers.Any(layer => !layer.IsShapeResolved))
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} InternImage block parameters, got {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in _parameterLayers)
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
 
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)

@@ -37,8 +37,57 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class ReconstructionLayer<T> : LayerBase<T>
+// A three-stage MLP decoder. FlattenToFeatureMatrix normalises whatever arrives to
+// [length / featureWidth, featureWidth] and the last sub-layer is a FullyConnectedLayer sized to
+// _outputDimension, so the layer both consumes and produces a plain feature matrix.
+//
+// RANK 2 ONLY. Higher ranks do run - the flatten accepts any rank - but they collapse to rank 2 on the
+// way out, and the batch that comes back is input.Length / featureWidth: a PRODUCT of every input axis
+// divided by a width, which no relation in this vocabulary states. Declaring a rank-3 form would have to
+// invent an answer for the axis that disappears, so it is left undeclared rather than guessed.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ReconstructionLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the output width is configuration, not input: <c>ForwardTraced</c> ends at
+    /// <c>_fc3.Forward(x)</c> and <c>_fc3</c> is built as
+    /// <c>new FullyConnectedLayer&lt;T&gt;(outputDimension, ...)</c>, so the trailing axis is
+    /// <c>Fixed(_outputDimension)</c> whatever came in. The two hidden widths never surface - they are
+    /// interior to the stack.
+    /// </para>
+    /// <para>
+    /// THE BATCH AXIS IS NOT <c>Same</c>. <c>FlattenToFeatureMatrix</c> reshapes to
+    /// <c>[input.Length / _inputDimension, _inputDimension]</c>, so the batch that comes out is the
+    /// TOTAL element count divided by the declared feature width - not the batch that went in. The two
+    /// coincide exactly when the input's width already equals <c>_inputDimension</c>, and diverge
+    /// otherwise: fed <c>[6, 7]</c> by a layer built for width 6, this returns <c>[7, 6]</c>, because
+    /// 42 elements regroup into 7 rows of 6. <c>Same(Batch)</c> was right for well-formed inputs and
+    /// silently wrong for every other one, which the conformance sweep caught.
+    /// </para>
+    /// <para>
+    /// Stated properly it is a product of every input axis, then a division:
+    /// <see cref="AxisRelation.ScaledBy"/> over <see cref="AxisRelation.Product"/>. The division is
+    /// exact, so a total that does not regroup evenly declines instead of rounding - which is correct,
+    /// since such an input is one this layer cannot reshape.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputDimension <= 0 || _inputDimension <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Batch,
+                AxisRelation.ScaledBy(
+                    AxisRelation.Product(TensorAxis.Batch, TensorAxis.Features), 1, _inputDimension)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDimension)),
+        };
+    }
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _outputDimension;
@@ -88,32 +137,6 @@ public partial class ReconstructionLayer<T> : LayerBase<T>
     /// When false, the layer uses scalar activation functions that operate on individual elements.
     /// </remarks>
     private bool _useVectorActivation;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the reconstruction layer.
-    /// </summary>
-    /// <value>
-    /// The sum of parameter counts from all three fully connected layers.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns the total number of trainable parameters (weights and biases) across all three
-    /// fully connected layers that make up this reconstruction layer. This is useful for monitoring the
-    /// complexity of the layer or for parameter initialization strategies.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you how many numbers the layer can adjust during training.
-    /// 
-    /// Each parameter is a number that the neural network learns:
-    /// - More parameters mean the layer can learn more complex patterns
-    /// - More parameters also require more training data and time
-    /// - This layer has parameters in all three of its internal layers
-    /// 
-    /// Think of parameters like knobs that the network can turn to get better results.
-    /// This property tells you the total number of knobs available to this layer.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        _fc1.ParameterCount + _fc2.ParameterCount + _fc3.ParameterCount;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -539,42 +562,6 @@ public partial class ReconstructionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the reconstruction layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters from all three fully connected layers.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the reconstruction layer as a single vector.
-    /// It collects the parameters from each of the three fully connected layers in sequence and concatenates
-    /// them into a single vector. This is useful for optimization algorithms that operate on all parameters
-    /// at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the reconstruction layer.
-    /// 
-    /// The parameters:
-    /// - Are the weights and biases from all three internal layers
-    /// - Control how the layer processes information
-    /// - Are returned as a single list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The parameters from the first layer come first in the vector, followed by the second layer's parameters,
-    /// and finally the third layer's parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for production-grade parameter collection
-        return Vector<T>.Concatenate(
-            _fc1.GetParameters(),
-            _fc2.GetParameters(),
-            _fc3.GetParameters());
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the reconstruction layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for all three fully connected layers.</param>
@@ -615,30 +602,6 @@ public partial class ReconstructionLayer<T> : LayerBase<T>
         _fc1.ClearGradients();
         _fc2.ClearGradients();
         _fc3.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Get parameter counts for each sublayer
-        int fc1ParamCount = checked((int)_fc1.ParameterCount);
-        int fc2ParamCount = checked((int)_fc2.ParameterCount);
-        int fc3ParamCount = checked((int)_fc3.ParameterCount);
-        int totalParams = fc1ParamCount + fc2ParamCount + fc3ParamCount;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Use Vector.Slice for production-grade parameter distribution
-        int offset = 0;
-        _fc1.SetParameters(parameters.Slice(offset, fc1ParamCount));
-        offset += fc1ParamCount;
-
-        _fc2.SetParameters(parameters.Slice(offset, fc2ParamCount));
-        offset += fc2ParamCount;
-
-        _fc3.SetParameters(parameters.Slice(offset, fc3ParamCount));
     }
 
     /// <summary>

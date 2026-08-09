@@ -1,4 +1,7 @@
 ﻿using AiDotNet.ActivationFunctions;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -55,8 +58,62 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
-public partial class RRDBNetGenerator<T> : LayerBase<T>
+// A SUPER-RESOLUTION generator, so the two spatial axes GROW and the channel axis is replaced. This is
+// exactly the tied relationship a [TensorLayout] cannot carry - _scale is a constructor argument, not a
+// compile-time constant - which is why the sizes live in OutputAxesFor below.
+//
+// Ranks and roles from this layer's own guard, which rejects everything else: "requires rank-3 [C,H,W]
+// or rank-4 [B,C,H,W] input".
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read straight off <c>OnFirstForward</c>, which is the single place this layer states its own
+    /// arithmetic: the upsample loop runs <c>currentH *= 2; currentW *= 2;</c> once per stage, and the
+    /// constructor sets <c>numUpsampleStages = (int)Math.Round(Math.Log(scale, 2.0))</c>. Doubling
+    /// log2(scale) times is multiplying by <c>_scale</c>, so both spatial axes are
+    /// <c>Scaled(axis, _scale)</c> - and the layer restricts <c>scale</c> to 2, 4 or 8 precisely so that
+    /// identity holds. It then locks
+    /// <c>ResolveShapes(new[] { _inputChannels, inH, inW }, new[] { _outputChannels, currentH, currentW })</c>,
+    /// which is this contract in full.
+    /// </para>
+    /// <para>
+    /// Channels is <c>Fixed(_outputChannels)</c> rather than <c>Same</c>: the final <c>_convLast</c>
+    /// projection sets the output channel count from configuration, and it is a SEPARATE argument from
+    /// <c>_inputChannels</c> even though both default to 3 for RGB. Declaring it <c>Same</c> would be
+    /// right for the default and wrong for every colour-space or single-channel build.
+    /// </para>
+    /// <para>
+    /// <c>Scaled</c> rather than <c>Window</c>: this is a genuine pixel-shuffle expansion with no kernel,
+    /// stride or boundary to model, and <c>Scaled</c> refuses uneven division, which is the correct
+    /// behaviour for an axis that must double cleanly at every stage.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4) || _scale <= 0 || _outputChannels <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Scaled(TensorAxis.Height, _scale));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Scaled(TensorAxis.Width, _scale));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     #region Fields
 
     /// <summary>
@@ -484,50 +541,6 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>
 
         _hrConv.UpdateParameters(learningRate);
         _convLast.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        AddParametersToList(allParams, _convFirst.GetParameters());
-
-        foreach (var rrdb in _rrdbBlocks)
-        {
-            AddParametersToList(allParams, rrdb.GetParameters());
-        }
-
-        AddParametersToList(allParams, _trunkConv.GetParameters());
-
-        foreach (var conv in _upsampleConvs)
-        {
-            AddParametersToList(allParams, conv.GetParameters());
-        }
-
-        AddParametersToList(allParams, _hrConv.GetParameters());
-        AddParametersToList(allParams, _convLast.GetParameters());
-
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Buffer until OnFirstForward resolves shapes when arriving pre-
-        // resolution: every sub-layer (_convFirst, _rrdbBlocks[i],
-        // _trunkConv, _upsampleConvs[i], _hrConv, _convLast) reports
-        // GetParameters().Length == 0 before OnFirstForward, so the
-        // SubVector cuts below all consume zero bytes and the parameters
-        // get silently dropped — a deserialized RRDBNet checkpoint
-        // would inference with random weights instead of the loaded
-        // values. Replay in OnFirstForward once shapes are resolved.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-        ApplyParameters(parameters);
     }
 
     /// <summary>
