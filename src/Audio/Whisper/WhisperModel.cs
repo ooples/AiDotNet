@@ -155,12 +155,36 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Index of the first decoder layer in <see cref="Layers"/>.
     /// </summary>
-    private int _encoderLayerCount;
+    /// <remarks>
+    /// Named for what it is -- an INDEX, not a count. It was called <c>_encoderLayerCount</c>, and the
+    /// two happen to coincide only because the encoder occupies a contiguous prefix. A later reader
+    /// comparing it against <c>_numEncoderLayers</c> (a genuine count, and a different number) has an
+    /// off-by-many waiting for them.
+    /// </remarks>
+    private int _decoderStartIndex;
 
     /// <summary>
     /// Teacher-forcing token IDs used by the current native training step.
     /// </summary>
+    /// <remarks>
+    /// This is a channel from <c>Train</c> to <c>ForwardForTraining</c>, which cannot take an extra
+    /// argument: the framework's <c>TrainWithTape</c> is what calls it. Two consequences, both
+    /// handled rather than left implicit:
+    /// <list type="bullet">
+    /// <item>Two <c>Train</c> calls on one instance would overwrite each other's tokens, so both are
+    /// serialized on <see cref="_trainingGate"/>. <c>TrainWithTape</c> invokes
+    /// <c>ForwardForTraining</c> synchronously on the calling thread, so holding the gate across the
+    /// whole call is what makes the field safe to read there.</item>
+    /// <item><c>ForwardForTraining</c> is public and is legitimately called outside training -- the
+    /// adversarial attacks (FGSMAttack, PGDAttack) do exactly that. Those calls find this null and
+    /// take the start-token decode, which is the right forward for them but is NOT the function
+    /// training optimizes. It is announced rather than silent; see the method.</item>
+    /// </list>
+    /// </remarks>
     private Tensor<T>? _teacherForcingTokens;
+
+    /// <summary>Serializes native training steps, so their teacher-forcing state cannot interleave.</summary>
+    private readonly object _trainingGate = new();
 
     /// <summary>
     /// Beam size for beam search decoding.
@@ -508,7 +532,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateLayerConfiguration(Layers);
-            _encoderLayerCount = FindDecoderStart(Layers);
+            _decoderStartIndex = FindDecoderStart(Layers);
         }
         else
         {
@@ -528,9 +552,14 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 vocabSize: WhisperVocabSize,
                 dropoutRate: 0.0));
 
-            // Two audio projections + encoder positional encoding + N residual
-            // attention blocks + the encoder's final layer normalization.
-            _encoderLayerCount = 3 + _numEncoderLayers + 1;
+            // FOUND FROM THE LAYERS, not recomputed from the parameters that built them. The old
+            // arithmetic (3 + _numEncoderLayers + 1) assumed one layer per encoder block; the factory
+            // actually emits five per block -- attention, norm, two dense, norm -- plus a conditional
+            // dropout. At the default six encoder layers the boundary landed inside the encoder, so
+            // the "decoder" pass replayed encoder layers and the encoder pass stopped early. Asking
+            // the built list where its token embedding is cannot drift from the factory the way a
+            // parallel formula does.
+            _decoderStartIndex = FindDecoderStart(Layers);
         }
     }
 
@@ -805,7 +834,20 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         var melFeatures = EnsureMelFeatures(input);
         var encoderOutput = EncodeAudio(melFeatures);
-        var tokens = _teacherForcingTokens ?? CreateStartTokens(batchSize: 1, sequenceLength: 1);
+        var tokens = _teacherForcingTokens;
+        if (tokens is null)
+        {
+            // Reached from outside a training step -- the adversarial attacks call this directly. The
+            // decoder then sees only a start token, which is a legitimate forward but a DIFFERENT
+            // function from the teacher-forced one training minimizes. Saying so is the point: the
+            // difference is otherwise invisible, since both return well-formed vocabulary logits.
+            System.Diagnostics.Trace.TraceWarning(
+                "AiDotNet.WhisperModel.ForwardForTraining: called outside Train, so there is no " +
+                "ground-truth token prefix to condition on. Decoding from the start token alone. " +
+                "This is not the teacher-forced function used during training.");
+            tokens = CreateStartTokens(batchSize: 1, sequenceLength: 1);
+        }
+
         return ForwardDecoder(tokens, encoderOutput);
     }
 
@@ -873,6 +915,12 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native constructor for training.");
         }
 
+        // Under _trainingGate: _teacherForcingTokens is per-instance, so two concurrent Train calls
+        // would overwrite each other's prefix and each would train against the other's transcript.
+        // TrainWithTape runs ForwardForTraining synchronously on this thread, so holding the gate for
+        // the whole call is what makes that field safe to read there.
+        lock (_trainingGate)
+        {
         SetTrainingMode(true);
         try
         {
@@ -896,6 +944,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             _teacherForcingTokens = null;
             SetTrainingMode(false);
+        }
         }
     }
 
@@ -1216,7 +1265,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 current = batched;
             }
 
-            for (int i = 0; i < _encoderLayerCount && i < Layers.Count; i++)
+            for (int i = 0; i < _decoderStartIndex && i < Layers.Count; i++)
             {
                 current = Layers[i].Forward(current);
             }
@@ -1241,7 +1290,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Calculate where decoder layers start
         // Forward through decoder layers (starting after encoder layers)
         var current = tokens;
-        for (int i = _encoderLayerCount; i < Layers.Count; i++)
+        for (int i = _decoderStartIndex; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             if (layer is TransformerDecoderLayer<T> decoderLayer)

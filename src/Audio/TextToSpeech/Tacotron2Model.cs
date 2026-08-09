@@ -966,9 +966,9 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
         if (expectedOutput.Shape[^1] % NumMels != 0)
             throw new ArgumentException($"expectedOutput last dimension ({expectedOutput.Shape[^1]}) must be divisible by NumMels ({NumMels}).", nameof(expectedOutput));
-        int melFrameCount = expectedOutput.Shape[1] / _numMelsPerFrame;
+        int melFrameCount = MelFrameCount(expectedOutput);
         if (melFrameCount == 0)
-            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[1]} mel values but _numMelsPerFrame is {_numMelsPerFrame}, resulting in zero frames.", nameof(expectedOutput));
+            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[^1]} mel values in its last axis but NumMels is {NumMels}, resulting in zero frames.", nameof(expectedOutput));
 
         _teacherForcingTarget = expectedOutput;
         try
@@ -1236,7 +1236,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         var encoderOutput = _encoderLstm?.Forward(encoderInput) ?? encoderInput;
 
-        int numFrames = targetMel.Rank >= 2 ? targetMel.Shape[^2] : 0;
+        int numFrames = MelFrameCount(targetMel);
         var melFrames = new List<Tensor<T>>();
         var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
         var decoderState = new Tensor<T>([1, _decoderDim]);
@@ -1402,10 +1402,33 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         return Engine.TensorConcatenate(new[] { a2d, b2d }, axis: 1);
     }
 
+    /// <summary>
+    /// The number of mel frames in a teacher-forcing target, under either supported layout.
+    /// </summary>
+    /// <remarks>
+    /// ONE PLACE THAT DECIDES THIS. There are two accepted layouts and they put the frame axis
+    /// somewhere different:
+    /// <list type="bullet">
+    /// <item>rank 3, <c>[batch, frames, mels]</c> -- the frame count is <c>Shape[^2]</c>;</item>
+    /// <item>rank 2, <c>[batch, frames*mels]</c> -- the frames are FLATTENED INTO the last axis, so
+    /// the count is <c>Shape[^1] / NumMels</c> and <c>Shape[^2]</c> is the batch.</item>
+    /// </list>
+    /// Reading <c>Shape[^2]</c> for both is what went wrong: on a rank-2 target the frame count came
+    /// back as the batch size, so <c>decoderSteps</c> collapsed to 1 for a target of any length and
+    /// the loss compared a single decoder step against the whole utterance. It produced a finite,
+    /// decreasing loss the whole time -- nothing about it looked like a failure.
+    /// </remarks>
+    private int MelFrameCount(Tensor<T> mel)
+    {
+        if (mel.Rank >= 3) return mel.Shape[^2];
+        if (mel.Rank == 2) return mel.Shape[^1] / NumMels;
+        return 0;
+    }
+
     private Tensor<T> ExtractMelFrameGroup(Tensor<T> mel, int firstFrame)
     {
         var group = new Tensor<T>([1, NumMels * _numMelsPerFrame]);
-        int availableFrames = mel.Rank >= 2 ? mel.Shape[^2] : 0;
+        int availableFrames = MelFrameCount(mel);
         for (int f = 0; f < _numMelsPerFrame; f++)
         {
             int frame = firstFrame + f;
@@ -1413,9 +1436,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 break;
             for (int m = 0; m < NumMels; m++)
             {
+                // Rank 2 is [batch, frames*mels], so the frame's mels are a contiguous NumMels-wide
+                // run inside the last axis -- NOT mel[frame, m], which indexed the batch axis by a
+                // frame number and read whatever row happened to be there.
                 group[0, f * NumMels + m] = mel.Rank >= 3
                     ? mel[0, frame, m]
-                    : mel[frame, m];
+                    : mel[0, frame * NumMels + m];
             }
         }
         return group;
