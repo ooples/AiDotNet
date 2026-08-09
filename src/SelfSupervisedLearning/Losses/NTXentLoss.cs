@@ -90,7 +90,7 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
         var a = _normalize ? ObjectiveOps.L2NormalizeRows(z1) : z1;
         var b = _normalize ? ObjectiveOps.L2NormalizeRows(z2) : z2;
 
-        var combined = Engine.Concat(new[] { a, b }, 0);              // [2N, D]
+        var combined = Concatenate(a, b);                             // [2N, D]
         var logits = ObjectiveOps.SimilarityMatrix(combined, combined, _temperature, normalize: false);
 
         // Remove self-comparisons without indexing: -inf on the diagonal via a constant mask.
@@ -174,6 +174,13 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
         return new Tensor<T>(result, [batchSize, dim]);
     }
 
+    /// <summary>Stacks two <c>[N, D]</c> view embeddings into the <c>[2N, D]</c> batch NT-Xent scores.</summary>
+    /// <remarks>
+    /// One name for the operation across this file. Both <c>IEngine.Concat</c> and
+    /// <c>IEngine.TensorConcatenate</c> are declared and do this, and ComputeLoss used to call the
+    /// former while this helper called the latter -- the same op under two names, one of which is the
+    /// idiom in the rest of the codebase.
+    /// </remarks>
     private Tensor<T> Concatenate(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorConcatenate(new[] { a, b }, 0);

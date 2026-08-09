@@ -163,10 +163,20 @@ public static class CompiledTapeTrainingStep<T>
     // fused compiled path off, so "(unspecified gate)" is no longer a black box.
     private static readonly bool s_fusedDebug =
         System.Environment.GetEnvironmentVariable("AIDOTNET_FUSED_DEBUG") == "1";
-    private static void Fd(string why)
+    // One gate and one sink for every fused diagnostic, so there is a single place to swap in a real
+    // logging abstraction later. The tag is a parameter rather than baked in because the two kinds of
+    // event -- a gate turning the path off, and the path actually running -- have to stay separable in
+    // a log.
+    private static void FdTagged(string tag, string message)
     {
-        if (s_fusedDebug) System.Console.Error.WriteLine($"[FUSED-MISS] {why}");
+        if (s_fusedDebug) System.Console.Error.WriteLine($"[{tag}] {message}");
     }
+
+    /// <summary>Reports the gate that turned the fused compiled path off.</summary>
+    private static void Fd(string why) => FdTagged("FUSED-MISS", why);
+
+    /// <summary>Reports a fused step that actually ran.</summary>
+    private static void FdStep(string what) => FdTagged("FUSED-STEP", what);
 
     // Reflection-cached lookup of ICompiledTrainingPlan<T>.SetMaxGradNorm(double).
     // Populated lazily on first call per process and reused on every subsequent
@@ -877,14 +887,15 @@ public static class CompiledTapeTrainingStep<T>
 
             // Execute forward + backward + fused parameter update in one replay.
             var lossOutput = plan.Step();
+            // The gate is repeated here, not left to FdStep, only to keep the ToDouble/ToString
+            // formatting off the hot path when diagnostics are off.
             if (s_fusedDebug)
             {
                 string reportedLoss = lossOutput.Length > 0
                     ? MathHelper.GetNumericOperations<T>().ToDouble(lossOutput[0]).ToString("G17")
                     : "<empty>";
-                System.Console.Error.WriteLine(
-                    $"[FUSED-STEP] model-parameters={parameters.Length} loss-length={lossOutput.Length} " +
-                    $"loss={reportedLoss} optimizer={optimizerType}");
+                FdStep($"model-parameters={parameters.Length} loss-length={lossOutput.Length} " +
+                       $"loss={reportedLoss} optimizer={optimizerType}");
             }
             lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
             // Signal successful fused engagement so tests/diagnostics can
