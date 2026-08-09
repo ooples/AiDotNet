@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides gradient clipping utilities to prevent exploding gradients during training.
@@ -27,6 +27,62 @@ public static class GradientClippingHelper
     /// Default maximum gradient value for value clipping.
     /// </summary>
     public const double DefaultMaxValue = 1.0;
+
+    /// <summary>Sum of squares accumulated in <c>double</c>, whatever <typeparamref name="T"/> is.</summary>
+    /// <remarks>
+    /// ONE ACCUMULATOR FOR THE WHOLE FILE. Summing squares in T overflows for a large float gradient
+    /// vector: the norm becomes +Infinity, the threshold test passes, the scale becomes
+    /// maxNorm/Infinity = 0, and any non-finite element then yields Infinity * 0 = NaN -- so enabling
+    /// clipping POISONS the gradients it was turned on to protect. Measured on TableTransformer:
+    /// green without clipping, "L2 distance = NaN ... collapsed to a uniform-output state" with it.
+    ///
+    /// This existed as a fix in two of the six norm computations in this file, which left the same
+    /// failure reachable through the other four -- including ClipByGlobalNorm, the most exposed of all
+    /// because it sums across every layer. One helper is what stops them drifting apart again.
+    /// </remarks>
+    private static double SumSquares<T>(Vector<T> gradients, INumericOperations<T> ops)
+    {
+        double total = 0.0;
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            double v = ops.ToDouble(gradients[i]);
+            total += v * v;
+        }
+
+        return total;
+    }
+
+    /// <inheritdoc cref="SumSquares{T}(Vector{T}, INumericOperations{T})"/>
+    private static double SumSquares<T>(Tensor<T> gradients, INumericOperations<T> ops)
+    {
+        double total = 0.0;
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            double v = ops.ToDouble(gradients.GetFlatIndexValue(i));
+            total += v * v;
+        }
+
+        return total;
+    }
+
+    /// <summary>True when a norm cannot be used to scale, having reported why.</summary>
+    /// <remarks>
+    /// The non-finite branch used to return the gradients untouched and say nothing. Its caller in
+    /// this codebase, GradientBasedOptimizerBase.ApplyGradientClipping, has no guard of its own, so a
+    /// poisoned step went straight into the update with no signal that the safeguard had declined to
+    /// act. Clipping cannot repair gradients that are already non-finite -- but it can say so.
+    /// </remarks>
+    private static bool IsUnusableNorm(double norm, string operation)
+    {
+        if (!double.IsNaN(norm) && !double.IsInfinity(norm)) return false;
+
+        System.Diagnostics.Trace.TraceWarning(
+            $"AiDotNet.GradientClippingHelper.{operation}: gradient norm is {norm}, so the gradients " +
+            "were left unclipped. They are already non-finite before clipping; scaling by a degenerate " +
+            "factor would turn that into silently zeroed or NaN updates.");
+
+        return true;
+    }
 
     /// <summary>
     /// Clips gradient values to a specified range [-maxValue, maxValue].
@@ -112,19 +168,13 @@ public static class GradientClippingHelper
         // to a uniform-output state" with it. The tape-path clipper in
         // GradientBasedOptimizerBase already accumulates in double and guards the
         // non-finite cases; this is the same computation and needs the same care.
-        double sumSquares = 0.0;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            double v = numOps.ToDouble(gradients[i]);
-            sumSquares += v * v;
-        }
-        double norm = Math.Sqrt(sumSquares);
+        double norm = Math.Sqrt(SumSquares(gradients, numOps));
 
         // A norm that is zero or non-finite has no meaningful direction to
         // preserve, so scaling is skipped rather than applied with a degenerate
         // factor. Returning the gradients untouched leaves the caller exactly as
         // well off as clipping being disabled.
-        if (norm <= maxNorm || norm == 0.0 || double.IsNaN(norm) || double.IsInfinity(norm))
+        if (IsUnusableNorm(norm, nameof(ClipByNorm)) || norm <= maxNorm || norm == 0.0)
         {
             return gradients.Clone();
         }
@@ -156,16 +206,10 @@ public static class GradientClippingHelper
         // Accumulated in double for the reason given in ClipByNorm above: a T-typed
         // sum of squares overflows on large float gradients, and the resulting
         // Infinity norm turns clipping into a NaN generator instead of a safeguard.
-        double sumSquares = 0.0;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            double v = numOps.ToDouble(gradients[i]);
-            sumSquares += v * v;
-        }
-        double norm = Math.Sqrt(sumSquares);
+        double norm = Math.Sqrt(SumSquares(gradients, numOps));
 
         // No meaningful direction to preserve -- leave the gradients alone.
-        if (norm <= maxNorm || norm == 0.0 || double.IsNaN(norm) || double.IsInfinity(norm))
+        if (IsUnusableNorm(norm, nameof(ClipByNormInPlace)) || norm <= maxNorm || norm == 0.0)
         {
             return false;
         }
@@ -202,27 +246,33 @@ public static class GradientClippingHelper
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Compute global L2 norm
-        T globalSumSquares = numOps.Zero;
+        double globalSumSquares = 0.0;
         foreach (var gradients in gradientsList)
         {
             if (gradients == null) continue;
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                globalSumSquares = numOps.Add(globalSumSquares,
-                    numOps.Multiply(gradients[i], gradients[i]));
-            }
+            globalSumSquares += SumSquares(gradients, numOps);
         }
-        T globalNorm = numOps.Sqrt(globalSumSquares);
+        double globalNorm = Math.Sqrt(globalSumSquares);
 
-        // If global norm is below threshold, return clones
-        T maxNormT = numOps.FromDouble(maxNorm);
-        if (!numOps.GreaterThan(globalNorm, maxNormT))
+        // If global norm is below threshold, or is not a number that can scale anything, return clones.
+        // Nulls are dropped here, exactly as the scaling path below drops them: the two paths used to
+        // disagree -- this one preserved a null as a null entry, the other skipped it -- so the length
+        // of the returned list depended on whether clipping happened to fire, and a caller indexing it
+        // against its layers got a different answer each way.
+        if (IsUnusableNorm(globalNorm, nameof(ClipByGlobalNorm)) || globalNorm <= maxNorm)
         {
-            return gradientsList.Select(g => g?.Clone()).ToList()!;
+            var clones = new List<Vector<T>>(gradientsList.Count);
+            foreach (var gradients in gradientsList)
+            {
+                if (gradients == null) continue;
+                clones.Add(gradients.Clone());
+            }
+
+            return clones;
         }
 
         // Scale all gradients
-        T scale = numOps.Divide(maxNormT, globalNorm);
+        T scale = numOps.FromDouble(maxNorm / globalNorm);
         var clippedList = new List<Vector<T>>();
         foreach (var gradients in gradientsList)
         {
@@ -257,23 +307,16 @@ public static class GradientClippingHelper
         int length = gradients.Length;
 
         // Compute L2 norm
-        T sumSquares = numOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            var val = gradients.GetFlatIndexValue(i);
-            sumSquares = numOps.Add(sumSquares, numOps.Multiply(val, val));
-        }
-        T norm = numOps.Sqrt(sumSquares);
+        double norm = Math.Sqrt(SumSquares(gradients, numOps));
 
-        // If norm is below threshold, return clone
-        T maxNormT = numOps.FromDouble(maxNorm);
-        if (!numOps.GreaterThan(norm, maxNormT))
+        // If norm is below threshold, or cannot scale anything, return clone
+        if (IsUnusableNorm(norm, nameof(ClipByNorm)) || norm <= maxNorm)
         {
             return (Tensor<T>)gradients.Clone();
         }
 
         // Scale gradients
-        T scale = numOps.Divide(maxNormT, norm);
+        T scale = numOps.FromDouble(maxNorm / norm);
         var clipped = new Tensor<T>(gradients._shape);
         for (int i = 0; i < length; i++)
         {
@@ -298,12 +341,11 @@ public static class GradientClippingHelper
         }
 
         var ops = MathHelper.GetNumericOperations<T>();
-        T sumSquares = ops.Zero;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            sumSquares = ops.Add(sumSquares, ops.Multiply(gradients[i], gradients[i]));
-        }
-        return ops.Sqrt(sumSquares);
+
+        // Double accumulation for the reason given on SumSquares. AreGradientsExploding and
+        // ClipAdaptive both build on this, so a T-typed sum that overflowed made the explosion
+        // DETECTOR report on its own overflow rather than on the gradients.
+        return ops.FromDouble(Math.Sqrt(SumSquares(gradients, ops)));
     }
 
     /// <summary>
@@ -319,18 +361,14 @@ public static class GradientClippingHelper
         if (gradientsList == null || gradientsList.Count == 0)
             return numOps.Zero;
 
-        T globalSumSquares = numOps.Zero;
+        double globalSumSquares = 0.0;
         foreach (var gradients in gradientsList)
         {
             if (gradients == null) continue;
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                globalSumSquares = numOps.Add(globalSumSquares,
-                    numOps.Multiply(gradients[i], gradients[i]));
-            }
+            globalSumSquares += SumSquares(gradients, numOps);
         }
 
-        return numOps.Sqrt(globalSumSquares);
+        return numOps.FromDouble(Math.Sqrt(globalSumSquares));
     }
 
     /// <summary>

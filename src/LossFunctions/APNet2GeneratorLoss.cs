@@ -131,6 +131,15 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
                 nameof(target));
         }
 
+        // A FLAT VECTOR IS ONE FRAME. Every term below is written against a [frames, bins] layout:
+        // the mel projection and the STFT reconstruction both right-multiply a constant matrix, which
+        // is a 2-D contraction and not a vector projection. CalculateLoss builds its tensors with
+        // Tensor<T>.FromVector, so it arrives here at rank 1 and BlockWidth accepts that -- the shape
+        // only fails later, inside a matmul, with a message about the wrong thing. Promote once, here,
+        // and the vector entry point computes the same objective as the tensor one.
+        if (predicted.Rank == 1) predicted = Engine.Reshape(predicted, new[] { 1, predicted.Shape[0] });
+        if (target.Rank == 1) target = Engine.Reshape(target, new[] { 1, target.Shape[0] });
+
         int last = predicted.Rank - 1;
 
         var logAmplitude = Engine.TensorNarrow(predicted, last, 0, bins);
