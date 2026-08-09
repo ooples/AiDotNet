@@ -10,8 +10,6 @@ using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
-using AiDotNet.NeuralNetworks.Graph;
-
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
