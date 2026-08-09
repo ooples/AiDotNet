@@ -99,56 +99,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         return NumOps.Negate(loss);
     }
 
-    /// <summary>
-    /// Calculates the derivative of cross-entropy loss with respect to logits.
-    /// </summary>
-    /// <param name="predicted">Raw logits.</param>
-    /// <param name="actual">One-hot encoded target vector.</param>
-    /// <returns>Gradient: softmax(logits) * sum(targets) - targets.</returns>
-    /// <remarks>
-    /// <para>
-    /// The gradient of cross-entropy loss with respect to logits has the elegant form:
-    ///   d(loss)/d(logit_i) = softmax(logit_i) * sum(target) - target_i
-    ///
-    /// For a one-hot target or normalized soft distribution, sum(target) = 1 and
-    /// this reduces to the familiar softmax(logit_i) - target_i form. Retaining
-    /// the target mass is necessary because <see cref="CalculateLoss"/> also
-    /// accepts weighted/non-normalized soft targets.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // Compute softmax probabilities
-        T maxLogit = predicted[0];
-        for (int i = 1; i < predicted.Length; i++)
-        {
-            if (NumOps.GreaterThan(predicted[i], maxLogit))
-                maxLogit = predicted[i];
-        }
-
-        var expValues = new Vector<T>(predicted.Length);
-        T sumExp = NumOps.Zero;
-        T targetMass = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            expValues[i] = NumOps.Exp(NumOps.Subtract(predicted[i], maxLogit));
-            sumExp = NumOps.Add(sumExp, expValues[i]);
-            targetMass = NumOps.Add(targetMass, actual[i]);
-        }
-
-        // Gradient = softmax(logits) * sum(targets) - targets.
-        // The target-mass factor is one for the usual one-hot/probability target.
-        var derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T softmaxI = NumOps.Divide(expValues[i], sumExp);
-            derivative[i] = NumOps.Subtract(NumOps.Multiply(softmaxI, targetMass), actual[i]);
-        }
-
-        return derivative;
-    }
 
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)

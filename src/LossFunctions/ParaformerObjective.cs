@@ -83,19 +83,6 @@ public sealed class ParaformerObjective<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
         => NumOps.Multiply(NumOps.FromDouble(_ceWeight), _crossEntropy.CalculateLoss(predicted, actual));
 
-    /// <inheritdoc/>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        var d = _crossEntropy.CalculateDerivative(predicted, actual);
-        var scale = NumOps.FromDouble(_ceWeight);
-        var scaled = new Vector<T>(d.Length);
-        for (int i = 0; i < d.Length; i++)
-        {
-            scaled[i] = NumOps.Multiply(scale, d[i]);
-        }
-
-        return scaled;
-    }
 
     /// <inheritdoc/>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)

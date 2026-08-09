@@ -91,50 +91,6 @@ public class BinaryCrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }
 
-    /// <summary>
-    /// Calculates the derivative of BCE loss with respect to logits.
-    /// </summary>
-    /// <param name="predicted">Raw logits.</param>
-    /// <param name="actual">Binary target values.</param>
-    /// <returns>Gradient: (sigmoid(x) - y) / N.</returns>
-    /// <remarks>
-    /// <para>
-    /// The gradient simplification <c>sigmoid(x) - y</c> is what makes the fused
-    /// sigmoid-plus-BCE loss preferable to applying them separately: it avoids the
-    /// catastrophic cancellation that occurs in <c>-y/p + (1-y)/(1-p)</c> when
-    /// <c>p</c> approaches 0 or 1.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var derivative = new Vector<T>(predicted.Length);
-        T n = NumOps.FromDouble(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Numerically stable sigmoid:
-            //   if x >= 0: 1 / (1 + exp(-x))
-            //   if x <  0: exp(x) / (1 + exp(x))
-            T x = predicted[i];
-            T sigmoid;
-            if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
-            {
-                T expNegX = NumOps.Exp(NumOps.Negate(x));
-                sigmoid = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
-            }
-            else
-            {
-                T expX = NumOps.Exp(x);
-                sigmoid = NumOps.Divide(expX, NumOps.Add(NumOps.One, expX));
-            }
-
-            derivative[i] = NumOps.Divide(NumOps.Subtract(sigmoid, actual[i]), n);
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

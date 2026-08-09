@@ -116,13 +116,4 @@ public class FactorVAEObjective<T> : LossFunctionBase<T>
             + "ComputeTapeLoss (TrainWithTape), or call the reconstruction loss directly if only that "
             + "term is wanted.");
 
-    /// <summary>
-    /// Not supported, for the same reason as <see cref="CalculateLoss"/>.
-    /// </summary>
-    /// <exception cref="NotSupportedException">Always.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-        => throw new NotSupportedException(
-            $"{nameof(FactorVAEObjective<T>)} cannot produce a derivative on the flat-vector surface: "
-            + "the KL term's gradient reaches the encoder through the tape. Train through "
-            + "ComputeTapeLoss (TrainWithTape).");
 }

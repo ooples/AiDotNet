@@ -403,7 +403,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 
         // Output layer error
         int lastIndex = activations.Count - 1;
-        Vector<T> error = _options.LossFunction.CalculateDerivative(activations[lastIndex], target);
+        Vector<T> error = _options.LossFunction.ComputeGradient(activations[lastIndex], target);
         Vector<T> delta = error.PointwiseMultiply(ApplyActivationDerivative(activations[lastIndex], true));
         deltas.Add(delta);
 

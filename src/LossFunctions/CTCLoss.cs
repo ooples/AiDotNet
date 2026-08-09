@@ -490,53 +490,6 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         return CalculateLoss(logProbs, targets, inputLengths, targetLengths);
     }
 
-    /// <summary>
-    /// Calculates the gradient of CTC loss from flattened vectors.
-    /// </summary>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        if (predicted is null) throw new ArgumentNullException(nameof(predicted));
-        if (actual is null) throw new ArgumentNullException(nameof(actual));
-
-        int batchSize = (int)Convert.ToDouble(actual[0]);
-        if (batchSize <= 0)
-            throw new ArgumentException("Invalid batch size encoded in actual vector");
-
-        int timeStepsTotal = predicted.Length / (_numClasses * batchSize);
-        var logProbs = new Tensor<T>(new[] { batchSize, timeStepsTotal, _numClasses });
-
-        int index = 0;
-        for (int b = 0; b < batchSize; b++)
-            for (int t = 0; t < timeStepsTotal; t++)
-                for (int c = 0; c < _numClasses; c++)
-                    logProbs[new[] { b, t, c }] = predicted[index++];
-
-        int actualIndex = 1;
-        var targets = new int[batchSize][];
-        var inputLengths = new int[batchSize];
-        var targetLengths = new int[batchSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            targetLengths[b] = (int)Convert.ToDouble(actual[actualIndex++]);
-            inputLengths[b] = timeStepsTotal;
-            targets[b] = new int[targetLengths[b]];
-            for (int i = 0; i < targetLengths[b]; i++)
-                targets[b][i] = (int)Convert.ToDouble(actual[actualIndex++]);
-        }
-
-        var gradientTensor = CalculateGradient(logProbs, targets, inputLengths, targetLengths);
-        var gradientVector = new Vector<T>(predicted.Length);
-
-        index = 0;
-        for (int b = 0; b < batchSize; b++)
-            for (int t = 0; t < timeStepsTotal; t++)
-                for (int c = 0; c < _numClasses; c++)
-                    gradientVector[index++] = gradientTensor[new[] { b, t, c }];
-
-        return gradientVector;
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// Uses the tape-tracked TensorCTCLoss engine op for differentiable CTC loss.

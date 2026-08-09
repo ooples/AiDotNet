@@ -672,7 +672,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
         if (_options.LossFunction != null)
         {
-            error = _options.LossFunction.CalculateDerivative(predictions, targets);
+            error = _options.LossFunction.ComputeGradient(predictions, targets);
         }
         else
         {

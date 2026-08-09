@@ -543,7 +543,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                         new Vector<T>(1) { [0] = target });
 
                     // Backward pass: compute gradients for contrastive loss
-                    var outputGrad = _lossFunction.CalculateDerivative(
+                    var outputGrad = _lossFunction.ComputeGradient(
                         new Vector<T>(1) { [0] = similarity },
                         new Vector<T>(1) { [0] = target });
 

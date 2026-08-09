@@ -97,53 +97,6 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(loss, NumOps.FromDouble(targetLogits.Length));
     }
 
-    /// <summary>
-    /// Calculates the gradient of the NCE loss function.
-    /// </summary>
-    /// <param name="targetLogits">The logits for the true target samples.</param>
-    /// <param name="noiseLogits">The logits for the noise samples.</param>
-    /// <returns>A tuple containing the gradients for target and noise logits.</returns>
-    public (Vector<T>, Matrix<T>) CalculateDerivative(Vector<T> targetLogits, Matrix<T> noiseLogits)
-    {
-        // Ensure dimensions match
-        if (targetLogits.Length != noiseLogits.Rows)
-        {
-            throw new ArgumentException("Number of target samples must match number of rows in noise samples.");
-        }
-
-        if (noiseLogits.Columns != _numNoiseSamples)
-        {
-            throw new ArgumentException("Number of noise samples per target must match the configured value.");
-        }
-
-        Vector<T> targetGradient = new Vector<T>(targetLogits.Length);
-        Matrix<T> noiseGradient = new Matrix<T>(noiseLogits.Rows, noiseLogits.Columns);
-
-        for (int i = 0; i < targetLogits.Length; i++)
-        {
-            // P(target is real | target)
-            T targetProb = Sigmoid(targetLogits[i]);
-
-            // -(1 - P(target is real | target))
-            targetGradient[i] = NumOps.Negate(NumOps.Subtract(NumOps.One, targetProb));
-
-            for (int j = 0; j < _numNoiseSamples; j++)
-            {
-                // P(noise is real | noise)
-                T noiseProb = Sigmoid(noiseLogits[i, j]);
-
-                // P(noise is real | noise)
-                noiseGradient[i, j] = noiseProb;
-            }
-        }
-
-        // Scale by batch size
-        T scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(targetLogits.Length));
-        targetGradient = targetGradient.Transform(x => NumOps.Multiply(x, scale));
-        noiseGradient = noiseGradient.Transform((x, _, __) => NumOps.Multiply(x, scale));
-
-        return (targetGradient, noiseGradient);
-    }
 
     /// <summary>
     /// This method is not used for NCE Loss as it requires specific input formats.
@@ -157,21 +110,6 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
         throw new NotSupportedException(
             "NCE Loss requires specific input formats. " +
             "Use the Calculate(Vector<T>, Matrix<T>) method instead."
-        );
-    }
-
-    /// <summary>
-    /// This method is not used for NCE Loss as it requires specific input formats.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (target) values vector.</param>
-    /// <returns>Throws NotSupportedException.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as NCE Loss requires specific input formats.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "NCE Loss requires specific input formats. " +
-            "Use the CalculateDerivative(Vector<T>, Matrix<T>) method instead."
         );
     }
 
@@ -196,6 +134,19 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        // NCE is not a pointwise (predicted, actual) loss: `target` carries the NOISE LOGITS,
+        // one row of K samples per example, and the noise term reduces over that second axis.
+        // A rank-1 argument used to reach ReduceSum(axis: 1) and fail there with an axis-range
+        // message that said nothing about NCE.
+        if (target.Rank < 2)
+        {
+            throw new ArgumentException(
+                "NoiseContrastiveEstimationLoss expects the second argument to be the noise "
+                + $"logits with shape [batch, numNoiseSamples], but it has rank {target.Rank}. "
+                + "Use Calculate(Vector targetLogits, Matrix noiseLogits) for the vector API.",
+                nameof(target));
+        }
+
         // Target term: -log(sigma(predicted))
         var targetSigmoid = Engine.TensorSigmoid(predicted);
         var eps = NumOps.FromDouble(1e-7);

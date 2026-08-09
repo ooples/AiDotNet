@@ -555,17 +555,6 @@ namespace AiDotNet.PhysicsInformed
             return NumOps.Divide(sumSquaredError, NumOps.FromDouble(count));
         }
 
-        /// <summary>
-        /// Computes the derivative of the loss with respect to predictions.
-        /// Required by the ILossFunction interface.
-        /// </summary>
-        public T[] ComputeDerivative(T[] predictions, T[] targets)
-        {
-            // Delegate to vectorized overload
-            var result = CalculateDerivative(new Vector<T>(predictions), new Vector<T>(targets));
-            return result.ToArray();
-        }
-
         /// <inheritdoc/>
         public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
         {
@@ -575,16 +564,6 @@ namespace AiDotNet.PhysicsInformed
             var error = (Vector<T>)Engine.Subtract(predicted, actual);
             T sumSquaredError = VectorHelper.DotProduct(error, error);
             return NumOps.Divide(sumSquaredError, NumOps.FromDouble(predicted.Length));
-        }
-
-        /// <inheritdoc/>
-        public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-        {
-            ValidateVectorLengths(predicted, actual);
-
-            // Vectorized MSE derivative: 2/N * (predicted - actual)
-            T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(predicted.Length));
-            return (Vector<T>)Engine.Multiply(Engine.Subtract(predicted, actual), scale);
         }
 
         /// <summary>

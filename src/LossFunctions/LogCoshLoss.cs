@@ -75,33 +75,6 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Log-Cosh loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of Log-Cosh loss for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var result = new T[predicted.Length];
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Subtract(predicted[i], actual[i]);
-            // Derivative of log(cosh(x)) is tanh(x) = (e^x - e^-x) / (e^x + e^-x)
-            T expPos = NumOps.Exp(diff);
-            T expNeg = NumOps.Exp(NumOps.Negate(diff));
-            result[i] = NumOps.Divide(
-                NumOps.Subtract(expPos, expNeg),
-                NumOps.Add(expPos, expNeg)
-            );
-        }
-
-        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Log-Cosh loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

@@ -57,7 +57,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.A2C;
     "https://arxiv.org/abs/1602.01783",
     Year = 2016,
     Authors = "Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., Silver, D., & Kavukcuoglu, K.")]
-public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -520,7 +520,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();

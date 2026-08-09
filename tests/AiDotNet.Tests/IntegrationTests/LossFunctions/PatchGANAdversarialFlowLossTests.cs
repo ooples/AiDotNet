@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
@@ -460,7 +460,10 @@ public class PatchGANAdversarialFlowLossTests
         var loss = new FlowLoss<double>();
         var v = new Vector<double>(8);
         Assert.Throws<NotSupportedException>(() => loss.CalculateLoss(v, v));
-        Assert.Throws<NotSupportedException>(() => loss.CalculateDerivative(v, v));
+
+        // CalculateDerivative is no longer asserted to throw because #1994 removed it from
+        // ILossFunction<T> outright -- the tape is the only source of gradients now. A member that
+        // does not exist is a stronger guarantee than one that throws, and the compiler enforces it.
     }
 
     #endregion

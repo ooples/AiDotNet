@@ -271,17 +271,6 @@ public class FlowLoss<T> : LossFunctionBase<T>
             "vector. Use ComputeTapeLoss(Tensor, Tensor) with a rank-4 or rank-5 clip.");
     }
 
-    /// <inheritdoc/>
-    /// <exception cref="NotSupportedException">
-    /// Always thrown, for the same reason as <see cref="CalculateLoss"/>. Gradients come from the
-    /// autodiff tape via <see cref="ComputeTapeLoss"/>.
-    /// </exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "FlowLoss operates on frame sequences and cannot infer frame boundaries from a flat " +
-            "vector. Its gradient is produced by the autodiff tape through ComputeTapeLoss.");
-    }
 
     #endregion
 }

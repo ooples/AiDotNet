@@ -332,41 +332,4 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
         return loss.Length > 0 ? loss[loss.Length - 1] : MathHelper.GetNumericOperations<T>().Zero;
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Central finite differences. The analytic gradient of a multi-resolution STFT magnitude is
-    /// long-winded, and this path exists only for callers outside the tape; taped training uses
-    /// <see cref="ComputeTapeLoss"/>, where the engine differentiates the graph exactly.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var gradient = new Vector<T>(predicted.Length);
-        const double step = 1e-4;
-
-        // PERTURB A COPY, NOT THE CALLER'S VECTOR. The probe used to write into `predicted` and
-        // restore it afterwards, which left two holes: if CalculateLoss threw between the write and
-        // the restore, the caller was handed back a vector still holding a perturbed element; and a
-        // vector shared with another thread was observably wrong for the duration of every probe.
-        // Copying once costs one allocation per call and removes both, and the method no longer has
-        // a side effect on its own input.
-        var probe = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            probe[i] = predicted[i];
-        }
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T original = predicted[i];
-            probe[i] = ops.Add(original, ops.FromDouble(step));
-            double plus = Convert.ToDouble(CalculateLoss(probe, actual));
-            probe[i] = ops.Subtract(original, ops.FromDouble(step));
-            double minus = Convert.ToDouble(CalculateLoss(probe, actual));
-            probe[i] = original;
-            gradient[i] = ops.FromDouble((plus - minus) / (2.0 * step));
-        }
-
-        return gradient;
-    }
 }

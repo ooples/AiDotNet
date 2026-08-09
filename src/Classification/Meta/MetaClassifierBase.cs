@@ -26,7 +26,7 @@ namespace AiDotNet.Classification.Meta;
 /// </para>
 /// </remarks>
 public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
     // Its own comment: "Meta classifiers typically do not have a simple parameter vector".
@@ -75,19 +75,6 @@ public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>,
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return CreateNewInstance();
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Meta classifiers delegate to base estimators
-        return new Vector<T>(0);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // No-op for meta classifiers
     }
 }
 

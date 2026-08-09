@@ -77,7 +77,7 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
 public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -655,21 +655,6 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     {
         // Return a fresh instance — LDA parameters come from training, not direct setting
         return CreateNewInstance();
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // LDA is a closed-form solution, not gradient-based
-        // Return zero gradients
-        return new Vector<T>(NumClasses * NumFeatures);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // LDA is a closed-form solution, not gradient-based
-        // This is a no-op
     }
 
     /// <inheritdoc/>

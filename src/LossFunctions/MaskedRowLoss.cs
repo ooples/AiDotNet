@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -90,28 +90,6 @@ public sealed class MaskedRowLoss<T> : LossFunctionBase<T>
         return _inner.CalculateLoss(p, a);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        var (p, a) = SelectRows(predicted, actual);
-        var innerGradient = _inner.CalculateDerivative(p, a);
-
-        // Scatter back into the full-width gradient. Unselected rows stay zero, which is the whole
-        // point: they were never part of the loss, so they get no gradient.
-        int valuesPerRow = predicted.Length / _totalRows;
-        var gradient = new Vector<T>(predicted.Length);
-        for (int i = 0; i < _selectedRows.Length; i++)
-        {
-            int sourceBase = i * valuesPerRow;
-            int targetBase = _selectedRows[i] * valuesPerRow;
-            for (int j = 0; j < valuesPerRow; j++)
-            {
-                gradient[targetBase + j] = innerGradient[sourceBase + j];
-            }
-        }
-
-        return gradient;
-    }
 
     private void RequireSelectableRows(int rows, string parameterName)
     {

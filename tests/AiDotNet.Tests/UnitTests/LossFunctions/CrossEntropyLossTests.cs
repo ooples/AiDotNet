@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -98,7 +99,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative = -actual / predicted / n
@@ -115,7 +116,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
+            Assert.Throws<ArgumentException>(() => loss.ComputeGradient(predicted, actual));
         }
 
         [Fact(Timeout = 60000)]
@@ -127,7 +128,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 0.0, 1.0, 0.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Should handle zero probabilities without throwing or returning NaN/Infinity
@@ -161,7 +162,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<float>(new float[] { 1.0f, 0.0f, 0.0f });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             Assert.True(result[0] < 0.0f);
@@ -210,7 +211,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             Assert.Equal(predicted.Length, result.Length);

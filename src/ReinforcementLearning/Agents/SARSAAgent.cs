@@ -57,7 +57,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
     "https://citeseerx.ist.psu.edu/doc/10.1.1.17.2539",
     Year = 1994,
     Authors = "Rummery, G. A. & Niranjan, M.")]
-public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
+public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -291,7 +291,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -299,7 +299,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tabular methods don't use gradients
     }

@@ -336,22 +336,6 @@ public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLos
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length / 4.0));
     }
 
-    /// <summary>
-    /// Gradient of categorical cross-entropy: -target / predicted.
-    /// </summary>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> target)
-    {
-        var gradient = new Vector<T>(predicted.Length);
-        T eps = NumOps.FromDouble(1e-7);
-        T scale = NumOps.FromDouble(4.0 / predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            var clipped = NumOps.Add(predicted[i], eps);
-            gradient[i] = NumOps.Multiply(NumOps.Negate(NumOps.Divide(target[i], clipped)), scale);
-        }
-        return gradient;
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// Categorical cross-entropy via engine ops: -mean(sum(target * log(predicted + eps)))

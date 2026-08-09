@@ -251,13 +251,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // configurations fail at construction with a clear message instead
         // of throwing mid-training when the user has already paid the cost
         // of the forward pass.
-        if (_lossFunction is not LossFunctions.LossFunctionBase<T>)
-        {
-            throw new ArgumentException(
-                "GraphGenerationModel requires a tape-capable loss function. " +
-                $"Pass a LossFunctionBase<T> implementation (got {_lossFunction.GetType().Name}).",
-                nameof(lossFunction));
-        }
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = learningRate,
@@ -1030,7 +1023,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // handled internally) when the caller didn't supply one. The
         // constructor enforces LossFunctionBase<T> so this cast cannot
         // fail at runtime.
-        var tapeLoss = (LossFunctions.LossFunctionBase<T>)_lossFunction;
+        var tapeLoss = _lossFunction;
         var reconLoss = tapeLoss.ComputeTapeLoss(reconstructed, adjacencyMatrix);
 
         // KL divergence to N(0, I) per Kipf & Welling 2016 §3.2:

@@ -55,7 +55,7 @@ namespace AiDotNet.Classification.Calibration;
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Predicting Good Probabilities with Supervised Learning", "https://doi.org/10.1145/1102351.1102430")]
 public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -882,21 +882,6 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
             calibrated.SetParameters(parameters);
         }
         return newModel;
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Calibration wrappers don't use gradient-based optimization
-        // The calibration is fitted using closed-form solutions or simple optimization
-        return new Vector<T>(6); // 6 calibration parameters
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Calibration wrappers don't use gradient-based optimization
-        // This is a no-op for compatibility
     }
 
     /// <inheritdoc/>

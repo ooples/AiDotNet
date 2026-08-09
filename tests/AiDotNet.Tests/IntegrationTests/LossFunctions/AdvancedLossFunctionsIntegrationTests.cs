@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Xunit;
@@ -296,7 +297,16 @@ public class AdvancedLossFunctionsIntegrationTests
         }
 
         // Act
-        var (targetGradient, noiseGradient) = nceLoss.CalculateDerivative(targetLogits, noiseLogits);
+        using var tape = new GradientTape<double>();
+
+        var targetT = Tensor<double>.FromVector(targetLogits);
+        var noiseT = Tensor<double>.FromMatrix(noiseLogits);
+
+        var scalar = nceLoss.ComputeTapeLoss(targetT, noiseT);
+        var gradients = tape.ComputeGradients(scalar, new[] { targetT, noiseT });
+
+        var targetGradient = gradients[targetT].ToVector();
+        var noiseGradient = gradients[noiseT].ToMatrix();
 
         // Assert
         Assert.Equal(targetLogits.Length, targetGradient.Length);
@@ -339,7 +349,12 @@ public class AdvancedLossFunctionsIntegrationTests
 
         // Act & Assert
         Assert.Throws<NotSupportedException>(() => nceLoss.CalculateLoss(predicted, actual));
-        Assert.Throws<NotSupportedException>(() => nceLoss.CalculateDerivative(predicted, actual));
+        // NCE's second argument is the noise-logit MATRIX, not a pointwise target, so the
+        // two-argument path cannot serve it. It used to fail through a thrown
+        // CalculateDerivative; it now fails in ComputeTapeLoss with a message naming the real
+        // problem and the API to use instead.
+        var ex = Assert.Throws<ArgumentException>(() => nceLoss.ComputeGradient(predicted, actual));
+        Assert.Contains("noise logits", ex.Message);
     }
 
     [Fact(Timeout = 120000)]
@@ -487,7 +502,12 @@ public class AdvancedLossFunctionsIntegrationTests
 
         // Act & Assert
         Assert.Throws<NotSupportedException>(() => perceptualLoss.CalculateLoss(predicted, actual));
-        Assert.Throws<NotSupportedException>(() => perceptualLoss.CalculateDerivative(predicted, actual));
+        // PerceptualLoss compares activations of a feature-extractor network. Without one
+        // configured there is nothing to compare, which is now reported as exactly that rather
+        // than as a blanket "not supported" from a hand-written derivative.
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => perceptualLoss.ComputeGradient(predicted, actual));
+        Assert.Contains("Feature extractor", ex.Message);
     }
 
     [Fact(Timeout = 120000)]
@@ -574,7 +594,7 @@ public class AdvancedLossFunctionsIntegrationTests
         var expected = new Vector<double>(new[] { 1.0, 0.0, 0.0, 0.0 });
 
         // Act
-        var gradient = quantumLoss.CalculateDerivative(predicted, expected);
+        var gradient = quantumLoss.ComputeGradient(predicted, expected);
 
         // Assert
         Assert.Equal(predicted.Length, gradient.Length);

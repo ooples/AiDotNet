@@ -422,8 +422,6 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         var expectedVector = expectedOutput.ToVector();
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
-        var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
 
         _optimizer?.UpdateParameters(Layers);
 

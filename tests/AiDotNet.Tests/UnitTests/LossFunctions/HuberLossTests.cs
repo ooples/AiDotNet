@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -147,7 +148,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             Assert.All(result, item => Assert.Equal(0.0, item, 10));
@@ -162,7 +163,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 0.0, 0.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // For small errors (< delta), derivative = diff / n
@@ -179,7 +180,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 0.0, 0.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // For large errors (> delta), derivative = delta * sign(diff) / n
@@ -196,7 +197,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0 });
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
+            Assert.Throws<ArgumentException>(() => loss.ComputeGradient(predicted, actual));
         }
 
         [Fact(Timeout = 60000)]
@@ -223,7 +224,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<float>(new float[] { 0.0f, 0.0f });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             Assert.Equal(0.25f, result[0], 5);

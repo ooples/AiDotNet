@@ -753,7 +753,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     {
         var loss = lossFunction ?? _defaultLossFunction;
         var predictions = Predict(input);
-        return loss.CalculateDerivative(predictions, target);
+        return loss.ComputeGradient(predictions, target);
     }
 
     /// <inheritdoc/>

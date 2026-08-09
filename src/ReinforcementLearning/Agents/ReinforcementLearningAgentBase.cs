@@ -596,22 +596,6 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         return clone;
     }
 
-    /// <summary>
-    /// Computes gradients for the agent.
-    /// </summary>
-    public abstract Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null);
-
-    /// <summary>
-    /// Applies gradients to update the agent.
-    /// </summary>
-    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Default: tape-based training handles parameter updates via TrainWithTape
-    }
-
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {

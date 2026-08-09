@@ -1968,7 +1968,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         LastLoss = LossFunction.CalculateLoss(imageOutput.ToVector(), expectedOutput.ToVector());
 
         // Backward pass - compute gradients
-        var lossGradient = LossFunction.CalculateDerivative(imageOutput.ToVector(), expectedOutput.ToVector());
+        var lossGradient = LossFunction.ComputeGradient(imageOutput.ToVector(), expectedOutput.ToVector());
         var gradient = Tensor<T>.FromVector(lossGradient);
 
         // Apply gradient descent update using the computed gradients

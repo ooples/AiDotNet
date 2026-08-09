@@ -6,7 +6,7 @@ section: "Reference"
 ---
 
 
-Reference for the loss functions in AiDotNet. They live in `AiDotNet.LossFunctions`, implement `ILossFunction<T>` (`CalculateLoss` / `CalculateDerivative`), and plug into training via `ConfigureLossFunction(...)`.
+Reference for the loss functions in AiDotNet. They live in `AiDotNet.LossFunctions`, implement `ILossFunction<T>` (`CalculateLoss` / `ComputeTapeLoss`), and plug into training via `ConfigureLossFunction(...)`.
 
 ---
 
@@ -103,9 +103,16 @@ var ctc = new CTCLoss<float>();
 
 ## Evaluating a Loss
 
-`CalculateLoss(predicted, actual)` returns the scalar loss; `CalculateDerivative(...)` returns the gradient.
+`CalculateLoss(predicted, actual)` returns the scalar loss. Gradients come from the autodiff tape:
+`ComputeGradient(...)` differentiates the loss's own `ComputeTapeLoss` forward.
+
+A loss function never defines its own derivative. It writes its formula once, in `ComputeTapeLoss`,
+using tensor operations, and the tape works out the calculus — the same arrangement as PyTorch,
+where an `nn.Module` loss defines `forward` and autograd supplies the backward. That is why a
+hand-written gradient cannot fall out of step with the loss it belongs to.
 
 ```csharp
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -115,7 +122,7 @@ var predicted = new Vector<float>(new[] { 0.9f, 0.2f, 0.7f });
 var actual = new Vector<float>(new[] { 1.0f, 0.0f, 1.0f });
 
 float value = loss.CalculateLoss(predicted, actual);
-var gradient = loss.CalculateDerivative(predicted, actual);
+var gradient = loss.ComputeGradient(predicted, actual);
 Console.WriteLine($"Loss: {value:F4}, gradient length: {gradient.Length}");
 ```
 

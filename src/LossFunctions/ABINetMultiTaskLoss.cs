@@ -142,51 +142,6 @@ public sealed class ABINetMultiTaskLoss<T> : LossFunctionBase<T>
             lossF);
     }
 
-    /// <summary>
-    /// The derivative of the same weighted objective, reassembled in the input's layout.
-    /// </summary>
-    /// <remarks>
-    /// Each branch's derivative is scaled by that branch's weight, which is what differentiating
-    /// <c>lambda_v*L_v + lambda_l*L_l + L_f</c> block-wise gives. Forwarding the whole vector
-    /// produced the derivative of a different objective.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        var (visionP, languageP, fusionP) = SplitThirds(predicted, nameof(predicted));
-        var (visionA, languageA, fusionA) = SplitThirds(actual, nameof(actual));
-
-        var gradV = _characterLoss.CalculateDerivative(visionP, visionA);
-        var gradL = _characterLoss.CalculateDerivative(languageP, languageA);
-        var gradF = _characterLoss.CalculateDerivative(fusionP, fusionA);
-
-        // THE THREE BRANCH GRADIENTS HAVE TO BE FULL LENGTH, and _characterLoss is caller-supplied
-        // through the constructor, so that is not a closed set of implementations to reason about. A
-        // loss returning a reduced or per-sample gradient would make every write below land at the
-        // wrong offset and leave the tail of `gradient` at zero -- no exception, just a silently
-        // truncated gradient handed to the optimizer, which is the failure this method was rewritten
-        // to remove.
-        int block = predicted.Length / 3;
-        if (gradV.Length != block || gradL.Length != block || gradF.Length != block)
-        {
-            throw new InvalidOperationException(
-                $"ABINet's character loss returned gradients of length {gradV.Length}/{gradL.Length}/" +
-                $"{gradF.Length} for branches of length {block}. Each branch gradient must match its " +
-                "branch, or the reassembled gradient is misaligned.");
-        }
-
-        var gradient = new Vector<T>(predicted.Length);
-        var visionWeight = NumOps.FromDouble(_visionLossWeight);
-        var languageWeight = NumOps.FromDouble(_languageLossWeight);
-
-        for (int i = 0; i < block; i++)
-        {
-            gradient[i] = NumOps.Multiply(visionWeight, gradV[i]);
-            gradient[block + i] = NumOps.Multiply(languageWeight, gradL[i]);
-            gradient[(2 * block) + i] = gradF[i];
-        }
-
-        return gradient;
-    }
 
     /// <inheritdoc/>
     /// <remarks>

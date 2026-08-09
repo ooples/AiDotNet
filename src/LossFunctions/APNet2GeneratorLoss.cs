@@ -605,16 +605,4 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
         var loss = ComputeTapeLoss(predictedTensor, actualTensor);
         return loss.Length > 0 ? loss[loss.Length - 1] : NumOps.Zero;
     }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Not available: this objective is differentiated by the tape, which records the anti-wrapping
-    /// phase computation as it runs. Returning a hand-rolled gradient here would mean maintaining a
-    /// second derivation of the same maths that could silently drift from the forward one, so the
-    /// tape path is the only supported route.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-        => throw new NotSupportedException(
-            "APNet2GeneratorLoss is differentiated through the autodiff tape; call ComputeTapeLoss " +
-            "via TrainWithTape rather than requesting an explicit derivative vector.");
 }

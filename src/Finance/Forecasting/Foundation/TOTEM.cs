@@ -359,9 +359,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         // arbitrarily far from the codebook. Run a custom tape step
         // that combines both.
 
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                "LossFunction must derive from LossFunctionBase<T> for TOTEM tape-based training.");
+        var loss = LossFunction;
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 

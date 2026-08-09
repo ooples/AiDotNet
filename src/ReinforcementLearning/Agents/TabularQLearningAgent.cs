@@ -54,7 +54,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
     "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
     Year = 1989,
     Authors = "Watkins, C. J. C. H.")]
-public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -285,7 +285,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -294,7 +294,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tabular methods don't use gradients
     }

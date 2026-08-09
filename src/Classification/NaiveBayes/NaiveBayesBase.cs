@@ -25,7 +25,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// </para>
 /// </remarks>
 public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -311,21 +311,6 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
         {
             LogPriors[i] = parameters[i];
         }
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Naive Bayes doesn't typically use gradient-based optimization
-        // Return zero gradients for compatibility
-        return new Vector<T>(NumClasses);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Naive Bayes doesn't typically use gradient-based optimization
-        // This is a no-op for compatibility
     }
 
     /// <inheritdoc/>

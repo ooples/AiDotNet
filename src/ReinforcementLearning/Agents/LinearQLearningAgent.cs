@@ -306,42 +306,6 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearQLearningAgent<T>(_options);
-
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        var pred = Predict(input);
-        var lf = lossFunction ?? LossFunction;
-        var loss = lf.CalculateLoss(pred, target);
-        var gradients = lf.CalculateDerivative(pred, target);
-        return gradients;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        if (gradients == null)
-        {
-            throw new ArgumentNullException(nameof(gradients));
-        }
-
-        // Gradients should be flattened from weight matrix [ActionSize x FeatureSize]
-        int expectedSize = _options.ActionSize * _options.FeatureSize;
-        if (gradients.Length != expectedSize)
-        {
-            throw new ArgumentException($"Gradient vector length {gradients.Length} does not match expected size {expectedSize}");
-        }
-
-        // Apply gradients to weight matrix
-        int index = 0;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                T update = NumOps.Multiply(learningRate, gradients[index]);
-                _weights[a, f] = NumOps.Subtract(_weights[a, f], update);  // Gradient descent
-                index++;
-            }
-        }
-    }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }
