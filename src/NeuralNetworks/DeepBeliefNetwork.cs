@@ -703,7 +703,10 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         // Add the size of the final hidden layer
         if (_rbmLayers.Count > 0)
         {
-            layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
+            // Same contract as CapsuleNetwork.GetModelMetadata: metadata reports geometry, it does
+            // not demand it. An axis that is not resolved yet comes back as LayerShape.Dynamic (-1)
+            // rather than throwing out of a diagnostic call.
+            layerSizes.Add(_rbmLayers[_rbmLayers.Count - 1].GetOutputLayerShape()[0]);
         }
 
         return new ModelMetadata<T>

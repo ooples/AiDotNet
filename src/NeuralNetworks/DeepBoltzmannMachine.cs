@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -501,7 +501,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var inputSize = inputShape[0];
         var rbmOutputSizes = Layers
             .Where(l => l is RBMLayer<T>)
-            .Select(l => l.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0])
+            // Metadata reports geometry, it does not demand it; an unresolved axis is reported as
+            // LayerShape.Dynamic (-1) rather than throwing out of a diagnostic call.
+            .Select(l => l.GetOutputLayerShape()[0])
             .ToList();
 
         _layerSizes = [inputSize, .. rbmOutputSizes];

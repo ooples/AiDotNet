@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
@@ -93,10 +93,23 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
     }
 
     /// <summary>
-    /// Returns immutable copies of the forward/feedback pairs used by the sequential KP rule.
-    /// Internal diagnostics keep the public credit-rule API small while allowing tests to verify
-    /// the defining same-update and shared-decay invariant directly.
+    /// Returns immutable copies of the forward/feedback pairs used by the sequential KP rule, for
+    /// inspecting how far feedback alignment has progressed.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kolen-Pollack works by driving the feedback matrices toward the transpose of the forward ones;
+    /// whether that is actually happening is invisible from the loss curve alone, and a rule that has
+    /// stopped aligning trains without ever failing. This is how a caller sees the two matrices and
+    /// measures the angle between them. Internal rather than public so the credit-rule surface stays
+    /// small.
+    /// </para>
+    /// <para>
+    /// DIAGNOSTIC ONLY, NOT PER-STEP. Every call clones two matrices per trainable layer, so calling
+    /// it inside a training loop adds an allocation pass proportional to the whole parameter set to
+    /// each step. Sample it, or use it from a test.
+    /// </para>
+    /// </remarks>
     internal IReadOnlyList<(Matrix<T> Forward, Matrix<T> Feedback)> GetAlignmentSnapshot()
     {
         var snapshot = new List<(Matrix<T> Forward, Matrix<T> Feedback)>();
