@@ -43,8 +43,43 @@ public static class CloneEngine
 
         foreach (var entry in CloneRegistry.GetPlan(type).Entries)
         {
-            var value = entry.Property.GetValue(source);
-            entry.Property.SetValue(clone, entry.Copy == CloneCopyKind.Deep ? Duplicate(value) : value);
+            object? value;
+            try
+            {
+                value = entry.Property.GetValue(source);
+            }
+            catch (TargetInvocationException ex)
+            {
+                // A getter that computes rather than returns. MultilayerPerceptronOptions.Optimizer
+                // builds a default model on first read, so cloning triggers that construction and
+                // any failure inside it surfaces here with a stack trace pointing at ModelHelper,
+                // giving no sign that cloning caused it. Naming the type and property converts an
+                // unrelated-looking exception into one that says where to look.
+                throw new InvalidOperationException(
+                    $"Reading {type.Name}.{entry.Property.Name} while cloning threw "
+                    + $"{ex.InnerException?.GetType().Name ?? ex.GetType().Name}: "
+                    + $"{ex.InnerException?.Message ?? ex.Message}. A property whose getter computes "
+                    + "or lazily constructs is not configuration; mark it [NotConfiguration] so a "
+                    + "clone re-derives it instead of reading it.",
+                    ex.InnerException ?? ex);
+            }
+
+            try
+            {
+                entry.Property.SetValue(clone, entry.Copy == CloneCopyKind.Deep ? Duplicate(value) : value);
+            }
+            catch (TargetInvocationException ex)
+            {
+                // A validating setter rejecting a value the original holds means the two disagree
+                // about what is valid, which is worth surfacing rather than leaving the clone
+                // quietly short of one property.
+                throw new InvalidOperationException(
+                    $"Assigning {type.Name}.{entry.Property.Name} while cloning threw "
+                    + $"{ex.InnerException?.GetType().Name ?? ex.GetType().Name}: "
+                    + $"{ex.InnerException?.Message ?? ex.Message}. The setter rejected a value the "
+                    + "original already holds.",
+                    ex.InnerException ?? ex);
+            }
         }
 
         return clone;
