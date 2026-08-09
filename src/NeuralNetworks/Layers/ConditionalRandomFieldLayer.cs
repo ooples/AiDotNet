@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -1237,7 +1237,9 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var lseKeepDim = Engine.TensorAdd(logSum, max);
 
         // Now squeeze the reduced axis to match the shape contract.
-        var inShape = x.Shape.ToArray();
+        // _shape, not Shape.ToArray(): inShape is only read (Length and indexing) -- outShape below
+        // is a fresh array -- so the copy allocated for nothing (ADNPERF001).
+        var inShape = x._shape;
         var outShape = new int[inShape.Length - 1];
         int oi = 0;
         for (int i = 0; i < inShape.Length; i++)
