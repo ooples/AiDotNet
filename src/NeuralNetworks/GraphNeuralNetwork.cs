@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -405,6 +405,17 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         {
             if (weightCount < 0)
                 throw new ArgumentOutOfRangeException(nameof(weightCount));
+
+            // STRENGTH IS A SHRINKAGE FACTOR, so it has to land in [0, 1]. Regularize computes
+            // 1 - strength: above 1 the shrinkage goes negative and every first-layer weight FLIPS
+            // SIGN on each application, and below 0 it exceeds 1 and amplifies the weights it is
+            // supposed to shrink. Neither fails anywhere, they just train something else.
+            if (strength < 0.0 || strength > 1.0 || double.IsNaN(strength))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(strength), strength,
+                    "L2 shrinkage strength must be in [0, 1]; 1 - strength is applied as a multiplier.");
+            }
 
             _weightCount = weightCount;
         }
@@ -1160,7 +1171,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = CopyOptions();
+        var options = new GraphNeuralNetworkOptions(_options);
 
         // Create a new instance with the same architecture and activation functions
         // Determine which constructor to use based on which activation functions are set
@@ -1204,24 +1215,5 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 finalActivationLayerActivation: _finalActivationLayerScalarActivation,
                 options: options);
         }
-    }
-
-    private GraphNeuralNetworkOptions CopyOptions()
-    {
-        return new GraphNeuralNetworkOptions
-        {
-            Seed = _options.Seed,
-            EncoderLayerCount = _options.EncoderLayerCount,
-            NodeFeatureSize = _options.NodeFeatureSize,
-            NumClasses = _options.NumClasses,
-            HiddenSize = _options.HiddenSize,
-            NumLayers = _options.NumLayers,
-            DropoutRate = _options.DropoutRate,
-            LearningRate = _options.LearningRate,
-            L2Regularization = _options.L2Regularization,
-            UseBias = _options.UseBias,
-            UseAuxiliaryLoss = _options.UseAuxiliaryLoss,
-            AuxiliaryLossWeight = _options.AuxiliaryLossWeight
-        };
     }
 }

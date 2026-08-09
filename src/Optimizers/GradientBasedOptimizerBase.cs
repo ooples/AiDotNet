@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Caching;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Data.Sampling;
@@ -502,6 +502,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> newModel)
     {
         base.OnModelChanged(oldModel, newModel);
+
+        // ADOPTION RUNS HERE TOO, not only in the constructors. SetModel is the documented "set
+        // later" path and routes through this method, so an optimizer configured at construction and
+        // attached to its network afterwards used to be silently replaced by the model's own default
+        // -- the configured object still existed, it just never ran. Adoption never overwrites an
+        // optimizer the model already chose, so running it twice is harmless.
+        if (newModel is NeuralNetworkBase<T> configuredNetwork
+            && this is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> tapeOptimizer)
+        {
+            configuredNetwork.AdoptConfiguredOptimizer(tapeOptimizer);
+        }
 
         if (GradientOptions.LossFunctionExplicitlySet)
         {
