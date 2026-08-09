@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
@@ -47,24 +47,41 @@ public class HarmTaxonomyModeratorTests
     {
         var frames = Frames(60);
 
-        // Saturate distinct channel/region combinations so more than one detector responds. The
-        // exact values are not meaningful; what matters is that the content is far from the uniform
-        // noise the benign fixture uses, in more than one way.
+        // ACTUAL SKIN-TONE PIXELS, NOT MERELY SATURATED ONES. The previous fixture drove the GREEN
+        // channel to 0.0, and CLIPImageSafetyClassifier's skin predicate requires g > 40 of 255 --
+        // so the "saturated" region was explicitly NOT skin, the skin fraction never approached the
+        // 0.8 NSFW threshold, and every assertion below was checking an empty collection. The fixture
+        // has to contain what it claims to contain for the assertions to mean anything.
+        //
+        // Values are normalized 0-1 (the classifier rescales by 255 when every channel is <= 1) and
+        // chosen to sit inside the predicate: r=0.85 (217) > g=0.65 (166) > b=0.55 (140), each above
+        // its floor, r-g = 51 clears the 15 minimum difference, and the implied HSV hue/saturation
+        // land in the accepted band. Every pixel is skin so the fraction is 1.0, comfortably over the
+        // 0.8 bar and independent of the random noise Frames() seeded.
         for (int f = 0; f < frames.Count; f++)
         {
             var t = frames[f];
-            for (int c = 0; c < 3; c++)
+            for (int y = 0; y < 8; y++)
             {
-                for (int y = 0; y < 8; y++)
+                for (int x = 0; x < 8; x++)
                 {
-                    for (int x = 0; x < 8; x++)
-                    {
-                        int i = (c * 8 + y) * 8 + x;
-                        if (i >= t.Length) continue;
-                        t[i] = c == 0 && y < 4 ? 1.0
-                             : c == 1 && x < 4 ? 0.0
-                             : t[i];
-                    }
+                    int r = (0 * 8 + y) * 8 + x;
+                    int g = (1 * 8 + y) * 8 + x;
+                    int b = (2 * 8 + y) * 8 + x;
+                    if (b >= t.Length) continue;
+
+                    // TWO shades of skin, cut hard at the midpoint. Uniform frames trip the image
+                    // classifier but leave the temporal detectors nothing to see -- no scene change,
+                    // no motion -- so only ONE category was ever reported and the
+                    // non-mutually-exclusive assertion could not pass. Both shades satisfy the skin
+                    // predicate (dark: r=115 > g=76 > b=56, all above their floors, r-g=39 > 15), so
+                    // the NSFW fraction stays 1.0 across the whole video while the shade flips on EVERY
+                    // frame, so the temporal-consistency and scene-transition detectors see a real
+                    // discontinuity at every pair rather than at a single midpoint.
+                    bool secondScene = f % 2 == 1;
+                    t[r] = secondScene ? 0.45 : 0.85;
+                    t[g] = secondScene ? 0.30 : 0.65;
+                    t[b] = secondScene ? 0.22 : 0.55;
                 }
             }
         }
