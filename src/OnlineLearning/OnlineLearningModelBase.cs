@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Newtonsoft.Json;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.OnlineLearning;
 
 /// <summary>
@@ -82,10 +83,76 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
-    /// Gets the total number of parameters in the model.
+    /// The components the parameters of this model live in. Empty until the model registers
+    /// some, in which case the surfaces below fall back to what they always did.
     /// </summary>
-    public virtual long ParameterCount => NumFeatures;
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
 
+    /// <summary>
+    /// Declares a component whose parameters belong to the surface of this model.
+    /// Registration
+    /// order is serialization order, so keep it stable.
+    /// </summary>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+        => _parameterRegistry.Register(component);
+
+    /// <summary>
+    /// Declare the trainable components of this model here with
+    /// <see cref="RegisterParameterComponent"/>. Called once, lazily, so it runs after the
+    /// constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private ParameterComponentRegistry<T> Registry
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+                _componentsRegistered = _parameterRegistry.HasComponents;
+            }
+            return _parameterRegistry;
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Virtual rather than abstract: a model that registers its components inherits all
+    /// three surfaces and writes no parameter plumbing. It was abstract, which FORCED every
+    /// descendant to hand-write the triple -- the same defect ModelBase and LayerBase had.
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+        => Registry.HasComponents ? Registry.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (!Registry.HasComponents) return;
+        Registry.SetParameters(parameters);
+        OnParametersRestored();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Folds the same enumeration the vector does once components are registered. The
+    /// previous expression is kept for models not yet converted -- and it is exactly why the
+    /// two could disagree: it described the MODEL, not the vector. Measured on
+    /// CausalForest: 5 against a 6-element vector after any restore.
+    /// </remarks>
+    public virtual long ParameterCount
+        => Registry.HasComponents ? Registry.ParameterCount : NumFeatures;
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
@@ -349,19 +416,9 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     }
 
     /// <summary>
-    /// Gets all model parameters as a single vector.
-    /// </summary>
-    public abstract Vector<T> GetParameters();
-
-    /// <summary>
     /// Creates a new instance of the model with specified parameters.
     /// </summary>
     public abstract IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Sets the parameters for this model.
-    /// </summary>
-    public abstract void SetParameters(Vector<T> parameters);
 
     /// <summary>
     /// Creates a new instance of the same type.

@@ -4,6 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.SurvivalAnalysis;
 
 /// <summary>
@@ -53,6 +55,15 @@ namespace AiDotNet.SurvivalAnalysis;
 [ResearchPaper("Theory of Counting Processes", "https://doi.org/10.1007/978-1-4612-4532-4")]
 public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The cumulative hazard estimate, which is this estimator's entire fitted state.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _cumulativeHazard,
+            value => _cumulativeHazard = value));
+    }
     /// <summary>
     /// The cumulative hazard values at each event time.
     /// </summary>
@@ -254,21 +265,6 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
 
         // Use median survival as prediction
         return PredictMedianSurvivalTime(input);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (_cumulativeHazard is null)
-            return new Vector<T>(0);
-
-        return Vector<T>.Wrap(_cumulativeHazard.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _cumulativeHazard = new Vector<T>(parameters.ToArray());
     }
 
     /// <inheritdoc />
