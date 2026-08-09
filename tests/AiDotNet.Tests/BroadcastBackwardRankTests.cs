@@ -1,3 +1,7 @@
+﻿// AiDotNet.Helpers, for the EngineBroadcastCompatibilityExtensions shim. It used to live in
+// AiDotNet.Tensors.Engines and so needed no using here; it was moved out of the dependency's
+// namespace so a future Tensors release re-adding these members cannot silently shadow it.
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
