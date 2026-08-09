@@ -430,11 +430,48 @@ public class PatchGANAdversarialFlowLossTests
     /// different samples' motion quietly averaged together.
     /// </summary>
     [Fact]
-    public void MultiSampleBatch_Throws()
+    public void MultiSampleBatch_IsAveragedPerSample()
     {
+        // ASSERTS THE REAL CONTRACT, WHICH IS NOT "throws". This used to be MultiSampleBatch_Throws,
+        // written when a rank-5 batch was rejected. ComputeTapeLoss now walks the batch --
+        // "one sample at a time, then average", because optical flow is defined per sample and the
+        // batch cannot be folded into another axis -- so the throw it asserted no longer happens.
+        // The NotSupportedException it was catching is still there, but it guards an INTERNAL
+        // invariant inside ClipLoss that the narrowing loop is precisely what stops being reached.
+        //
+        // Averaging is the property worth pinning, and "does not throw" would not pin it: a batch of
+        // two IDENTICAL samples must score exactly what that sample scores alone. A sum instead of a
+        // mean would double it; scoring only the first sample would pass this but fail the second
+        // assertion below, where the two samples differ and the batch must land between them.
         var loss = new FlowLoss<double>();
-        var clip = Ramp([2, 2, 3, 16, 16]);
-        Assert.Throws<NotSupportedException>(() => loss.ComputeTapeLoss(clip, clip));
+
+        var single = Ramp([1, 2, 3, 16, 16]);
+        var duplicated = new Tensor<double>([2, 2, 3, 16, 16]);
+        for (int i = 0; i < single.Length; i++)
+        {
+            duplicated[i] = single[i];
+            duplicated[single.Length + i] = single[i];
+        }
+
+        double singleLoss = loss.ComputeTapeLoss(single, single.Clone())[0];
+        double duplicatedLoss = loss.ComputeTapeLoss(duplicated, duplicated.Clone())[0];
+        Assert.Equal(singleLoss, duplicatedLoss, 10);
+
+        // Two DIFFERENT samples: the mean must sit between the two individual scores, which a
+        // first-sample-only implementation could not satisfy.
+        var sampleA = Ramp([1, 2, 3, 16, 16]);
+        var sampleB = Ramp([1, 2, 3, 16, 16], scale: 2.0, seed: 5);
+        var mixed = new Tensor<double>([2, 2, 3, 16, 16]);
+        for (int i = 0; i < sampleA.Length; i++)
+        {
+            mixed[i] = sampleA[i];
+            mixed[sampleA.Length + i] = sampleB[i];
+        }
+
+        double lossA = loss.ComputeTapeLoss(sampleA, sampleA.Clone())[0];
+        double lossB = loss.ComputeTapeLoss(sampleB, sampleB.Clone())[0];
+        double mixedLoss = loss.ComputeTapeLoss(mixed, mixed.Clone())[0];
+        Assert.Equal((lossA + lossB) / 2.0, mixedLoss, 10);
     }
 
     /// <summary>A rank-5 clip with a single sample is the normal batched form and must work.</summary>
