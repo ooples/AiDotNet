@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "0")]
-public class MeanLayer<T> : LayerBase<T>
+public partial class MeanLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the axis along which the mean is calculated.
@@ -144,7 +144,8 @@ public class MeanLayer<T> : LayerBase<T>
     /// For example, with inputShape=[32, 10, 128] and axis=1, the output shape would be [32, 128].
     /// </para>
     /// </remarks>
-    public MeanLayer(int axis)
+    public MeanLayer(
+        [LayerState] int axis)
         : base(new[] { -1 }, new[] { -1 })
     {
         Axis = axis;
@@ -234,7 +235,7 @@ public class MeanLayer<T> : LayerBase<T>
     /// the result would be [2.5, 3.5, 4.5] (average of each column).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

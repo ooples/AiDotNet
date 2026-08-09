@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "16", TestConstructorArgs = "16, 4, new int[] { 4, 8 }")]
-public class KairosMultiSizePatchLayer<T> : LayerBase<T>
+public partial class KairosMultiSizePatchLayer<T> : LayerBase<T>
 {
     private readonly int _contextLength;
     private readonly int _hiddenDim;
@@ -121,13 +121,20 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
             outputSize: _patchSizes.Length,
             activationFunction: new SoftmaxActivation<T>());
 
+        // Every input width is part of this layer's constructor contract. Materialize
+        // the weights now so parameter enumeration, cloning, and serialization have
+        // the same layout before and after the first forward pass.
+        _router.ResolveFromShape(new[] { _contextLength });
+        for (int k = 0; k < _patchEmbeddings.Count; k++)
+            _patchEmbeddings[k].ResolveFromShape(new[] { _patchSizes[k] });
+
         foreach (var emb in _patchEmbeddings)
             RegisterSubLayer(emb);
         RegisterSubLayer(_router);
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Support [contextLength], [B, contextLength], and [B, lookback, channels]
         // inputs.

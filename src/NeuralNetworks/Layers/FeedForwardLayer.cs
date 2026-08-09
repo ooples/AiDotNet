@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -281,6 +281,19 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// <remarks>
     /// This includes all weights (inputSize × outputSize) and all biases (outputSize).
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
     public override long ParameterCount
     {
         get
@@ -543,7 +556,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// is the core of how neural networks transform data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // EnsureInitializedFromInput resolves lazy shapes via
         // OnFirstForward and then internally calls EnsureInitialized;

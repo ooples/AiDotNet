@@ -144,7 +144,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private int[]? _originalInputShape;
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Retain backward-activation caches (_lastInput / _lastMean / _lastVariance)
         // only when an eager manual Backward will read them; skip in inference/under

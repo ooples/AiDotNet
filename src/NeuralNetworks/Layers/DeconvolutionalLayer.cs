@@ -303,6 +303,19 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its upsampling abilities as it processes more data
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
+    /// nothing until the input width is known. Without this, a deferred layer said "I have no
+    /// parameters" (count 0, empty vector) AND "nothing is pending" -- three surfaces agreeing on a
+    /// statement that is false, since the layer certainly will have weights once it sees an input.
+    /// Callers asking "does this model have learnable parameters?" got a flat no and had no way to
+    /// tell it apart from a genuinely parameterless layer. Mirrors
+    /// <see cref="ConvolutionalLayer{T}.HasUninitializedParameters"/> and PyTorch's
+    /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
+    /// </remarks>
+    public override bool HasUninitializedParameters => !IsShapeResolved;
+
     public override long ParameterCount => _kernels.Length > 0
         ? _kernels.Length + _biases.Length
         // Deferred-shape mode: weights aren't materialised yet (e.g. resolved via
@@ -479,7 +492,24 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        InitializeLayerWeights(_kernels, InputDepth, OutputDepth);
+        // Fans must include the RECEPTIVE FIELD, not just the channel counts. Passing bare
+        // InputDepth/OutputDepth under-counted fan-in by KernelSize^2 (9x for a 3x3 kernel), and since
+        // initialization std scales as 1/sqrt(fan) that inflated every deconv's initial weights.
+        //
+        // Measured consequence before this fix: each upsampling deconv multiplied activation meanAbs by
+        // ~1.7x, so a StandardVAE decoder's three deconvs compounded ~5.4x (latent meanAbs 1.32 ->
+        // 7.66) and drove the decoder's output tanh into saturation — 47.2% of outputs pinned at
+        // exactly +/-1, making an untrained decode information-free (two latents differing by maxAbs
+        // 0.673 decoded to byte-identical images). ConvolutionalLayer never had this bug; it computes
+        // fanIn = KernelInChannels * KernelSize * KernelSize explicitly.
+        //
+        // Orientation follows PyTorch's _calculate_fan_in_and_fan_out for a transposed convolution:
+        // this kernel is laid out [inputDepth, outputDepth, K, K], and for ConvTranspose the fan-in is
+        // taken from the SECOND weight axis. So fan-in is OutputDepth * K * K and fan-out is
+        // InputDepth * K * K — the reverse of a forward convolution, because a transposed convolution
+        // scatters each input over the output rather than gathering.
+        int receptiveField = KernelSize * KernelSize;
+        InitializeLayerWeights(_kernels, OutputDepth * receptiveField, InputDepth * receptiveField);
         InitializeLayerBiases(_biases);
     }
 
@@ -506,7 +536,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// where each stamp design comes from your pattern generators (kernels).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Shape-inference mode: resolve dims + return a placeholder, no kernel allocation.
         if (IsInferringShapes) return ShapeInferenceOutput(input);

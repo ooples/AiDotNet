@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "2, 2")]
-public class MaxPool3DLayer<T> : LayerBase<T>
+public partial class MaxPool3DLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -126,7 +126,9 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// For example, with pool size 2 and stride 2, a 32x32x32 input becomes 16x16x16.
     /// </para>
     /// </remarks>
-    public MaxPool3DLayer(int poolSize, int stride = 0)
+    public MaxPool3DLayer(
+        [LayerState] int poolSize,
+        [LayerState] int stride = 0)
         : base(new[] { -1, -1, -1, -1 }, new[] { -1, -1, -1, -1 })
     {
         if (poolSize <= 0)
@@ -184,7 +186,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// The max indices are cached for use in the backward pass.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)

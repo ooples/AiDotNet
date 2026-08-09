@@ -68,7 +68,7 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var normed = _norm.Forward(input);
         var attnOut = _attention.Forward(normed);

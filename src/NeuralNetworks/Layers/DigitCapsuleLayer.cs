@@ -289,7 +289,12 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// with a moderate number of routing iterations (3-5) for good performance.
     /// </para>
     /// </remarks>
-    public DigitCapsuleLayer(int inputCapsules, int inputCapsuleDimension, int numClasses, int outputCapsuleDimension, int routingIterations)
+    public DigitCapsuleLayer(
+        [LayerState] int inputCapsules,
+        [LayerState] int inputCapsuleDimension,
+        [LayerState] int numClasses,
+        [LayerState] int outputCapsuleDimension,
+        [LayerState] int routingIterations)
         : base([inputCapsules, inputCapsuleDimension], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
     {
         _inputCapsules = inputCapsules;
@@ -498,7 +503,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// then gradually giving more weight to experts who agree with the consensus for each outcome.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-ctor instances start with _inputCapsules =
         // _inputCapsuleDimension = -1; resolve from input.Shape on first

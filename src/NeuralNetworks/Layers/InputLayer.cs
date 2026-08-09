@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Input)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, SupportsBackpropagation = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class InputLayer<T> : LayerBase<T>
+public partial class InputLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -86,7 +86,8 @@ public class InputLayer<T> : LayerBase<T>
     /// The layer is automatically set up to pass data through without changing it.
     /// </para>
     /// </remarks>
-    public InputLayer(int inputSize)
+    public InputLayer(
+        int inputSize)
         : base([inputSize], [inputSize], new IdentityActivation<T>() as IActivationFunction<T>)
     {
     }
@@ -159,7 +160,7 @@ public class InputLayer<T> : LayerBase<T>
     /// as its purpose is just to feed data into the network.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return input;
     }

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -7,6 +7,8 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+
+using AiDotNet.NeuralNetworks.Graph;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -522,9 +524,74 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// that point.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// A dynamic axis in the OUTPUT shape is a declaration, not an unfinished one: a convolution
+    /// over a variable-length signal, or an attention block that preserves its input's sequence
+    /// length, cannot name that axis and must not pretend to. Treating such a layer as permanently
+    /// unresolved is what the paragraph on <c>_firstForwardRan</c> below warns about, and it broke
+    /// two separate things: first-forward setup re-ran on every pass, and — because both the
+    /// generated parameter accessors and the deserialization path gate on this property —
+    /// <c>SetParameters</c> silently skipped such a layer, so a restored model came back with its
+    /// trained weights dropped.
+    /// </para>
+    /// <para>
+    /// The question this property answers is therefore whether the layer's PARAMETERS can be sized,
+    /// and those are derived from the input shape alone. A dynamic output axis never becomes
+    /// concrete no matter how long you wait, so including it here would make those layers
+    /// permanently second-class. Callers that genuinely need concrete output dimensions ask for
+    /// them explicitly through <see cref="LayerShape.TryGetConcrete"/> or
+    /// <see cref="LayerShape.RequireConcrete"/>, which fail loudly rather than reading a sentinel
+    /// as a size.
+    /// </para>
+    /// </remarks>
     public virtual bool IsShapeResolved =>
-        InputShape is not null && !ShapeContainsSentinel(InputShape)
-        && OutputShape is not null && !ShapeContainsSentinel(OutputShape);
+        InputShape is not null && OutputShape is not null
+        // A layer that resolved while deliberately keeping a declared-free axis dynamic IS
+        // resolved. Reading the surviving -1 as "not resolved yet" would re-run first-forward
+        // setup on every pass and leave a sequence-length-agnostic block permanently unresolved.
+        && (_resolvedWithDeclaredFreeAxes || !ShapeContainsSentinel(InputShape));
+
+    /// <summary>
+    /// <c>true</c> when this layer will have trainable parameters but cannot size them yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The counterpart to PyTorch's <c>LazyModuleMixin.has_uninitialized_params()</c>. It exists so
+    /// that "this layer has no parameters" (a LayerNormalization-free activation, a dropout) is
+    /// distinguishable from "this layer's parameter count is not knowable yet" (a convolution whose
+    /// input channel count arrives with the first input).
+    /// </para>
+    /// <para>
+    /// Without this distinction the only way to keep a "models have learnable parameters" check
+    /// passing before the first forward was for <see cref="ParameterCount"/> to invent a number,
+    /// which then contradicted <see cref="GetParameters"/> — the count claimed weights the flat
+    /// vector did not contain, and every caller pairing the two broke. PyTorch refuses the question
+    /// instead: <c>UninitializedParameter.numel()</c> raises. Answering it honestly is strictly more
+    /// useful than either lying or throwing, and costs nothing at runtime.
+    /// </para>
+    /// </remarks>
+    public virtual bool HasUninitializedParameters => false;
+
+    /// <summary>
+    /// <c>true</c> once first-forward setup has run, whether or not every axis ended up concrete.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="EnsureInitializedFromInput"/> used to gate first-forward setup on
+    /// <see cref="IsShapeResolved"/>, which asks whether every declared axis is a concrete
+    /// number. That is a different question from "has this layer been set up", and the two come
+    /// apart for any layer with a genuinely dynamic axis.
+    /// </para>
+    /// <para>
+    /// A transformer decoder is the clear case: its parameters depend only on the embedding
+    /// width, known as soon as it sees an input, but its OUTPUT length is the target length and
+    /// changes call to call. Gating on "every axis concrete" forced it to choose between
+    /// declaring a length it does not keep -- UDOP's decoder declared [4, 32] then produced
+    /// [2, 32] -- and never counting as set up, re-running setup on every pass.
+    /// </para>
+    /// </remarks>
+    private bool _firstForwardRan;
 
     /// <summary>
     /// Proactively declares this layer's parameter shapes WITHOUT requiring a forward pass.
@@ -604,8 +671,264 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <param name="input">The input tensor whose shape determines the deferred dims.</param>
     protected virtual void OnFirstForward(Tensor<T> input)
     {
-        // Default: do nothing. Layers with deferred shape override this.
+        // Shape-preserving layers adopt the incoming shape. Everything else defers to its own
+        // override; the base default stays a no-op so no existing layer changes behaviour.
+        if (!IsShapePreserving) return;
+
+        var shape = input.Shape.ToArray();
+        if (shape.Length < 2) return;
+
+        var perSample = new int[shape.Length - 1];
+        Array.Copy(shape, 1, perSample, 0, perSample.Length);
+        ResolveShapes(perSample, perSample);
     }
+
+    /// <summary>
+    /// <c>true</c> for layers whose output has exactly the same shape as their input.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Such layers declare wildcard shapes because they accept anything, and
+    /// <see cref="GetOutputShape"/> returns the DECLARED shape — so without this they keep
+    /// reporting <c>[-1]</c> even after being resolved. Anything that walks a layer list deriving
+    /// each layer's input from the previous layer's output then hits a wildcard and stops, which
+    /// leaves every subsequent layer lazy.
+    /// </para>
+    /// <para>
+    /// Keras takes the opposite default: <c>Layer.compute_output_shape</c> returns the input shape
+    /// unchanged unless a layer overrides it. This flag is the opt-in equivalent — nothing changes
+    /// for a layer that does not set it.
+    /// </para>
+    /// </remarks>
+    protected virtual bool IsShapePreserving => false;
+
+    /// <summary>
+    /// Verifies, once, that what <see cref="Forward"/> actually produced matches the shape this
+    /// layer reports.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Neither PyTorch nor Keras does this. PyTorch has no static shape contract to check; Keras
+    /// computes output shapes but never reconciles them against a real forward. A layer that
+    /// reports one shape and produces another is silently wrong, and the damage shows up far from
+    /// the cause.
+    /// </para>
+    /// <para>
+    /// Every defect of this class found while stabilising the generated model suites was exactly
+    /// that disagreement, and each took hours to locate by hand: ABINet reporting 1,718,624
+    /// parameters where the same model after a forward reported 4,281,376; ReshapeLayer counting
+    /// 256 elements against a 131072-element target; APNet2's restored clone predicting
+    /// differently from the model it was cloned from. This turns all of them into an immediate,
+    /// named failure at the layer that caused it.
+    /// </para>
+    /// <para>
+    /// Runs only on the first forward after resolution, so it costs one shape comparison per layer
+    /// per model instance.
+    /// </para>
+    /// </remarks>
+    /// <param name="output">The tensor <see cref="Forward"/> returned.</param>
+    /// <summary>
+    /// How this layer's output shape follows from its input shape. <see cref="ShapeRelationKind.Unknown"/>
+    /// by default, which checks nothing.
+    /// </summary>
+    /// <remarks>
+    /// Declaring one turns a shape mismatch from "this layer's number is wrong" into a statement
+    /// about WHERE the wrong number came from — see <see cref="ShapeRelationKind"/>. Opt-in on
+    /// purpose: a layer that has not declared a relation behaves exactly as before.
+    /// </remarks>
+    protected internal virtual ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Unknown;
+
+    /// <summary>
+    /// Given this layer's DECLARED output shape and its relation, the input shape that declaration
+    /// implies — or <c>null</c> when the relation cannot be inverted.
+    /// </summary>
+    /// <remarks>
+    /// Only relations that preserve the axes in question are invertible. Identity inverts exactly;
+    /// ChannelOnly inverts on the spatial axes but says nothing about the channel count; the
+    /// convolution formula is not invertible without the original extent, so it returns null rather
+    /// than guessing.
+    /// </remarks>
+    internal int[]? ImpliedInputShape(int[] declaredOutput)
+    {
+        switch (OutputShapeRelation)
+        {
+            case ShapeRelationKind.Identity:
+                return (int[])declaredOutput.Clone();
+
+            case ShapeRelationKind.ChannelOnly:
+            {
+                // Channel axis is the layer's own choice, so mark it unconstrained (-1) and keep
+                // the spatial axes, which this relation promises are carried through untouched.
+                var implied = (int[])declaredOutput.Clone();
+                if (implied.Length > 0) implied[0] = -1;
+                return implied;
+            }
+
+            case ShapeRelationKind.FeatureOnly:
+            {
+                // Mirror image of ChannelOnly: the layer fixes the TRAILING feature width and
+                // carries every leading axis through, so only that last axis is unconstrained.
+                var implied = (int[])declaredOutput.Clone();
+                if (implied.Length > 0) implied[implied.Length - 1] = -1;
+                return implied;
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// The single axis this layer's own parameters are sized by — the one number in a declared
+    /// shape that is genuinely the layer's claim. Returns <c>-1</c> when no relation is declared.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three of the four relations are channel-first, putting that axis at 0;
+    /// <see cref="ShapeRelationKind.FeatureOnly"/> is feature-last and puts it at the end. Reading
+    /// a feature-last layer with the channel-first assumption inverts the question exactly: it
+    /// asserts the sequence length, which no transformer block fixes, and exempts the feature
+    /// width, which every one of them does.
+    /// </para>
+    /// </remarks>
+    private int ParameterizedAxisIndex(int rank) => OutputShapeRelation switch
+    {
+        ShapeRelationKind.Identity => 0,
+        ShapeRelationKind.ChannelOnly => 0,
+        ShapeRelationKind.Convolutional => 0,
+        ShapeRelationKind.FeatureOnly => rank - 1,
+        _ => -1,
+    };
+
+    internal void VerifyReportedOutputShape(Tensor<T> output) => VerifyReportedOutputShape(output, actualInput: null);
+
+    internal void VerifyReportedOutputShape(Tensor<T> output, Tensor<T>? actualInput)
+    {
+        if (_reportedOutputShapeVerified) return;
+        _reportedOutputShapeVerified = true;
+
+        var reported = GetOutputShape();
+        if (reported is null || reported.Length == 0) return;
+
+        var actual = output.Shape.ToArray();
+        // Reported shapes exclude the batch axis; compare against the actual per-sample shape.
+        if (actual.Length != reported.Length + 1) return;
+
+        for (int i = 0; i < reported.Length; i++)
+        {
+            // A -1 axis is a genuine "any size here" declaration, so only the axes the layer
+            // commits to are checked. Checking the concrete axes of a PARTIAL shape is the point:
+            // those are exactly the layers a shape inference has to reason about, and skipping
+            // any shape containing a sentinel would exempt all of them.
+            if (reported[i] < 0) continue;
+
+            // Axes the sequential walk inferred are not this layer's claim. ResolveLazyLayerShapes
+            // fills them in from the architecture's input, which is only correct when the model's
+            // real forward IS that chain; for a custom forward it writes numbers the layer never
+            // agreed to. Asserting them blames the layer for someone else's inference, which is
+            // exactly what the MaskAdapter / Mask2Former / SlimSAM cluster was reporting. The
+            // parameterized axis is still checked — that one the layer genuinely determines, and
+            // it sits at the END for feature-last layers, not always at 0.
+            if (_spatialAxesWerePropagated && i != ParameterizedAxisIndex(reported.Length)) continue;
+
+            if (reported[i] == actual[i + 1]) continue;
+
+            throw new InvalidOperationException(
+                $"{GetType().Name} reports an output shape of [{string.Join(", ", reported)}] but its forward " +
+                $"produced [{string.Join(", ", actual)}] (per-sample [{string.Join(", ", actual.Skip(1))}]). " +
+                "A layer whose declared shape disagrees with what it computes corrupts every consumer " +
+                "that sizes itself from the declaration — parameter-vector slicing, chain resolution and " +
+                "ONNX export all read it." +
+                DescribeDeclarationProvenance(reported, actualInput));
+        }
+    }
+
+    /// <summary>
+    /// Uses this layer's shape relation to say whether the LAYER or the DECLARATION is at fault.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without a relation the failure text can only report two disagreeing numbers, which reads as
+    /// "this layer is broken" — and for the whole MaskAdapter / Mask2Former / SlimSAM cluster that
+    /// reading is wrong. Those layers computed correctly; something upstream wrote a declaration
+    /// describing an input they never received.
+    /// </para>
+    /// <para>
+    /// With a relation the declaration becomes a falsifiable claim about the input. A layer that
+    /// preserves shape and declares <c>[8, 32, 32]</c> is asserting it was fed <c>[8, 32, 32]</c>;
+    /// if it actually received <c>[8, 8, 8]</c>, the declaration is provably not describing this
+    /// forward, and the message says so and names the usual author.
+    /// </para>
+    /// </remarks>
+    private string DescribeDeclarationProvenance(int[] reported, Tensor<T>? actualInput)
+    {
+        if (actualInput is null || OutputShapeRelation == ShapeRelationKind.Unknown)
+            return string.Empty;
+
+        var implied = ImpliedInputShape(reported);
+        if (implied is null) return string.Empty;
+
+        var actualIn = actualInput.Shape.ToArray();
+        // Reported/implied shapes exclude the batch axis.
+        if (actualIn.Length != implied.Length + 1) return string.Empty;
+
+        bool inputContradicts = false;
+        for (int i = 0; i < implied.Length; i++)
+        {
+            if (implied[i] < 0) continue;
+            if (implied[i] != actualIn[i + 1]) { inputContradicts = true; break; }
+        }
+
+        if (!inputContradicts) return string.Empty;
+
+        return
+            $" This layer's shape relation is {OutputShapeRelation}, so the declared output asserts an " +
+            $"input of [{string.Join(", ", implied)}] — but the input it actually received was " +
+            $"[{string.Join(", ", actualIn.Skip(1))}]. The layer computed correctly for the input it was " +
+            "given; the DECLARATION is what does not describe this forward. Declarations for lazy layers " +
+            $"are written by {nameof(NeuralNetworkBase<T>)}.ResolveLazyLayerShapes, which walks Layers " +
+            "sequentially from the architecture's input shape — so a model whose real forward is not that " +
+            "sequential chain (a custom forward, a downsampling path, or branches) will have concrete " +
+            "dimensions pinned onto layers that never receive them.";
+    }
+
+    /// <summary>
+    /// True when this layer's spatial axes were filled in by the sequential shape walk rather than
+    /// determined by the layer, so they are not a claim it stands behind.
+    /// </summary>
+    private bool _spatialAxesWerePropagated;
+
+    /// <summary>
+    /// Set when <see cref="ResolveShapes"/> accepted an input shape that keeps a declared-free
+    /// axis dynamic, so <see cref="IsShapeResolved"/> can tell that state apart from "never
+    /// resolved" — both of which show up in the shape array as a bare <c>-1</c>.
+    /// </summary>
+    private bool _resolvedWithDeclaredFreeAxes;
+
+    /// <summary>
+    /// True when every dynamic entry in <paramref name="resolvedInput"/> is an axis this layer
+    /// already declared dynamic and its relation preserves.
+    /// </summary>
+    private bool DeclaredFreeAxesOnly(int[] resolvedInput)
+    {
+        // Pre-resolution, InputShape still holds the constructor's declaration — the record of
+        // what this layer said it accepts before anything tried to narrow it.
+        var declared = InputShape;
+        if (declared is null || declared.Length != resolvedInput.Length) return false;
+        if (OutputShapeRelation == ShapeRelationKind.Unknown) return false;
+
+        int parameterized = ParameterizedAxisIndex(resolvedInput.Length);
+        for (int i = 0; i < resolvedInput.Length; i++)
+        {
+            if (resolvedInput[i] >= 0) continue;
+            if (declared[i] >= 0) return false;   // was concrete; resolution may not un-fix it
+            if (i == parameterized) return false; // the layer's own width is never "free"
+        }
+
+        return true;
+    }
+
+    private bool _reportedOutputShapeVerified;
 
     /// <summary>
     /// Resolves a deferred-shape layer's input and output shapes. Call from inside an
@@ -620,9 +943,43 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (resolvedInputShape is null) throw new ArgumentNullException(nameof(resolvedInputShape));
         if (resolvedOutputShape is null) throw new ArgumentNullException(nameof(resolvedOutputShape));
         if (ShapeContainsSentinel(resolvedInputShape))
-            throw new ArgumentException("Resolved input shape still contains a -1 placeholder.", nameof(resolvedInputShape));
-        if (ShapeContainsSentinel(resolvedOutputShape))
-            throw new ArgumentException("Resolved output shape still contains a -1 placeholder.", nameof(resolvedOutputShape));
+        {
+            // ...unless every dynamic entry is an axis this layer ALWAYS declared free and its
+            // relation carries through untouched. A transformer block is the case that forces
+            // this: it is defined to preserve the sequence axis, so S is not its to fix, and
+            // demanding a concrete value left it only the option of pinning whichever length the
+            // first input happened to carry. That pin then contradicted every later batch of a
+            // different length — the block declared [8, 16] while its own forward, correctly,
+            // produced [S, 16] for whatever S arrived.
+            //
+            // The rule is deliberately narrow: an axis may stay dynamic only if it was dynamic at
+            // construction AND is not the axis the layer's parameters are sized by. You cannot
+            // invent dynamism during resolution, only decline to pin what you always said was
+            // free — so "this layer never got resolved" stays distinguishable from "this axis is
+            // genuinely free", which is the distinction a bare -1 could not previously express.
+            if (!DeclaredFreeAxesOnly(resolvedInputShape))
+            {
+                throw new ArgumentException(
+                    $"Resolved input shape [{string.Join(", ", resolvedInputShape)}] still contains a -1 " +
+                    $"placeholder on an axis {GetType().Name} has not declared free. An axis may stay " +
+                    $"dynamic through resolution only when it was declared dynamic at construction and " +
+                    $"the layer's {nameof(OutputShapeRelation)} passes it through unchanged.",
+                    nameof(resolvedInputShape));
+            }
+
+            _resolvedWithDeclaredFreeAxes = true;
+        }
+        // The OUTPUT may legitimately keep a dynamic axis. A layer whose output length is decided
+        // by something other than its own input -- a decoder emitting one position per TARGET
+        // token, cross-attention emitting one per query -- has no honest concrete value to give,
+        // and forcing one is what produced declarations the forward then contradicted.
+        //
+        // The INPUT still must be concrete: it is the shape actually being handed to this layer,
+        // so a dynamic entry there means the caller does not know what it is passing.
+        //
+        // Keras allows exactly this asymmetry, returning None per axis from compute_output_shape
+        // while build(input_shape) receives a real shape. See LayerShape for the richer form,
+        // where a dynamic axis can also be NAMED so two of them can be asserted equal.
 
         InputShape = resolvedInputShape;
         InputShapes = new[] { resolvedInputShape };
@@ -780,9 +1137,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
-        if (!IsShapeResolved)
+        if (!_firstForwardRan && !IsShapeResolved)
         {
             OnFirstForward(input);
+            _firstForwardRan = true;
             RegisterStreamingWeightsWithPool();
         }
         EnsureInitialized();
@@ -963,6 +1321,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         }
         // Intentionally NOT calling EnsureInitialized — weights stay deferred until
         // the first real forward pass so RNG state is preserved.
+    }
+
+    /// <summary>
+    /// Resolves shapes and constructs a composite layer's child-layer graph
+    /// without allocating trainable tensors. Used by copy-on-write cloning so
+    /// a lazy destination exposes the same child structure as its materialized
+    /// source before shared tensors are installed.
+    /// </summary>
+    internal void ResolveStructureShapesOnly(int[] inputShape)
+    {
+        ResolveShapesOnly(inputShape);
+        IsResolvingShapesOnly = true;
+        try
+        {
+            EnsureInitialized();
+        }
+        finally
+        {
+            IsResolvingShapesOnly = false;
+        }
     }
 
     /// <summary>
@@ -1457,6 +1835,52 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </remarks>
     public int[] GetOutputShape() => OutputShape;
 
+    /// <summary>
+    /// Drops the concrete spatial dimensions from this layer's DECLARED output shape, leaving the
+    /// axes it genuinely determines. Called by the shape propagation after it resolves a lazy layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="NeuralNetworkBase{T}.ResolveLazyLayerShapes"/> derives a shape for each lazy layer
+    /// by walking <c>Layers</c> in order from the architecture's input. That is only valid when the
+    /// model's real forward IS that sequential chain. When it is not — a custom forward, a
+    /// downsampling path, branches — the walk pins spatial dimensions onto layers that never receive
+    /// them, and the layer then reports a size it does not produce.
+    /// </para>
+    /// <para>
+    /// The channel axis survives because it is usually the layer's own choice (a convolution's
+    /// OutputDepth) rather than an echo of the input, so it carries real information and a wrong one
+    /// is still worth catching. The spatial axes are the ones the walk cannot verify, and for a
+    /// shape-preserving layer they add nothing at all: the relation already says "same as input", so
+    /// writing numbers there is pure risk. Declaring them dynamic (-1) is honest — the layer accepts
+    /// any spatial extent — and <see cref="VerifyReportedOutputShape(Tensor{T})"/> skips dynamic axes,
+    /// so no real check is lost.
+    /// </para>
+    /// <para>
+    /// Only applies to layers that opted into a <see cref="ShapeRelationKind"/>; everything else is
+    /// left exactly as before.
+    /// </para>
+    /// </remarks>
+    internal void RelaxPropagatedSpatialAxes()
+    {
+        if (OutputShapeRelation == ShapeRelationKind.Unknown) return;
+        if (OutputShape is null || OutputShape.Length < 2) return;
+
+        // Keep the NUMBERS — the declared shape is load-bearing: tensor allocation reads it and
+        // rejects a -1 outright ("Shape dimension 2 must be non-negative"). Record instead that the
+        // spatial axes were inferred by the walk rather than determined by this layer, so the shape
+        // contract stops treating them as a claim the layer made.
+        _spatialAxesWerePropagated = true;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Built from the declared <see cref="OutputShape"/>, whose -1 entries denote axes this layer
+    /// cannot fix. Layers that can name those axes -- so two of them can be asserted equal at
+    /// runtime -- override this to supply the names.
+    /// </remarks>
+    public virtual LayerShape GetOutputLayerShape() => new LayerShape(OutputShape);
+
 
     /// <summary>
     /// Gets the weight matrix for layers that have trainable weights.
@@ -1591,7 +2015,60 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// This is where the actual data processing happens during both training and prediction.
     /// </para>
     /// </remarks>
-    public abstract Tensor<T> Forward(Tensor<T> input);
+    /// <remarks>
+    /// <para>
+    /// NOT ABSTRACT ANY MORE, and not the method a layer implements. This is the single point every
+    /// forward call passes through, which is what makes graph TRACING possible: with an observer
+    /// attached it records which layer produced the tensor that becomes which layer's input, and the
+    /// model's real dataflow falls out of one forward pass. The topology was always expressed - in each
+    /// model's forward method, in imperative C# - it just was not readable by anything. Now it is.
+    /// </para>
+    /// <para>
+    /// The split mirrors PyTorch's <c>__call__</c> / <c>forward</c> separation and exists for the same
+    /// reason: a framework needs one place to stand between the caller and the computation. Layers
+    /// override <see cref="ForwardTraced"/>; nothing should override this.
+    /// </para>
+    /// <para>
+    /// MIGRATION: it stays virtual only until every layer moves to ForwardTraced. A layer that still
+    /// overrides Forward keeps working and is simply invisible to tracing - a silent coverage hole, so
+    /// ADNSHAPE004 reports each one at build time and the count only goes down. Sealing it is the last
+    /// step, once that diagnostic reads zero.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> Forward(Tensor<T> input)
+    {
+        var observer = LayerForwardObserver<T>.Current;
+        if (observer is null) return ForwardTraced(input);
+
+        var output = ForwardTraced(input);
+        observer.Record(this, input, output);
+        return output;
+    }
+
+    /// <summary>
+    /// The layer's actual computation. Override THIS, not <see cref="Forward"/>.
+    /// </summary>
+    /// <param name="input">Input tensor.</param>
+    /// <returns>The transformed tensor.</returns>
+    /// <remarks>
+    /// Virtual rather than abstract purely so the migration off <see cref="Forward"/> can proceed one
+    /// layer at a time without a broken build in between. The default throws, because a layer that
+    /// implements neither has no computation at all - that is a bug, not a default worth inventing.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Always, unless a derived layer overrides this. NotSupportedException rather than
+    /// NotImplementedException, and the distinction is not cosmetic: NotImplementedException reads as
+    /// "this library has not finished building this yet", which would be a promise that some future
+    /// version supplies a base-class forward pass. There is nothing to supply -- a layer with no
+    /// computation of its own cannot be given one generically, so the condition is permanent for that
+    /// type and belongs to the DERIVED layer, not to this base. NotSupportedException says exactly
+    /// that, and it is what the caller can act on.
+    /// </exception>
+    protected virtual Tensor<T> ForwardTraced(Tensor<T> input)
+        => throw new NotSupportedException(
+            $"{GetType().Name} implements neither Forward nor ForwardTraced, so it has no forward "
+            + "computation. Override ForwardTraced in that layer with its computation; LayerBase "
+            + "cannot supply one.");
 
     #region Mixed Precision Support
 
@@ -3165,7 +3642,65 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// - Advanced optimization techniques that need access to all parameters
     /// </para>
     /// </remarks>
-    public abstract Vector<T> GetParameters();
+    /// <remarks>
+    /// <para>
+    /// Concrete, and folds over EXACTLY the three things <see cref="ParameterCount"/> sums:
+    /// <c>Parameters</c>, this layer's registered tensors from <c>GetTrainableParameters()</c>, and
+    /// each entry of <c>GetSubLayers()</c>. Because both members walk one source in one order, they
+    /// cannot describe different tensors — the disagreement is unrepresentable rather than merely
+    /// untested.
+    /// </para>
+    /// <para>
+    /// This was <c>abstract</c>, which is the root of the whole parameter-surface problem: it
+    /// FORCED all 710 layers to hand-write their own walk, while <c>ParameterCount</c> stayed
+    /// virtual with a registry-based default. Two independently written answers to one question,
+    /// per layer, 710 times — and every model-level mismatch in CI is some layer answering them
+    /// differently. PyTorch never had this exposure: <c>nn.Module.parameters()</c> is concrete and
+    /// no module implements it, so a count derived from it cannot drift.
+    /// </para>
+    /// <para>
+    /// Made virtual rather than sealed so the change is non-breaking: every existing override still
+    /// wins, and they can be deleted one at a time with the layer sweep as the gate. A layer that
+    /// genuinely aggregates differently — a GAN reading frozen modules, or weight tying that shares
+    /// one tensor across two slots — can still override, exactly as the note on
+    /// <see cref="ParameterCount"/> anticipates. The point is that doing nothing is now CORRECT,
+    /// where before doing nothing was impossible.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        var values = new List<T>();
+
+        for (int i = 0; i < Parameters.Length; i++)
+            values.Add(Parameters[i]);
+
+        var trainable = GetTrainableParameters();
+        if (trainable is not null)
+        {
+            for (int i = 0; i < trainable.Count; i++)
+            {
+                var t = trainable[i];
+                if (t is null) continue;
+                for (int j = 0; j < t.Length; j++)
+                    values.Add(t.GetFlat(j));
+            }
+        }
+
+        var subs = GetSubLayers();
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var s = subs[i];
+                if (s is null) continue;
+                var sp = s.GetParameters();
+                for (int j = 0; j < sp.Length; j++)
+                    values.Add(sp[j]);
+            }
+        }
+
+        return new Vector<T>(values.ToArray());
+    }
 
     /// <summary>
     /// Sets the trainable parameters of the layer.
@@ -3192,6 +3727,23 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// - Setting specific parameter values for testing
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// The exact inverse of <see cref="GetParameters"/>, consuming the flat vector in the same
+    /// order that produces it: <c>Parameters</c>, then this layer's registered tensors, then each
+    /// sub-layer recursively. Get, set and <see cref="ParameterCount"/> therefore fold one
+    /// enumeration in one order, so a vector produced by the getter always restores exactly.
+    /// </para>
+    /// <para>
+    /// This previously assigned <c>Parameters = parameters</c> and nothing else, which was the
+    /// silent half of the same defect as the abstract getter. It length-checked against
+    /// <c>ParameterCount</c> — a count that includes registered tensors and every sub-layer — and
+    /// then dropped all of them on the floor, writing only the base slot. For a composite that is
+    /// a checkpoint restore which reports success and restores nothing, leaving the model on its
+    /// initial weights. It went unnoticed because every composite overrode this method to do the
+    /// distribution by hand; the default was only ever exercised by layers that had no children.
+    /// </para>
+    /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)
@@ -3199,7 +3751,61 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
         }
 
-        Parameters = parameters;
+        var trainableForShape = GetTrainableParameters();
+        var subsForShape = GetSubLayers();
+        bool hasRegistry = (trainableForShape is not null && trainableForShape.Count > 0)
+                        || (subsForShape is not null && subsForShape.Count > 0);
+
+        // A layer with nothing registered keeps the ORIGINAL wholesale semantics: the entire vector
+        // goes into Parameters. Deferred layers depend on that. Conv1DLayer holds the incoming
+        // vector in Parameters until its input width arrives and then hands the whole thing to
+        // ApplyResolvedParameters; slicing it by the CURRENT Parameters.Length instead truncates it,
+        // because pre-resolution that length is a placeholder. That is a real failure, not a
+        // hypothetical: it cut a 144-value restore down to the 32-element placeholder and
+        // MusicSourceSeparator threw "Expected 144 parameters, but got 32" on its first forward.
+        if (!hasRegistry)
+        {
+            Parameters = parameters;
+            return;
+        }
+
+        int index = 0;
+
+        if (Parameters.Length > 0)
+        {
+            var own = new Vector<T>(Parameters.Length);
+            for (int i = 0; i < Parameters.Length; i++)
+                own[i] = parameters[index++];
+            Parameters = own;
+        }
+
+        var trainable = trainableForShape;
+        if (trainable is not null)
+        {
+            for (int i = 0; i < trainable.Count; i++)
+            {
+                var t = trainable[i];
+                if (t is null) continue;
+                for (int j = 0; j < t.Length; j++)
+                    t.SetFlat(j, parameters[index++]);
+            }
+        }
+
+        var subs = subsForShape;
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var s = subs[i];
+                if (s is null) continue;
+                long take = s.ParameterCount;
+                if (take <= 0) continue;
+                var slice = new Vector<T>((int)take);
+                for (int j = 0; j < take; j++)
+                    slice[j] = parameters[index++];
+                s.SetParameters(slice);
+            }
+        }
     }
 
     /// <summary>
@@ -3359,7 +3965,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             metadata["VectorActivationType"] = VectorActivation.GetType().AssemblyQualifiedName ?? VectorActivation.GetType().FullName ?? string.Empty;
         }
 
+        WriteConstructionState(metadata);
+
         return metadata;
+    }
+
+    /// <summary>
+    /// Writes the constructor arguments marked <c>[LayerState]</c> so this layer can be rebuilt
+    /// exactly. Generated; do not implement by hand.
+    /// </summary>
+    /// <param name="metadata">The metadata being assembled.</param>
+    /// <remarks>
+    /// This is a separate hook rather than part of <see cref="GetMetadata"/> so that the roughly
+    /// four dozen layers which already override <c>GetMetadata</c> keep working untouched: their
+    /// <c>base.GetMetadata()</c> call routes through here, and their own keys are applied
+    /// afterwards. A layer that overrides <c>GetMetadata</c> without calling base opts itself out,
+    /// which the generator reports as ADN0054.
+    /// </remarks>
+    internal virtual void WriteConstructionState(Dictionary<string, string> metadata)
+    {
     }
 
     /// <summary>
@@ -3529,7 +4153,27 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     {
         if (subLayer is null)
             throw new ArgumentNullException(nameof(subLayer));
+        // Registration is identity-based and idempotent. Composite layers may
+        // register children explicitly in their constructor while the source
+        // generator's EnsureSubLayersRegistered() discovers the same fields
+        // during lazy shape resolution. Appending both copies makes recursive
+        // parameter/training walks visit every child twice after deserialization.
+        for (int i = 0; i < _registeredSubLayers.Count; i++)
+        {
+            if (ReferenceEquals(_registeredSubLayers[i], subLayer))
+                return;
+        }
         _registeredSubLayers.Add(subLayer);
+
+        // Lazy composite layers can create children during their first
+        // Forward, after the parent has already been switched to evaluation
+        // mode. A newly constructed child otherwise keeps its default training
+        // mode until the next model-level SetTrainingMode call, making the
+        // first prediction use a different execution path from later calls.
+        // Inherit the parent's current mode at registration so the entire
+        // composite has one consistent state immediately.
+        subLayer.SetTrainingMode(IsTrainingMode);
+
         // Sub-layer's ParameterCount contributes to ours; invalidate the
         // cache so the next query picks up the addition.
         _cachedParameterCount = -1;
@@ -3585,6 +4229,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Buffer name must not be empty.", nameof(name));
 
+        // Buffer registration is name-based, matching PyTorch's register_buffer
+        // contract. Lazy initialization and deserialization can replace a buffer
+        // tensor after a placeholder or restored value is installed; keep the
+        // engine's persistent-tensor registry and the layer's named view aligned.
+        for (int i = 0; i < _registeredBuffers.Count; i++)
+        {
+            if (!string.Equals(_registeredBuffers[i].Name, name, StringComparison.Ordinal))
+                continue;
+
+            var previous = _registeredBuffers[i].Tensor;
+            if (ReferenceEquals(previous, tensor))
+                return;
+
+            Engine.UnregisterPersistentTensor(previous);
+            Engine.RegisterPersistentTensor(tensor, role);
+            _registeredBuffers[i] = (name, tensor);
+            return;
+        }
+
         Engine.RegisterPersistentTensor(tensor, role);
         _registeredBuffers.Add((name, tensor));
     }
@@ -3610,6 +4273,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
+
+    /// <summary>
+    /// Gets the number of tensors held by this layer's base registration list.
+    /// </summary>
+    /// <remarks>
+    /// Source-generated parameter setters use this value to distinguish an already
+    /// synchronized registry from lazy parameter fields that have not yet been
+    /// registered. It intentionally does not call <see cref="GetTrainableParameters"/>,
+    /// because generated overrides can expose field tensors before the base registry
+    /// has been populated.
+    /// </remarks>
+    protected int RegisteredTrainableParameterCount => _registeredTensors.Count;
 
     /// <summary>
     /// Moves this layer's parameters and buffers (and, recursively, every registered sub-layer) to the given
