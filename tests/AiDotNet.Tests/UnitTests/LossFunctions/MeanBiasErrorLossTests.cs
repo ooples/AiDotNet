@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -128,7 +129,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative = -1/n = -1/3 = -0.3333... for all elements
@@ -145,7 +146,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative is always -1/n regardless of prediction accuracy
@@ -162,7 +163,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 3.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative = -1/1 = -1.0
@@ -179,7 +180,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 1.0, 2.0 });
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
+            Assert.Throws<ArgumentException>(() => loss.ComputeGradient(predicted, actual));
         }
 
         [Fact(Timeout = 60000)]
@@ -207,7 +208,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             // Derivative = -1/3 for all elements
@@ -286,19 +287,19 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             // Length 2: derivative should be -0.5
             var predicted2 = new Vector<double>(new double[] { 1.0, 2.0 });
             var actual2 = new Vector<double>(new double[] { 1.0, 2.0 });
-            var result2 = loss.CalculateDerivative(predicted2, actual2);
+            var result2 = loss.ComputeGradient(predicted2, actual2);
             Assert.All(result2, item => Assert.Equal(-0.5, item, 10));
 
             // Length 5: derivative should be -0.2
             var predicted5 = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
             var actual5 = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
-            var result5 = loss.CalculateDerivative(predicted5, actual5);
+            var result5 = loss.ComputeGradient(predicted5, actual5);
             Assert.All(result5, item => Assert.Equal(-0.2, item, 10));
 
             // Length 10: derivative should be -0.1
             var predicted10 = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 });
             var actual10 = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 });
-            var result10 = loss.CalculateDerivative(predicted10, actual10);
+            var result10 = loss.ComputeGradient(predicted10, actual10);
             Assert.All(result10, item => Assert.Equal(-0.1, item, 10));
         }
     }

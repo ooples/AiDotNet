@@ -51,23 +51,6 @@ public sealed class DistillationLossAdapter<T> : LossFunctionBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// <paramref name="predicted"/> is the student output, <paramref name="actual"/> the teacher
-    /// output. Returns the distillation gradient with respect to the student output.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        var gradient = _strategy.ComputeGradient(ToRow(predicted), ToRow(actual), LabelRow());
-        var result = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            result[i] = gradient[0, i];
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
     /// Builds the surrogate <c>Σ (g · ŷ)</c> where <c>g</c> is the strategy's gradient at the current
     /// prediction values, held as a constant. Differentiating this on the tape yields <c>g</c> as the
     /// prediction cotangent, which is exactly what distillation needs to propagate.

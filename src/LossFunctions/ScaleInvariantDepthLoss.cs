@@ -68,37 +68,6 @@ public class ScaleInvariantDepthLoss<T> : LossFunctionBase<T>
         return NumOps.FromDouble(loss);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        int n = predicted.Length;
-        var derivative = new Vector<T>(n);
-
-        double sumDiff = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double predLog = Math.Log(Convert.ToDouble(predicted[i]) + 1e-8);
-            double actLog = Math.Log(Convert.ToDouble(actual[i]) + 1e-8);
-            sumDiff += predLog - actLog;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            double pred = Convert.ToDouble(predicted[i]);
-            double predLog = Math.Log(pred + 1e-8);
-            double actLog = Math.Log(Convert.ToDouble(actual[i]) + 1e-8);
-            double diff = predLog - actLog;
-
-            // Derivative: (2/n) * d / pred - (2*lambda/n^2) * sum(d) / pred
-            double grad = (2.0 / n) * diff / (pred + 1e-8) - (2.0 * _lambda / (n * n)) * sumDiff / (pred + 1e-8);
-            derivative[i] = NumOps.FromDouble(grad);
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

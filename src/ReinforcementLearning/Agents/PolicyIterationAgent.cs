@@ -399,23 +399,6 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // DP methods don't use gradients
-    }
-
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

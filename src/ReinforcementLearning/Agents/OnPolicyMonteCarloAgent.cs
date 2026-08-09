@@ -398,24 +398,6 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        // Loss computation not used in Monte Carlo methods
-
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Monte Carlo methods don't use gradients in the traditional sense
-    }
-
     public override void SaveModel(string filepath)
     {
         throw new NotSupportedException(

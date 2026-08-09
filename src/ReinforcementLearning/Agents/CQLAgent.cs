@@ -58,7 +58,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.CQL;
     "https://arxiv.org/abs/2006.04779",
     Year = 2020,
     Authors = "Kumar, A., Zhou, A., Tucker, G., & Levine, S.")]
-public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -574,7 +574,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // CQL uses custom gradient computation - return zero gradients as placeholder

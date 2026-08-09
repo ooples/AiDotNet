@@ -285,9 +285,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                "LossFunction must derive from LossFunctionBase<T> for TFC tape-based training.");
+        var loss = LossFunction;
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 

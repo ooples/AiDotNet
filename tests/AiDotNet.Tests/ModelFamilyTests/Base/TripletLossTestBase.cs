@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
@@ -125,7 +126,21 @@ public abstract class TripletLossTestBase
         var positive = CreateMatrix(2, 3, 0.15);
         var negative = CreateMatrix(2, 3, 0.9);
 
-        var (anchorGrad, positiveGrad, negativeGrad) = loss.CalculateDerivative(anchor, positive, negative);
+        // All three gradients come from one backward pass over the triplet forward, which is what
+        // the objective needs: the anchor is pulled toward the positive and pushed from the
+        // negative in the same step.
+        using var tape = new GradientTape<double>();
+
+        var a = Tensor<double>.FromMatrix(anchor);
+        var pos = Tensor<double>.FromMatrix(positive);
+        var neg = Tensor<double>.FromMatrix(negative);
+
+        var scalar = loss.ComputeTapeLoss(a, pos, neg);
+        var gradients = tape.ComputeGradients(scalar, new[] { a, pos, neg });
+
+        var anchorGrad = gradients[a].ToMatrix();
+        var positiveGrad = gradients[pos].ToMatrix();
+        var negativeGrad = gradients[neg].ToMatrix();
 
         for (int i = 0; i < anchorGrad.Rows; i++)
         {

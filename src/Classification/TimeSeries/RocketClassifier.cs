@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Enums;
@@ -84,7 +84,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
 public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>{
+    IParameterizable<T, Matrix<T>, Vector<T>>{
 
     /// <inheritdoc />
     /// <remarks>The ridge weights over the random kernels, as in MiniRocketClassifier.</remarks>
@@ -512,25 +512,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
         return new RocketClassifier<T>(_rocketOptions);
     }
 
-    /// <inheritdoc />
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Ridge regression doesn't use gradients in the traditional sense
-        // Return zeros for now
-        return new Vector<T>(_internalWeights?.Length ?? 0);
-    }
 
-    /// <inheritdoc />
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        if (_internalWeights is null) return;
-
-        for (int i = 0; i < _internalWeights.Length && i < gradients.Length; i++)
-        {
-            _internalWeights[i] = NumOps.Subtract(_internalWeights[i],
-                NumOps.Multiply(learningRate, gradients[i]));
-        }
-    }
 
     /// <inheritdoc />
     public override byte[] Serialize()

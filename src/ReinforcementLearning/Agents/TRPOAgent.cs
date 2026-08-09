@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
     "https://arxiv.org/abs/1502.05477",
     Year = 2015,
     Authors = "Schulman, J., Levine, S., Moritz, P., Jordan, M. I., & Abbeel, P.")]
-public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -661,17 +661,29 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
+    /// <summary>
+    /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
+    /// </summary>
+    /// <param name="input">The input state.</param>
+    /// <param name="target">The target output.</param>
+    /// <param name="lossFunction">The loss to differentiate, or null to use the agent's own.</param>
+    /// <returns>A gradient vector the same length as <c>GetParameters()</c>.</returns>
+    /// <remarks>
+    /// Returns PARAMETER-space gradients, as <c>IGradientComputable</c> documents and as
+    /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
+    /// derivative is written by hand here.
+    /// </remarks>
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
+        return ComputeGradientsForNetwork(
+            _policyNetwork,
+            new[] { _policyNetwork, _valueNetwork },
+            input,
+            target,
+            lossFunction);
     }
 
     public override void SaveModel(string filepath)

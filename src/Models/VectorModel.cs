@@ -295,7 +295,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
         var predictions = PredictInternal(input);
 
         // Compute loss gradient w.r.t. predictions: ∂L/∂y_pred
-        var predictionGradient = loss.CalculateDerivative(predictions, target);
+        var predictionGradient = loss.ComputeGradient(predictions, target);
 
         // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
         // Pre-extract columns from input for Engine.DotProduct

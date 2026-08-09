@@ -89,36 +89,6 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         return total;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The derivative of a weighted sum is the weighted sum of the derivatives, so each term's
-    /// gradient is scaled by its own coefficient and accumulated.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        Vector<T>? accumulated = null;
-        for (int i = 0; i < _losses.Length; i++)
-        {
-            var term = _losses[i].CalculateDerivative(predicted, actual);
-            if (accumulated is null)
-            {
-                accumulated = new Vector<T>(term.Length);
-                for (int j = 0; j < term.Length; j++)
-                    accumulated[j] = NumOps.Multiply(_weights[i], term[j]);
-                continue;
-            }
-
-            if (term.Length != accumulated.Length)
-                throw new InvalidOperationException(
-                    $"Composite loss term {i} produced a gradient of length {term.Length}, " +
-                    $"but term 0 produced {accumulated.Length}. All terms must score the same prediction.");
-
-            for (int j = 0; j < term.Length; j++)
-                accumulated[j] = NumOps.Add(accumulated[j], NumOps.Multiply(_weights[i], term[j]));
-        }
-
-        return accumulated!;
-    }
 
     /// <inheritdoc/>
     /// <remarks>

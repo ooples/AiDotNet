@@ -72,26 +72,6 @@ public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
         return sum;
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Kullback-Leibler Divergence.
-    /// </summary>
-    /// <param name="predicted">The predicted probability distribution.</param>
-    /// <param name="actual">The actual (target) probability distribution.</param>
-    /// <returns>A vector containing the gradient of the KL divergence with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // The derivative of KL(P||Q) with respect to Q is -P/Q
-            derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

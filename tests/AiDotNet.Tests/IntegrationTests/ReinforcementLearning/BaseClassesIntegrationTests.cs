@@ -271,7 +271,7 @@ public class BaseClassesIntegrationTests
             return new TestDeepAgent(Options);
         }
 
-        public override Vector<double> ComputeGradients(
+        public Vector<double> ComputeGradients(
             Vector<double> input,
             Vector<double> target,
             ILossFunction<double>? lossFunction = null)
@@ -279,10 +279,7 @@ public class BaseClassesIntegrationTests
             return new Vector<double>(1);
         }
 
-        public override void ApplyGradients(Vector<double> gradients, double learningRate)
-        {
-        }
-
+        
         public override void SaveModel(string filepath)
         {
         }
@@ -378,7 +375,7 @@ public class BaseClassesIntegrationTests
             return clone;
         }
 
-        public override Vector<double> ComputeGradients(
+        public Vector<double> ComputeGradients(
             Vector<double> input,
             Vector<double> target,
             ILossFunction<double>? lossFunction = null)
@@ -386,10 +383,7 @@ public class BaseClassesIntegrationTests
             return new Vector<double>((int)ParameterCount);
         }
 
-        public override void ApplyGradients(Vector<double> gradients, double learningRate)
-        {
-        }
-
+        
         public override void SaveModel(string filepath)
         {
             var data = Serialize();

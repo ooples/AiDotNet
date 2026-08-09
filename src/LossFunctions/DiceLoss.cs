@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -76,50 +76,6 @@ public class DiceLoss<T> : LossFunctionBase<T>
         return NumOps.Subtract(NumOps.One, diceCoefficient);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Dice loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of Dice loss for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        T intersection = Engine.DotProduct(predicted, actual);
-
-        T sumPredicted = NumOps.Zero;
-        T sumActual = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
-            sumActual = NumOps.Add(sumActual, actual[i]);
-        }
-
-        T denominator = NumOps.Add(sumPredicted, sumActual);
-
-        var result = new T[predicted.Length];
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Derivative of Dice loss wrt p_i:
-            // loss = 1 - 2*intersection/denom
-            // d(loss)/dp_i = -2 * (a_i * denom - intersection) / denom^2
-            // (quotient rule: d(intersection)/dp_i = a_i, d(denom)/dp_i = 1)
-            T numerator = NumOps.Subtract(
-                NumOps.Multiply(actual[i], denominator),
-                intersection
-            );
-            result[i] = NumOps.Negate(
-                NumericalStabilityHelper.SafeDiv(
-                    NumOps.Multiply(NumOps.FromDouble(2.0), numerator),
-                    NumOps.Multiply(denominator, denominator),
-                    NumericalStabilityHelper.SmallEpsilon
-                )
-            );
-        }
-
-        return new Vector<T>(result);
-    }
 
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)

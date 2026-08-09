@@ -66,7 +66,7 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
 public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -725,21 +725,6 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return CreateNewInstance();
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // QDA is a closed-form solution, not gradient-based
-        // Return zero gradients
-        return new Vector<T>(NumClasses * NumFeatures);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // QDA is a closed-form solution, not gradient-based
-        // This is a no-op
     }
 
     /// <inheritdoc/>

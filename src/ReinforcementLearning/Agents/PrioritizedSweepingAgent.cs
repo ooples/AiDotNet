@@ -380,11 +380,6 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
 
         return cloned;
     }
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        throw new NotSupportedException("Gradient-based updates are not supported for tabular reinforcement learning agents. Q-values are updated directly through temporal difference learning in StoreExperience().");
-    }
 
     public override void SaveModel(string filepath)
     {

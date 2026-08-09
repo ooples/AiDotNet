@@ -36,60 +36,48 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     public abstract T CalculateLoss(Vector<T> predicted, Vector<T> actual);
 
     /// <summary>
-    /// Calculates the derivative (gradient) of the loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of the loss with respect to each prediction.</returns>
-    public abstract Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual);
-
-    /// <summary>
     /// Computes the loss as a scalar tensor using tape-differentiable engine operations.
     /// Gradients flow through this computation automatically via the gradient tape.
     /// </summary>
     /// <param name="predicted">The predicted tensor from the forward pass.</param>
     /// <param name="target">The target tensor.</param>
-    /// <returns>A scalar tensor containing the loss value.</returns>
-    /// <returns>
-    /// A <b>rank-0</b> scalar tensor (shape <c>[]</c>), not a rank-1 <c>[1]</c>.
-    /// </returns>
+    /// <returns>A rank-0 scalar tensor containing the loss value.</returns>
     /// <remarks>
-    /// <para>
-    /// THE SCALAR SHAPE IS PART OF THE CONTRACT. Gradient seeding takes this tensor as the tape
-    /// root; a rank-1 <c>[1]</c> leaves the tape without a scalar to seed the backward from, so the
-    /// step silently produces no gradients. Mixing the two also makes composition throw
-    /// "Tensor shapes must match. Got [1] and []" when a composite adds two terms that disagree.
-    /// </para>
-    /// <para>
-    /// In practice this means finishing with a full reduction that does NOT keep dimensions --
-    /// <c>Engine.ReduceMean(x, allAxes, keepDims: false)</c> -- or with an operation that preserves
-    /// the rank-0 result of one. Do not reshape to <c>[1]</c> to make two terms addable; reduce
-    /// both to rank 0 instead.
-    /// </para>
+    /// Implementations define their math here and nowhere else. There is no hand-written
+    /// derivative to keep in step with it, because the tape differentiates this method.
     /// </remarks>
     public abstract Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target);
 
     /// <summary>
     /// Calculates both loss and gradient on GPU in a single pass.
-    /// Default implementation falls back to separate calls.
+    /// Default implementation differentiates <see cref="ComputeTapeLoss"/> on the CPU and uploads
+    /// the result; override to compute both in a single GPU kernel invocation.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// The loss value and the gradient are read from a <b>single</b> tape recording rather than from
+    /// two independent computations. Previously this method called the forward and a separately
+    /// hand-written derivative, so the pair could disagree with no way to detect it; taking both from
+    /// one differentiated forward makes that class of mismatch unrepresentable.
+    /// </para>
+    /// <para>
+    /// The tape is scoped to this call because a GPU caller supplies already-materialized tensors and
+    /// has no surrounding tape to record onto. Callers that do own a training tape should record
+    /// <see cref="ComputeTapeLoss"/> on it directly instead of coming through here.
+    /// </para>
+    /// </remarks>
     public virtual (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
-        // Default: fall back to CPU
-        var predictedCpu = predicted;
-        var actualCpu = actual;
-
-        var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
-        var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
-
-        var gradientTensor = new Tensor<T>(predictedCpu._shape);
-        Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
+        if (predicted is null) throw new ArgumentNullException(nameof(predicted));
+        if (actual is null) throw new ArgumentNullException(nameof(actual));
 
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
+
+        var (loss, gradientTensor) = LossFunctionExtensions.ComputeLossAndGradient<T>(this, predicted, actual);
         var gradientGpu = GpuTensorHelper.UploadToGpu<T>(backend, gradientTensor, GpuTensorRole.Gradient);
 
         return (loss, gradientGpu);

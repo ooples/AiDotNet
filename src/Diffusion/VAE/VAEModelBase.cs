@@ -740,7 +740,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         {
             var predicted = ForwardForTraining(input);
 
-            var lossGrad = effectiveLossFunction.CalculateDerivative(
+            var lossGrad = effectiveLossFunction.ComputeGradient(
                 predicted.ToVector(), target.ToVector());
             var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 

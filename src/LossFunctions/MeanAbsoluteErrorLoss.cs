@@ -46,34 +46,6 @@ public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
         return StatisticsHelper<T>.CalculateMeanAbsoluteError(predicted, actual);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Mean Absolute Error loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of MAE for each prediction.</returns>
-    /// <remarks>
-    /// The derivative of MAE is sign(predicted-actual)/n where:
-    /// - sign(x) = 1 if x > 0
-    /// - sign(x) = -1 if x &lt; 0
-    /// - sign(x) = 0 if x = 0 (subgradient at the kink point)
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // The derivative of MAE is sign(predicted-actual)/n
-        return predicted.Subtract(actual).Transform(x =>
-        {
-            if (NumOps.GreaterThan(x, NumOps.Zero))
-                return NumOps.One;
-            else if (NumOps.LessThan(x, NumOps.Zero))
-                return NumOps.FromDouble(-1);
-            else
-                return NumOps.Zero; // Subgradient at 0
-        }).Divide(NumOps.FromDouble(predicted.Length));
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

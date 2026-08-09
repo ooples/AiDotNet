@@ -85,30 +85,6 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Categorical Cross Entropy loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values (probabilities that sum to 1 across categories).</param>
-    /// <param name="actual">The actual (target) values (typically one-hot encoded).</param>
-    /// <returns>A vector containing the derivatives of CCE for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-        actual = SmoothActual(actual);
-
-        // Derivative of -Σ actual_i * log(predicted_i) with respect to predicted_i = -actual_i / predicted_i
-        // Note: When composed with softmax, this simplifies to (predicted - actual),
-        // but the standalone derivative must use the correct formula.
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            derivative[i] = NumOps.Negate(
-                NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
-        }
-
-        return derivative;
-    }
-
-    /// <summary>
     /// Calculates both Categorical Cross Entropy loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

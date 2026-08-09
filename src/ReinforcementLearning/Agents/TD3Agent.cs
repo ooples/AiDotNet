@@ -59,7 +59,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
     "https://arxiv.org/abs/1802.09477",
     Year = 2018,
     Authors = "Fujimoto, S., van Hoof, H., & Meger, D.")]
-public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
+public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -496,7 +496,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         throw new NotSupportedException(

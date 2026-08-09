@@ -200,8 +200,6 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
                     var output = Forward(preprocessed);
                     double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
                         output.ToVector(), preprocessedLabels.ToVector()));
-                    var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
-                    var gt = Tensor<T>.FromVector(grad);
                     // Backward removed — tape-based training handles gradients
                     _optimizer.UpdateParameters(Layers);
 

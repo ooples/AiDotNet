@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Interfaces;
 using AiDotNet.ComputerVision.Detection.Anchors;
 using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
@@ -573,7 +574,7 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         var pred = new Vector<double>(new double[] { 0, 0, 10, 10 });
         var actual = new Vector<double>(new double[] { 5, 5, 15, 15 });
 
-        var gradient = loss.CalculateDerivative(pred, actual);
+        var gradient = loss.ComputeGradient(pred, actual);
 
         for (int i = 0; i < gradient.Length; i++)
         {
@@ -589,7 +590,7 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
         var pred = new Vector<double>(new double[] { 0, 0, 10, 10 });
         var actual = new Vector<double>(new double[] { 5, 5, 15, 15 });
 
-        var gradient = loss.CalculateDerivative(pred, actual);
+        var gradient = loss.ComputeGradient(pred, actual);
 
         for (int i = 0; i < gradient.Length; i++)
         {

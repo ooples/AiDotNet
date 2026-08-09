@@ -1,4 +1,4 @@
-using AiDotNet.Classification;
+﻿using AiDotNet.Classification;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -29,7 +29,7 @@ namespace AiDotNet.Classification.SVM;
 /// </para>
 /// </remarks>
 public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunctionClassifier<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -246,19 +246,7 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
         return newModel;
     }
 
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // SVMs don't use gradient-based optimization in the typical sense
-        // They use quadratic programming
-        return new Vector<T>(NumFeatures);
-    }
 
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // SVMs don't use gradient-based optimization
-    }
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

@@ -75,7 +75,7 @@ namespace AiDotNet.Classification.Online;
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
 public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -452,19 +452,6 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new OnlineNaiveBayesClassifier<T>(_options);
-    }
-
-    /// <inheritdoc />
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Naive Bayes doesn't use gradients
-        return new Vector<T>(GetParameters().Length);
-    }
-
-    /// <inheritdoc />
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Naive Bayes doesn't use gradients
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Training.Factories;
 using Xunit;
@@ -204,7 +205,7 @@ public class TrainingDeepMathIntegrationTests
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         var actual = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
         for (int i = 0; i < derivative.Length; i++)
         {
             Assert.Equal(0.0, derivative[i], 1e-10);
@@ -219,7 +220,7 @@ public class TrainingDeepMathIntegrationTests
         var predicted = new Vector<double>(new double[] { 5.0 });
         var actual = new Vector<double>(new double[] { 3.0 });
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
         Assert.True(derivative[0] > 0, $"Derivative should be positive when predicted > actual, got {derivative[0]}");
     }
 
@@ -231,7 +232,7 @@ public class TrainingDeepMathIntegrationTests
         var predicted = new Vector<double>(new double[] { 1.0 });
         var actual = new Vector<double>(new double[] { 5.0 });
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
         Assert.True(derivative[0] < 0, $"Derivative should be negative when predicted < actual, got {derivative[0]}");
     }
 
@@ -246,7 +247,7 @@ public class TrainingDeepMathIntegrationTests
         var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
         var actual = new Vector<double>(new double[] { 1.5, 2.5, 3.5, 4.5 });
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
         Assert.Equal(predicted.Length, derivative.Length);
     }
 }

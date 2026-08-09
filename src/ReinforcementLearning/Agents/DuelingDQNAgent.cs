@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -220,7 +220,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backward pass through dueling architecture
-            var gradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
+            var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
 
             // Update parameters
             _qNetwork.UpdateWeights(gradients, LearningRate);
@@ -332,40 +332,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         return clone;
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        throw new NotSupportedException(
-            "ComputeGradients is not supported for DuelingDQNAgent; " +
-            "use the agent's internal Train() loop or expose layer gradients. " +
-            "DuelingNetwork stores gradients internally but does not expose them.");
-    }
 
-    /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var flatParams = _qNetwork.GetFlattenedParameters();
-        var currentParams = new Vector<T>(flatParams.Rows);
-        for (int i = 0; i < flatParams.Rows; i++)
-            currentParams[i] = flatParams[i, 0];
-
-        var newParams = new Vector<T>(currentParams.Length);
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var gradValue = (i < gradients.Length) ? gradients[i] : NumOps.Zero;
-            var update = NumOps.Multiply(learningRate, gradValue);
-            newParams[i] = NumOps.Subtract(currentParams[i], update);
-        }
-
-        var matrix = new Matrix<T>(newParams.Length, 1);
-        for (int i = 0; i < newParams.Length; i++)
-            matrix[i, 0] = newParams[i];
-        _qNetwork.SetFlattenedParameters(matrix);
-    }
 
     // Helper methods
     private void CopyNetworkWeights(DuelingNetwork<T> source, DuelingNetwork<T> target)

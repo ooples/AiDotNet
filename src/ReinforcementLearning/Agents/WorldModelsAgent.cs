@@ -725,18 +725,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
     public override void SaveModel(string filepath)
     {
         var data = Serialize();

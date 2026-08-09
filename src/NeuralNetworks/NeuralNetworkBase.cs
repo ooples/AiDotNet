@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -12836,14 +12836,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         else
         {
-            // Fallback for custom ILossFunction: use CalculateDerivative to get
-            // the loss gradient w.r.t. predictions, then backpropagate manually.
-            // This preserves the IGradientComputable contract without silently
-            // producing zero gradients from a disconnected scalar tensor.
-            var predVec = prediction.ToVector();
-            var targetVec = target.ToVector();
-            var derivVec = resolved.CalculateDerivative(predVec, targetVec);
-            lossTensor = new Tensor<T>(prediction._shape, derivVec);
+            // Fallback for a custom ILossFunction: record the loss on the tape and let
+            // reverse-mode AD produce the gradient. This used to call CalculateDerivative and
+            // hand-build a gradient tensor, but #1994 removed that member from the interface --
+            // the tape is now the only source of gradients, which is also what stops a custom
+            // loss from silently disagreeing with the autodiff path it is scored against.
+            lossTensor = resolved.ComputeTapeLoss(prediction, target);
         }
 
         // Reverse-mode AD: compute gradients across the FULL tape, then

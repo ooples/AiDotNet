@@ -55,7 +55,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
+public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -321,12 +321,12 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

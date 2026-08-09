@@ -271,27 +271,6 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the combined loss for backpropagation.
-    /// </summary>
-    /// <param name="predicted">The predicted values.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>The gradient vector.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // L1 loss derivative: sign(predicted - actual) / n
-        Vector<T> l1Gradient = _l1Loss.CalculateDerivative(predicted, actual);
-
-        // Scale by L1 weight
-        l1Gradient = l1Gradient.Multiply(NumOps.FromDouble(_l1Weight));
-
-        // Note: Perceptual and GAN gradients are computed separately in the training loop
-        // as they require the feature extractor network and discriminator
-        return l1Gradient;
-    }
-
-    /// <summary>
     /// Calculates the L2 distance between feature tensors.
     /// </summary>
     private T CalculateFeatureLoss(Tensor<T> predictedFeatures, Tensor<T> actualFeatures)

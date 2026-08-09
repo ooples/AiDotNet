@@ -492,41 +492,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    /// <summary>
-    /// Computes gradients for supervised learning scenarios.
-    /// </summary>
-    /// <remarks>
-    /// FIX ISSUE 9: This method uses simple supervised loss for compatibility with base class API.
-    /// It does NOT match the agent's internal training procedure which uses:
-    /// - World model losses (dynamics, reward, continue prediction)
-    /// - Imagination-based policy gradients
-    /// - Value function TD errors
-    ///
-    /// For actual agent training, use Train() which implements the full Dreamer algorithm.
-    /// This method is provided only for API compatibility and simple supervised fine-tuning scenarios.
-    /// </remarks>
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        throw new NotSupportedException(
-            "Dreamer agent requires per-network gradient distribution for six networks " +
-            "(VAE encoder/decoder, RNN world model, reward/continue/value predictors). " +
-            "The current signature cannot distribute gradients appropriately. " +
-            "Use the internal Train() method for training, which handles multi-network updates correctly.");
-    }
-
     public override void SaveModel(string filepath)
     {
         // FIX ISSUE 8: Throw NotSupportedException since Serialize is not supported

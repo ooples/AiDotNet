@@ -97,85 +97,6 @@ public class TripletLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
-    /// <summary>
-    /// Calculates the gradients of the Triplet Loss function for anchor, positive, and negative samples.
-    /// </summary>
-    /// <param name="anchor">The anchor samples matrix.</param>
-    /// <param name="positive">The positive samples matrix (similar to anchor).</param>
-    /// <param name="negative">The negative samples matrix (dissimilar to anchor).</param>
-    /// <returns>A tuple containing the gradients for anchor, positive, and negative samples.</returns>
-    /// <exception cref="ArgumentException">Thrown when input matrices have inconsistent dimensions.</exception>
-    public (Matrix<T>, Matrix<T>, Matrix<T>) CalculateDerivative(Matrix<T> anchor, Matrix<T> positive, Matrix<T> negative)
-    {
-        // Validate input dimensions
-        if (anchor.Rows != positive.Rows || anchor.Rows != negative.Rows ||
-            anchor.Columns != positive.Columns || anchor.Columns != negative.Columns)
-        {
-            throw new ArgumentException("Anchor, positive, and negative matrices must have the same dimensions.");
-        }
-
-        var batchSize = anchor.Rows;
-        var featureCount = anchor.Columns;
-
-        var anchorGradient = new Matrix<T>(batchSize, featureCount);
-        var positiveGradient = new Matrix<T>(batchSize, featureCount);
-        var negativeGradient = new Matrix<T>(batchSize, featureCount);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            var anchorSample = anchor.GetRow(i);
-            var positiveSample = positive.GetRow(i);
-            var negativeSample = negative.GetRow(i);
-
-            var positiveDistance = VectorHelper.EuclideanDistance(anchorSample, positiveSample);
-            var negativeDistance = VectorHelper.EuclideanDistance(anchorSample, negativeSample);
-
-            var loss = NumOps.Subtract(
-                NumOps.Add(positiveDistance, _margin),
-                negativeDistance
-            );
-
-            if (NumOps.GreaterThan(loss, NumOps.Zero))
-            {
-                // Only compute gradients if loss > 0 (the triplet is active)
-                for (int j = 0; j < featureCount; j++)
-                {
-                    var anchorPositiveDiff = NumOps.Subtract(anchorSample[j], positiveSample[j]);
-                    var anchorNegativeDiff = NumOps.Subtract(anchorSample[j], negativeSample[j]);
-
-                    // Gradient for anchor: 2*(anchor - positive) - 2*(anchor - negative)
-                    anchorGradient[i, j] = NumOps.Multiply(
-                        NumOps.FromDouble(2),
-                        NumOps.Subtract(anchorPositiveDiff, anchorNegativeDiff)
-                    );
-
-                    // Gradient for positive: -2*(anchor - positive)
-                    positiveGradient[i, j] = NumOps.Multiply(
-                        NumOps.FromDouble(-2),
-                        anchorPositiveDiff
-                    );
-
-                    // Gradient for negative: 2*(anchor - negative)
-                    negativeGradient[i, j] = NumOps.Multiply(
-                        NumOps.FromDouble(2),
-                        anchorNegativeDiff
-                    );
-                }
-            }
-            else
-            {
-                // If the triplet loss is zero or negative, the gradients are zero
-                for (int j = 0; j < featureCount; j++)
-                {
-                    anchorGradient[i, j] = NumOps.Zero;
-                    positiveGradient[i, j] = NumOps.Zero;
-                    negativeGradient[i, j] = NumOps.Zero;
-                }
-            }
-        }
-
-        return (anchorGradient, positiveGradient, negativeGradient);
-    }
 
     /// <summary>
     /// This method is not used for Triplet Loss as it requires multiple input vectors.
@@ -191,22 +112,6 @@ public class TripletLoss<T> : LossFunctionBase<T>
             "Use the Calculate(Matrix<T>, Matrix<T>, Matrix<T>) method instead."
         );
     }
-
-    /// <summary>
-    /// This method is not used for Triplet Loss as it requires multiple input vectors.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (target) values vector.</param>
-    /// <returns>Throws NotSupportedException.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as TripletLoss requires three input matrices.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "TripletLoss requires three input matrices (anchor, positive, negative). " +
-            "Use the CalculateDerivative(Matrix<T>, Matrix<T>, Matrix<T>) method instead."
-        );
-    }
-
 
     /// <summary>
     /// Calculates Triplet Loss on GPU for batched input tensors.
@@ -264,5 +169,78 @@ public class TripletLoss<T> : LossFunctionBase<T>
         var clamped = Engine.TensorMax(shifted, zeros);
         var allAxes = Enumerable.Range(0, clamped.Shape.Length).ToArray();
         return Engine.ReduceMean(clamped, allAxes, keepDims: false);
+    }
+
+    /// <summary>
+    /// Computes the triplet loss as a tape-differentiable scalar from the three embedding sets.
+    /// </summary>
+    /// <param name="anchor">Anchor embeddings, shaped [batch, features] (or [features] for one triplet).</param>
+    /// <param name="positive">Embeddings that should be close to the anchor, same shape.</param>
+    /// <param name="negative">Embeddings that should be far from the anchor, same shape.</param>
+    /// <returns>A rank-0 scalar tensor holding mean(max(0, d(a,p) - d(a,n) + margin)).</returns>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the three shapes differ.</exception>
+    /// <remarks>
+    /// <para>
+    /// This computes only the GEOMETRY -- the two Euclidean distances -- and then hands the
+    /// distance difference to the two-argument <see cref="ComputeTapeLoss(Tensor{T}, Tensor{T})"/>,
+    /// which owns the hinge. The margin rule therefore exists in exactly one place and the two
+    /// entry points cannot drift apart.
+    /// </para>
+    /// <para>
+    /// Gradients flow to all three inputs, which is what a triplet objective needs: the anchor is
+    /// pulled toward the positive and pushed from the negative in the same backward pass.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> ComputeTapeLoss(Tensor<T> anchor, Tensor<T> positive, Tensor<T> negative)
+    {
+        if (anchor is null) throw new ArgumentNullException(nameof(anchor));
+        if (positive is null) throw new ArgumentNullException(nameof(positive));
+        if (negative is null) throw new ArgumentNullException(nameof(negative));
+
+        if (!anchor._shape.SequenceEqual(positive._shape) || !anchor._shape.SequenceEqual(negative._shape))
+        {
+            throw new ArgumentException(
+                "Anchor, positive and negative must have the same shape, but were "
+                + $"[{string.Join(", ", anchor.Shape.ToArray())}], "
+                + $"[{string.Join(", ", positive.Shape.ToArray())}] and "
+                + $"[{string.Join(", ", negative.Shape.ToArray())}].",
+                nameof(positive));
+        }
+
+        var difference = Engine.TensorSubtract(
+            EuclideanDistance(anchor, positive),
+            EuclideanDistance(anchor, negative));
+
+        // The two-argument overload ignores its target; it reads the distance difference only.
+        return ComputeTapeLoss(difference, new Tensor<T>(difference._shape));
+    }
+
+    /// <summary>
+    /// Row-wise Euclidean distance between two equally shaped embedding tensors.
+    /// </summary>
+    /// <remarks>
+    /// The small offset under the root is not cosmetic: d(sqrt(x))/dx is unbounded as x approaches
+    /// zero, so two IDENTICAL embeddings -- the exact case a positive pair converges to -- would
+    /// otherwise produce a NaN gradient and destroy the whole backward pass.
+    /// </remarks>
+    private Tensor<T> EuclideanDistance(Tensor<T> left, Tensor<T> right)
+    {
+        var delta = Engine.TensorSubtract(left, right);
+        var squared = Engine.TensorMultiply(delta, delta);
+
+        // Reduce the feature axis, keeping one distance per sample.
+        var featureAxis = new[] { squared.Shape.Length - 1 };
+        var summed = Engine.ReduceSum(squared, featureAxis, keepDims: false);
+
+        // A single un-batched triplet reduces to rank 0, and the hinge overload then calls
+        // ReduceMean over an EMPTY axis list, whose backward rejects the empty shape. Keeping one
+        // sample as [1] makes the un-batched case take the same path as a batch of one.
+        if (summed.Shape.Length == 0)
+        {
+            summed = Engine.Reshape(summed, new[] { 1 });
+        }
+
+        return Engine.TensorSqrt(Engine.TensorAddScalar(summed, NumOps.FromDouble(1e-12)));
     }
 }

@@ -89,57 +89,6 @@ public class WassersteinLoss<T> : LossFunctionBase<T>
         return NumOps.Negate(mean);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Wasserstein loss function.
-    /// </summary>
-    /// <param name="predicted">The critic's output scores for each sample.</param>
-    /// <param name="actual">The labels: +1 for real samples, -1 for fake samples.</param>
-    /// <returns>A vector containing the derivatives of the Wasserstein loss for each prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// The derivative of the Wasserstein loss with respect to the predicted scores is simply
-    /// the negative of the labels (after accounting for the mean).
-    /// </para>
-    /// <para>
-    /// <b>Mathematical Derivation:</b>
-    /// <list type="bullet">
-    /// <item><description>Loss = -mean(predicted * actual) = -(1/n) * sum(predicted_i * actual_i)</description></item>
-    /// <item><description>dLoss/d(predicted_i) = -actual_i / n</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> The derivative tells the network which direction to adjust.
-    ///
-    /// For a real sample (label = +1):
-    /// <list type="bullet">
-    /// <item><description>Derivative is negative, so increasing the score decreases the loss</description></item>
-    /// <item><description>This pushes the critic to give higher scores to real images</description></item>
-    /// </list>
-    ///
-    /// For a fake sample (label = -1):
-    /// <list type="bullet">
-    /// <item><description>Derivative is positive, so decreasing the score decreases the loss</description></item>
-    /// <item><description>This pushes the critic to give lower scores to fake images</description></item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // d/d(predicted) of -mean(predicted * actual) = -actual / n
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        T divisor = NumOps.FromDouble(predicted.Length);
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Derivative: -actual[i] / n
-            derivative[i] = NumOps.Divide(NumOps.Negate(actual[i]), divisor);
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

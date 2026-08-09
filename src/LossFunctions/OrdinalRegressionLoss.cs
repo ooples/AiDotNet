@@ -90,43 +90,6 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
         return loss;
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Ordinal Regression Loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (ground truth) values vector, typically integers representing ordinal categories.</param>
-    /// <returns>A vector containing the derivatives of the ordinal regression loss with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < _numClasses - 1; j++)
-            {
-                // Binary indicator: 1 if actual > j, 0 otherwise
-                T indicator = NumOps.GreaterThan(actual[i], NumOps.FromDouble(j)) ?
-                    NumOps.One : NumOps.Zero;
-
-                // exp(-indicator * predicted)
-                T expTerm = NumOps.Exp(NumOps.Negate(NumOps.Multiply(indicator, predicted[i])));
-
-                // -indicator * exp(-indicator * predicted) / (1 + exp(-indicator * predicted))
-                T term = NumOps.Divide(
-                    NumOps.Negate(NumOps.Multiply(indicator, expTerm)),
-                    NumOps.Add(NumOps.One, expTerm)
-                );
-
-                sum = NumOps.Add(sum, term);
-            }
-            derivative[i] = sum;
-        }
-
-        return derivative;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

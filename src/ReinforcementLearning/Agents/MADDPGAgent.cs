@@ -770,34 +770,6 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         return clonedAgent;
     }
 
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    /// <summary>
-    /// Not supported for MADDPGAgent. Use the agent's internal Train() loop instead.
-    /// </summary>
-    /// <param name="gradients">Not used.</param>
-    /// <param name="learningRate">Not used.</param>
-    /// <exception cref="NotSupportedException">
-    /// Always thrown. MADDPG manages gradient computation and parameter updates internally through backpropagation.
-    /// </exception>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        throw new NotSupportedException(
-            "ApplyGradients is not supported for MADDPGAgent; use the agent's internal Train() loop. " +
-            "MADDPG manages gradient computation and parameter updates internally through backpropagation.");
-    }
-
     /// <summary>
     /// Saves the trained model to a file.
     /// </summary>

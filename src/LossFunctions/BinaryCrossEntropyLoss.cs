@@ -70,34 +70,6 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Binary Cross Entropy loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values (probabilities between 0 and 1).</param>
-    /// <param name="actual">The actual (target) values (typically 0 or 1).</param>
-    /// <returns>A vector containing the derivatives of BCE for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Clamp values to prevent division by zero using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-
-            // -(y/p - (1-y)/(1-p)) with safe division
-            T denominator = NumOps.Multiply(p, NumOps.Subtract(NumOps.One, p));
-            derivative[i] = NumericalStabilityHelper.SafeDiv(
-                NumOps.Subtract(p, actual[i]),
-                denominator,
-                NumericalStabilityHelper.SmallEpsilon
-            );
-        }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both BCE loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor (probabilities between 0 and 1).</param>

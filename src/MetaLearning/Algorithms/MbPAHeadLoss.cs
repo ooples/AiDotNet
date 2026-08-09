@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Linq;
+using System;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -85,6 +86,22 @@ internal sealed class MbPAHeadLoss<T> : ILossFunction<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>Tape-recorded loss, required by <see cref="ILossFunction{T}"/> since #1994.</summary>
+    /// <remarks>
+    /// #1994 made the autodiff tape the only source of gradients and promoted ComputeTapeLoss onto
+    /// the interface. This head is a squared error averaged over every axis, matching
+    /// <see cref="CalculateLoss"/>: a mean loss with a summed gradient differ by the batch size,
+    /// which would make the effective learning rate depend on how the caller chunked its data.
+    /// </remarks>
+    public Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.TensorSubtract(predicted, target);
+        var squared = engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        return engine.ReduceMean(squared, allAxes, keepDims: false);
+    }
+
     public Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         var derivative = new Vector<T>(predicted.Length);

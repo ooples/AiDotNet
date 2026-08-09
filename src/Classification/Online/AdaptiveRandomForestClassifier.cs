@@ -544,19 +544,6 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         return new AdaptiveRandomForestClassifier<T>(_options);
     }
 
-    /// <inheritdoc />
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Tree ensemble - no gradients
-        return new Vector<T>(0);
-    }
-
-    /// <inheritdoc />
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Tree ensemble - no gradient application
-    }
-
     /// <summary>
     /// Serializes the trained ARF ensemble including all Hoeffding trees and metadata.
     /// </summary>

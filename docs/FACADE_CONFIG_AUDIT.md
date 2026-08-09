@@ -149,6 +149,11 @@ Swappable (all plain MSE): NBEATS (`:298`, `:625`), NHiTS (`:265`, `:524`), Info
 
 ### The contract is wider than training can honor
 
+> **RESOLVED (#1992).** `ILossFunction<T>` now declares `ComputeTapeLoss` and no longer
+> declares `CalculateDerivative`, so the downcasts described below are gone and any type
+> implementing the interface is tape-trainable by construction. The finding is kept as a
+> record of what was wrong.
+
 `ILossFunction<T>` (`src/Interfaces/ILossFunction.cs:26`) has three members: `CalculateLoss` (`:34`), `CalculateDerivative` (`:42`), `CalculateLossAndGradientGpu` (`:54`). It has **no `ComputeTapeLoss`** — that lives on the abstract `LossFunctionBase<T>`, and the tape paths hard-require the downcast:
 
 ```
