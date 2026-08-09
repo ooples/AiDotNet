@@ -796,37 +796,6 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Computes gradients for the model parameters.
-    /// </summary>
-    /// <param name="input">Input feature matrix.</param>
-    /// <param name="target">Target labels.</param>
-    /// <param name="lossFunction">Optional custom loss function.</param>
-    /// <returns>Gradient vector.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Gradient boosting models are trained iteratively, not by
-    /// computing a single gradient over all parameters. This returns a placeholder gradient.</para>
-    /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Tree models don't use gradient-based parameter updates in the traditional sense
-        return new Vector<T>(1) { [0] = NumOps.Zero };
-    }
-
-    /// <summary>
-    /// Applies gradients to update model parameters.
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <param name="learningRate">Learning rate.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree models are not updated via gradient descent on parameters.
-    /// They're trained by building trees iteratively.</para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Tree models don't support gradient-based parameter updates
-    }
-
-    /// <summary>
     /// Gets feature importance based on total gain reduction.
     /// </summary>
     /// <returns>Dictionary mapping feature names to importance scores.</returns>

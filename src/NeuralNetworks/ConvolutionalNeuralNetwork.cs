@@ -521,7 +521,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Vector<T> CalculateOutputGradient(Tensor<T> prediction, Tensor<T> expectedOutput)
     {
-        return _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        return _lossFunction.ComputeGradient(prediction.ToVector(), expectedOutput.ToVector());
     }
 
     /// <inheritdoc/>

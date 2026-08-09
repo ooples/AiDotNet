@@ -663,7 +663,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Vector<T> CalculateOutputGradients(Vector<T> predicted, Vector<T> expected)
     {
-        return _lossFunction.CalculateDerivative(predicted, expected);
+        return _lossFunction.ComputeGradient(predicted, expected);
     }
 
     /// <summary>

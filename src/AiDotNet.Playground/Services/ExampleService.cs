@@ -3989,7 +3989,7 @@ var mseLoss = new MeanSquaredErrorLoss<double>();
 var loss = mseLoss.CalculateLoss(predicted, actual);
 
 // Calculate the derivative (gradient)
-var gradient = mseLoss.CalculateDerivative(predicted, actual);
+var gradient = mseLoss.ComputeGradient(predicted, actual);
 
 Console.WriteLine(""Mean Squared Error Loss:"");
 Console.WriteLine($""  Predicted: [{string.Join("", "", predicted.ToArray())}]"");
@@ -4020,7 +4020,7 @@ var actual = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
 var ceLoss = new CrossEntropyLoss<double>();
 
 var loss = ceLoss.CalculateLoss(predicted, actual);
-var gradient = ceLoss.CalculateDerivative(predicted, actual);
+var gradient = ceLoss.ComputeGradient(predicted, actual);
 
 Console.WriteLine(""Cross Entropy Loss:"");
 Console.WriteLine($""  Predicted probs: [{string.Join("", "", predicted.ToArray().Select(p => p.ToString(""F2"")))}]"");

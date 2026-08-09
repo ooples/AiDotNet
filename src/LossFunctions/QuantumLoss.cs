@@ -49,41 +49,6 @@ public class QuantumLoss<T> : LossFunctionBase<T>
         return NumOps.Subtract(NumOps.One, fidelity);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the quantum loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted quantum state.</param>
-    /// <param name="expected">The expected quantum state.</param>
-    /// <returns>The gradient of the loss with respect to the predicted values.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> expected)
-    {
-        if (predicted.Length != expected.Length)
-            throw new ArgumentException("Predicted and expected vectors must have the same length.");
-
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        var gradient = new Vector<T>(predicted.Length);
-
-        for (int i = 0; i < predicted.Length; i += 2)
-        {
-            Complex<T> predictedComplex = new(predicted[i], predicted[i + 1]);
-            Complex<T> expectedComplex = new(expected[i], expected[i + 1]);
-
-            T magnitude = NumOps.Sqrt(NumOps.Add(
-                NumOps.Multiply(predictedComplex.Real, predictedComplex.Real),
-                NumOps.Multiply(predictedComplex.Imaginary, predictedComplex.Imaginary)
-            ));
-
-            Complex<T> gradientComplex = complexOps.Multiply(expectedComplex.Conjugate(),
-                new Complex<T>(NumOps.Divide(NumOps.One, magnitude), NumOps.Zero)
-            );
-
-            gradient[i] = gradientComplex.Real;
-            gradient[i + 1] = gradientComplex.Imaginary;
-        }
-
-        return gradient;
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// Quantum fidelity loss on interleaved complex representation [re0, im0, re1, im1, ...].

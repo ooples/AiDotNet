@@ -251,7 +251,6 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         };
     }
 
-
     /// <summary>
     /// Computes Manhattan (L1) distance.
     /// </summary>
@@ -432,21 +431,6 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     public void SetParameters(Vector<T> parameters)
     {
         // KNN is a lazy learner - it doesn't have traditional model parameters
-        // This is a no-op for compatibility
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // KNN doesn't use gradient-based optimization
-        // Return zero gradients for compatibility
-        return new Vector<T>(NumFeatures);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // KNN doesn't use gradient-based optimization
         // This is a no-op for compatibility
     }
 

@@ -75,7 +75,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("MiniRocket: A Very Fast (Almost) Deterministic Transform for Time Series Classification", "https://arxiv.org/abs/2012.08791", Year = 2021, Authors = "Angus Dempster, Daniel F. Schmidt, Geoffrey I. Webb")]
 public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
     private readonly MiniRocketOptions<T> _options;
 
@@ -295,25 +295,6 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new MiniRocketClassifier<T>(_options);
-    }
-
-    /// <inheritdoc />
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Ridge regression is closed-form, gradients not typically used
-        return new Vector<T>(GetParameters().Length);
-    }
-
-    /// <inheritdoc />
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        if (_weights is null) return;
-
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            _weights[i] = NumOps.Subtract(_weights[i],
-                NumOps.Multiply(learningRate, gradients[i]));
-        }
     }
 
     /// <inheritdoc />

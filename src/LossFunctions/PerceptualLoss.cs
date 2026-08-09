@@ -142,20 +142,6 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// This method is not used for Perceptual Loss as it requires image matrices.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (target) values vector.</param>
-    /// <returns>Throws NotSupportedException.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as Perceptual Loss requires image matrices.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "Perceptual Loss requires image matrices and is typically calculated using automatic differentiation."
-        );
-    }
-
-    /// <summary>
     /// Optional neural network feature extractor for tape-based training.
     /// Set via <see cref="SetFeatureExtractorNetwork"/> before calling <see cref="ComputeTapeLoss"/>.
     /// </summary>

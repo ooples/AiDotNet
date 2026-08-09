@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Interfaces;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -77,7 +78,7 @@ public class LossFunctionDeepMathIntegrationTests3
         var loss = new ScaleInvariantDepthLoss<double>(0.5);
         var pred = new Vector<double>(new[] { 1.5, 2.5, 3.5 });
         var actual = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
-        var analytical = loss.CalculateDerivative(pred, actual);
+        var analytical = loss.ComputeGradient(pred, actual);
 
         double h = 1e-5;
         for (int i = 0; i < pred.Length; i++)

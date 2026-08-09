@@ -61,30 +61,6 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Exponential Loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (ground truth) values vector, typically -1 or 1.</param>
-    /// <returns>A vector containing the derivatives of the exponential loss with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // -y * exp(-y * f(x))
-            T exponent = NumOps.Negate(NumOps.Multiply(actual[i], predicted[i]));
-            derivative[i] = NumOps.Multiply(
-                NumOps.Negate(actual[i]),
-                NumOps.Exp(exponent)
-            );
-        }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Exponential loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

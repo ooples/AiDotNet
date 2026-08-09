@@ -45,22 +45,6 @@ public class MeanSquaredErrorLoss<T> : LossFunctionBase<T>
         return StatisticsHelper<T>.CalculateMeanSquaredError(predicted, actual);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Mean Squared Error loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of MSE for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // The derivative of MSE is 2*(predicted-actual)/n
-        return predicted.Subtract(actual).Transform(x =>
-            NumOps.Multiply(NumOps.FromDouble(2), x)
-        ).Divide(NumOps.FromDouble(predicted.Length));
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

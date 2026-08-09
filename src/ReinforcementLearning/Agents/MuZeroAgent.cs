@@ -647,7 +647,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         net.UpdateParameters(updated);
     }
 
-
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
     {
         var result = new Vector<T>(a.Length + b.Length);
@@ -923,30 +922,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var copy = new MuZeroAgent<T>(new MuZeroOptions<T>(_options));
         copy.SetParameters(GetParameters());
         return copy;
-    }
-
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var currentParams = GetParameters();
-        if (gradients.Length != currentParams.Length)
-        {
-            throw new ArgumentException(
-                $"Gradient vector length ({gradients.Length}) must match parameter count ({currentParams.Length}).",
-                nameof(gradients));
-        }
-
-        SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
     }
 
     public override void SaveModel(string filepath)

@@ -328,7 +328,6 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
         SetTrainingMode(true);
         try
         {
-            var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
             // Backward pass would be implemented here or in derived classes
         }
         finally

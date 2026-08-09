@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Interfaces;
 using AiDotNet.ComputerVision.Detection.Anchors;
 using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
@@ -420,7 +421,7 @@ public class ComputerVisionExtendedIntegrationTests
         var predicted = new Vector<double>(new[] { 0.0, 0.0, 100.0, 100.0 });
         var actual = new Vector<double>(new[] { 20.0, 20.0, 120.0, 120.0 });
 
-        var gradient = loss.CalculateDerivative(predicted, actual);
+        var gradient = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(4, gradient.Length);
         // Gradient should not be all zeros since boxes differ
@@ -441,7 +442,7 @@ public class ComputerVisionExtendedIntegrationTests
         var actual = new Vector<double>(new[] { 20.0, 20.0, 120.0, 120.0 });
 
         double originalLoss = loss.CalculateLoss(predicted, actual);
-        var gradient = loss.CalculateDerivative(predicted, actual);
+        var gradient = loss.ComputeGradient(predicted, actual);
 
         // Take a small step in the negative gradient direction
         double stepSize = 0.1;
@@ -547,7 +548,7 @@ public class ComputerVisionExtendedIntegrationTests
         var actual = new Vector<double>(new[] { 20.0, 20.0, 120.0, 120.0 });
 
         double originalLoss = loss.CalculateLoss(predicted, actual);
-        var gradient = loss.CalculateDerivative(predicted, actual);
+        var gradient = loss.ComputeGradient(predicted, actual);
 
         double stepSize = 0.1;
         var stepped = new Vector<double>(4);
@@ -621,7 +622,7 @@ public class ComputerVisionExtendedIntegrationTests
         var predicted = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
         var actual = new Vector<double>(new[] { 1.5, 2.5, 3.5, 4.5 });
 
-        var gradient = loss.CalculateDerivative(predicted, actual);
+        var gradient = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(4, gradient.Length);
         bool hasNonZero = false;

@@ -107,7 +107,7 @@ public abstract class SparseCategoricalLossTestBase
         var predicted = new Vector<double>(new[] { 0.1, 0.2, 0.6, 0.1 });
         var actual = new Vector<double>(new[] { 2.0 });
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(predicted.Length, derivative.Length);
         for (int i = 0; i < derivative.Length; i++)
@@ -130,7 +130,7 @@ public abstract class SparseCategoricalLossTestBase
         var predicted = new Vector<double>(new[] { 0.3, 0.4, 0.3 });
         var actual = new Vector<double>(new[] { 1.0 }); // class 1
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
 
         // Gradient at the correct class should be negative (to increase probability)
         Assert.True(derivative[1] < 0,

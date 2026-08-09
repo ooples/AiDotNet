@@ -52,7 +52,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
     "https://doi.org/10.1109/ADPRL.2009.4927542",
     Year = 2009,
     Authors = "van Seijen, H., van Hasselt, H., Whiteson, S., & Wiering, M.")]
-public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
+public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private ExpectedSARSAOptions<T> _options;
 
@@ -345,12 +345,12 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

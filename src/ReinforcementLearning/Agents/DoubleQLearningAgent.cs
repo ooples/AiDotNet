@@ -50,7 +50,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
     "https://papers.nips.cc/paper/2010/hash/091d584fced301b442654dd8c23b3fc9-Abstract.html",
     Year = 2010,
     Authors = "van Hasselt, H.")]
-public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private DoubleQLearningOptions<T> _options;
 
@@ -363,12 +363,12 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

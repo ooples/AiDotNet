@@ -1,9 +1,15 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
+// Gradient benchmarks measure the TAPE gradient: every loss derivative in the library is
+// now obtained by differentiating ComputeTapeLoss, and the hand-written analytic
+// derivatives these once measured are deleted. Expect different absolute numbers -- a tape
+// records and replays a graph where a closed form did not -- and note that the comparison
+// against the old figures is not like-for-like.
 namespace AiDotNetBenchmarkTests.BenchmarkTests;
 
 /// <summary>
@@ -126,9 +132,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> MSE_CalculateDerivative()
+    public Vector<double> MSE_ComputeGradient()
     {
-        return _mse.CalculateDerivative(_predicted, _actual);
+        return _mse.ComputeGradient(_predicted, _actual);
     }
 
     #endregion
@@ -142,9 +148,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> MAE_CalculateDerivative()
+    public Vector<double> MAE_ComputeGradient()
     {
-        return _mae.CalculateDerivative(_predicted, _actual);
+        return _mae.ComputeGradient(_predicted, _actual);
     }
 
     #endregion
@@ -158,9 +164,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> RMSE_CalculateDerivative()
+    public Vector<double> RMSE_ComputeGradient()
     {
-        return _rmse.CalculateDerivative(_predicted, _actual);
+        return _rmse.ComputeGradient(_predicted, _actual);
     }
 
     #endregion
@@ -174,9 +180,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> Huber_CalculateDerivative()
+    public Vector<double> Huber_ComputeGradient()
     {
-        return _huber.CalculateDerivative(_predicted, _actual);
+        return _huber.ComputeGradient(_predicted, _actual);
     }
 
     #endregion
@@ -190,9 +196,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> Quantile_CalculateDerivative()
+    public Vector<double> Quantile_ComputeGradient()
     {
-        return _quantile.CalculateDerivative(_predicted, _actual);
+        return _quantile.ComputeGradient(_predicted, _actual);
     }
 
     #endregion
@@ -206,9 +212,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> LogCosh_CalculateDerivative()
+    public Vector<double> LogCosh_ComputeGradient()
     {
-        return _logCosh.CalculateDerivative(_predicted, _actual);
+        return _logCosh.ComputeGradient(_predicted, _actual);
     }
 
     #endregion
@@ -222,9 +228,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> BCE_CalculateDerivative()
+    public Vector<double> BCE_ComputeGradient()
     {
-        return _bce.CalculateDerivative(_binaryPredicted, _binaryActual);
+        return _bce.ComputeGradient(_binaryPredicted, _binaryActual);
     }
 
     #endregion
@@ -239,10 +245,10 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> CrossEntropy_CalculateDerivative()
+    public Vector<double> CrossEntropy_ComputeGradient()
     {
         // Use softmax predicted and one-hot encoded actual for proper multi-class classification
-        return _crossEntropy.CalculateDerivative(_softmaxPredicted, _oneHotActual);
+        return _crossEntropy.ComputeGradient(_softmaxPredicted, _oneHotActual);
     }
 
     #endregion
@@ -256,9 +262,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> Focal_CalculateDerivative()
+    public Vector<double> Focal_ComputeGradient()
     {
-        return _focal.CalculateDerivative(_binaryPredicted, _binaryActual);
+        return _focal.ComputeGradient(_binaryPredicted, _binaryActual);
     }
 
     #endregion
@@ -273,10 +279,10 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> Hinge_CalculateDerivative()
+    public Vector<double> Hinge_ComputeGradient()
     {
         // Hinge loss expects {-1, +1} labels for max(0, 1 - y*f(x)) formula
-        return _hinge.CalculateDerivative(_binaryPredicted, _hingeBinaryActual);
+        return _hinge.ComputeGradient(_binaryPredicted, _hingeBinaryActual);
     }
 
     #endregion
@@ -290,9 +296,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> Cosine_CalculateDerivative()
+    public Vector<double> Cosine_ComputeGradient()
     {
-        return _cosine.CalculateDerivative(_predicted, _actual);
+        return _cosine.ComputeGradient(_predicted, _actual);
     }
 
     #endregion
@@ -306,9 +312,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> Dice_CalculateDerivative()
+    public Vector<double> Dice_ComputeGradient()
     {
-        return _dice.CalculateDerivative(_binaryPredicted, _binaryActual);
+        return _dice.ComputeGradient(_binaryPredicted, _binaryActual);
     }
 
     #endregion
@@ -322,9 +328,9 @@ public class LossFunctionsBenchmarks
     }
 
     [Benchmark]
-    public Vector<double> Jaccard_CalculateDerivative()
+    public Vector<double> Jaccard_ComputeGradient()
     {
-        return _jaccard.CalculateDerivative(_binaryPredicted, _binaryActual);
+        return _jaccard.ComputeGradient(_binaryPredicted, _binaryActual);
     }
 
     #endregion

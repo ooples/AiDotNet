@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Interfaces;
 using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
@@ -677,7 +678,7 @@ public class ComputerVisionIntegrationTests
         var predicted = new Vector<double>(new[] { 0.0, 0.0, 100.0, 100.0 });
         var actual = new Vector<double>(new[] { 10.0, 10.0, 110.0, 110.0 });
 
-        var gradient = loss.CalculateDerivative(predicted, actual);
+        var gradient = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(4, gradient.Length);
         // Gradient should not be all zeros when boxes differ

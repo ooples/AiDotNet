@@ -109,75 +109,24 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(sum, NumOps.FromDouble(sampleCount));
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Sparse Categorical Cross Entropy loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted probability values for all classes (length = num_classes).</param>
-    /// <param name="actual">The actual class indices as floating-point values (length = batch_size or 1 for single sample).</param>
-    /// <returns>A vector containing the derivatives for each class probability.</returns>
-    /// <remarks>
-    /// The derivative is:
-    /// - For the correct class: -1 / predicted[correct_class]
-    /// - For all other classes: 0
-    ///
-    /// When used with softmax activation, this combines with the softmax derivative
-    /// to produce the simplified gradient (predicted - one_hot_actual).
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown when class indices are invalid or vectors are empty.</exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        // Note: We do NOT validate that predicted and actual have the same length
-        // In sparse categorical cross-entropy, they can differ
-
-        if (predicted.Length == 0)
-        {
-            throw new ArgumentException("Predicted vector cannot be empty.");
-        }
-
-        // Initialize gradient vector with zeros
-        var gradient = new Vector<T>(predicted.Length);
-
-        // Process each sample
-        for (int i = 0; i < actual.Length; i++)
-        {
-            // Extract class index from actual
-            int classIndex = NumOps.ToInt32(actual[i]);
-
-            // Validate class index
-            if (classIndex < 0 || classIndex >= predicted.Length)
-            {
-                throw new ArgumentException(
-                    $"Class index {classIndex} at position {i} is out of bounds. " +
-                    $"Expected value between 0 and {predicted.Length - 1}.");
-            }
-
-            // Clamp to prevent division by zero using NumericalStabilityHelper
-            T predictedProb = NumericalStabilityHelper.ClampProbability(
-                predicted[classIndex],
-                NumericalStabilityHelper.SmallEpsilon);
-
-            // Derivative for the correct class: -1 / predicted[correct_class] with safe division
-            T derivative = NumOps.Negate(NumericalStabilityHelper.SafeDiv(NumOps.One, predictedProb, NumericalStabilityHelper.SmallEpsilon));
-
-            // Accumulate gradient (in case multiple samples point to the same class)
-            gradient[classIndex] = NumOps.Add(gradient[classIndex], derivative);
-        }
-
-        // Average the gradients
-        return gradient.Divide(NumOps.FromDouble(actual.Length));
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // True sparse implementation: gather log-probabilities at target indices
-        // instead of one-hot encoding (avoids O(batch * numClasses) allocation).
-        var softmaxed = Engine.Softmax(predicted);
-        var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));
-        var logP = Engine.TensorLog(safeSoftmax);
+        // `predicted` holds class PROBABILITIES, not logits. This applied Engine.Softmax first,
+        // so the tape forward and CalculateLoss were computing different losses: CalculateLoss
+        // takes -log(p[class]) of the values it is given, while this re-normalized them and took
+        // -log(softmax(p)[class]). The library keeps the logit convention in separate
+        // *WithLogitsLoss classes precisely so these do not have to be guessed at, and
+        // CrossEntropyWithLogitsLoss is the one to use for unnormalized scores.
+        var safeP = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-12));
+        var logP = Engine.TensorLog(safeP);
 
-        // If target has the same shape as predicted, treat as one-hot/dense targets
-        if (target.Rank == predicted.Rank && target._shape.SequenceEqual(predicted._shape))
+        // Dense/one-hot targets, but ONLY for a batched prediction. The shape test alone is
+        // ambiguous for a rank-1 prediction: N class indices against N classes matches it exactly,
+        // so [0, 1, 2] against three classes was read as one-hot VALUES rather than indices and
+        // produced a gradient of zero for every class. CalculateLoss has no such ambiguity -- a
+        // vector `actual` is always class indices -- so rank 1 follows the sparse path.
+        if (predicted.Rank >= 2 && target.Rank == predicted.Rank && target._shape.SequenceEqual(predicted._shape))
         {
             target = EnsureTargetMatchesPredicted(predicted, target);
             var product = Engine.TensorMultiply(target, logP);
@@ -186,10 +135,18 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
             return Engine.TensorNegate(mean);
         }
 
-        // Sparse path: target contains integer class indices
+        // Sparse path: target contains integer class indices.
+        //
+        // The selection is expressed as a constant one-hot MASK multiplied into logP, rather than
+        // by indexing logP element-by-element into a fresh tensor. Indexing severs the tape: the
+        // gathered values become a leaf constant with no path back to `predicted`, so the loss had
+        // no gradient at all and anything training on the sparse path silently learned nothing.
+        // A mask keeps logP itself in the graph, and the selection carries no gradient of its own
+        // because the indices are data, not parameters.
         int batchSize = target.Length;
         int numClasses = predicted.Shape[^1];
-        var gatheredLogP = new Tensor<T>(target._shape);
+
+        var selection = new Tensor<T>(predicted._shape);
         for (int i = 0; i < batchSize; i++)
         {
             double rawIdx = NumOps.ToDouble(target[i]);
@@ -199,17 +156,22 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
                     $"Target at position {i} is {rawIdx}, expected an integer class index.",
                     nameof(target));
             if (classIdx < 0 || classIdx >= numClasses)
-                throw new ArgumentOutOfRangeException(nameof(target),
-                    $"Target index {classIdx} at position {i} is out of range [0, {numClasses}).");
-            gatheredLogP[i] = predicted.Rank == 1
-                ? logP[classIdx]
-                : logP[i * numClasses + classIdx];
+                throw new ArgumentException(
+                    $"Class index {classIdx} at position {i} is out of bounds. " +
+                    $"Expected value between 0 and {numClasses - 1}.",
+                    nameof(target));
+
+            // Accumulate rather than assign: a rank-1 prediction scored against several target
+            // indices can name the same class twice, and that sample must count twice.
+            int slot = predicted.Rank == 1 ? classIdx : (i * numClasses) + classIdx;
+            selection[slot] = NumOps.Add(selection[slot], NumOps.One);
         }
 
-        // loss = -mean(gathered log-probs)
-        var sum = Engine.ReduceSum(gatheredLogP, null, keepDims: false);
-        var batchT = new Tensor<T>(new[] { 1 });
-        batchT[0] = NumOps.FromDouble(batchSize);
-        return Engine.TensorNegate(Engine.TensorDivide(sum, batchT));
+        // loss = -(1 / batch) * sum_over_all(selection * logP)
+        var selected = Engine.TensorMultiply(logP, selection);
+        var selectedAxes = Enumerable.Range(0, selected.Shape.Length).ToArray();
+        var sum = Engine.ReduceSum(selected, selectedAxes, keepDims: false);
+
+        return Engine.TensorNegate(Engine.TensorDivideScalar(sum, NumOps.FromDouble(batchSize)));
     }
 }

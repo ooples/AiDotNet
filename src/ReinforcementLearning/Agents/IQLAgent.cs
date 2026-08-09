@@ -63,7 +63,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
     "https://arxiv.org/abs/2110.06169",
     Year = 2022,
     Authors = "Kostrikov, I., Nair, A., & Levine, S.")]
-public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private IQLOptions<T> _options;
 
@@ -498,7 +498,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)

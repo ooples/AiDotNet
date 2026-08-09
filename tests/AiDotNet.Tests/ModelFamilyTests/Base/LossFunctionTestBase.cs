@@ -174,7 +174,7 @@ public abstract class LossFunctionTestBase
         var predicted = new Vector<double>(TestPredicted);
         var actual = new Vector<double>(TestActual);
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(predicted.Length, derivative.Length);
         for (int i = 0; i < derivative.Length; i++)
@@ -200,7 +200,7 @@ public abstract class LossFunctionTestBase
         var loss = CreateLoss();
         var values = new Vector<double>(new[] { 0.3, 0.5, 0.7 });
 
-        var derivative = loss.CalculateDerivative(values, values);
+        var derivative = loss.ComputeGradient(values, values);
 
         for (int i = 0; i < derivative.Length; i++)
         {
@@ -225,7 +225,7 @@ public abstract class LossFunctionTestBase
         var actual = new Vector<double>(TestActual);
         double epsilon = 1e-5;
 
-        var analyticalGrad = loss.CalculateDerivative(predicted, actual);
+        var analyticalGrad = loss.ComputeGradient(predicted, actual);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -266,7 +266,7 @@ public abstract class LossFunctionTestBase
         var predicted = new Vector<double>(SignTestPredicted);
         var actual = new Vector<double>(SignTestActual);
 
-        var derivative = loss.CalculateDerivative(predicted, actual);
+        var derivative = loss.ComputeGradient(predicted, actual);
 
         // For standard regression losses, positive error → positive gradient
         Assert.True(derivative[0] > -1e-10,

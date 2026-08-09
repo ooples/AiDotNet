@@ -90,38 +90,6 @@ public class HuberLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Huber loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model.</param>
-    /// <param name="actual">The actual (target) values.</param>
-    /// <returns>A vector containing the derivatives of Huber loss for each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        var result = new T[predicted.Length];
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Subtract(predicted[i], actual[i]);
-            T absDiff = NumOps.Abs(diff);
-
-            if (NumOps.LessThanOrEquals(absDiff, _delta))
-            {
-                // Quadratic region: derivative is diff
-                result[i] = diff;
-            }
-            else
-            {
-                // Linear region: derivative is delta * sign(diff)
-                result[i] = NumOps.Multiply(_delta, NumOps.SignOrZero(diff));
-            }
-        }
-
-        return new Vector<T>(result).Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Huber loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
