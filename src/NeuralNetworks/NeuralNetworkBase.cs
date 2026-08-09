@@ -11611,29 +11611,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Integer-class → one-hot matching is handled inside each loss function's
         // ComputeTapeLoss via EnsureTargetMatchesPredicted.
         var resolved = lossFunction ?? LossFunction;
-        Tensor<T> lossTensor;
-        if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
-        {
-            lossTensor = tapeLoss.ComputeTapeLoss(prediction, target);
-            // Record the scalar loss so GetLastLoss() reflects this gradient step. The
-            // IGradientComputable fast-path (used by every gradient-based optimizer's
-            // CalculateGradient) previously left LastLoss stale/zero, so callers reading the
-            // per-batch training loss — e.g. AdamOptimizer's UseTrainingLossAsFitness mode —
-            // saw 0 even though the true batch loss was computed right here. The other training
-            // paths (TrainWithTape / fused step) already set LastLoss the same way.
-            LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-        }
-        else
-        {
-            // Fallback for custom ILossFunction: use CalculateDerivative to get
-            // the loss gradient w.r.t. predictions, then backpropagate manually.
-            // This preserves the IGradientComputable contract without silently
-            // producing zero gradients from a disconnected scalar tensor.
-            var predVec = prediction.ToVector();
-            var targetVec = target.ToVector();
-            var derivVec = resolved.ComputeGradient(predVec, targetVec);
-            lossTensor = new Tensor<T>(prediction._shape, derivVec);
-        }
+        var lossTensor = resolved.ComputeTapeLoss(prediction, target);
+
+        // Record the scalar loss so GetLastLoss() reflects this gradient step. The
+        // IGradientComputable fast-path (used by every gradient-based optimizer's
+        // CalculateGradient) previously left LastLoss stale/zero, so callers reading the
+        // per-batch training loss — e.g. AdamOptimizer's UseTrainingLossAsFitness mode —
+        // saw 0 even though the true batch loss was computed right here. The other training
+        // paths (TrainWithTape / fused step) already set LastLoss the same way.
+        LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
         // Reverse-mode AD: compute gradients across the FULL tape, then
         // filter to trainable parameters via reference-keyed lookup. The
