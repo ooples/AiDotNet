@@ -430,30 +430,29 @@ public class MultilayerPerceptronOptions<T, TInput, TOutput> : NonLinearRegressi
     /// models behave during training.
     /// </para>
     /// </remarks>
-    private IOptimizer<T, TInput, TOutput>? _optimizer;
-
-    public IOptimizer<T, TInput, TOutput> Optimizer
-    {
-        get
-        {
-            if (_optimizer == null)
-            {
-                var defaultModel = ModelHelper<T, TInput, TOutput>.CreateDefaultModel();
-                _optimizer = new AdamOptimizer<T, TInput, TOutput>(
-                    defaultModel,
-                    new AdamOptimizerOptions<T, TInput, TOutput>
-                    {
-                        InitialLearningRate = 0.001,
-                        Beta1 = 0.9,
-                        Beta2 = 0.999,
-                        Epsilon = 1e-8
-                    });
-            }
-            return _optimizer;
-        }
-        set
-        {
-            _optimizer = value;
-        }
-    }
+    /// <value>
+    /// <see langword="null"/> when no optimizer has been configured, in which case the model
+    /// supplies its own default.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This previously built a default on first read, from
+    /// <c>ModelHelper.CreateDefaultModel()</c>. An optimizer has to be bound to the model it
+    /// optimizes, and the model does not exist when its options are constructed — so the default it
+    /// produced was bound to a throwaway stand-in rather than to the real model.
+    /// </para>
+    /// <para>
+    /// Because that getter never returned <see langword="null"/>, the
+    /// <c>_options.Optimizer ?? new AdamOptimizer(this, ...)</c> in
+    /// <c>MultilayerPerceptronRegression</c>'s constructor could never fire. Every instance trained
+    /// through an optimizer attached to the stand-in model, and the correctly-bound fallback beside
+    /// it was unreachable.
+    /// </para>
+    /// <para>
+    /// Leaving this null when unconfigured makes that fallback live, so the model binds an optimizer
+    /// to itself. It also matches every other options class in the library, which initialize in
+    /// their constructors rather than lazily in a getter.
+    /// </para>
+    /// </remarks>
+    public IOptimizer<T, TInput, TOutput>? Optimizer { get; set; }
 }
