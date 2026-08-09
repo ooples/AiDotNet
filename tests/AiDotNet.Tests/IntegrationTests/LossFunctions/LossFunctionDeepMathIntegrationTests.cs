@@ -1145,19 +1145,38 @@ public class LossFunctionDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Contrastive_StandardOverload_ThrowsNotSupported()
+    public async Task Contrastive_StandardOverload_LossUnsupported_GradientFromTape()
     {
         var loss = new ContrastiveLoss<double>();
+
+        // The pointwise loss VALUE is still unsupported: contrastive loss is defined on a PAIR of
+        // embeddings with a similarity label, which the two-argument overload cannot express.
         Assert.Throws<NotSupportedException>(() => loss.CalculateLoss(V(1), V(2)));
-        Assert.Throws<NotSupportedException>(() => loss.ComputeGradient(V(1), V(2)));
+
+        // The gradient no longer throws. It used to, because CalculateDerivative threw here; that
+        // hand-written derivative is gone and the gradient is differentiated from ComputeTapeLoss,
+        // which is defined for this shape. A finite gradient is the honest outcome.
+        var gradient = loss.ComputeGradient(V(1), V(2));
+        Assert.Equal(1, gradient.Length);
+        Assert.False(double.IsNaN(gradient[0]));
+        Assert.False(double.IsInfinity(gradient[0]));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Triplet_StandardOverload_ThrowsNotSupported()
+    public async Task Triplet_StandardOverload_LossUnsupported_GradientFromTape()
     {
         var loss = new TripletLoss<double>();
+
+        // Triplet loss needs anchor, positive and negative; two arguments cannot carry that, so
+        // the pointwise loss value stays unsupported.
         Assert.Throws<NotSupportedException>(() => loss.CalculateLoss(V(1), V(2)));
-        Assert.Throws<NotSupportedException>(() => loss.ComputeGradient(V(1), V(2)));
+
+        // The gradient comes from ComputeTapeLoss now rather than a hand-written derivative that
+        // threw, so it returns a real value instead of refusing.
+        var gradient = loss.ComputeGradient(V(1), V(2));
+        Assert.Equal(1, gradient.Length);
+        Assert.False(double.IsNaN(gradient[0]));
+        Assert.False(double.IsInfinity(gradient[0]));
     }
 
     [Fact(Timeout = 120000)]

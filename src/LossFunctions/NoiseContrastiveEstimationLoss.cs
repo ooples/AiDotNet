@@ -181,6 +181,19 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        // NCE is not a pointwise (predicted, actual) loss: `target` carries the NOISE LOGITS,
+        // one row of K samples per example, and the noise term reduces over that second axis.
+        // A rank-1 argument used to reach ReduceSum(axis: 1) and fail there with an axis-range
+        // message that said nothing about NCE.
+        if (target.Rank < 2)
+        {
+            throw new ArgumentException(
+                "NoiseContrastiveEstimationLoss expects the second argument to be the noise "
+                + $"logits with shape [batch, numNoiseSamples], but it has rank {target.Rank}. "
+                + "Use Calculate(Vector targetLogits, Matrix noiseLogits) for the vector API.",
+                nameof(target));
+        }
+
         // Target term: -log(sigma(predicted))
         var targetSigmoid = Engine.TensorSigmoid(predicted);
         var eps = NumOps.FromDouble(1e-7);

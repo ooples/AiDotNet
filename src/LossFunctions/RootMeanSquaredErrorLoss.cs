@@ -45,6 +45,11 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
         var squared = Engine.TensorMultiply(diff, diff);
         var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
         var mse = Engine.ReduceMean(squared, allAxes, keepDims: false);
-        return Engine.TensorSqrt(mse);
+
+        // Offset before the square root. d(sqrt(x))/dx = 1/(2*sqrt(x)) is unbounded as x -> 0, so
+        // a PERFECT prediction -- mse exactly 0 -- produced 0 * infinity = NaN and poisoned every
+        // downstream parameter gradient. The offset is far below any meaningful loss, and it makes
+        // the gradient at a perfect fit 0, which is the mathematically right answer there.
+        return Engine.TensorSqrt(Engine.TensorAddScalar(mse, NumOps.FromDouble(1e-12)));
     }
 }

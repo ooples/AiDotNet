@@ -121,8 +121,12 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         var safeP = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-12));
         var logP = Engine.TensorLog(safeP);
 
-        // If target has the same shape as predicted, treat as one-hot/dense targets
-        if (target.Rank == predicted.Rank && target._shape.SequenceEqual(predicted._shape))
+        // Dense/one-hot targets, but ONLY for a batched prediction. The shape test alone is
+        // ambiguous for a rank-1 prediction: N class indices against N classes matches it exactly,
+        // so [0, 1, 2] against three classes was read as one-hot VALUES rather than indices and
+        // produced a gradient of zero for every class. CalculateLoss has no such ambiguity -- a
+        // vector `actual` is always class indices -- so rank 1 follows the sparse path.
+        if (predicted.Rank >= 2 && target.Rank == predicted.Rank && target._shape.SequenceEqual(predicted._shape))
         {
             target = EnsureTargetMatchesPredicted(predicted, target);
             var product = Engine.TensorMultiply(target, logP);

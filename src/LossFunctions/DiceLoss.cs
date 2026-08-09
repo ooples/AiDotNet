@@ -79,15 +79,22 @@ public class DiceLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // Dice = 1 - (2 * intersection + smooth) / (|pred| + |target| + smooth)
+        // Dice = 1 - 2 * intersection / (|pred| + |target|), matching CalculateLoss above.
+        // This added a smoothing constant of 1 to both numerator and denominator while
+        // CalculateLoss added none, so the two forwards computed different losses and their
+        // gradients disagreed by a factor that depended on the batch totals.
         var intersection = Engine.TensorMultiply(predicted, target);
         var allAxes = Enumerable.Range(0, intersection.Shape.Length).ToArray();
         var interSum = Engine.ReduceSum(intersection, allAxes, keepDims: false);
         var predSum = Engine.ReduceSum(predicted, allAxes, keepDims: false);
         var targSum = Engine.ReduceSum(target, allAxes, keepDims: false);
-        var twoInter = Engine.TensorMultiplyScalar(interSum, NumOps.FromDouble(2.0));
-        var numerator = Engine.TensorAddScalar(twoInter, NumOps.One);
-        var denominator = Engine.TensorAddScalar(Engine.TensorAdd(predSum, targSum), NumOps.One);
+        var numerator = Engine.TensorMultiplyScalar(interSum, NumOps.FromDouble(2.0));
+
+        // Guard the division the way CalculateLoss does with SafeDiv, rather than by smoothing:
+        // an epsilon keeps an all-zero prediction and target finite without changing the value
+        // for any real input.
+        var denominator = Engine.TensorAddScalar(
+            Engine.TensorAdd(predSum, targSum), NumOps.FromDouble(1e-12));
         var dice = Engine.TensorDivide(numerator, denominator);
         return Engine.ScalarMinusTensor(NumOps.One, dice);
     }
