@@ -46,6 +46,11 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ResearchPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2111.09395", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
 public class FinRLAgent<T> : TradingAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The wrapped agent this one delegates to. All three hand-written surfaces forwarded straight to it.</remarks>
+    protected override void RegisterComponents()
+        => RegisterParameterComponent(_innerAgent);
     #region Fields
 
     private readonly FinRLAgentOptions<T> _options;
@@ -63,9 +68,6 @@ public class FinRLAgent<T> : TradingAgentBase<T>
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _innerAgent.ParameterCount;
 
     /// <summary>
     /// Gets the RL algorithm being used.
@@ -260,28 +262,6 @@ public class FinRLAgent<T> : TradingAgentBase<T>
         int innerLength = reader.ReadInt32();
         var innerData = reader.ReadBytes(innerLength);
         _innerAgent.Deserialize(innerData);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, GetParameters performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return _innerAgent.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, SetParameters performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _innerAgent.SetParameters(parameters);
     }
 
     #endregion
