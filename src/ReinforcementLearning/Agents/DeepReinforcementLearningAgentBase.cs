@@ -139,6 +139,43 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
     }
 
     /// <summary>
+    /// Applies pre-computed parameter-space gradients as a single gradient-descent step.
+    /// </summary>
+    /// <param name="gradients">Gradients laid out like <c>GetParameters()</c>.</param>
+    /// <param name="learningRate">The step size.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="gradients"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="gradients"/> is not the same length as the parameter vector.
+    /// </exception>
+    /// <remarks>
+    /// The length check is the point of this method rather than an afterthought: it is what
+    /// separates a genuine parameter-space gradient from the output-space vector these agents used
+    /// to return, which is shorter and means something else entirely. Failing loudly beats applying
+    /// a mismatched vector by index.
+    /// </remarks>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
+    {
+        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
+
+        var currentParams = GetParameters();
+        if (gradients.Length != currentParams.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter vector length "
+                + $"({currentParams.Length}).",
+                nameof(gradients));
+        }
+
+        var updated = new Vector<T>(currentParams.Length);
+        for (int i = 0; i < currentParams.Length; i++)
+        {
+            updated[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
+        }
+
+        SetParameters(updated);
+    }
+
+    /// <summary>
     /// Computes gradients of the loss with respect to this agent's PARAMETERS, laid out to match
     /// <c>GetParameters()</c> so the result can be handed straight to <c>ApplyGradients</c>.
     /// </summary>

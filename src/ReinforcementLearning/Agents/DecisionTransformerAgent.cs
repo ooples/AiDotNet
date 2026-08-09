@@ -61,7 +61,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
     "https://arxiv.org/abs/2106.01345",
     Year = 2021,
     Authors = "Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A., Laskin, M., Abbeel, P., Srinivas, A., & Mordatch, I.")]
-public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private DecisionTransformerOptions<T> _options;
 
@@ -459,7 +459,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
     /// derivative is written by hand here.
     /// </remarks>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)

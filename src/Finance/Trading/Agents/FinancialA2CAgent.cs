@@ -51,7 +51,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Asynchronous Methods for Deep Reinforcement Learning", "https://arxiv.org/abs/1602.01783")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FinancialA2CAgent<T> : TradingAgentBase<T>
+public class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     #region Fields
 
@@ -411,7 +411,7 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialA2CAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return _actor.ComputeGradients(Tensor<T>.FromVector(input), Tensor<T>.FromVector(target), lossFunction);
     }
@@ -424,7 +424,7 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialA2CAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _actor.ApplyGradients(gradients, learningRate);
     }

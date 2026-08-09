@@ -63,7 +63,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
     "https://arxiv.org/abs/1801.01290",
     Year = 2018,
     Authors = "Haarnoja, T., Zhou, A., Abbeel, P., & Levine, S.")]
-public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private SACOptions<T> _sacOptions;
 
@@ -726,7 +726,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();

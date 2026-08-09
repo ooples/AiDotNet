@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
     "https://arxiv.org/abs/1312.5602",
     Year = 2015,
     Authors = "Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., et al.")]
-public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
+public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private DQNOptions<T> _dqnOptions;
 
@@ -403,7 +403,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValuePr
     /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
     /// derivative is written by hand here.
     /// </remarks>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)

@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
     "https://arxiv.org/abs/1710.02298",
     Year = 2018,
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
-public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
+public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private RainbowDQNOptions<T> _options;
 
@@ -743,7 +743,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
     /// derivative is written by hand here.
     /// </remarks>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)

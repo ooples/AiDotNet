@@ -44,7 +44,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2011.09607", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
-public class FinRLAgent<T> : TradingAgentBase<T>
+public class FinRLAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     #region Fields
 
@@ -53,6 +53,24 @@ public class FinRLAgent<T> : TradingAgentBase<T>
     private readonly FinRLAlgorithm _algorithm;
     private readonly NeuralNetworkArchitecture<T> _primaryArchitecture;
     private readonly NeuralNetworkArchitecture<T>? _secondaryArchitecture;
+
+
+    /// <summary>
+    /// The wrapped agent, viewed as a gradient-computable model.
+    /// </summary>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the wrapped agent does not compute gradients.
+    /// </exception>
+    /// <remarks>
+    /// Resolved on the instance rather than assumed from the static type: agents that learn by
+    /// Bellman backup or eligibility traces no longer claim IGradientComputable, so which inner
+    /// agents support this is a runtime property of the one that was supplied.
+    /// </remarks>
+    private IGradientComputable<T, Vector<T>, Vector<T>> InnerGradientModel =>
+        _innerAgent as IGradientComputable<T, Vector<T>, Vector<T>>
+        ?? throw new NotSupportedException(
+            $"The wrapped agent ({_innerAgent.GetType().Name}) does not compute gradients, so "
+            + "FinRLAgent cannot either. Wrap a gradient-trained agent such as PPOAgent or SACAgent.");
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -321,9 +339,9 @@ public class FinRLAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinRLAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return _innerAgent.ComputeGradients(input, target, lossFunction);
+        return InnerGradientModel.ComputeGradients(input, target, lossFunction);
     }
 
     /// <inheritdoc/>
@@ -332,9 +350,9 @@ public class FinRLAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinRLAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _innerAgent.ApplyGradients(gradients, learningRate);
+        InnerGradientModel.ApplyGradients(gradients, learningRate);
     }
 
     #endregion

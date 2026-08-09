@@ -61,7 +61,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
     "https://arxiv.org/abs/1803.11485",
     Year = 2018,
     Authors = "Rashid, T., Samvelyan, M., de Witt, C. S., Farquhar, G., Foerster, J., & Whiteson, S.")]
-public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private QMIXOptions<T> _options;
 
@@ -830,7 +830,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
     /// derivative is written by hand here.
     /// </remarks>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
