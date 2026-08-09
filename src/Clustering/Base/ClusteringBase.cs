@@ -7,6 +7,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Factories;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regularization;
@@ -492,7 +493,83 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     }
 
     /// <inheritdoc/>
-    public virtual long ParameterCount => ExpectedParameterCount;
+    /// <summary>
+    /// The single component a clustering model serializes: its cluster centres.
+    /// </summary>
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this model's surface.
+    /// </summary>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+        => _parameterRegistry.Register(component);
+
+    /// <summary>
+    /// Declare the trainable components of this model. Defaults to the cluster centres, which is
+    /// what every one of the 27 models under this base actually stores -- none of them overrode
+    /// any parameter surface.
+    /// </summary>
+    protected virtual void RegisterComponents()
+        => RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private ParameterComponentRegistry<T> Registry
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+                _componentsRegistered = _parameterRegistry.HasComponents;
+            }
+            return _parameterRegistry;
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Folds the same component <see cref="GetParameters"/> does. It used to be
+    /// <see cref="ExpectedParameterCount"/> -- NumFeatures * NumClusters -- and that made the count
+    /// depend on CALL ORDER: PackParameters derives NumFeatures from ClusterCenters.Columns when a
+    /// subclass set the centres but not NumFeatures (its own comment says that happens), while the
+    /// formula did not. Measured on KMeans with 3 clusters x 4 features:
+    /// </para>
+    /// <code>
+    /// count asked first : ParameterCount 0, GetParameters().Length 12, ParameterCount 12
+    /// vector asked first: GetParameters().Length 12, ParameterCount 12
+    /// </code>
+    /// <para>
+    /// A caller that sized a buffer from the count before reading got zero and lost every centre.
+    /// All 27 models under this base inherited that, none of them overriding any of the three
+    /// surfaces, so this one change fixes the family.
+    /// </para>
+    /// </remarks>
+    public virtual long ParameterCount => Registry.ParameterCount;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> GetParameters() => Registry.GetParameters();
+
+    /// <inheritdoc/>
+    /// <remarks>The inverse of <see cref="GetParameters"/>, down the same component -- including
+    /// the dimension inference that lets a restore re-derive NumClusters and NumFeatures from the
+    /// vector it is handed.</remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        Registry.SetParameters(parameters);
+        OnParametersRestored();
+    }
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
@@ -506,7 +583,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     public virtual bool SupportsParameterInitialization => true;
 
     /// <inheritdoc/>
-    public virtual Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         if (ClusterCenters is null)
         {
@@ -533,7 +610,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     }
 
     /// <inheritdoc/>
-    public virtual void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // If NumFeatures wasn't set but NumClusters is known, derive from parameter vector
         if (NumFeatures == 0 && NumClusters > 0 && parameters.Length > 0 && parameters.Length % NumClusters == 0)
