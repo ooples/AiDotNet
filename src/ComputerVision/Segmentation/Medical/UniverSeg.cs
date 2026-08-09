@@ -56,37 +56,33 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniverSeg: Universal Medical Image Segmentation", "https://arxiv.org/abs/2304.06131", Year = 2023, Authors = "Butoi et al.")]
-public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
+public class UniverSeg<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly UniverSegOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only UniverSeg's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from MedicalSegmentationBase -> SegmentationModelBase.
+    private static readonly string[] ModalitiesSupported =
+        ["CT", "MRI_T1", "Xray", "Ultrasound", "Dermoscopy", "Microscopy"];
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this UniverSeg instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, SupportedModalities
+    // and Supports2D are all supplied identically by the base.
     internal bool UseNativeMode => _useNativeMode;
-    internal int NumClasses => _numClasses;
+
+    /// <summary>UniverSeg operates on 2D slices only.</summary>
+    public override bool Supports3D => false;
+
+    /// <summary>UniverSeg is a few-shot model: its whole point is segmenting from a support set.</summary>
+    public override bool SupportsFewShot => true;
     #endregion
 
     #region Constructors
@@ -109,15 +105,15 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         UniverSegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
+        // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
+        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
     {
         _options = options ?? new UniverSegOptions(); Options = _options;
+        // UniverSeg defaults to 128x128, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _dropRate = dropRate;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
@@ -142,23 +138,17 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public UniverSeg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         UniverSegOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
+        // InferenceSession - the same twenty lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
     {
         _options = options ?? new UniverSegOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"UniverSeg ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _dropRate = 0;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load UniverSeg ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -193,7 +183,7 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -203,7 +193,7 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #endregion
 
     #region Private Methods
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -212,7 +202,7 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -229,11 +219,8 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase; the copies
+    // that used to live here were line-for-line identical apart from the base's extra rank guards.
     #endregion
 
     #region Abstract Implementation
@@ -325,30 +312,13 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ? new UniverSeg<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new UniverSeg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
+    // and UniverSeg owns no other unmanaged resource.
     #endregion
 
     #region IMedicalSegmentation Implementation
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI_T1", "Xray", "Ultrasound", "Dermoscopy", "Microscopy"];
-    bool IMedicalSegmentation<T>.Supports3D => false;
-    bool IMedicalSegmentation<T>.Supports2D => true;
-    bool IMedicalSegmentation<T>.SupportsFewShot => true;
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
+    /// <summary>Segments a single 2D medical slice.</summary>
+    public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
@@ -367,9 +337,15 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
-    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+    /// <summary>Segments a volume by treating it as a single slice (UniverSeg is a 2D model).</summary>
+    public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume) => SegmentSlice(volume);
+
+    /// <summary>
+    /// Prototype-based few-shot segmentation. Reached through the base's <c>SegmentFewShot</c>,
+    /// which null-checks the arguments and verifies <see cref="SupportsFewShot"/> first.
+    /// </summary>
+    protected override MedicalSegmentationResult<T> SegmentFewShotInternal(
+        Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
     {
         var queryFeatures = Predict(queryImage);
         int numC = queryFeatures.Shape[0], h = queryFeatures.Shape[1], w = queryFeatures.Shape[2];
