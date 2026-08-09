@@ -68,9 +68,41 @@ public static class CloneRegistry
     {
         if (type is null) throw new ArgumentNullException(nameof(type));
 
+        EnsureGeneratedPlansLoaded();
+
         return Generated.TryGetValue(type, out var generated)
             ? generated
             : Reflected.GetOrAdd(type, BuildByReflection);
+    }
+
+    private static int _generatedLoaded;
+
+    /// <summary>
+    /// Runs the generated registrations once, on first use.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Resolved by reflection rather than called directly so that this file still compiles when the
+    /// generator produces nothing — during bootstrap, or in a consumer's assembly that references
+    /// the library without running its generators. A direct call would make the runtime depend on
+    /// generated output existing, which is exactly the kind of coupling that turns a missing
+    /// generator into an unexplainable build failure.
+    /// </para>
+    /// <para>
+    /// Absence is not an error: every type then falls back to a reflected plan, and
+    /// <see cref="IsVerified"/> reports honestly that no compile-time plan was available.
+    /// </para>
+    /// </remarks>
+    private static void EnsureGeneratedPlansLoaded()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _generatedLoaded, 1) != 0) return;
+
+        var registrations = typeof(CloneRegistry).Assembly
+            .GetType("AiDotNet.Generated.CloneRegistrations", throwOnError: false);
+
+        registrations
+            ?.GetMethod("RegisterAll", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
+            ?.Invoke(null, null);
     }
 
     /// <summary>
