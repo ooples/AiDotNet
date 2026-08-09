@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.SourceSeparation;
@@ -30,6 +30,15 @@ public class SourceSeparationOptions : ModelOptions
         HpssKernelSize = other.HpssKernelSize;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
+
+        // The native Demucs geometry. Omitting these made a clone silently revert to the paper
+        // defaults while the original kept its configured (often much smaller) network -- the exact
+        // silent-clone-data-loss this constructor exists to prevent, and what AIDN070 flags.
+        DemucsDepth = other.DemucsDepth;
+        DemucsBaseChannels = other.DemucsBaseChannels;
+        DemucsKernelSize = other.DemucsKernelSize;
+        DemucsStride = other.DemucsStride;
+        DemucsPadding = other.DemucsPadding;
     }
 
     /// <summary>Audio sample rate. Default: 44100.</summary>
