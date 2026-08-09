@@ -786,19 +786,19 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.M2|FullyQualifiedName~Generated.MA|FullyQualifiedName~Generated.MC|FullyQualifiedName~Generated.Mea|FullyQualifiedName~Generated.MedC|FullyQualifiedName~Generated.MedF|FullyQualifiedName~Generated.MedN|FullyQualifiedName~Generated.Medi)
+              (FullyQualifiedName~Generated.M2|FullyQualifiedName~Generated.MA|FullyQualifiedName~Generated.Ma|FullyQualifiedName~Generated.MC|FullyQualifiedName~Generated.Mc|FullyQualifiedName~Generated.Mea|FullyQualifiedName~Generated.MedC|FullyQualifiedName~Generated.MedG|FullyQualifiedName~Generated.MedF|FullyQualifiedName~Generated.MedN|FullyQualifiedName~Generated.Medi)
           - name: ModelFamily - Generated Layers M MedS-Meta
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.MEG|FullyQualifiedName~Generated.MER|FullyQualifiedName~Generated.MedS|FullyQualifiedName~Generated.Mel|FullyQualifiedName~Generated.Mem|FullyQualifiedName~Generated.Mes|FullyQualifiedName~Generated.MetaC)
+              (FullyQualifiedName~Generated.MEG|FullyQualifiedName~Generated.Meg|FullyQualifiedName~Generated.MER|FullyQualifiedName~Generated.MedS|FullyQualifiedName~Generated.Mel|FullyQualifiedName~Generated.Mem|FullyQualifiedName~Generated.Mes|FullyQualifiedName~Generated.MetaC)
           - name: ModelFamily - Generated Layers M MetaV-Mu
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.METE|FullyQualifiedName~Generated.MG|FullyQualifiedName~Generated.MI|FullyQualifiedName~Generated.ML|FullyQualifiedName~Generated.MM|FullyQualifiedName~Generated.MP|FullyQualifiedName~Generated.MQ|FullyQualifiedName~Generated.MT|FullyQualifiedName~Generated.MetaV|FullyQualifiedName~Generated.Mo|FullyQualifiedName~Generated.Mu)
+              (FullyQualifiedName~Generated.METE|FullyQualifiedName~Generated.MG|FullyQualifiedName~Generated.MI|FullyQualifiedName~Generated.Mi|FullyQualifiedName~Generated.ML|FullyQualifiedName~Generated.MM|FullyQualifiedName~Generated.MP|FullyQualifiedName~Generated.MQ|FullyQualifiedName~Generated.MT|FullyQualifiedName~Generated.MetaV|FullyQualifiedName~Generated.Mo|FullyQualifiedName~Generated.MO|FullyQualifiedName~Generated.Mu)
           # N-Z was a single serial $heavyShard whose ~835 default-gate scaffold
           # methods ran the full 45-min job timeout and got CANCELLED before
           # finishing — perpetually red, like Integration C / NeuralNetworks A-L
@@ -823,18 +823,18 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.Pa|FullyQualifiedName~Generated.Pc|
-              FullyQualifiedName~Generated.Pi|FullyQualifiedName~Generated.Pl|
-              FullyQualifiedName~Generated.Pn|FullyQualifiedName~Generated.Pp)
+              (FullyQualifiedName~Generated.Pa|FullyQualifiedName~Generated.PA|FullyQualifiedName~Generated.Pc|FullyQualifiedName~Generated.PC|
+              FullyQualifiedName~Generated.Pi|FullyQualifiedName~Generated.PI|FullyQualifiedName~Generated.Pl|FullyQualifiedName~Generated.PL|
+              FullyQualifiedName~Generated.Pn|FullyQualifiedName~Generated.PN|FullyQualifiedName~Generated.Pp|FullyQualifiedName~Generated.PP)
           - name: ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               (FullyQualifiedName~Generated.Pe|FullyQualifiedName~Generated.Ph|
-              FullyQualifiedName~Generated.Po|FullyQualifiedName~Generated.Pr|
-              FullyQualifiedName~Generated.Ps|FullyQualifiedName~Generated.Pu|
-              FullyQualifiedName~Generated.Pw|FullyQualifiedName~Generated.Py)
+              FullyQualifiedName~Generated.Po|FullyQualifiedName~Generated.Pr|FullyQualifiedName~Generated.PR|
+              FullyQualifiedName~Generated.Ps|FullyQualifiedName~Generated.PS|FullyQualifiedName~Generated.Pu|FullyQualifiedName~Generated.PU|
+              FullyQualifiedName~Generated.Pw|FullyQualifiedName~Generated.PW|FullyQualifiedName~Generated.Py)
           # Q-S was itself a 45-min CANCELLATION, exactly like N-Z and N-S before it.
           # MEASURED (full local run, all correctness fixes in place): 203 classes,
           # 83.8 min of summed per-test time, and ~125 min WALL — the ~1.5x factor is
@@ -862,7 +862,7 @@ jobs:
             # 56 classes, 15.9 min. Heaviest: RecurrentGemmaLanguageModel 5.9m, RealESRGANVideo 2.3m.
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.RA|FullyQualifiedName~Generated.RB|FullyQualifiedName~Generated.RC|FullyQualifiedName~Generated.RE|FullyQualifiedName~Generated.RF|FullyQualifiedName~Generated.RI|FullyQualifiedName~Generated.RM|FullyQualifiedName~Generated.RN|FullyQualifiedName~Generated.RoBE)
+              (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.RA|FullyQualifiedName~Generated.Ra|FullyQualifiedName~Generated.RB|FullyQualifiedName~Generated.RC|FullyQualifiedName~Generated.RE|FullyQualifiedName~Generated.Re|FullyQualifiedName~Generated.RF|FullyQualifiedName~Generated.RI|FullyQualifiedName~Generated.RM|FullyQualifiedName~Generated.RN|FullyQualifiedName~Generated.RoBE)
           - name: ModelFamily - Generated Layers R2-SAI
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -878,14 +878,14 @@ jobs:
             # because SAL*/SAM* cannot be separated further by prefix.
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.SAL|FullyQualifiedName~Generated.SAM)
+              (FullyQualifiedName~Generated.SAL|FullyQualifiedName~Generated.SAM|FullyQualifiedName~Generated.Sam)
           - name: ModelFamily - Generated Layers SAN-Sig
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             # 40 classes, 16.4 min. Heaviest: SECBERT 5.5m, SeACo 2.8m.
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.SAN|FullyQualifiedName~Generated.SAR|FullyQualifiedName~Generated.SC|FullyQualifiedName~Generated.SE|FullyQualifiedName~Generated.Sh|FullyQualifiedName~Generated.Sig)
+              (FullyQualifiedName~Generated.SAN|FullyQualifiedName~Generated.SAR|FullyQualifiedName~Generated.Sar|FullyQualifiedName~Generated.SC|FullyQualifiedName~Generated.Sc|FullyQualifiedName~Generated.SE|FullyQualifiedName~Generated.Se|FullyQualifiedName~Generated.Sh|FullyQualifiedName~Generated.Sig)
           # The previous Sil-Sy job reached the 45-minute job timeout after four
           # individual MoreData watchdogs. Split its exact prefix union at the
           # Sq/St boundary so both halves retain headroom even if a future model
@@ -895,16 +895,16 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|
-              FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.SP|
-              FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.Sil|
+              (FullyQualifiedName~Generated.SK|FullyQualifiedName~Generated.SL|FullyQualifiedName~Generated.Sl|
+              FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.So|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.Sp|
+              FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.Sq|FullyQualifiedName~Generated.Sil|
               FullyQualifiedName~Generated.Sim)
           - name: ModelFamily - Generated Layers St-Sy
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|
+              (FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.St|FullyQualifiedName~Generated.SU|FullyQualifiedName~Generated.Su|
               FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sw|
               FullyQualifiedName~Generated.Sy)
           # The T-Z tail is 201 model classes / 4,378 tests. T is split in two (see below).
@@ -941,7 +941,7 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.VA|FullyQualifiedName~Generated.VF)
+              (FullyQualifiedName~Generated.VA|FullyQualifiedName~Generated.Va|FullyQualifiedName~Generated.VF)
           - name: ModelFamily - Generated Layers Video
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -952,7 +952,7 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              ((FullyQualifiedName~Generated.Vi&FullyQualifiedName!~Generated.Video)|FullyQualifiedName~Generated.VM)
+              ((FullyQualifiedName~Generated.Vi|FullyQualifiedName~Generated.VI&FullyQualifiedName!~Generated.Video)|FullyQualifiedName~Generated.VM)
           - name: ModelFamily - Generated Layers Vo-VR
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
