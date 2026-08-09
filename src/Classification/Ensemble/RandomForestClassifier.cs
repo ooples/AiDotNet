@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
@@ -454,10 +454,11 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         // Clone all estimators
         foreach (var estimator in Estimators)
         {
-            if (estimator is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                clone.Estimators.Add((IClassifier<T>)fullModel.Clone());
-            }
+            // No type test: IClassifier<T> derives from IFullModel<T, Matrix<T>, Vector<T>>, so the
+            // check was always true and its else-branch unreachable. Testing it suggested some
+            // estimator might not be cloneable and be skipped -- which would drop trees from the
+            // forest silently. Every estimator is cloned.
+            clone.Estimators.Add((IClassifier<T>)estimator.Clone());
         }
 
         return clone;

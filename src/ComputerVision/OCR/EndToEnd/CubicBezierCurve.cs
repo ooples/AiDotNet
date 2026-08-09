@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -264,8 +264,12 @@ public readonly struct CubicBezierCurve<T>
 
             for (int r = col + 1; r < n; r++)
             {
+                // No exact-zero shortcut on `factor`: a magnitude test cannot stand in for one
+                // (a 1e-300 factor against a 1e300 pivot row still contributes), and at 4x4 the
+                // skip saves five multiply-subtracts. Always eliminate.
+                //
+                // RE-APPLIED: this fix landed in c52dc3e9d and the #1995 merge reverted it.
                 double factor = m[r, col] / m[col, col];
-                if (factor == 0.0) continue;
                 for (int c = col; c <= n; c++) m[r, c] -= factor * m[col, c];
             }
         }
