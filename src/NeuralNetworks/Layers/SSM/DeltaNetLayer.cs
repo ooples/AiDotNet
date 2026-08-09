@@ -65,7 +65,15 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class DeltaNetLayer<T> : LayerBase<T>
+// Shape-preserving; relations DISCOVERED by probing, roles read from the forward. Like every layer in
+// this folder it takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is
+// [Time, Features] with NO batch axis. OutputAxesFor is generated from these layouts.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DeltaNetLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -147,16 +155,6 @@ public partial class DeltaNetLayer<T> : LayerBase<T>
     /// Gets the dimension per head (modelDimension / numHeads).
     /// </summary>
     public int HeadDimension => _headDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    public override long ParameterCount =>
-        _queryWeights.Length + _queryBias.Length +
-        _keyWeights.Length + _keyBias.Length +
-        _valueWeights.Length + _valueBias.Length +
-        _betaWeights.Length + _betaBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
     /// <summary>
     /// Creates a new DeltaNet layer.
@@ -464,28 +462,6 @@ public partial class DeltaNetLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     /// <summary>

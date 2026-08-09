@@ -86,6 +86,14 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ResearchPaper("Point-E: A System for Generating 3D Point Clouds from Complex Prompts", "https://arxiv.org/abs/2212.08751", Year = 2022, Authors = "Nichol et al.")]
 public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_pointCloudPredictor);
+    }
+
     #region Constants
 
     /// <summary>
@@ -619,28 +627,11 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        return _pointCloudPredictor.GetParameters();
-    }
+
+
+
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _pointCloudPredictor.ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {_pointCloudPredictor.ParameterCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        _pointCloudPredictor.SetParameters(parameters);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount => _pointCloudPredictor.ParameterCount;
-
     #endregion
 
     #region ICloneable Implementation

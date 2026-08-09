@@ -37,6 +37,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+// SHAPE-PRESERVING AT EVERY RANK, which is worth stating because the interior does change shape twice.
+// The squeeze pools the spatial axes away to [B, C] and the excitation runs a bottleneck through
+// _reducedChannels - but ForwardTraced ends at TensorBroadcastMultiply(input, excitationReshaped),
+// where excitationReshaped is deliberately reshaped to broadcast against the ORIGINAL input at each of
+// the rank-1/2/3/4/higher branches. The result is always the input's own shape.
+//
+// The shorthand is used rather than enumerated layouts because the rank really is open-ended here: the
+// final branch handles arbitrary [B, D1, ..., C] by pooling axes 1..rank-2, so no fixed list of layouts
+// would cover what this layer accepts. _reducedChannels is interior and rightly absent.
+[ElementWiseShape(Note = "Channel-wise rescale: pools, excites, then broadcasts back over the input's own shape.")]
+[AutoParameters]
 public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -488,17 +499,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <remarks>
-    /// This returns the total count of weights and biases in both fully connected layers.
-    /// </remarks>
-    public override long ParameterCount =>
-        _weights1.Shape[0] * _weights1.Shape[1] +   // FC1 weights
-        _bias1.Shape[0] +                            // FC1 biases
-        _weights2.Shape[0] * _weights2.Shape[1] +   // FC2 weights
-        _bias2.Shape[0];                             // FC2 biases
+                             // FC2 biases
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SqueezeAndExcitationLayer{T}"/> class with scalar activation functions.
@@ -1247,72 +1248,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) of the layer and combines them into a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all weights and biases from both fully connected layers
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Calculate total number of parameters
-        int totalParams = _weights1.Shape[0] * _weights1.Shape[1] +
-                          _bias1.Shape[0] +
-                          _weights2.Shape[0] * _weights2.Shape[1] +
-                          _bias2.Shape[0];
-
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Copy weights1
-        for (int i = 0; i < _weights1.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights1.Shape[1]; j++)
-            {
-                parameters[index++] = _weights1[i, j];
-            }
-        }
-
-        // Copy bias1
-        for (int i = 0; i < _bias1.Shape[0]; i++)
-        {
-            parameters[index++] = _bias1[i];
-        }
-
-        // Copy weights2
-        for (int i = 0; i < _weights2.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights2.Shape[1]; j++)
-            {
-                parameters[index++] = _weights2[i, j];
-            }
-        }
-
-        // Copy bias2
-        for (int i = 0; i < _bias2.Shape[0]; i++)
-        {
-            parameters[index++] = _bias2[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -1354,51 +1289,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(gW1, gB1),
             Vector<T>.Concatenate(gW2, gB2));
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int totalParams = _weights1.Shape[0] * _weights1.Shape[1] +
-                          _bias1.Shape[0] +
-                          _weights2.Shape[0] * _weights2.Shape[1] +
-                          _bias2.Shape[0];
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        // Set weights1
-        for (int i = 0; i < _weights1.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights1.Shape[1]; j++)
-            {
-                _weights1[i, j] = parameters[index++];
-            }
-        }
-
-        // Set bias1
-        for (int i = 0; i < _bias1.Shape[0]; i++)
-        {
-            _bias1[i] = parameters[index++];
-        }
-
-        // Set weights2
-        for (int i = 0; i < _weights2.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights2.Shape[1]; j++)
-            {
-                _weights2[i, j] = parameters[index++];
-            }
-        }
-
-        // Set bias2
-        for (int i = 0; i < _bias2.Shape[0]; i++)
-        {
-            _bias2[i] = parameters[index++];
-        }
     }
 
     /// <summary>

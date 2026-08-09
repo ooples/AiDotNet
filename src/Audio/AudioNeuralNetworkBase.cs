@@ -1,4 +1,9 @@
 using AiDotNet.Diffusion.Audio;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds to ours when this import shadows them from a nearer
+// scope. Without it the attribute resolves to the wrong type and ADNSHAPE003 reports this contract as
+// having no input layout.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
@@ -31,8 +36,59 @@ namespace AiDotNet.Audio;
 /// 2. Build and train a new model from scratch
 /// </para>
 /// </remarks>
-public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
+// MEASURED across the family, not assumed: every audio model probed returns RANK 2, [Batch, Features].
+// Batch tracks the input; the feature width is model-specific and comes from OutputFeatureWidth below.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The width of this model's output feature axis, or 0 when it has not been stated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// VIRTUAL returning 0, not abstract, and that is deliberate on two counts. Adding an abstract
+    /// member to a public base is a breaking change for anything outside this repository that derives
+    /// from it; and 0 lets the 206 models in this family be migrated INCREMENTALLY, with the remaining
+    /// count readable from the conformance sweep at any point - the same ladder ADNSHAPE006 climbed
+    /// from 85 of ~270 layers to zero.
+    /// </para>
+    /// <para>
+    /// WHY THIS CANNOT LIVE ON THE BASE, unlike segmentation's _numClasses. Measured across the family,
+    /// the width is a different quantity per task and is stored under a different name in every options
+    /// class - AudioLM's SemanticVocabSize (1024), BasicPitch's NumHarmonicBins (264) - and is
+    /// sometimes DERIVED rather than stored: BandSplitRNNEnhancer returns 257, which is its
+    /// FFTSize (512) / 2 + 1. No single field and no name-matching rule can produce all three, which is
+    /// why each model states its own one-line expression instead.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> the last number in an audio model's output says how many values it
+    /// predicts per step - a vocabulary size for speech recognition, a bin count for pitch detection, a
+    /// frequency count for enhancement. Each model knows its own, so each one reports it here.
+    /// </para>
+    /// </remarks>
+    protected virtual int OutputFeatureWidth => 0;
+
+    /// <summary>
+    /// The output axes for an audio model: [Batch, Features].
+    /// </summary>
+    /// <remarks>
+    /// Declines - returns null - until the model states its <see cref="OutputFeatureWidth"/>. Declining
+    /// is the honest answer where nothing has been measured, and it is what keeps this contract from
+    /// claiming a width it cannot know.
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        int width = OutputFeatureWidth;
+        if (inputRank != 2 || width <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(width)),
+        };
+    }
+
     /// <summary>
     /// Gets the sample rate expected by this model.
     /// </summary>

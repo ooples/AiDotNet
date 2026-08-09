@@ -7,6 +7,7 @@ using AiDotNet.Validation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.MultiLabel;
 
 /// <summary>
@@ -63,6 +64,17 @@ namespace AiDotNet.Classification.MultiLabel;
     [ResearchPaper("A Review on Multi-Label Learning Algorithms", "https://doi.org/10.1109/TKDE.2013.39")]
 public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>One independent binary classifier per label, in label order -- the order the hand-written concatenation walked them. Returning early when the array is null keeps registration from latching before training has built them: the base only marks the job done once something was actually registered.</remarks>
+    protected override void RegisterComponents()
+    {
+        if (_labelClassifiers is null) return;
+        foreach (var classifier in _labelClassifiers)
+        {
+            RegisterParameterComponent(classifier as IParameterSource<T>);
+        }
+    }
     #region Fields
 
     /// <summary>
@@ -304,38 +316,6 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     #region Abstract Method Implementations
 
     /// <summary>
-    /// Gets all learnable parameters of the model as a single vector.
-    /// </summary>
-    /// <returns>A concatenated vector of all label classifiers' parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Binary Relevance contains multiple classifiers, each with
-    /// its own parameters. This method collects all parameters from all classifiers
-    /// into a single vector for operations like serialization or optimization.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        if (_labelClassifiers is null || _labelClassifiers.Length == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        // Collect all parameters from all classifiers
-        var allParams = new List<T>();
-        foreach (var classifier in _labelClassifiers)
-        {
-            var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
-            for (int i = 0; i < classifierParams.Length; i++)
-            {
-                allParams.Add(classifierParams[i]);
-            }
-        }
-
-        return new Vector<T>(allParams.ToArray());
-    }
-
-    /// <summary>
     /// Creates a new instance of the model with the specified parameters.
     /// </summary>
     /// <param name="parameters">The parameters to use.</param>
@@ -353,38 +333,6 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         newClassifier.NumFeatures = NumFeatures;
         newClassifier.SetParameters(parameters);
         return newClassifier;
-    }
-
-    /// <summary>
-    /// Sets the parameters of this model.
-    /// </summary>
-    /// <param name="parameters">The parameters to set.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This distributes the provided parameters among all label classifiers.
-    /// The parameters must be in the same order they were retrieved by GetParameters().
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (_labelClassifiers is null || _labelClassifiers.Length == 0)
-        {
-            return;
-        }
-
-        int paramIndex = 0;
-        foreach (var classifier in _labelClassifiers)
-        {
-            var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
-            var newParams = new Vector<T>(classifierParams.Length);
-
-            for (int i = 0; i < classifierParams.Length && paramIndex < parameters.Length; i++)
-            {
-                newParams[i] = parameters[paramIndex++];
-            }
-
-            ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).SetParameters(newParams);
-        }
     }
 
     /// <summary>

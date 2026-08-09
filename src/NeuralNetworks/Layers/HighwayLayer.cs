@@ -37,7 +37,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// Width-preserving by CONSTRUCTION, not by convention. Both constructors call
+// base([inputDimension], [inputDimension]) - one dimension, used for both sides - and ForwardTraced
+// finishes with Engine.TensorAdd(gatedDiff, input): the bypass lane adds the untouched input back in,
+// so the output can only ever have the input's feature width. That is what makes Same(Features)
+// a claim about the layer rather than about one configuration; a Fixed(...) here would be wrong even
+// though the width happens to be a constructor argument, because the residual add - not the field -
+// is what pins it.
+// Rank 2 only. The declared shapes carry a single feature axis and both weight tensors are
+// [inputDimension, inputDimension], so [Batch, Features] is the form the layer is written for and the
+// form it is tested at; nothing here demonstrates an unbatched or sequence-shaped input, so neither is
+// declared. Same rank and same roles both ways, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "output = gate * transform + (1 - gate) * input; the bypass lane forces width to be preserved.")]
+[AutoParameters]
+public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -305,29 +322,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <value>
-    /// The sum of elements in all weight and bias tensors (transform weights, transform bias, gate weights, gate bias).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns the total count of learnable parameters across all four parameter tensors:
-    /// transform weights, transform biases, gate weights, and gate biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you how many numbers the layer can adjust during training.
-    /// For a Highway layer with 100 input/output dimensions, you would have:
-    /// - 10,000 transform weights (100 x 100)
-    /// - 100 transform biases
-    /// - 10,000 gate weights (100 x 100)
-    /// - 100 gate biases
-    /// - Total: 20,200 parameters
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        _transformWeights.Length + _transformBias.Length + _gateWeights.Length + _gateBias.Length;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HighwayLayer{T}"/> class with the specified dimensions and element-wise activation functions.
@@ -798,96 +792,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _transformBias = Engine.TensorSubtract(_transformBias, scaledTransformBiasGrad);
         _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
         _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_transformWeights);
-        Engine.InvalidatePersistentTensor(_transformBias);
-        Engine.InvalidatePersistentTensor(_gateWeights);
-        Engine.InvalidatePersistentTensor(_gateBias);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) and combines them into a single vector.
-    /// The parameters are arranged in the following order: transform weights, transform biases, gate weights, gate biases.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include weights and biases from both transform and gate paths
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_transformWeights.ToArray()),
-            new Vector<T>(_transformBias.ToArray()),
-            new Vector<T>(_gateWeights.ToArray()),
-            new Vector<T>(_gateBias.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all the weight matrices and bias vectors of the highway layer from a single vector of parameters.
-    /// The parameters should be arranged in the following order: transform weights, transform biases, gate weights, gate biases.
-    /// This is useful for loading saved model weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The parameters must be in the right order: transform weights, transform biases, gate weights, gate biases
-    /// - This maintains the same structure used by GetParameters
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int transformWeightsSize = _transformWeights.Shape[0] * _transformWeights.Shape[1];
-        int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
-        int expectedLength = transformWeightsSize + _transformBias.Length +
-                             gateWeightsSize + _gateBias.Length;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        _transformWeights = new Tensor<T>(_transformWeights._shape, parameters.Slice(index, transformWeightsSize));
-        index += transformWeightsSize;
-
-        _transformBias = new Tensor<T>(_transformBias._shape, parameters.Slice(index, _transformBias.Length));
-        index += _transformBias.Length;
-
-        _gateWeights = new Tensor<T>(_gateWeights._shape, parameters.Slice(index, gateWeightsSize));
-        index += gateWeightsSize;
-
-        _gateBias = new Tensor<T>(_gateBias._shape, parameters.Slice(index, _gateBias.Length));
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_transformWeights);

@@ -46,6 +46,15 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("Fish Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis", "https://arxiv.org/abs/2411.01156", Year = 2024, Authors = "Shijia Liao, Yuxuan Wang, Tianyu Li, Yifan Hu, Ruobing Xie")]
 public class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore is a plain fold over Layers, and the last layer
+    /// CreateDefaultFishSpeechLayers emits is the GFSQ output projection
+    /// <c>FullyConnectedLayer&lt;T&gt;(codebookSize)</c>, wired from <c>_options.CodebookSize</c> (8192).
+    /// A codebook size, not a text vocabulary - TextVocabSize (32000) is an input-side quantity here.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.CodebookSize;
+
     #region Fields
 
     private readonly FishSpeechOptions _options;

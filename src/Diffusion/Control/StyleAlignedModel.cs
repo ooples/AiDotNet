@@ -56,6 +56,15 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("Style Aligned Image Generation via Shared Attention", "https://arxiv.org/abs/2312.02133", Year = 2024, Authors = "Hertz et al.")]
 public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_vae);
+    }
+
     private const int LATENT_CHANNELS = 4;
 
     private UNetNoisePredictor<T> _baseUNet;
@@ -72,7 +81,6 @@ public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new Style-Aligned model.
@@ -112,40 +120,7 @@ public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _baseUNet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
-        for (int i = 0; i < unetParams.Length; i++) combined[i] = unetParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[unetParams.Length + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int uc = checked((int)_baseUNet.ParameterCount);
-        int vc = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)uc + vc;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int o = 0;
-        var unetArr = new T[uc];
-        for (int i = 0; i < uc; i++) unetArr[i] = parameters[o + i];
-        _baseUNet.SetParameters(new Vector<T>(unetArr));
-        o += uc;
-
-        var vaeArr = new T[vc];
-        for (int i = 0; i < vc; i++) vaeArr[i] = parameters[o + i];
-        _vae.SetParameters(new Vector<T>(vaeArr));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

@@ -65,6 +65,26 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
     Authors = "Haarnoja, T., Zhou, A., Abbeel, P., & Levine, S.")]
 public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_policyNetwork);
+        RegisterParameterComponent(_q1Network);
+        RegisterParameterComponent(_q2Network);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Refreshes what derives from the parameters. This ran at the end of the
+    /// hand-written SetParameters; losing it would not fail a test, it would just leave
+    /// the agent training against a stale target.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_q1Network, _q1TargetNetwork);
+        CopyNetworkWeights(_q2Network, _q2TargetNetwork);
+    }
     private SACOptions<T> _sacOptions;
 
     /// <inheritdoc/>
@@ -672,49 +692,6 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         ReadNetwork(_q2Network);
         ReadNetwork(_q1TargetNetwork);
         ReadNetwork(_q2TargetNetwork);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var policyParams = _policyNetwork.GetParameters();
-        var q1Params = _q1Network.GetParameters();
-        var q2Params = _q2Network.GetParameters();
-
-        var total = policyParams.Length + q1Params.Length + q2Params.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in policyParams) vector[idx++] = p;
-        foreach (var p in q1Params) vector[idx++] = p;
-        foreach (var p in q2Params) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var policyParams = _policyNetwork.GetParameters();
-        var q1Params = _q1Network.GetParameters();
-        var q2Params = _q2Network.GetParameters();
-
-        int idx = 0;
-        var policyVec = new Vector<T>(policyParams.Length);
-        var q1Vec = new Vector<T>(q1Params.Length);
-        var q2Vec = new Vector<T>(q2Params.Length);
-
-        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
-        for (int i = 0; i < q1Params.Length; i++) q1Vec[i] = parameters[idx++];
-        for (int i = 0; i < q2Params.Length; i++) q2Vec[i] = parameters[idx++];
-
-        _policyNetwork.UpdateParameters(policyVec);
-        _q1Network.UpdateParameters(q1Vec);
-        _q2Network.UpdateParameters(q2Vec);
-
-        // Update targets
-        CopyNetworkWeights(_q1Network, _q1TargetNetwork);
-        CopyNetworkWeights(_q2Network, _q2TargetNetwork);
     }
 
     /// <inheritdoc/>

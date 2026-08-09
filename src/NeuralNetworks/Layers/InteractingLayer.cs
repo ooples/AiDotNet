@@ -24,7 +24,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public partial class InteractingLayer<T> : LayerBase<T>
+// AutoInt operates on EMBEDDED TABULAR FIELDS, not a sequence: ForwardTraced reads
+// [batchSize, numFeatures, embDim] off input.Shape and attends across the numFeatures axis. That axis
+// is the set of table columns, which is why it is Other rather than Time - there is no ordering to it,
+// the same reason GraphAttentionLayer names its node axis Other. The trailing axis is the per-field
+// embedding width, the layer's Features.
+// Shape-preserving on all three axes: attention is over the field axis so it cannot change its length,
+// and ProjectOutput ends with `projected.Reshape(batchSize, numFeatures, _embeddingDim)` - the output
+// projection maps _attentionDim back DOWN to the embedding width it started at, which is also what lets
+// the residual add work when useResidual is set.
+// Rank 3 only: the forward pass indexes Shape[0..2] unconditionally, so nothing else is accepted.
+// Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Field embeddings: the middle axis is the tabular fields AutoInt attends across.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -69,15 +86,6 @@ public partial class InteractingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        // Cast the first term to long so the running sum widens to 64-bit
-        // and never wraps before reaching ToFlatVectorSize. With Q/K/V/O
-        // weight matrices each `embeddingDim × attentionDim` the int sum
-        // can overflow on multi-billion-parameter feature interactors.
-        (long)_queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _outputWeights.Length + (_residualWeights?.Length ?? 0);
 
     /// <summary>
     /// Initializes an interacting layer.
@@ -320,25 +328,6 @@ public partial class InteractingLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
 
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        int total = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var result = new Vector<T>(total);
-        int offset = 0;
-
-        CopyTensorToVector(_queryWeights, result, ref offset);
-        CopyTensorToVector(_keyWeights, result, ref offset);
-        CopyTensorToVector(_valueWeights, result, ref offset);
-        CopyTensorToVector(_outputWeights, result, ref offset);
-        if (_residualWeights != null)
-        {
-            CopyTensorToVector(_residualWeights, result, ref offset);
-        }
-
-        return result;
     }
 
     private static void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int offset)

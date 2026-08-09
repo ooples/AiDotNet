@@ -63,6 +63,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
     Authors = "Rashid, T., Samvelyan, M., de Witt, C. S., Farquhar, G., Foerster, J., & Whiteson, S.")]
 public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var network in _agentNetworks) RegisterParameterComponent(network);
+        RegisterParameterComponent(_mixingNetwork);
+    }
     private QMIXOptions<T> _options;
 
     /// <inheritdoc/>
@@ -726,85 +735,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             SetParameters(parameters);
         }
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        foreach (var network in _agentNetworks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        var mixingParams = _mixingNetwork.GetParameters();
-        for (int i = 0; i < mixingParams.Length; i++)
-        {
-            allParams.Add(mixingParams[i]);
-        }
-
-        var paramVector = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            paramVector[i] = allParams[i];
-        }
-
-        return paramVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        // Calculate expected parameter count
-        int expectedParamCount = 0;
-        foreach (var network in _agentNetworks)
-        {
-            expectedParamCount += (int)network.ParameterCount;
-        }
-        expectedParamCount += (int)_mixingNetwork.ParameterCount;
-
-        if (parameters.Length != expectedParamCount)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length mismatch. Expected {expectedParamCount} parameters but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        foreach (var network in _agentNetworks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
-
-        int mixingParamCount = checked((int)_mixingNetwork.ParameterCount);
-        var mixingParams = new Vector<T>(mixingParamCount);
-        for (int i = 0; i < mixingParamCount; i++)
-        {
-            mixingParams[i] = parameters[offset + i];
-
-            // Enforce QMIX monotonicity: all mixing network weights must be non-negative
-            if (NumOps.LessThan(mixingParams[i], NumOps.Zero))
-            {
-                mixingParams[i] = NumOps.Zero;
-            }
-        }
-        _mixingNetwork.UpdateParameters(mixingParams);
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

@@ -4,6 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -58,6 +60,12 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Image-to-Image Translation with Conditional Adversarial Networks", "https://arxiv.org/abs/1611.07004", Year = 2017, Authors = "Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, Alexei A. Efros")]
 public class Pix2Pix<T> : NeuralNetworkBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Generator then discriminator, and the same fix as ACGAN: measured 49,345 against a vector of length 0 before this.</remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => Generator.Layers.Cast<LayerBase<T>?>()
+            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
     private readonly Pix2PixOptions _options;
 
     /// <inheritdoc/>
@@ -119,11 +127,6 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the Pix2Pix model.
-    /// </summary>
-    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     private readonly ILossFunction<T> _lossFunction;
 

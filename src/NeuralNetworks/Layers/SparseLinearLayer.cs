@@ -38,8 +38,49 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 0.5")]
-public partial class SparseLinearLayer<T> : LayerBase<T>
+// A dense projection that happens to store its weights sparsely. SPARSITY IS NOT A SHAPE PROPERTY:
+// _sparsity decides how many of the [OutputFeatures, InputFeatures] entries are non-zero, not how wide
+// the result is - the sparse matmul still produces a fully dense [batch, OutputFeatures]. So the
+// contract is the ordinary linear one and says nothing about _sparsity.
+//
+// Ranks 1 and 2 only, per ForwardTraced's own <param> ("shape [inputFeatures] or [batch,
+// inputFeatures]") and enforced there: it promotes rank 1 to [1, InputFeatures] and then reads
+// input2d.Shape[1], so a rank-3 input would compare the wrong axis against InputFeatures and throw.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From <c>ForwardTraced</c>: the chain ends at
+    /// <c>TensorBroadcastAdd(outBO, Reshape(_biases, [1, OutputFeatures]))</c>, giving
+    /// <c>[batch, OutputFeatures]</c>, and a rank-1 input is reshaped back to <c>[OutputFeatures]</c>
+    /// on the way out. <c>OutputFeatures</c> is the constructor argument that sizes the weight matrix's
+    /// row count, so <c>Fixed</c> is reading the layer's own parameter, not an observed number.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputFeatures <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputFeatures));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     private readonly ISparseEngine _engine;
     private readonly INumericOperations<T> _numOps;
 
@@ -105,15 +146,6 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// Gets the number of output features.
     /// </summary>
     public int OutputFeatures { get; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// For sparse layers, this returns the number of non-zero weights plus biases.
-    /// </remarks>
-    public override long ParameterCount =>
-        _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
     /// Gets whether this layer supports training. Returns <c>true</c>: both
@@ -417,30 +449,6 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all non-zero weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        var paramArray = new T[ParameterCount];
-        int idx = 0;
-
-        // Add non-zero weights
-        for (int nz = 0; nz < _weights.NonZeroCount; nz++)
-        {
-            paramArray[idx++] = _weights.Values[nz];
-        }
-
-        // Add biases
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            paramArray[idx++] = _biases[o];
-        }
-
-        return new Vector<T>(paramArray);
-    }
-
     public override void Serialize(BinaryWriter writer)
     {
         // Persist sparsity pattern (CSR row/col indices) so Deserialize
@@ -520,57 +528,6 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
             RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         }
         base.Deserialize(reader);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
-        }
-
-        int idx = 0;
-
-        // SparseTensor.Values is a defensive copy (DataVector.ToArray()), so
-        // writing into it does NOT update the underlying storage. Build the
-        // values array, snapshot CSR positions, and reconstruct the
-        // SparseTensor in place. We assign the new instance to _weights
-        // directly rather than going through SetTrainableParameters, because
-        // the latter calls ClearRegisteredParameters → UnregisterPersistentTensor
-        // → Contiguous() which throws on sparse tensors. Deserialize is
-        // pre-training, so no ParameterBuffer view aliasing is in flight yet.
-        int nnz = _weights.NonZeroCount;
-        var newValues = new T[nnz];
-        for (int nz = 0; nz < nnz; nz++)
-        {
-            newValues[nz] = parameters[idx++];
-        }
-        _weights = new SparseTensor<T>(
-            _weights.Rows,
-            _weights.Columns,
-            (int[])_weights.RowIndices.Clone(),
-            (int[])_weights.ColumnIndices.Clone(),
-            newValues);
-        // Re-register the new sparse instance so GetTrainableParameters
-        // (used by tape-mode optimizers and parameter walks) returns the
-        // updated reference. The OLD _weights stays in the engine's
-        // persistent-tensor registry because Engine.UnregisterPersistentTensor
-        // calls Contiguous() which throws on sparse tensors — sparse-aware
-        // unregistration is tracked in the Tensors repo. Pre-training
-        // SetParameters is the only call site, so no ParameterBuffer
-        // view aliases the old reference yet.
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-
-        // Restore biases in place — _biases is a dense Tensor<T> and supports
-        // direct indexer writes.
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            _biases[o] = parameters[idx++];
-        }
     }
 
     /// <inheritdoc/>

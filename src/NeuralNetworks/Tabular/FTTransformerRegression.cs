@@ -48,6 +48,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
 public class FTTransformerRegression<T> : FTTransformerBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The regression head, folded after the shared backbone by the base.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _regressionHead };
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
@@ -59,11 +64,6 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     /// Gets the output dimension (number of target values to predict).
     /// </summary>
     public int OutputDimension => _outputDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters including the regression head.
-    /// </summary>
-    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the FTTransformerRegression class.
@@ -378,54 +378,6 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     {
         base.UpdateParameters(learningRate);
         _regressionHead.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets all parameters including the regression head.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var baseParams = base.GetParameters();
-        var headParams = _regressionHead.GetParameters();
-
-        var allParams = new T[baseParams.Length + headParams.Length];
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            allParams[i] = baseParams[i];
-        }
-        for (int i = 0; i < headParams.Length; i++)
-        {
-            allParams[baseParams.Length + i] = headParams[i];
-        }
-
-        return new Vector<T>(allParams);
-    }
-
-    /// <summary>
-    /// Sets all parameters including the regression head.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // GetParameters concatenates [base.GetParameters() (= base.ParameterCount)][head].
-        // base.ParameterCount (explicit-base call) is the backbone only, WITHOUT the head,
-        // so the base slice is exactly that. The previous
-        // `base.ParameterCount - head.ParameterCount` under-counted the base by the head
-        // size and corrupted the round-trip.
-        int baseCount = checked((int)base.ParameterCount);
-        var baseParams = new Vector<T>(baseCount);
-        for (int i = 0; i < baseCount; i++)
-        {
-            baseParams[i] = parameters[i];
-        }
-        base.SetParameters(baseParams);
-
-        int headCount = checked((int)_regressionHead.ParameterCount);
-        var headParams = new Vector<T>(headCount);
-        for (int i = 0; i < headCount; i++)
-        {
-            headParams[i] = parameters[baseCount + i];
-        }
-        _regressionHead.SetParameters(headParams);
     }
 
     /// <summary>

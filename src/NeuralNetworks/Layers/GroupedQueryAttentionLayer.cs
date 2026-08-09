@@ -39,7 +39,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
-internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
+// Grouped-query attention: shape-preserving at rank 2 [Time, Features], the rank the sweep probed.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
@@ -184,25 +188,6 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// Gets the RoPE theta parameter if RoPE is configured, or the default 10000.0.
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _weightsDeferred
-            // Weights not yet materialized: derive the exact count from the dimensions so
-            // callers iterating ParameterCount before the first forward (e.g. a parent
-            // predictor's CalculateParameterCount) get the real value without forcing allocation.
-            ? (long)_embeddingDimension * (_numHeads * _headDimension)        // Q
-              + 2L * _embeddingDimension * (_numKVHeads * _headDimension)     // K + V
-              + (long)(_numHeads * _headDimension) * _embeddingDimension      // output
-              + _embeddingDimension                                          // output bias
-              + (_useProjectionBias                                          // optional q/k/v biases
-                  ? (long)_numHeads * _headDimension + 2L * _numKVHeads * _headDimension
-                  : 0L)
-            : _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-              _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
-              _outputBias.Length;
 
     /// <summary>
     /// Creates a new Grouped-Query Attention layer.
@@ -752,27 +737,6 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _outputBias = Engine.TensorAdd(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureWeightsMaterialized();
-        int totalParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                          _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
-                          _outputBias.Length;
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        // Order: Q/K/V/O weights, optional q/k/v biases (zero-length when unused → layout unchanged),
-        // then the output bias LAST (the tensor-parallel partitioner reads it tail-wise).
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         EnsureWeightsMaterialized();
@@ -806,24 +770,6 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _valueWeightsGradient = null;
         _outputWeightsGradient = null;
         _outputBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureWeightsMaterialized();
-        int expectedParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-                             _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
-                             _outputBias.Length;
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     /// <inheritdoc />

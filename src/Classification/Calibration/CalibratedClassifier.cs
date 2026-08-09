@@ -56,6 +56,15 @@ namespace AiDotNet.Classification.Calibration;
 public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived from the getter, which is what ModelBase already does. The inherited override
+    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
+    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
+    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
+    /// </remarks>
+    public override long ParameterCount => GetParameters().Length;
+
     /// <summary>
     /// The base classifier being calibrated.
     /// </summary>

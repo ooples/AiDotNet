@@ -81,6 +81,17 @@ namespace AiDotNet.Audio.Enhancement;
     Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
 public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: <c>PredictCore</c> runs the inherited <c>Forward</c> (a fold over
+    /// <c>Layers</c>) and <c>PostprocessOutput</c> returns the mask unchanged. The last layer of
+    /// <c>CreateNeuralNoiseReducerLayers</c> is <c>DenseLayer&lt;T&gt;(freqBins, sigmoid)</c> with
+    /// <c>freqBins = fftSize / 2 + 1</c> computed inside the helper from the <c>_fftSize</c> this
+    /// model passes - a per-bin soft mask. 257 for the default 512-point FFT, and that number appears
+    /// nowhere in the options.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _fftSize / 2 + 1;
+
     private readonly NeuralNoiseReducerOptions _options;
 
     /// <inheritdoc/>

@@ -54,6 +54,15 @@ namespace AiDotNet.Diffusion.Control;
     [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
 public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_controlEncoder);
+    }
+
     private const int SD3_LATENT_CHANNELS = 16;
     private const int SD3_CONTEXT_DIM = 4096;
     private const double DEFAULT_GUIDANCE = 7.0;
@@ -73,7 +82,6 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => SD3_LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet-SD3 model.
@@ -124,40 +132,7 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
             seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        var predParams = _predictor.GetParameters();
-        for (int i = 0; i < predParams.Length; i++) allParams.Add(predParams[i]);
-        var ctrlParams = _controlEncoder.GetParameters();
-        for (int i = 0; i < ctrlParams.Length; i++) allParams.Add(ctrlParams[i]);
-        return new Vector<T>(allParams.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int predCount = checked((int)_predictor.ParameterCount);
-        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
-        long expectedTotal = (long)predCount + ctrlCount;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        var predParams = new T[predCount];
-        for (int i = 0; i < predCount; i++) predParams[i] = parameters[offset + i];
-        _predictor.SetParameters(new Vector<T>(predParams));
-        offset += predCount;
-
-        var ctrlParams = new T[ctrlCount];
-        for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
-        _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
-    }
 
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()

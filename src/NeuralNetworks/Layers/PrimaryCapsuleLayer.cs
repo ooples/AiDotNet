@@ -40,7 +40,25 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 4, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
+// RANK 4 ONLY, and that restriction is the honest part of this declaration rather than an omission.
+// ForwardTraced detects NCHW vs NHWC from the DATA - "if (input.Shape[1] == _inputChannels &&
+// input.Shape[3] != _inputChannels)" - so at rank 3 the same tensor is read as [C,H,W] or [H,W,C]
+// depending on which extent happens to equal the channel count. A layout is a claim about roles by
+// POSITION, and at rank 3 this layer has no fixed answer, so no rank-3 layout is declared. At rank 4
+// the code names one path "the primary 4D path" and that is what is declared here: NCHW in.
+//
+// The output is one rank HIGHER than the input, which is the whole point of a primary capsule layer:
+// ForwardTraced ends at "Reshape(activatedFlat, [batchSize, outputHeight, outputWidth,
+// _capsuleChannels, _capsuleDimension])" - the convolution's output channels are SPLIT into a capsule
+// count and a capsule vector width, so one scalar channel axis becomes two.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "NCHW: the rank-4 path ForwardTraced takes when Shape[1] matches the resolved input channel count.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Capsule layout [B, OH, OW, capsuleChannels, capsuleDimension] - Channels counts capsules, Features is one capsule's vector width.")]
+[AutoParameters]
+public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The weight tensor for convolution operations. Shape: [outputChannels, inputChannels * kernelSize * kernelSize]
@@ -153,30 +171,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _stride;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because the PrimaryCapsuleLayer has trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that PrimaryCapsuleLayer can be trained through backpropagation. The layer
-    /// has trainable parameters (convolution weights and biases) that are updated during training to optimize
-    /// the capsule transformation process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has internal values (weights and biases) that change during training
-    /// - It will improve its performance as it sees more data
-    /// - It learns to extract better capsule representations from the input
-    /// 
-    /// During training, the layer learns to transform input features into capsule vectors
-    /// that best represent the entities in the data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _convWeights.Length + _convBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -186,6 +180,52 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// operations, defeating GPU benefits - CPU fallback is used instead.
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written, because every one of the four output axes is set by construction arguments rather
+    /// than carried through. Read straight off <c>ForwardTraced</c>:
+    /// <c>outputHeight = (inputHeight - _kernelSize) / _stride + 1</c> and the matching line for width -
+    /// which is the sliding-window formula with padding 0 and dilation 1, the same zeros the
+    /// <c>Engine.Conv2D(..., new[] { 0, 0 }, new[] { 1, 1 })</c> call passes.
+    /// </para>
+    /// <para>
+    /// The last two axes are <c>Fixed</c> off <c>_capsuleChannels</c> and <c>_capsuleDimension</c>, from
+    /// <c>Reshape(activatedFlat, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension])</c>.
+    /// They are two axes rather than one because a capsule layer's job is precisely to split the
+    /// convolution's <c>_capsuleChannels * _capsuleDimension</c> output channels back apart - so the
+    /// output rank is one HIGHER than the input rank, and a same-rank contract would be wrong here
+    /// however tidy it looked.
+    /// </para>
+    /// <para>
+    /// Rank 4 only. Lower ranks run, but <c>ForwardTraced</c> decides between NCHW and NHWC by comparing
+    /// extents against <c>_inputChannels</c>, so at rank 3 which axis is height is a property of the DATA,
+    /// not of the layer - there is no positional claim to declare, and inventing one would be confidently
+    /// wrong for half of the inputs the layer accepts.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4 || _kernelSize <= 0 || _stride <= 0
+            || _capsuleChannels <= 0 || _capsuleDimension <= 0)
+        {
+            return null;
+        }
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(
+                TensorAxis.Height,
+                AxisRelation.Window(TensorAxis.Height, _kernelSize, _stride, padding: 0)),
+            new OutputAxisContract(
+                TensorAxis.Width,
+                AxisRelation.Window(TensorAxis.Width, _kernelSize, _stride, padding: 0)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_capsuleChannels)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_capsuleDimension)),
+        };
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PrimaryCapsuleLayer{T}"/> class with the specified parameters
@@ -869,41 +909,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from the primary capsule layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. It concatenates
-    /// the convolution weights and biases into a single vector. This is useful for optimization algorithms
-    /// that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values in the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all the weights and biases from this layer
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The method carefully arranges all parameters in a specific order
-    /// so they can be correctly restored later.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector.Concatenate for production-grade parameter extraction
-        return Vector<T>.Concatenate(
-            new Vector<T>(_convWeights.ToArray()),
-            new Vector<T>(_convBias.ToArray())
-        );
-    }
-
-    /// <summary>
     /// Sets the trainable parameters for the primary capsule layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -952,30 +957,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         base.ClearGradients();
         _convWeightsGradient = null;
         _convBiasGradient = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int weightSize = _convWeights.Length;
-        int biasSize = _convBias.Length;
-        int totalParams = weightSize + biasSize;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Write in-place to preserve registered parameter tensor references
-        parameters.Slice(0, weightSize).AsSpan().CopyTo(_convWeights.Data.Span);
-        parameters.Slice(weightSize, biasSize).AsSpan().CopyTo(_convBias.Data.Span);
-
-        // Invalidate any GPU-resident copy of these persistent parameter tensors.
-        // The CPU spans were just overwritten, but the GPU keeps a separately-uploaded
-        // mirror of registered persistent tensors and reuses it on subsequent ForwardGpu
-        // calls. Without this invalidation the GPU forward path would silently keep
-        // computing against the pre-update weights, mirroring DenseLayer/Conv layers.
-        Engine.InvalidatePersistentTensor(_convWeights);
-        Engine.InvalidatePersistentTensor(_convBias);
     }
 
     /// <summary>

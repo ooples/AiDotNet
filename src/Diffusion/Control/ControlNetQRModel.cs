@@ -53,6 +53,16 @@ namespace AiDotNet.Diffusion.Control;
     [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
 public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_controlEncoder);
+        RegisterParameterComponent(_vae);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 10.0;
 
@@ -70,7 +80,6 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet QR model.
@@ -116,44 +125,7 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
             channelMultipliers: _baseUNet.ChannelMultipliers, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _baseUNet.GetParameters();
-        var ctrlParams = _controlEncoder.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(unetParams.Length + ctrlParams.Length + vaeParams.Length);
-        int o = 0;
-        for (int i = 0; i < unetParams.Length; i++) combined[o++] = unetParams[i];
-        for (int i = 0; i < ctrlParams.Length; i++) combined[o++] = ctrlParams[i];
-        for (int i = 0; i < vaeParams.Length; i++) combined[o++] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int c1 = checked((int)_baseUNet.ParameterCount);
-        int c2 = checked((int)_controlEncoder.ParameterCount);
-        int c3 = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)c1 + c2 + c3;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[offset + i];
-        _baseUNet.SetParameters(new Vector<T>(a1)); offset += c1;
-
-        var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[offset + i];
-        _controlEncoder.SetParameters(new Vector<T>(a2)); offset += c2;
-
-        var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[offset + i];
-        _vae.SetParameters(new Vector<T>(a3));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

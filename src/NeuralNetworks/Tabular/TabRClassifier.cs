@@ -52,6 +52,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, Artem Babenko")]
 public class TabRClassifier<T> : TabRBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The task head. Everything else is the shared backbone, which the base folds ahead of it in every parameter surface.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _classificationHead };
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
@@ -64,11 +69,6 @@ public class TabRClassifier<T> : TabRBase<T>
     /// Gets the number of output classes.
     /// </summary>
     public int NumClasses => _numClasses;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the TabRClassifier class with default configuration.

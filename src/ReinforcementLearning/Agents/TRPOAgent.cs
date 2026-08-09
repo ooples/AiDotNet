@@ -62,6 +62,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
     Authors = "Schulman, J., Levine, S., Moritz, P., Jordan, M. I., & Abbeel, P.")]
 public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_policyNetwork);
+        RegisterParameterComponent(_valueNetwork);
+    }
     private TRPOOptions<T> _options;
 
     /// <inheritdoc/>
@@ -640,43 +649,6 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         var oldPolicyLength = reader.ReadInt32();
         var oldPolicyBytes = reader.ReadBytes(oldPolicyLength);
         _oldPolicyNetwork.Deserialize(oldPolicyBytes);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var policyParams = _policyNetwork.GetParameters();
-        var valueParams = _valueNetwork.GetParameters();
-
-        var combinedParams = new Vector<T>(policyParams.Length + valueParams.Length);
-        for (int i = 0; i < policyParams.Length; i++)
-        {
-            combinedParams[i] = policyParams[i];
-        }
-        for (int i = 0; i < valueParams.Length; i++)
-        {
-            combinedParams[policyParams.Length + i] = valueParams[i];
-        }
-
-        return combinedParams;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int policyParamCount = checked((int)_policyNetwork.ParameterCount);
-        var policyParams = new Vector<T>(policyParamCount);
-        var valueParams = new Vector<T>(parameters.Length - policyParamCount);
-
-        for (int i = 0; i < policyParamCount; i++)
-        {
-            policyParams[i] = parameters[i];
-        }
-        for (int i = 0; i < valueParams.Length; i++)
-        {
-            valueParams[i] = parameters[policyParamCount + i];
-        }
-
-        _policyNetwork.UpdateParameters(policyParams);
-        _valueNetwork.UpdateParameters(valueParams);
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

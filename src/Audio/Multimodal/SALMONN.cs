@@ -49,6 +49,16 @@ namespace AiDotNet.Audio.Multimodal;
 [ResearchPaper("SALMONN: Towards Generic Hearing Abilities for Large Language Models", "https://arxiv.org/abs/2310.13289", Year = 2024, Authors = "Changli Tang, Wenyi Yu, Guangzhi Sun, Xianzhao Chen, Tian Tan, Wei Li, Lu Lu, Zejun Ma, Chao Zhang")]
 public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultSALMONNLayers emits is the output projection
+    /// <c>FullyConnectedLayer&lt;T&gt;(lmHiddenDim)</c>, wired from <c>_options.LMHiddenDim</c>
+    /// (4096). Explicitly NOT VocabSize (32000): the Q-Former stack ends in LM input space with no
+    /// unembedding head. QFormerDim (768) is the width one projection earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LMHiddenDim;
+
     #region Fields
 
     private readonly SALMONNOptions _options;

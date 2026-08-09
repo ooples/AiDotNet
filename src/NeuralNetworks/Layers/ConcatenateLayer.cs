@@ -42,8 +42,92 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class ConcatenateLayer<T> : LayerBase<T>
+// Ranks 2-4 with positional roles. A generic concatenation has no intrinsic axis MEANINGS - it joins
+// whatever it is given - but the labels are safe here for the same reason they are safe for an
+// element-wise layer: every relation below maps a role to itself (Same, or a Sum over that same role
+// across ports), so the resolved sizes do not depend on what the axes are called, only on the labelling
+// being consistent between the input and output layouts.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// A concatenation has NO single-input form - <c>ForwardTraced</c> throws
+    /// <c>NotSupportedException</c> - so this declines, and the real contract is
+    /// <see cref="OutputAxesForPorts"/>. Returning null is the honest answer rather than describing a
+    /// call the layer refuses to serve.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Restates <c>CalculateOutputShape</c>: every axis passes through except the joined one, whose size
+    /// is the sum of that axis across ALL inputs. That sum is exactly why this layer went undeclared
+    /// until a contract could see more than one input - 13 from joining 8 and 5 is not a function of
+    /// either input alone, so no amount of care with <see cref="OutputAxesFor(int)"/> could have
+    /// expressed it. The limitation was in the interface, not in the layer.
+    /// </para>
+    /// <para>
+    /// <c>_axis</c> is a constructor argument and may be NEGATIVE, counting from the end, which this
+    /// resolves exactly as <c>ForwardTraced</c> does (<c>axis = _axis &lt; 0 ? rank + _axis : _axis</c>).
+    /// Reading it at all is possible only because this is an instance method.
+    /// </para>
+    /// <para>
+    /// Ranks must AGREE across ports; a join of differently-ranked tensors is not a shape this layer
+    /// produces, so a mismatch declines rather than picking a winner.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesForPorts(IReadOnlyList<int> inputRanks)
+    {
+        if (inputRanks is null || inputRanks.Count == 0) return null;
+
+        int rank = inputRanks[0];
+        for (int i = 1; i < inputRanks.Count; i++)
+        {
+            if (inputRanks[i] != rank) return null;
+        }
+
+        TensorAxis[]? roles = rank switch
+        {
+            2 => new[] { TensorAxis.Batch, TensorAxis.Features },
+            3 => new[] { TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features },
+            4 => new[] { TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width },
+            _ => null,
+        };
+        if (roles is null) return null;
+
+        int axis = _axis < 0 ? rank + _axis : _axis;
+        if (axis < 0 || axis >= rank) return null;
+
+        var contracts = new List<OutputAxisContract>(rank);
+        for (int i = 0; i < rank; i++)
+        {
+            var role = roles[i];
+            if (i != axis)
+            {
+                contracts.Add(new OutputAxisContract(role, AxisRelation.Same(role)));
+                continue;
+            }
+
+            var terms = new AxisRelation[inputRanks.Count];
+            for (int p = 0; p < inputRanks.Count; p++) terms[p] = AxisRelation.FromPort(p, role);
+            contracts.Add(new OutputAxisContract(role, AxisRelation.SumOf(terms)));
+        }
+
+        return contracts;
+    }
+
     private readonly int _axis;
     private Tensor<T>[]? _lastInputs;
     private Tensor<T>? _lastOutput;
@@ -401,7 +485,7 @@ public partial class ConcatenateLayer<T> : LayerBase<T>
     /// this method will join them into a single tensor containing both types of features.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {
@@ -424,28 +508,6 @@ public partial class ConcatenateLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is a no-op for concatenate layers since they have no trainable parameters to update.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method doesn't do anything for concatenate layers because there are no parameters to update.
-    /// 
-    /// Unlike layers with weights and biases that need to be updated during training,
-    /// the concatenate layer just passes data through without learning any parameters.
-    /// 
-    /// This method is still required to be implemented because all layers must follow
-    /// the same interface, but it doesn't actually do anything for this type of layer.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in a concatenate layer
-    }
-
-    /// <summary>
     /// Declares named input ports for this multi-input layer.
     /// </summary>
     private IReadOnlyList<LayerPort>? _inputPortsCache;
@@ -459,7 +521,7 @@ public partial class ConcatenateLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass. Collects all "input_N" keys and concatenates.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         var tensors = new List<Tensor<T>>();
@@ -497,35 +559,9 @@ public partial class ConcatenateLayer<T> : LayerBase<T>
     /// Instead, you should use the other Forward method that accepts multiple inputs (params Tensor&lt;T&gt;[] inputs).
     /// </para>
     /// </remarks>
-    /// <inheritdoc/>
-    public override bool RequiresMultipleInputs => true;
-
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         throw new NotSupportedException("ConcatenateLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector as concatenate layers have no parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector because concatenate layers don't have any trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because concatenate layers don't have any learnable values.
-    /// 
-    /// Unlike layers with weights and biases, the concatenate layer doesn't have any parameters
-    /// that need to be saved or loaded. It's just a fixed operation that joins inputs together.
-    /// 
-    /// This method is still required because all layers must follow the same interface, but it
-    /// simply returns an empty vector in this case.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Concatenate layers don't have parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines.Gpu;
 
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -16,7 +16,13 @@ namespace AiDotNet.Interfaces;
 /// Think of it as a checklist of abilities that every layer must have to work within our neural network.
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("Layer")]
-public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
+/// <remarks>
+/// ParameterCount, GetParameters and SetParameters come from <see cref="IParameterSource{T}"/>,
+/// the minimal contract shared with models and internal components. Inheriting it means a layer
+/// can BE a component of a model -- which several VAEs rely on, holding their encoder and
+/// decoder stacks as plain layer lists.
+/// </remarks>
+public interface ILayer<T> : IParameterSource<T>, IDiagnosticsProvider, IWeightLoadable<T>
 {
     /// <summary>
     /// Gets the shape (dimensions) of the input data expected by this layer.
@@ -53,18 +59,6 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     /// <para>
     /// <see cref="LayerShape.TryGetConcrete"/> and <see cref="LayerShape.RequireConcrete"/> make
     /// that choice explicit, so consuming a dynamic axis by accident stops being possible.
-    /// </para>
-    /// <para>
-    /// <b>MIGRATION -- this member is new and required.</b> A layer implemented outside the library
-    /// will not compile until it supplies this method. There is no default implementation because
-    /// <c>net471</c> is a target framework and default interface members do not exist there. A layer
-    /// whose output shape is fully known can satisfy it from the existing <see cref="GetOutputShape"/>:
-    /// <code>
-    /// public LayerShape GetOutputLayerShape() =&gt; new LayerShape(GetOutputShape());
-    /// </code>
-    /// That is the correct implementation for every layer with no dynamic axis, which is most of
-    /// them. Only a layer that genuinely cannot fix an axis -- a decoder whose length is the target
-    /// length -- needs to build a shape with a dynamic axis instead.
     /// </para>
     /// </remarks>
     /// <returns>The output shape, possibly with dynamic axes.</returns>
@@ -226,24 +220,6 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     void UpdateParameters(Vector<T> parameters);
 
     /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This tells you how many adjustable values this layer has.
-    /// 
-    /// For example:
-    /// - A dense layer with 10 inputs and 5 outputs has 10×5=50 weights plus 5 biases = 55 parameters
-    /// - A convolutional layer with 16 3×3 filters has 16×3×3=144 weights plus 16 biases = 160 parameters
-    /// - A pooling layer has 0 parameters (it just selects values, no weights to adjust)
-    /// 
-    /// More parameters means the layer can learn more complex patterns, but also requires more data to train effectively.
-    ///
-    /// Return type is <see cref="long"/> for consistency with
-    /// <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>.
-    /// </remarks>
-    long ParameterCount { get; }
-
-    /// <summary>
     /// Saves the layer's configuration and parameters to a binary stream.
     /// </summary>
     /// <param name="writer">The binary writer to write the data to.</param>
@@ -285,23 +261,6 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     /// This method tells you which activation functions this layer uses.
     /// </remarks>
     IEnumerable<ActivationFunction> GetActivationTypes();
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method returns all the values that can be adjusted during training
-    /// (weights and biases) as a single list.
-    /// 
-    /// This is useful for:
-    /// 1. Saving and loading models
-    /// 2. Advanced optimization techniques
-    /// 3. Analyzing or visualizing the learned parameters
-    /// 
-    /// Some layers (like pooling layers) might return an empty vector because they have no trainable parameters.
-    /// </remarks>
-    Vector<T> GetParameters();
 
     /// <summary>
     /// Indicates whether this layer supports training operations.
@@ -378,22 +337,6 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     /// It's like wiping a whiteboard clean before starting a new calculation.
     /// </remarks>
     void ClearGradients();
-
-    /// <summary>
-    /// Sets all trainable parameters of the layer to the specified values.
-    /// </summary>
-    /// <param name="parameters">The new parameter values to set.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method lets you directly set all the weights and biases of the layer.
-    /// 
-    /// This is useful when:
-    /// 1. Loading a pre-trained model
-    /// 2. Initializing parameters in a specific way
-    /// 3. Testing how different parameter values affect performance
-    /// 
-    /// It's like replacing all the settings in the layer at once.
-    /// </remarks>
-    void SetParameters(Vector<T> parameters);
 
     /// <summary>
     /// Resets the internal state of the layer to its initial condition.

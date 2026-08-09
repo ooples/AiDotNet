@@ -45,6 +45,13 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation", "https://arxiv.org/abs/2203.09893", Year = 2022, Authors = "Rachel M. Bittner, Juan Jose Bosch, David Rubinstein, Gabriel Meseguer-Brocal, Sebastian Ewert")]
 public class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: a [1,8] input returns [1,264], this model's harmonic bin count - a different quantity
+    /// from a vocabulary, which is why no single field on the base could serve the whole family.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumHarmonicBins;
+
     #region Fields
 
     private readonly BasicPitchOptions _options;

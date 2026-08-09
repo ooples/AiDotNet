@@ -70,17 +70,152 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
 
     // --- IParameterizable ---
 
+    /// <summary>
+    /// The components this wrapper's parameters live in, in registration order, which is also the
+    /// serialization order. Empty for a plain wrapper, which forwards to the model it wraps.
+    /// </summary>
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this wrapper's own surface, for a wrapper
+    /// that holds parameters INSTEAD of the model it wraps.
+    /// </summary>
+    /// <remarks>
+    /// A meta-learning adapted model is the case this exists for: it wraps a base model but carries
+    /// its own adapted vector, and forwarding to the wrapped model would read the wrong weights.
+    /// Registration order is serialization order, so keep it stable. Null is tolerated and
+    /// registration is idempotent by reference.
+    /// </remarks>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+    }
+
+    /// <summary>
+    /// Declare this wrapper's own trainable components here with
+    /// <see cref="RegisterParameterComponent"/>. Leave it alone to forward to the wrapped model.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private IReadOnlyList<IParameterSource<T>> Components
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+                _componentsRegistered = _parameterComponents.Count > 0;
+            }
+            return _parameterComponents;
+        }
+    }
+
     /// <inheritdoc/>
+    /// <remarks>
+    /// Registered components first; a wrapper that registers none forwards to the model it wraps,
+    /// which is what a wrapper should do and what this always did.
+    /// </remarks>
     public virtual Vector<T> GetParameters()
-        => InterfaceGuard.TryParameterizable(BaseModel)?.GetParameters() ?? new Vector<T>(0);
+    {
+        var components = Components;
+        if (components.Count == 0)
+            return InterfaceGuard.TryParameterizable(BaseModel)?.GetParameters() ?? new Vector<T>(0);
+
+        var parts = new Vector<T>[components.Count];
+        int total = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            parts[i] = components[i].GetParameters();
+            total += parts[i].Length;
+        }
+
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            for (int j = 0; j < parts[i].Length; j++)
+            {
+                result[offset++] = parts[i][j];
+            }
+        }
+
+        return result;
+    }
 
     /// <inheritdoc/>
+    /// <remarks>The inverse of <see cref="GetParameters"/>, down whichever of the two paths that
+    /// took.</remarks>
     public virtual void SetParameters(Vector<T> parameters)
-        => InterfaceGuard.TryParameterizable(BaseModel)?.SetParameters(parameters);
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        var components = Components;
+        if (components.Count == 0)
+        {
+            InterfaceGuard.TryParameterizable(BaseModel)?.SetParameters(parameters);
+            return;
+        }
+
+        long expected = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            expected += components[i].ParameterCount;
+        }
+
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        }
+
+        int offset = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            int n = checked((int)components[i].ParameterCount);
+            var slice = new Vector<T>(n);
+            for (int j = 0; j < n; j++)
+            {
+                slice[j] = parameters[offset++];
+            }
+            components[i].SetParameters(slice);
+        }
+
+        OnParametersRestored();
+    }
 
     /// <inheritdoc/>
-    public virtual long ParameterCount =>
-        InterfaceGuard.TryParameterizable(BaseModel)?.ParameterCount ?? 0;
+    /// <remarks>Folds the same enumeration the vector does, so the two cannot disagree.</remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            var components = Components;
+            if (components.Count == 0)
+                return InterfaceGuard.TryParameterizable(BaseModel)?.ParameterCount ?? 0;
+
+            long total = 0;
+            for (int i = 0; i < components.Count; i++)
+            {
+                total += components[i].ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization =>

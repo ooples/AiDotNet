@@ -12,6 +12,8 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Models;
 using AiDotNet.TransferLearning.FeatureMapping;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.TransferLearning.Algorithms;
 
 /// <summary>
@@ -296,6 +298,35 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 [PipelineStage(PipelineStage.Training)]
 public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The wrapped forest, when it is one that exposes parameters. The hand-written surfaces made
+    /// exactly this test and fell back to the base wrapper otherwise; registering nothing in the
+    /// else case IS that fallback, so both branches keep their old behaviour while the count now
+    /// folds the same enumeration the vector does.
+    /// </para>
+    /// <para>
+    /// The restore is a no-op, which is what it has always been:
+    /// <see cref="AsyncDecisionTreeRegressionBase{T}"/> exposes GetParameters and ParameterCount
+    /// but no SetParameters, so the wrapper's forwarding found nothing to call. Registering it at
+    /// least makes a WRONG-LENGTH restore an error instead of a silent nothing. A correct-length
+    /// restore still discards its values, and the real fix is a SetParameters on the tree base --
+    /// until that exists a transfer-learned forest cannot be round-tripped through this surface,
+    /// and hiding that here would only make it harder to find.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
+        {
+            RegisterParameterComponent(new DelegatingParameterSource<T>(
+                () => treeModel.ParameterCount,
+                () => treeModel.GetParameters(),
+                _ => { }));
+        }
+    }
     private const int WrapperMagic = 0x4D52464D; // 'MRFM'
     private readonly IFeatureMapper<T> _mapper;
     private readonly int _targetFeatures;
@@ -328,25 +359,6 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     // as public methods but does NOT implement IParameterizable or IFeatureAware interfaces.
     // ModelWrapperBase delegates via InterfaceGuard which uses 'as' casts that return null.
     // Override here to call the concrete methods directly on the tree-based model.
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
-            return treeModel.GetParameters();
-        return base.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (BaseModel is AsyncDecisionTreeRegressionBase<T> treeModel)
-                return treeModel.ParameterCount;
-            return base.ParameterCount;
-        }
-    }
 
     /// <inheritdoc/>
     /// <remarks>

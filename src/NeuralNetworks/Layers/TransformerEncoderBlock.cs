@@ -44,7 +44,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 2, 16, 0.0")]
-public partial class TransformerEncoderBlock<T> : LayerBase<T>
+// SHAPE-PRESERVING. Both Pre-LN sublayers close with a residual add against the stream they were
+// given - `TensorAdd(input, attnOut)` and `TensorAdd(afterAttn, ffnReshaped)` - and the FFN detour
+// through the 2-D DenseLayers restores the stream's own dimensions with
+// `Engine.Reshape(ffnDownOut, afterAttn._shape)`. The feed-forward width is therefore internal: it is
+// projected back to hiddenSize before the add, so it never reaches the output.
+//
+// Rank 3 is declared rather than [ElementWiseShape], which would claim every rank down to 1: the
+// self-attention sublayer needs a sequence axis as well as a feature axis, so rank 1 is not this
+// layer's to accept. Matching layouts let the generator derive Same(role) per axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _hiddenSize;
     private readonly int _numHeads;
@@ -237,41 +251,6 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
         _norm2.SetTrainingMode(isTraining);
         _attnDropout?.SetTrainingMode(isTraining);
         _ffnDropout?.SetTrainingMode(isTraining);
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _attention.ParameterCount + _norm1.ParameterCount +
-        _ffnUp.ParameterCount + _ffnDown.ParameterCount + _norm2.ParameterCount;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() =>
-        Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(_attention.GetParameters(), _norm1.GetParameters()),
-                Vector<T>.Concatenate(_ffnUp.GetParameters(), _ffnDown.GetParameters())),
-            _norm2.GetParameters());
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // The Dense FFN sublayers resolve their input dimension lazily (on first
-        // Forward), so a freshly-constructed/deserialized block reports a partial
-        // ParameterCount. Materialize them at the known hidden size before slicing
-        // so deserialization (SetParameters with the full trained vector) succeeds.
-        if (parameters.Length != ParameterCount)
-            MaterializeLazySublayers();
-
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int offset = 0;
-        SetSubParams(_attention, parameters, ref offset);
-        SetSubParams(_norm1, parameters, ref offset);
-        SetSubParams(_ffnUp, parameters, ref offset);
-        SetSubParams(_ffnDown, parameters, ref offset);
-        SetSubParams(_norm2, parameters, ref offset);
     }
 
     /// <summary>

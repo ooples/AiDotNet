@@ -112,6 +112,15 @@ namespace AiDotNet.Diffusion.Video;
 [ResearchPaper("LTX-Video: Realtime Video Latent Diffusion", "https://arxiv.org/abs/2501.00103", Year = 2024, Authors = "Lightricks")]
 public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_dit);
+        RegisterParameterComponent(_temporalVAE);
+    }
+
     #region Constants
 
     /// <summary>
@@ -206,7 +215,6 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
 
     #endregion
 
@@ -323,56 +331,7 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var ditParams = _dit.GetParameters();
-        var vaeParams = _temporalVAE.GetParameters();
 
-        var combined = new Vector<T>(ditParams.Length + vaeParams.Length);
-
-        for (int i = 0; i < ditParams.Length; i++)
-        {
-            combined[i] = ditParams[i];
-        }
-
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[ditParams.Length + i] = vaeParams[i];
-        }
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = _temporalVAE.GetParameters().Length;
-
-        if (parameters.Length != ditCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ditCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var ditParams = new Vector<T>(ditCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < ditCount; i++)
-        {
-            ditParams[i] = parameters[i];
-        }
-
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[ditCount + i];
-        }
-
-        _dit.SetParameters(ditParams);
-        _temporalVAE.SetParameters(vaeParams);
-    }
 
     #endregion
 

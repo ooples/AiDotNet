@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Kong et al."
 )]
-public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
+public class DiffWave<T> : VocoderBase<T>
 {
     private readonly DiffWaveOptions _options;
 
@@ -90,9 +90,8 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using DiffWave's reverse diffusion process.
@@ -103,7 +102,7 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
     /// (4) Mel conditioning via FiLM (Feature-wise Linear Modulation) at each layer,
     /// (5) Fast sampling: use fewer steps (6 steps) with noise schedule search.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

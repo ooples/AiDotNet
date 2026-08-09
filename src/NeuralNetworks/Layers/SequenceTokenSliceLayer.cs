@@ -34,7 +34,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = false, ChangesShape = true,
     TestInputShape = "1, 4, 8",
     TestConstructorArgs = "AiDotNet.NeuralNetworks.Layers.SequenceTokenSliceLayer<double>.Position.Last")]
-public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
+// Rank 3 [Batch, Time, Features] per [LayerProperty(TestInputShape = "1, 4, 8")]; the output is rank 2
+// because one token is selected and the Time axis is consumed.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SequenceTokenSliceLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Which sequence position the slice selects.
@@ -49,6 +54,24 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
 
     private readonly Position _position;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Selects ONE token from the sequence, so the Time axis is consumed entirely and batch and feature
+    /// widths pass through untouched. <see cref="_position"/> chooses WHICH token, which changes the
+    /// values but not the shape - so unlike MeanLayer's Axis, it does not enter the relation.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 3 [Batch, Time, Features] per [LayerProperty(TestInputShape = "1, 4, 8")].
+        if (inputRank != 3) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+        };
+    }
+
     /// <summary>
     /// Creates a slice layer that selects a single position from the
     /// sequence axis (axis 1 of a rank-3 input).
@@ -58,9 +81,6 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
     {
         _position = position;
     }
-
-    /// <inheritdoc />
-    public override long ParameterCount => 0;
 
     /// <inheritdoc />
     public override bool SupportsTraining => false;
@@ -112,23 +132,7 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters() => new(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException(
-                $"{nameof(SequenceTokenSliceLayer<T>)} has no parameters; got vector of length {parameters.Length}.");
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
-    {
-    }
-
-    /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
     {
     }
 

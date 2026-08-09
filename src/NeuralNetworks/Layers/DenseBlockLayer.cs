@@ -15,8 +15,56 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4")]
-internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// Both ranks come from OnFirstForward naming them itself - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and rejecting everything else.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Straight from this layer's own <c>ResolveShapes(new[] { _inputChannels, height, width },
+    /// new[] { _growthRate, height, width })</c> in <see cref="OnFirstForward"/>: the spatial extent
+    /// is carried through and only the channel count changes.
+    /// </para>
+    /// <para>
+    /// The spatial preservation is a real property of the composition, not an assumption. Both
+    /// convolutions are built same-padded in the constructor - <c>kernelSize: 1, stride: 1,
+    /// padding: 0</c> and <c>kernelSize: 3, stride: 1, padding: 1</c> - and batch normalization does
+    /// not resize. That is required by DenseNet itself: the caller CONCATENATES this block's output
+    /// with its input along the channel axis, which is only possible if the spatial dims survive.
+    /// </para>
+    /// <para>
+    /// Note the output width is the growth rate, NOT the bottleneck width. The <c>4 * growthRate</c>
+    /// bottleneck is internal to the 1x1 stage and is consumed by the 3x3 stage that follows it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_growthRate <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_growthRate));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width) },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), channels, Pass(TensorAxis.Height), Pass(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     private readonly BatchNormalizationLayer<T> _bn1;
     private readonly ConvolutionalLayer<T> _conv1x1;
     private readonly BatchNormalizationLayer<T> _bn2;
@@ -35,7 +83,6 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     private Tensor<T>? _gpuConv1Out;
     private Tensor<T>? _gpuBn2Out;
 
-    public override long ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -254,30 +301,6 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
         _conv1x1.UpdateParameters(learningRate);
         _bn2.UpdateParameters(learningRate);
         _conv3x3.UpdateParameters(learningRate);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        parameters.AddRange(_bn1.GetParameters().ToArray());
-        parameters.AddRange(_conv1x1.GetParameters().ToArray());
-        parameters.AddRange(_bn2.GetParameters().ToArray());
-        parameters.AddRange(_conv3x3.GetParameters().ToArray());
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: sub-layers' shapes haven't been resolved, so
-        // their GetParameters().Length is wrong. Buffer and replay
-        // from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     private Vector<T>? _pendingParameters;

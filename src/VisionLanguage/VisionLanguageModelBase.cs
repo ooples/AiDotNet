@@ -1,4 +1,8 @@
 using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -31,8 +35,75 @@ namespace AiDotNet.VisionLanguage;
 /// 2. Build and train a new model from scratch
 /// </para>
 /// </remarks>
-public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "An image batch. ImageChannels x ImageSize x ImageSize is the declared per-sample shape, "
+         + "though probing showed the spatial axes are free rather than pinned to ImageSize.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "The pooled joint-embedding law: one EmbeddingDim-wide vector per sample. Two other "
+         + "measured laws exist in this family - see PatchTokenContract and TrailingFeatureContract.")]
+public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The family's default output law: one pooled <see cref="EmbeddingDim"/>-wide embedding per sample.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// MEASURED, not assumed. Probing this family found THREE distinct output laws, so a single
+    /// declaration for all of it would have been wrong - which is exactly why this is virtual:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><b>Pooled</b> (this default) - ALIGN: <c>[1,3,8,8] -&gt; [1,640]</c>, and 640
+    /// is its EmbeddingDim. The classic dual-encoder law.</description></item>
+    /// <item><description><b>Patch tokens</b> - BiomedCLIP and CLIPA: <c>[1,3,8,8] -&gt; [1,64,512]</c>
+    /// but <c>[1,3,12,8] -&gt; [1,96,512]</c>. That middle axis is the PRODUCT of the two spatial axes,
+    /// not a constant - see <see cref="PatchTokenContract"/>.</description></item>
+    /// <item><description><b>Trailing feature</b> - BASIC: <c>[1,3,8,8] -&gt; [1,3,8,1024]</c>. Every
+    /// input axis is carried and only the LAST is replaced - see
+    /// <see cref="TrailingFeatureContract"/>.</description></item>
+    /// </list>
+    /// <para>
+    /// NONE of the three is the default, and that is the measurement talking. Two of the first FOUR
+    /// models probed did not follow the pooled law, so defaulting to it would attach a wrong contract
+    /// to an unknown fraction of 170 models. The conformance sweep that would settle the rest cannot
+    /// finish: these are LLaVA-scale networks, and a full-family pass exceeded thirty minutes without
+    /// reporting a single model. Declaring an unverified family law here to look complete is exactly
+    /// the mistake that put a /32 stride on ten segmentation models that did not have it.
+    /// </para>
+    /// <para>
+    /// So this declines, each MEASURED model states its own law in one line, and the remaining backlog
+    /// stays visible in the sweep instead of being hidden behind a confident default.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <summary>The pooled law: <c>[Batch, EmbeddingDim]</c>, whatever the input rank above 1.</summary>
+    protected IReadOnlyList<OutputAxisContract>? PooledEmbeddingContract(int inputRank)
+    {
+        if (inputRank < 2 || EmbeddingDim <= 0) return null;
+        return
+        [
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(EmbeddingDim)),
+        ];
+    }
+
+    // The other two laws probing found are deliberately NOT offered as helpers, because the sweep
+    // refuted the versions of them that seemed to fit:
+    //
+    //   PATCH TOKENS - BiomedCLIP and CLIPA looked like [Batch, Product(Height,Width), EmbeddingDim]
+    //   from [1,3,8,8] -> [1,64,512] and [1,3,12,8] -> [1,96,512]. At extent 64 the real answer was
+    //   [1,256,512], not [1,4096,768]: the token axis is a patch grid that does not track H*W, and the
+    //   width is not EmbeddingDim.
+    //
+    //   TRAILING FEATURE - BASIC looked like [..., EmbeddingDim] from [1,3,8,8] -> [1,3,8,1024]. At
+    //   extent 64 EmbeddingDim had moved to 1536 while the output width stayed 1024, so the two were
+    //   never the same quantity.
+    //
+    // Leaving those as protected helpers would hand the next author a ready-made wrong answer with a
+    // reassuring name. They come back when the real quantities are traced, not before.
+
     /// <summary>
     /// Gets the expected input image size (height = width in pixels).
     /// </summary>

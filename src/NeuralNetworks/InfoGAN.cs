@@ -9,6 +9,8 @@ using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -72,6 +74,13 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets", "https://arxiv.org/abs/1606.03657", Year = 2016, Authors = "Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, Pieter Abbeel")]
 public class InfoGAN<T> : NeuralNetworkBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Generator, discriminator, then the Q network that recovers the latent code -- the order the hand-written concatenation used. The Q network is trained jointly to maximise mutual information between the code and the output, so it belongs in the surface.</remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => Generator.Layers.Cast<LayerBase<T>?>()
+            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>())
+            .Concat(QNetwork.Layers.Cast<LayerBase<T>?>());
     private readonly InfoGANOptions _options;
 
     /// <inheritdoc/>
@@ -201,11 +210,6 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public NeuralNetworkBase<T> QNetwork { get; private set; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the InfoGAN.
-    /// </summary>
-    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
 
     /// <inheritdoc />
     /// <remarks>
@@ -1066,36 +1070,6 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             qNetworkOptimizer: null,
             _lossFunction,
             NumOps.ToDouble(_mutualInfoCoefficient));
-    }
-
-    /// <summary>
-    /// Returns the concatenated trainable parameters from Generator,
-    /// Discriminator, and QNetwork. The base
-    /// <see cref="NeuralNetworkBase{T}.GetParameters"/> walks
-    /// <see cref="Layers"/>, but InfoGAN keeps its trainable surface in
-    /// three sub-networks and leaves Layers empty — so the inherited
-    /// path returned a length-0 vector and broke
-    /// ParameterCount_ShouldBeSubstantial / Training_ShouldChangeParameters
-    /// / GradientFlow / Clone_AfterTraining (#1224 Cluster F).
-    /// Mirror <see cref="UpdateParameters(Vector{T})"/>'s ordering so
-    /// flat round-trips stay coherent. (GetParameterChunks already
-    /// streams the same data — see line 208 — but several test
-    /// invariants probe via the flat GetParameters surface specifically.)
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var genParams = Generator.GetParameters();
-        var discParams = Discriminator.GetParameters();
-        var qParams = QNetwork.GetParameters();
-        int totalLength = genParams.Length + discParams.Length + qParams.Length;
-        var combined = new Vector<T>(totalLength);
-        int offset = 0;
-        for (int i = 0; i < genParams.Length; i++) combined[offset + i] = genParams[i];
-        offset += genParams.Length;
-        for (int i = 0; i < discParams.Length; i++) combined[offset + i] = discParams[i];
-        offset += discParams.Length;
-        for (int i = 0; i < qParams.Length; i++) combined[offset + i] = qParams[i];
-        return combined;
     }
 
     /// <summary>

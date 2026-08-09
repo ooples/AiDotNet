@@ -40,7 +40,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "")]
-public partial class RMSNormalizationLayer<T> : LayerBase<T>
+// Rescales values, never resizes. Rank-agnostic, so its axes carry no intrinsic meaning to name.
+[ElementWiseShape(Note = "Root-mean-square normalisation; every dimension is carried through.")]
+[AutoParameters]
+public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly T _epsilon;
 
@@ -187,35 +190,6 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>
         var output = Engine.TensorBroadcastMultiply(normalised, _gamma);
 
         return output;
-    }
-
-    public override long ParameterCount => _gamma.Length;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _gamma.ToVector();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when the layer is still in lazy
-        // placeholder state. RMSNorm has only γ (no β), so featureSize equals
-        // parameters.Length directly.
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            ResolveFromShape(new[] { parameters.Length });
-        }
-
-        if (parameters.Length != _gamma.Length)
-        {
-            throw new ArgumentException(
-                $"Expected {_gamma.Length} parameters, but got {parameters.Length}.");
-        }
-
-        var gSpan = _gamma.Data.Span;
-        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
-
-        Engine.InvalidatePersistentTensor(_gamma);
     }
 
     /// <inheritdoc/>

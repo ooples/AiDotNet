@@ -62,6 +62,24 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
     Authors = "Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., et al.")]
 public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Only the online Q-network is a parameter. The target network is a periodic
+    /// COPY of it, refreshed in <see cref="OnParametersRestored"/>; registering it too would
+    /// double the count and expose weights an optimizer must never move.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_qNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The target network is derived from the online one, so a restore has to
+    /// refresh it. Without this the agent trains against a stale target and diverges quietly,
+    /// which no assertion would catch.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
+    }
     private DQNOptions<T> _dqnOptions;
 
     /// <inheritdoc/>
@@ -349,20 +367,6 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValuePr
         var targetNetworkLength = reader.ReadInt32();
         var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
         _targetNetwork.Deserialize(targetNetworkBytes);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return _qNetwork.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.UpdateParameters(parameters);
-        // Sync target network to match Q-network after parameter update
-        CopyNetworkWeights(_qNetwork, _targetNetwork);
     }
 
     /// <inheritdoc/>

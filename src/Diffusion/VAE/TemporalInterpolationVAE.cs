@@ -51,6 +51,22 @@ namespace AiDotNet.Diffusion.VAE;
     [ResearchPaper("FILM: Frame Interpolation for Large Motion", "https://arxiv.org/abs/2202.04901")]
 public class TemporalInterpolationVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>The order the previous getter concatenated and the previous setter redistributed
+    /// in -- it built a local array of these eight layers, which is why the automated
+    /// converter could not confirm the order and skipped this model.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_encoderIn);
+        RegisterParameterComponent(_encoderOut);
+        RegisterParameterComponent(_decoderIn);
+        RegisterParameterComponent(_decoderOut);
+        RegisterParameterComponent(_interpIn);
+        RegisterParameterComponent(_interpOut);
+        RegisterParameterComponent(_encoderNorm);
+        RegisterParameterComponent(_decoderNorm);
+    }
+
     private readonly int _inputChannels;
     private readonly int _latentChannels;
     private readonly int _baseChannels;
@@ -79,12 +95,6 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _encoderIn.ParameterCount + _encoderOut.ParameterCount +
-        _decoderIn.ParameterCount + _decoderOut.ParameterCount +
-        _interpIn.ParameterCount + _interpOut.ParameterCount +
-        _encoderNorm.ParameterCount + _decoderNorm.ParameterCount;
-
     /// <summary>
     /// Gets the temporal interpolation factor.
     /// </summary>
@@ -249,57 +259,6 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         var result = (int[])shape.Clone();
         result[^1] = lastDim;
         return result;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parts = new[]
-        {
-            _encoderIn.GetParameters(), _encoderOut.GetParameters(),
-            _decoderIn.GetParameters(), _decoderOut.GetParameters(),
-            _interpIn.GetParameters(), _interpOut.GetParameters(),
-            _encoderNorm.GetParameters(), _decoderNorm.GetParameters()
-        };
-
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-
-        var combined = new Vector<T>(total);
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++)
-                combined[offset + i] = p[i];
-            offset += p.Length;
-        }
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var layers = new LayerBase<T>[]
-        {
-            _encoderIn, _encoderOut, _decoderIn, _decoderOut,
-            _interpIn, _interpOut, _encoderNorm, _decoderNorm
-        };
-
-        int expected = 0;
-        foreach (var layer in layers) expected += layer.GetParameters().Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in layers)
-        {
-            int count = layer.GetParameters().Length;
-            var sub = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-                sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += count;
-        }
     }
 
     /// <inheritdoc />

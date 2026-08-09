@@ -83,6 +83,16 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ResearchPaper("MVDream: Multi-view Diffusion for 3D Generation", "https://arxiv.org/abs/2308.16512", Year = 2024, Authors = "Shi et al.")]
 public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_multiViewUNet);
+        RegisterParameterComponent(_imageVAE);
+        RegisterParameterComponent(_cameraEmbedding);
+    }
+
     #region Constants
 
     /// <summary>
@@ -1123,68 +1133,11 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _multiViewUNet.GetParameters();
-        var vaeParams = _imageVAE.GetParameters();
-        var camParams = _cameraEmbedding.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length + camParams.Length;
-        var combined = new Vector<T>(totalLength);
 
-        int offset = 0;
 
-        for (int i = 0; i < unetParams.Length; i++)
-            combined[offset + i] = unetParams[i];
-        offset += unetParams.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[offset + i] = vaeParams[i];
-        offset += vaeParams.Length;
-
-        for (int i = 0; i < camParams.Length; i++)
-            combined[offset + i] = camParams[i];
-
-        return combined;
-    }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int unetCount = checked((int)_multiViewUNet.ParameterCount);
-        int vaeCount = checked((int)_imageVAE.ParameterCount);
-        int camCount = checked((int)_cameraEmbedding.ParameterCount);
-
-        var expected = unetCount + vaeCount + camCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int offset = 0;
-
-        var unetParams = new Vector<T>(unetCount);
-        for (int i = 0; i < unetCount; i++)
-            unetParams[i] = parameters[offset + i];
-        offset += unetCount;
-
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[offset + i];
-        offset += vaeCount;
-
-        var camParams = new Vector<T>(camCount);
-        for (int i = 0; i < camCount; i++)
-            camParams[i] = parameters[offset + i];
-
-        _multiViewUNet.SetParameters(unetParams);
-        _imageVAE.SetParameters(vaeParams);
-        _cameraEmbedding.SetParameters(camParams);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _multiViewUNet.ParameterCount + _imageVAE.ParameterCount + _cameraEmbedding.ParameterCount;
-
     #endregion
 
     #region ICloneable Implementation
@@ -1262,7 +1215,7 @@ public class MVDreamConfig
 /// Multi-view aware U-Net for MVDream.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-public class MultiViewUNet<T>
+public class MultiViewUNet<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private UNetNoisePredictor<T> _baseUNet;
@@ -1612,7 +1565,7 @@ public class MultiViewAttention<T>
 /// Camera position embedding for view conditioning.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-public class CameraEmbedding<T>
+public class CameraEmbedding<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Matrix<T> _projectionWeights;

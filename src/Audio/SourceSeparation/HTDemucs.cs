@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -41,8 +41,17 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hybrid Transformers for Music Source Separation", "https://doi.org/10.1109/ICASSP49357.2023.10096956", Year = 2023, Authors = "Simon Rouard, Francisco Massa, Alexandre Défossez")]
-public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
+public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultHTDemucsLayers emits is the decoder's multi-stem mask prediction
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * numStems)</c>. 8196 (2049 x 4 at the defaults) appears
+    /// nowhere in the options; TransformerDim is the width one layer earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumStems;
+
     #region Fields
 
     private readonly HTDemucsOptions _options;

@@ -63,6 +63,23 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
     Authors = "van Hasselt, H., Guez, A., & Silver, D.")]
 public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_qNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Refreshes what derives from the parameters. This ran at the end of the
+    /// hand-written SetParameters; losing it would not fail a test, it would just leave
+    /// the agent training against a stale target.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_qNetwork, _targetNetwork);
+    }
     private DoubleDQNOptions<T> _options;
 
     /// <inheritdoc/>
@@ -322,19 +339,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionV
         var targetNetworkLength = reader.ReadInt32();
         var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
         _targetNetwork.Deserialize(targetNetworkBytes);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return _qNetwork.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.UpdateParameters(parameters);
-        CopyNetworkWeights(_qNetwork, _targetNetwork);
     }
 
     /// <inheritdoc/>

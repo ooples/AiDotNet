@@ -656,6 +656,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             perLayerParameters.Add(layerParameters);
             totalParameterCountLong += layerParameters.Length;
         }
+
+        // Then the network-level extras, in the same order ParameterCount sums them.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            var extraParameters = extra.GetParameters();
+            perLayerParameters.Add(extraParameters);
+            totalParameterCountLong += extraParameters.Length;
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null) continue;
+            var flat = new Vector<T>(tensor.Length);
+            tensor.AsSpan().CopyTo(flat.AsWritableSpan());
+            perLayerParameters.Add(flat);
+            totalParameterCountLong += flat.Length;
+        }
         int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
         var parameters = new Vector<T>(totalParameterCount);
@@ -690,19 +707,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         ResolveLazyLayerShapes();
 
-        // SCOPE CONTRACT: chunks must match exactly the parameter set
-        // that ParameterCount / GetParameters / SetParameters operate on.
-        // Those flat APIs walk only `Layers`; widening this enumeration
-        // to include GetExtraTrainableLayers / GetExtraTrainableTensors
-        // would make `sum(chunk.Length) > ParameterCount` for models
-        // with network-level extras (ViT cls/pos, Conformer subsamplers),
-        // causing callers that mix the flat and chunked APIs to mis-size
-        // buffers or skip parameters on round-trip.
+        // SCOPE CONTRACT: chunks must match exactly the parameter set that
+        // ParameterCount / GetParameters / SetParameters operate on, or a caller mixing the flat
+        // and chunked APIs mis-sizes buffers or skips parameters on round-trip.
         //
-        // Extras still flow through TrainWithTape via the separate extra-
-        // trainable handling path — they're just not surfaced in the
-        // chunked enumeration here. If a future PR widens the flat APIs
-        // to include extras, this enumeration can match in lockstep.
+        // Those flat APIs used to walk only `Layers`, so this enumeration did too, and the
+        // network-level extras (ViT cls/pos, Conformer subsamplers, PaLM-E's patch embed) were
+        // absent from both — trained through the separate extra-trainable path while the flat
+        // surface reported a count that excluded them. The flat APIs now include extras, so this
+        // matches in lockstep, which is what the note here always said should happen.
         //
         // The recursive CollectTrainableLayers walk DOES descend into
         // composite-layer sublayers (DenseBlock BN/Conv, MoE experts) —
@@ -717,6 +730,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (t is null || t.Length == 0) continue;
                 yield return t;
             }
+        }
+
+        // Same order the flat APIs use: layers, then extra layers, then extra tensors.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            foreach (var t in extra.GetTrainableParameters())
+            {
+                if (t is null || t.Length == 0) continue;
+                yield return t;
+            }
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            yield return tensor;
         }
     }
 
@@ -2006,6 +2035,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 total += Layers[i].ParameterCount;
             }
+
+            // Network-level weights that live OUTSIDE Layers -- a ViT's class and position
+            // embeddings, a Conformer's subsampler, PaLM-E's patch-embed conv. They were trained
+            // and serialized through a separate path while the flat surface pretended they did not
+            // exist, so a model holding them reported a count that its own GetParameters
+            // contradicted. Walked here, in GetParameters, in SetParameters and in
+            // GetParameterChunks in the SAME order, so all four describe one parameter set.
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) total += extra.ParameterCount;
+            }
+            foreach (var tensor in GetExtraTrainableTensors())
+            {
+                if (tensor is not null) total += tensor.Length;
+            }
+
             return total;
         }
     }
@@ -3100,6 +3145,53 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// flag on both of its exit paths.
     /// </remarks>
     protected void MarkLayerShapesResolved() => _layerShapesResolved = true;
+    /// <summary>
+    /// Brings this network's weights into existence now, for a network whose architecture already
+    /// determines every shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ResolveLazyLayerShapes"/> pins each lazy layer's input and output shape from the
+    /// architecture, but it stops there: the weight tensors are still unallocated, so
+    /// <see cref="ParameterCount"/> and <see cref="GetParameters"/> both answer zero. That is the
+    /// correct answer for a layer whose input width is genuinely unknown -- reading a size must not
+    /// allocate, which is why the parameter surface never materializes on its own -- but it is the
+    /// WRONG answer for a network that was handed a concrete inputSize at construction and simply
+    /// has not been forwarded yet. QMIXAgent is the canonical case: its agent and mixing networks
+    /// resolve to [10]->[32]->[1] and still reported 0 parameters forever, because the only thing
+    /// that would have materialized them was a forward pass its replay-buffer training never ran.
+    /// </para>
+    /// <para>
+    /// A model that knows its own architecture is complete calls this to close that gap. It is the
+    /// deliberate, CALLER-DRIVEN allocation the read path refuses to perform implicitly: the cost is
+    /// paid where someone asked for it, never inside a bare count query. Dispose and
+    /// ComputeTopologyFingerprint both read <see cref="ParameterCount"/>, and allocating there threw
+    /// OutOfMemoryException on a 774M-parameter model that was being torn down.
+    /// </para>
+    /// <para>
+    /// Idempotent, and a no-op for any layer still carrying the -1 shape sentinel -- those have
+    /// nothing to allocate until a real input arrives.
+    /// </para>
+    /// </remarks>
+    public void MaterializeParameters()
+    {
+        ResolveLazyLayerShapes();
+
+        if (Layers is not null)
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                if (Layers[i] is LayerBase<T> layer) layer.MaterializeParameters();
+            }
+        }
+
+        // The network-level extras GetParameters also folds, so count and vector stay in step.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is LayerBase<T> extraLayer) extraLayer.MaterializeParameters();
+        }
+    }
+
 
 
     /// <summary>
@@ -3417,6 +3509,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             // Validation is a diagnostic. It must never be the reason a model fails to construct.
             return;
+        }
+
+        // SHADOW COMPARISON - reporting only, and deliberately separate from the layout mismatches
+        // above. The layouts check axis ROLES; this checks the SIZES the shape contracts predict
+        // against the sizes the imperative resolution concluded. It is the parallel run that has to
+        // come back clean before InferOutputShape can be made authoritative in TryAdvanceLayerShape
+        // and LayerGraph.ResolveShapes, because until now nothing in production consulted a contract
+        // at all and there was no evidence either way.
+        try
+        {
+            var shadow = LayerContractValidator.CompareContractsToResolvedShapes(Layers);
+            if (shadow.Disagreements.Count > 0
+                && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                var shadowReport = new System.Text.StringBuilder();
+                shadowReport.Append(GetType().Name)
+                    .Append(": shape CONTRACT disagrees with resolved shape (agreed=")
+                    .Append(shadow.Agreed)
+                    .Append(", declined=").Append(shadow.Declined)
+                    .Append(", unresolved=").Append(shadow.Unresolved)
+                    .Append(')');
+
+                foreach (var d in shadow.Disagreements)
+                {
+                    shadowReport.AppendLine().Append("  ").Append(d);
+                }
+
+                System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + shadowReport);
+            }
+        }
+        catch
+        {
+            // A diagnostic must never be the reason a model fails to construct.
         }
 
         if (mismatches.Count == 0) return;
@@ -6443,6 +6568,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
+
+    // NOTE for whoever converges the model-side parameter mechanisms (there are currently three:
+    // [AutoParameters] on LayerBase, RegisterComponents duplicated in DiffusionModelBase and
+    // VAEModelBase, and the GetExtraTrainable* hooks here).
+    //
+    // Hoisting RegisterComponents to this class LOOKS like the convergence, and it is not sufficient.
+    // IParameterSource<T> is flat-vector only - ParameterCount / GetParameters / SetParameters - so a
+    // registered component can be counted, saved and loaded, but CANNOT flow through the six sites
+    // here that need Tensor<T> to register gradients and streaming handles.
+    //
+    // MEASURED, and it corrects an earlier note that guessed the diffusion side had the same gap:
+    // it does not, because it does not use these hooks at all. DiffusionModelBase is NOT a
+    // NeuralNetworkBase (it implements IDiffusionModel directly) and its tape training calls
+    // CollectTrainableParameters, a cached reflective walk of the whole object graph that gathers
+    // every ITrainableLayer<T>'s tensors. A registered component therefore DOES train there, so long
+    // as its parameters live inside layers.
+    //
+    // The real hole in that walk is a BARE Tensor<T>: it returns early on `obj is Tensor<T>` and skips
+    // fields declared as Tensor<T>, so a raw learned scalar or embedding held directly by a component
+    // is saved and never trained. On this side that is exactly what GetExtraTrainableTensors exists to
+    // carry - see CLAPModel's _logTemperature.
+    //
+    // So the convergence still needs a decision, but a narrower one than first stated: either
+    // IParameterSource gains a tensor-level view, or components are explicitly save/load-only and the
+    // training paths keep using GetExtraTrainable* plus the diffusion walk. Until that is settled,
+    // adding the registry here would be a mechanism nothing on this side consumes.
 
     /// <summary>
     /// Returns the registered module roots used by copy-on-write cloning.
@@ -10418,7 +10569,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     private const int SerializationMagic = 0x4E444941; // "AIDN" (little-endian int)
-    private const int SerializationVersion = 4;
+    // v5 records each layer's parameter SHAPES alongside the flat values. Restore then allocates
+    // exactly what was saved instead of inferring arity from vector length -- inference that was
+    // impossible for a layer whose parameter set depends on the data it saw (EmbeddingLayer's
+    // input projection). Reading v1-v4 still works and restores exactly as it did before; those
+    // payloads simply carry no layout, so nothing can be mis-applied from one.
+    private const int SerializationVersion = 5;
 
     // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
     // here so the check still compiles on net471, where Array.MaxLength
@@ -10525,6 +10681,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Write parameters (do not rely on ParameterCount: some layers keep trainable state outside LayerBase.Parameters).
             var parameters = layer.GetParameters();
+
+            // v5 layout manifest, written before the values and in the same fold order.
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layoutLayer)
+            {
+                writer.Write(true);
+                layoutLayer.WriteParameterLayout(writer);
+            }
+            else
+            {
+                writer.Write(false);
+            }
+
             writer.Write(parameters.Length);
             foreach (var param in parameters)
             {
@@ -10634,7 +10802,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            // Read parameters
+            // Read parameters. v5 precedes them with a shape manifest; apply it first so the
+            // layer is materialized to exactly the saved layout before values are poured in.
+            AiDotNet.NeuralNetworks.Layers.ParameterLayoutNode? parameterLayout = null;
+            if (version >= 5 && reader.ReadBoolean())
+            {
+                parameterLayout = AiDotNet.NeuralNetworks.Layers.ParameterLayoutNode.Read(reader);
+            }
+
             int paramCount = reader.ReadInt32();
             Vector<T>? parametersVector = null;
             if (paramCount > 0)
@@ -10690,8 +10865,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // are still unmaterialised, and skipping it here left SetParameters below with nowhere
             // to put them -- the restored model came back at its initialisation values with no
             // error raised, which is the eager half of the same defect fixed in the COW path.
+            // Measure SCALARS, not the number of tensors. An unmaterialized layer still returns
+            // its placeholder tensors, so a lazy EmbeddingLayer reported Count == 1 against a
+            // [0]-length tensor, this branch concluded it was already resolved, and SetParameters
+            // below was then handed 3072 values for a layer that believed it had none. ParameterCount
+            // folds tensors, buffers and sub-layers, so it is zero exactly when nothing is sized yet.
             if (layer is LayerBase<T> lb
-                && (!lb.IsShapeResolved || lb.GetTrainableParameters().Count == 0))
+                && (!lb.IsShapeResolved || lb.ParameterCount == 0))
             {
                 int[]? candidate = inputShape is { Length: > 0 } && inputShape.All(d => d > 0)
                     ? inputShape
@@ -10707,6 +10887,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     try { lb.ResolveFromShape(candidate); }
                     catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
                 }
+            }
+
+            // Size the layer to exactly what was saved before pouring values in. Without this a
+            // layer whose parameter set depends on the data it saw -- EmbeddingLayer's input
+            // projection -- comes back one tensor short and the restore is rejected.
+            if (parameterLayout is not null && layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layoutTarget)
+            {
+                layoutTarget.ApplyParameterLayout(parameterLayout);
             }
 
             // Apply parameters if any
@@ -12256,6 +12444,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 .CopyTo(layerParameters.AsWritableSpan());
             layer.SetParameters(layerParameters);
             currentIndex += layerParameterCount;
+        }
+
+        // Restore the network-level extras from the tail of the vector, in the order
+        // ParameterCount summed and GetParameters wrote them.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null || extra.ParameterCount <= 0) continue;
+            int extraCount = checked((int)extra.ParameterCount);
+            var extraParameters = new Vector<T>(extraCount);
+            srcSpan.Slice(currentIndex, extraCount).CopyTo(extraParameters.AsWritableSpan());
+            extra.SetParameters(extraParameters);
+            currentIndex += extraCount;
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
+            currentIndex += tensor.Length;
         }
 
         // Some ITrainableLayer implementations swap their parameter tensors

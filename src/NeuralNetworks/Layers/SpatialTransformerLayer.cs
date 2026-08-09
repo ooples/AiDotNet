@@ -46,7 +46,16 @@ public enum SpatialTransformerDataFormat
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+// ChannelsFirst [Batch?, Channels, Height, Width] - the constructor default, and the convention
+// ConvolutionalLayer and MaxPoolingLayer already declare. A type-level layout can name the axes only
+// one way, while the data format is INSTANCE state, so the contract below declines for any other
+// format rather than naming a ChannelsLast input's axes wrongly.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -308,6 +317,48 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     private readonly SpatialTransformerDataFormat _dataFormat;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The sampler resamples onto the configured output grid, so Height and Width are
+    /// <see cref="AxisRelation.Fixed"/> at <c>_outputHeight</c>/<c>_outputWidth</c> whatever came in,
+    /// and the channel and batch axes carry through untouched.
+    /// </para>
+    /// <para>
+    /// THE DEFAULT DATA FORMAT WAS THE DEFECT. It used to be
+    /// <see cref="SpatialTransformerDataFormat.Auto"/>, whose branch decides whether an axis IS
+    /// Channels or Height by comparing the input's SIZES against the already-resolved
+    /// <c>_inputHeight</c>/<c>_inputWidth</c> - and when both readings match it simply prefers one.
+    /// So the same rank-3 shape could be read as <c>[C,H,W]</c> or <c>[H,W,C]</c>, giving outputs with
+    /// the same sizes in a different axis ORDER. That is not a shape a contract can state, and it is
+    /// not a behaviour a caller can rely on. The default is now
+    /// <see cref="SpatialTransformerDataFormat.ChannelsFirst"/>, matching ConvolutionalLayer and
+    /// MaxPoolingLayer, so the out-of-the-box shape is determined by configuration alone.
+    /// </para>
+    /// <para>
+    /// <c>Auto</c> remains selectable for callers who deliberately want inference, and this declines
+    /// for it - as it does for ChannelsLast, whose axis ORDER the type-level layout cannot express
+    /// alongside ChannelsFirst.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_dataFormat != SpatialTransformerDataFormat.ChannelsFirst) return null;
+        if (_outputHeight <= 0 || _outputWidth <= 0) return null;
+        if (inputRank != 3 && inputRank != 4) return null;
+
+        var axes = new List<OutputAxisContract>(inputRank);
+        if (inputRank == 4)
+        {
+            axes.Add(new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)));
+        }
+
+        axes.Add(new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels)));
+        axes.Add(new OutputAxisContract(TensorAxis.Height, AxisRelation.Fixed(_outputHeight)));
+        axes.Add(new OutputAxisContract(TensorAxis.Width, AxisRelation.Fixed(_outputWidth)));
+        return axes;
+    }
+
     /// <summary>
     /// The height of the output feature map.
     /// </summary>
@@ -338,28 +389,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     private readonly int _outputWidth;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training through backpropagation.
-    /// </summary>
-    /// <value>
-    /// Always returns <c>true</c> as spatial transformer layers have trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the spatial transformer layer can be trained. The layer contains trainable parameters
-    /// in the localization network that are updated during the training process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer contains numbers (parameters) that can be adjusted during training
-    /// - It will improve its performance as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// The spatial transformer will gradually learn the best transformations for the task at hand.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -388,7 +417,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// which works well for predicting transformation parameters.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
+    public SpatialTransformerLayer(int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
         : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, activationFunction ?? new TanhActivation<T>())
     {
         if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));
@@ -434,7 +463,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// for their neural networks. For most cases, the basic constructor is sufficient.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int outputHeight, int outputWidth, IVectorActivationFunction<T> vectorActivationFunction, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.Auto)
+    public SpatialTransformerLayer(int outputHeight, int outputWidth, IVectorActivationFunction<T> vectorActivationFunction, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
         : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, vectorActivationFunction ?? new TanhActivation<T>())
     {
         if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));
@@ -894,42 +923,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the layer (localization network weights and biases) and combines them
-    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The parameters:
-    /// - Are the weights and biases of the localization network
-    /// - Are converted from matrices and vectors to a single long list (vector)
-    /// - Can be used to save the state of the layer or apply optimization techniques
-    /// 
-    /// This method is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatW1 = new Vector<T>(_localizationWeights1.ToArray());
-        var flatB1 = new Vector<T>(_localizationBias1.ToArray());
-        var flatW2 = new Vector<T>(_localizationWeights2.ToArray());
-        var flatB2 = new Vector<T>(_localizationBias2.ToArray());
-
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(flatW1, flatB1),
-            Vector<T>.Concatenate(flatW2, flatB2));
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -1005,39 +998,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             ResolveFromShape(new[] { inH, inW });
         }
         base.Deserialize(reader);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int w1Size = _localizationWeights1.Shape[0] * _localizationWeights1.Shape[1];
-        int b1Size = _localizationBias1.Shape[0];
-        int w2Size = _localizationWeights2.Shape[0] * _localizationWeights2.Shape[1];
-        int b2Size = _localizationBias2.Shape[0];
-        int totalParams = w1Size + b1Size + w2Size + b2Size;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Copy IN PLACE into the existing tensor storage so we preserve
-        // the engine's persistent-tensor registration. Replacing the field
-        // references with `Tensor<T>.FromVector(...)` would leave the
-        // registry pointing at the old tensors, causing stale GPU-cached
-        // weights and breaking streaming bookkeeping.
-        int index = 0;
-        parameters.AsSpan().Slice(index, w1Size).CopyTo(_localizationWeights1.Data.Span);
-        index += w1Size;
-        parameters.AsSpan().Slice(index, b1Size).CopyTo(_localizationBias1.Data.Span);
-        index += b1Size;
-        parameters.AsSpan().Slice(index, w2Size).CopyTo(_localizationWeights2.Data.Span);
-        index += w2Size;
-        parameters.AsSpan().Slice(index, b2Size).CopyTo(_localizationBias2.Data.Span);
-
-        Engine.InvalidatePersistentTensor(_localizationWeights1);
-        Engine.InvalidatePersistentTensor(_localizationBias1);
-        Engine.InvalidatePersistentTensor(_localizationWeights2);
-        Engine.InvalidatePersistentTensor(_localizationBias2);
     }
 
     /// <summary>

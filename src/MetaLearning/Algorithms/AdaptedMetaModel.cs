@@ -6,6 +6,8 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Models;
 using AiDotNet.Models;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>
@@ -43,6 +45,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The adapted parameter vector this model carries INSTEAD of the wrapped model's. It is replaced wholesale on restore, which is why the source takes a setter.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _adaptedParams,
+            value => _adaptedParams = value));
+    }
     private Vector<T> _adaptedParams;
     private readonly Vector<T>? _supportFeatures;
     private readonly double[]? _modulationFactors;
@@ -94,17 +105,6 @@ public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
         {
             InterfaceGuard.Parameterizable(BaseModel).SetParameters(originalParams);
         }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _adaptedParams;
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-        _adaptedParams = parameters;
     }
 
     /// <inheritdoc/>

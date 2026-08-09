@@ -43,6 +43,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
     [ResearchPaper("Music Structure Analysis: A Survey", "https://doi.org/10.1007/978-3-319-25226-1_12")]
 public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMusicStructureAnalyzerLayers emits is the section-segmentation head
+    /// <c>DenseLayer&lt;T&gt;(numSections)</c>, wired from <c>_options.NumSections</c> (8). A
+    /// structural class count; the HiddenDim projection just before it is not the output width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumSections;
+
     #region Fields
 
     private readonly MusicStructureAnalyzerOptions _options;

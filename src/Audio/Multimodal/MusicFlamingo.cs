@@ -47,6 +47,16 @@ namespace AiDotNet.Audio.Multimodal;
 [ResearchPaper("MusicFlamingo: Multimodal Music Understanding and Generation with Pretrained Language Models", "https://doi.org/10.48550/arXiv.2410.01250", Year = 2024, Authors = "Zhifeng Kong, Arushi Goel, Rohan Badlani, Wei Ping, Rafael Valle, Bryan Catanzaro")]
 public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMusicFlamingoLayers emits is the LLM output projection
+    /// <c>DenseLayer&lt;T&gt;(llmHiddenDim)</c>, wired from <c>_options.LLMHiddenDim</c> (2048).
+    /// The stack ends in LLM embedding space, not at a vocabulary; MusicEncoderDim is the input side
+    /// and NumPerceiverTokens is a sequence length, neither is the last axis.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LLMHiddenDim;
+
     #region Fields
 
     private readonly MusicFlamingoOptions _options;

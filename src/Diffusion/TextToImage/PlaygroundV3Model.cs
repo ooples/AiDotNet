@@ -94,6 +94,15 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ResearchPaper("Playground v3: Improving Text-to-Image Alignment with Human Feedback", "https://arxiv.org/abs/2409.10695", Year = 2024, Authors = "Li et al.")]
 public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -139,7 +148,6 @@ public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => PG3_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this model uses aesthetic DPO alignment.
@@ -261,48 +269,7 @@ public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var predictorParams = _predictor.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = predictorParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        for (int i = 0; i < predictorParams.Length; i++)
-            combined[i] = predictorParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[predictorParams.Length + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int predictorCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        long expectedTotal = (long)predictorCount + vaeCount;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var predictorParams = new Vector<T>(predictorCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < predictorCount; i++)
-            predictorParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[predictorCount + i];
-
-        _predictor.SetParameters(predictorParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

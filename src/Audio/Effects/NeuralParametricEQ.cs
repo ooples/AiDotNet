@@ -43,6 +43,16 @@ namespace AiDotNet.Audio.Effects;
 [ResearchPaper("Style Transfer of Audio Effects with Differentiable Signal Processing", "https://arxiv.org/abs/2207.08759", Year = 2022, Authors = "Christian J. Steinmetz, Nicholas J. Bryan, Joshua D. Reiss")]
 public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the
+    /// identity, so the width is the last layer of
+    /// <c>CreateDefaultNeuralParametricEQLayers</c> - <c>FullyConnectedLayer&lt;T&gt;(numBands * 3)</c>,
+    /// the EQ parameter head emitting gain / frequency / Q per band. The model predicts FILTER
+    /// SETTINGS, not spectrum, so <c>_options.FFTSize</c> sizes only the input projection.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumBands * 3;
+
     #region Fields
 
     private readonly NeuralParametricEQOptions _options;

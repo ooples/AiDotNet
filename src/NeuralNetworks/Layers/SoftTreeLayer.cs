@@ -29,8 +29,60 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 2")]
-public partial class SoftTreeLayer<T> : LayerBase<T>
+// FEATURE-LAST, like a dense projection: ForwardTraced flattens everything ahead of the trailing axis
+// into a batch ("input.Length / features, features"), runs the tree, then restores the caller's leading
+// dimensions with only the last axis replaced by outputDim. Its own <returns> says so: "[outputDim] for
+// rank-1 input, [batchSize, outputDim] for rank-2, and [d0, ..., outputDim] for higher rank". The tree
+// structure - depth, internal nodes, leaves - is entirely interior; it never reaches the output shape.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position tree evaluation: leading axes are flattened into the batch and restored.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Rank-polymorphic for the same reason <c>DenseLayer</c> is: the layer fixes the TRAILING axis and
+    /// carries every leading axis through untouched. <c>ForwardTraced</c> reshapes to
+    /// <c>[input.Length / features, features]</c>, matmuls, and then rebuilds <c>outShape</c> by copying
+    /// <c>input.Shape[i]</c> for every leading axis and setting only the last to <c>outputDim</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputDim)</c> is the constructor argument, not an observed number - it is the width of
+    /// <c>_leafValues</c> (<c>[numLeaves, outputDim]</c>), the right operand of the final matmul, so it
+    /// is a size the layer's parameters genuinely impose rather than one inherited from the input.
+    /// </para>
+    /// <para>
+    /// <c>_numLeaves</c> and <c>_numInternalNodes</c> are deliberately absent. They size the path
+    /// probabilities, an intermediate that the leaf matmul contracts away; naming a tree of depth 4 as a
+    /// 16-wide axis would describe a tensor the caller never receives.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDim <= 0 || inputRank < 1) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        // Enumerated rather than looped: each leading axis needs a DISTINCT role, since a relation
+        // refers to its input by role and two anonymous placeholders could not be told apart.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            _ => null,
+        };
+    }
+
     private readonly int _inputDim;
     private readonly int _depth;
     private readonly int _outputDim;
@@ -73,9 +125,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedRightProbs;
     private Tensor<T>? _cachedNodeProbs;
     private Tensor<T>? _cachedSplitLogits;
-
-    public override long ParameterCount =>
-        _splitWeights.Length + _splitBiases.Length + _leafValues.Length;
 
     /// <summary>
     /// Initializes a new soft tree layer.
@@ -269,34 +318,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int idx = 0;
-
-        // Copy split weights
-        for (int i = 0; i < _splitWeights.Length; i++)
-        {
-            parameters[idx++] = _splitWeights[i];
-        }
-
-        // Copy split biases
-        for (int i = 0; i < _splitBiases.Length; i++)
-        {
-            parameters[idx++] = _splitBiases[i];
-        }
-
-        // Copy leaf values
-        for (int i = 0; i < _leafValues.Length; i++)
-        {
-            parameters[idx++] = _leafValues[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int idx = 0;
@@ -371,19 +392,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     {
         base.ClearGradients();
         _splitWeightsGrad = null; _splitBiasesGrad = null; _leafValuesGrad = null;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int idx = 0;
-        var swSpan = _splitWeights.Data.Span;
-        for (int i = 0; i < _splitWeights.Length; i++) swSpan[i] = parameters[idx++];
-        var sbSpan = _splitBiases.Data.Span;
-        for (int i = 0; i < _splitBiases.Length; i++) sbSpan[i] = parameters[idx++];
-        var lvSpan = _leafValues.Data.Span;
-        for (int i = 0; i < _leafValues.Length; i++) lvSpan[i] = parameters[idx++];
     }
 
     /// <inheritdoc/>

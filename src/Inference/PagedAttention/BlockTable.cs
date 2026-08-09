@@ -21,7 +21,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// - Swapping to disk (move a chapter to storage, update the table)
 /// </para>
 /// </remarks>
-internal class BlockTable
+public class BlockTable
 {
     private readonly int _blockSize;
     private readonly List<int> _physicalBlockIds;
@@ -236,7 +236,7 @@ internal class BlockTable
 /// Manages block tables for multiple sequences.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-internal class BlockTableManager<T>
+public class BlockTableManager<T>
 {
     private readonly BlockManager<T> _blockManager;
     private readonly Dictionary<long, BlockTable> _blockTables;

@@ -26,7 +26,25 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public partial class IntersampleAttentionLayer<T> : LayerBase<T>
+// SAINT row attention over EMBEDDED TABULAR FIELDS: ForwardTraced reads
+// [batchSize, numFeatures, embDim] off input.Shape. The middle axis is the set of table columns, named
+// Other rather than Time because it has no ordering - the same choice GraphAttentionLayer makes for its
+// node axis - and the trailing axis is the per-field embedding width.
+// Shape-preserving on all three, and the batch axis is worth calling out: this layer attends ACROSS
+// samples, so a reader could reasonably expect it to reduce or reorder them. It does not. The samples
+// are the attention SEQUENCE, and attention returns one context vector per query position, so the count
+// survives - the permute back (`[2, 0, 1, 3]`) restores the original arrangement, the residual
+// `Engine.TensorAdd(residual, output)` forces the shape to match the input exactly, and Engine.LayerNorm
+// only rescales.
+// Rank 3 only: the forward pass indexes Shape[0..2] unconditionally.
+// Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Field embeddings; attention runs across the BATCH axis, one problem per field.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -54,13 +72,7 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _queryProjection.ParameterCount +
-        _keyProjection.ParameterCount +
-        _valueProjection.ParameterCount +
-        _outputProjection.ParameterCount +
-        _embeddingDim * 2; // LayerNorm gamma and beta
+ // LayerNorm gamma and beta
 
     /// <summary>
     /// Initializes intersample attention.
@@ -183,60 +195,12 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
         _outputProjection.UpdateParameters(learningRate);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var qParams = _queryProjection.GetParameters();
-        var kParams = _keyProjection.GetParameters();
-        var vParams = _valueProjection.GetParameters();
-        var oParams = _outputProjection.GetParameters();
-
-        int total = qParams.Length + kParams.Length + vParams.Length + oParams.Length + _embeddingDim * 2;
-        var result = new Vector<T>(total);
-        int offset = 0;
-
-        CopyVectorToVector(qParams, result, ref offset);
-        CopyVectorToVector(kParams, result, ref offset);
-        CopyVectorToVector(vParams, result, ref offset);
-        CopyVectorToVector(oParams, result, ref offset);
-
-        for (int i = 0; i < _embeddingDim; i++)
-            result[offset++] = _layerNormGamma[i];
-        for (int i = 0; i < _embeddingDim; i++)
-            result[offset++] = _layerNormBeta[i];
-
-        return result;
-    }
-
     private static void CopyVectorToVector(Vector<T> source, Vector<T> target, ref int offset)
     {
         for (int i = 0; i < source.Length; i++)
         {
             target[offset++] = source[i];
         }
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int qCount = ParameterCountHelper.ToFlatVectorSize(_queryProjection.ParameterCount);
-        int kCount = ParameterCountHelper.ToFlatVectorSize(_keyProjection.ParameterCount);
-        int vCount = ParameterCountHelper.ToFlatVectorSize(_valueProjection.ParameterCount);
-        int oCount = ParameterCountHelper.ToFlatVectorSize(_outputProjection.ParameterCount);
-        int expected = qCount + kCount + vCount + oCount + _embeddingDim * 2;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-        }
-
-        int offset = 0;
-        _queryProjection.SetParameters(parameters.SubVector(offset, qCount)); offset += qCount;
-        _keyProjection.SetParameters(parameters.SubVector(offset, kCount)); offset += kCount;
-        _valueProjection.SetParameters(parameters.SubVector(offset, vCount)); offset += vCount;
-        _outputProjection.SetParameters(parameters.SubVector(offset, oCount)); offset += oCount;
-        for (int i = 0; i < _embeddingDim; i++) _layerNormGamma[i] = parameters[offset++];
-        for (int i = 0; i < _embeddingDim; i++) _layerNormBeta[i] = parameters[offset++];
     }
 
     /// <summary>

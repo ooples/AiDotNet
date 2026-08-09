@@ -44,6 +44,15 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ResearchPaper("SCNet: Sparse Compression Network for Music Source Separation", "https://doi.org/10.48550/arXiv.2401.13276", Year = 2024, Authors = "Weinan Tong, Jiaxu Zhu, Jun Chen, Shiyin Kang, Tao Jiang, Yang Li, Zhiyong Wu, Helen Meng")]
 public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore calls ForwardNative, which walks Layers in order and only
+    /// adds shape-preserving residuals. The last layer CreateDefaultSCNetLayers emits is the
+    /// decompression head <c>DenseLayer&lt;T&gt;(numFreqBins * numStems)</c>; CompressionDim is the
+    /// intermediate one layer earlier, not the output width. 4100 (1025 x 4) is stored nowhere.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumStems;
+
     #region Fields
 
     private readonly SCNetOptions _options;

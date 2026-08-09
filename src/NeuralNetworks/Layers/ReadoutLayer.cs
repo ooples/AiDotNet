@@ -38,8 +38,50 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public partial class ReadoutLayer<T> : LayerBase<T>
+// Ranks 1 and 2, the two forms ForwardTraced round-trips: a rank-1 input is reshaped to [1, inputSize]
+// and returned as [OutputShape[0]], and a rank-2 input passes straight through the matmul. Higher ranks
+// are flattened into a batch and restored from _originalInputShape, but a readout head has nothing to say
+// about what a third axis would be, so it is not declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// A linear readout: the trailing axis becomes the layer's own output width and the batch axis is
+    /// carried through. Read off <c>ForwardTraced</c>, which returns <c>[OutputShape[0]]</c> for rank 1
+    /// and sets <c>outputShape[^1] = OutputShape[0]</c> for higher ranks - the same value the constructor
+    /// passed to the base as <c>outputSize</c>.
+    /// </para>
+    /// <para>
+    /// The size is read from the base's declared output shape rather than copied into a private field,
+    /// because that is the value the forward itself uses; a second copy could disagree with it after a
+    /// shape-resolving path and there would be no way to tell which one the contract meant.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var declared = OutputShape;
+        if (declared is null || declared.Length != 1 || declared[0] <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(declared[0]));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and outputs.
     /// </summary>
@@ -114,30 +156,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>
     private int _gpuInputSize;
     private FusedActivationType _gpuActivationType;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> for ReadoutLayer, indicating that the layer can be trained through backpropagation.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the ReadoutLayer has trainable parameters (weights and biases) that
-    /// can be optimized during the training process using backpropagation. The gradients of these parameters
-    /// are calculated during the backward pass and used to update the parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has values (weights and biases) that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// When you train a neural network containing this layer, the weights and biases will 
-    /// automatically adjust to better recognize patterns specific to your data.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -470,39 +488,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the readout layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (weights and biases).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) of the readout layer as a
-    /// single vector. The weights are stored first, followed by the biases. This is useful for optimization
-    /// algorithms that operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the readout layer.
-    /// 
-    /// The parameters:
-    /// - Are the weights and biases that the readout layer learns during training
-    /// - Control how the layer processes information
-    /// - Are returned as a single list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The weights are stored first in the vector, followed by all the bias values.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatWeights = new Vector<T>(_weights.ToArray());
-        var flatBias = new Vector<T>(_bias.ToArray());
-        return Vector<T>.Concatenate(flatWeights, flatBias);
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the readout layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters (weights and biases) to set.</param>
@@ -539,35 +524,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>
     {
         _weightGradients = new Tensor<T>(_weights._shape);
         _biasGradients = new Tensor<T>(_bias._shape);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int outputSize = _weights.Shape[0];
-        int inputSize = _weights.Shape[1];
-        int weightCount = outputSize * inputSize;
-        int totalParams = weightCount + _bias.Shape[0];
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Extract weight parameters and reshape using Tensor<T>.FromVector
-        var weightParams = new Vector<T>(weightCount);
-        for (int i = 0; i < weightCount; i++)
-        {
-            weightParams[i] = parameters[i];
-        }
-        _weights = Tensor<T>.FromVector(weightParams).Reshape([outputSize, inputSize]);
-
-        // Extract bias parameters
-        var biasParams = new Vector<T>(_bias.Shape[0]);
-        for (int i = 0; i < _bias.Shape[0]; i++)
-        {
-            biasParams[i] = parameters[weightCount + i];
-        }
-        _bias = Tensor<T>.FromVector(biasParams);
     }
 
     /// <summary>

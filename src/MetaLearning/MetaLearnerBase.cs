@@ -45,6 +45,13 @@ namespace AiDotNet.MetaLearning;
 /// </remarks>
 public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>, IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The inner model the meta-learner adapts. Both hand-written surfaces already delegated straight to it, so registering it is the same enumeration with the forwarding removed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(ParamModel);
+    }
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
@@ -1509,12 +1516,6 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
 
     /// <inheritdoc />
     public override ILossFunction<T> DefaultLossFunction => LossFunction ?? new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => ParamModel.GetParameters();
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) => ParamModel.SetParameters(parameters);
 
     /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)

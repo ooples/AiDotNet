@@ -132,26 +132,6 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         return _textProjection.Forward(eosTensor);
     }
 
-    /// <summary>
-    /// CLIP parameter count = layer-stack params + the post-pool projection.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long basePc = 0;
-            foreach (var layer in Layers) basePc += layer.ParameterCount;
-            return basePc + _textProjection.ParameterCount;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var basePart = base.GetParameters();
-        return Vector<T>.Concatenate(basePart, _textProjection.GetParameters());
-    }
-
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {

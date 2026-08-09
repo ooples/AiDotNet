@@ -50,6 +50,15 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ResearchPaper("SenseFlow: Accelerated Flow-Matching Generation", "https://arxiv.org/abs/2501.04601", Year = 2024, Authors = "SenseTime")]
 public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_vae);
+    }
+
     private const int LATENT_CHANNELS = 16;
     private const double DEFAULT_GUIDANCE = 3.5;
 
@@ -66,7 +75,6 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new SenseFlow model.
@@ -109,27 +117,8 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
             numResBlocksPerLevel: 2, latentScaleFactor: 0.3611, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var pp = _predictor.GetParameters();
-        var vp = _vae.GetParameters();
-        return Vector<T>.Concatenate(new[] { pp, vp });
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int pc = checked((int)_predictor.ParameterCount);
-        int vc = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)pc + vc;
-        if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
-        var pp = new Vector<T>(parameters.AsSpan().Slice(0, pc).ToArray());
-        var vp = new Vector<T>(parameters.AsSpan().Slice(pc, vc).ToArray());
-        _predictor.SetParameters(pp);
-        _vae.SetParameters(vp);
-    }
+
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 

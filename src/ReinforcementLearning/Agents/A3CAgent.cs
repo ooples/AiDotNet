@@ -63,6 +63,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
     Authors = "Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., Silver, D., & Kavukcuoglu, K.")]
 public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_globalPolicyNetwork);
+        RegisterParameterComponent(_globalValueNetwork);
+    }
     private readonly A3COptions<T> _options;
 
     /// <inheritdoc/>
@@ -770,39 +779,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
         };
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var policyParams = _globalPolicyNetwork.GetParameters();
-        var valueParams = _globalValueNetwork.GetParameters();
-
-        var total = policyParams.Length + valueParams.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in policyParams) vector[idx++] = p;
-        foreach (var p in valueParams) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var policyParams = _globalPolicyNetwork.GetParameters();
-        var valueParams = _globalValueNetwork.GetParameters();
-
-        int idx = 0;
-        var policyVec = new Vector<T>(policyParams.Length);
-        var valueVec = new Vector<T>(valueParams.Length);
-
-        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
-        for (int i = 0; i < valueParams.Length; i++) valueVec[i] = parameters[idx++];
-
-        _globalPolicyNetwork.UpdateParameters(policyVec);
-        _globalValueNetwork.UpdateParameters(valueVec);
     }
 
     /// <inheritdoc/>

@@ -40,7 +40,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4, 4 }); for (int i = 0; i < 4; i++) { adj[0, i, i] = 1.0; if (i > 0) adj[0, i, i-1] = 1.0; if (i < 3) adj[0, i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+// Roles and ranks from ForwardTraced's own normalization: "PNA is a graph layer: normalize to 3D
+// [batch, nodes, features]", with an explicit rank-2 branch for [nodes, features]. The node axis is Other
+// because a graph's nodes are an unordered vertex set - not a spatial extent and not a sequence position -
+// so none of the named roles describes it without asserting something false.
+//
+// Rank 1 also runs (it is reshaped to [1, 1, features]) but is not declared: it degenerates to a
+// single-node graph, and a declaration would advertise a shape callers should not be routing here.
+// Higher ranks collapse their leading axes into the batch, which would need a distinct role per axis
+// that this layer says nothing about.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
+    Note = "Unbatched graph: leading axis is the node count.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -98,8 +115,6 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     private Tensor<T>? _selfWeightsGradient;
     private Tensor<T>? _biasGradient;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -110,6 +125,46 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
     /// <inheritdoc/>
     public int OutputFeatures => _outputFeatures;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off the shape-restoring tail of <c>ForwardTraced</c>, which reshapes to
+    /// <c>[processNumNodes, _outputFeatures]</c> for a rank-2 input and leaves the rank-3 result as
+    /// <c>[batch, nodes, _outputFeatures]</c>. Aggregation is per node over its neighbours, so the node
+    /// count is carried through; only the feature width is this layer's to set.
+    /// </para>
+    /// <para>
+    /// The adjacency matrix is a second input, set through <see cref="SetAdjacencyMatrix"/>, and it is
+    /// worth being explicit that the output shape does NOT depend on it - it selects WHICH neighbours are
+    /// summed, never how many rows come out. That is why this layer can declare a contract at all where a
+    /// layer whose output extent came from its second input could not.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputFeatures)</c> reads the constructor argument, not the observed width: the multiple
+    /// aggregators and scalers widen the intermediate to <c>_combinedFeatures</c>, but the post-aggregation
+    /// MLP projects back down, so the declared width is the one the final matmul produces.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputFeatures <= 0) return null;
+
+        var nodes = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures));
+
+        return inputRank switch
+        {
+            2 => new[] { nodes, features },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                nodes,
+                features,
+            },
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PrincipalNeighbourhoodAggregationLayer{T}"/> class.
@@ -1140,21 +1195,6 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_preTransformWeights.ToArray()),
-            new Vector<T>(_preTransformBias.ToArray()),
-            new Vector<T>(_postAggregationWeights1.ToArray()),
-            new Vector<T>(_postAggregationBias1.ToArray()),
-            new Vector<T>(_postAggregationWeights2.ToArray()),
-            new Vector<T>(_postAggregationBias2.ToArray()),
-            new Vector<T>(_selfWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
-        );
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         var gPreTransformWeights = _preTransformWeightsGradient != null ? new Vector<T>(_preTransformWeightsGradient.ToArray()) : new Vector<T>(_preTransformWeights.Length);
@@ -1180,59 +1220,6 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         _postAggregationBias2Gradient = null;
         _selfWeightsGradient = null;
         _biasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int preTransformWeightCount = _preTransformWeights.Length;
-        int preTransformBiasCount = _preTransformBias.Length;
-        int post1WeightCount = _postAggregationWeights1.Length;
-        int post1BiasCount = _postAggregationBias1.Length;
-        int post2WeightCount = _postAggregationWeights2.Length;
-        int post2BiasCount = _postAggregationBias2.Length;
-        int selfWeightCount = _selfWeights.Length;
-        int biasCount = _bias.Length;
-
-        int totalParams = preTransformWeightCount + preTransformBiasCount +
-                         post1WeightCount + post1BiasCount +
-                         post2WeightCount + post2BiasCount +
-                         selfWeightCount + biasCount;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Expected {totalParams} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        int index = 0;
-
-        _preTransformWeights = Tensor<T>.FromVector(parameters.SubVector(index, preTransformWeightCount))
-            .Reshape(_preTransformWeights._shape);
-        index += preTransformWeightCount;
-
-        _preTransformBias = Tensor<T>.FromVector(parameters.SubVector(index, preTransformBiasCount));
-        index += preTransformBiasCount;
-
-        _postAggregationWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, post1WeightCount))
-            .Reshape(_postAggregationWeights1._shape);
-        index += post1WeightCount;
-
-        _postAggregationBias1 = Tensor<T>.FromVector(parameters.SubVector(index, post1BiasCount));
-        index += post1BiasCount;
-
-        _postAggregationWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, post2WeightCount))
-            .Reshape(_postAggregationWeights2._shape);
-        index += post2WeightCount;
-
-        _postAggregationBias2 = Tensor<T>.FromVector(parameters.SubVector(index, post2BiasCount));
-        index += post2BiasCount;
-
-        _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfWeightCount))
-            .Reshape(_selfWeights._shape);
-        index += selfWeightCount;
-
-        _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
     }
 
     /// <inheritdoc/>

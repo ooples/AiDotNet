@@ -45,6 +45,16 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ResearchPaper("Danna-Sep: Unite to Separate - A Unified Model for Audio Source Separation", "https://doi.org/10.48550/arXiv.2410.11145", Year = 2024, Authors = "Dongchao Yang, Songxiang Liu, Yuanyuan Wang, Helen Meng")]
 public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultDannaSepLayers emits is the multi-source mask head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * numSources)</c> with a sigmoid. Note this model names the
+    /// stem count <c>NumSources</c>, not <c>NumStems</c> like its siblings; 8196 (2049 x 4) is stored
+    /// nowhere.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumSources;
+
     #region Fields
 
     private readonly DannaSepOptions _options;

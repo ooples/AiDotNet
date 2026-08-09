@@ -51,6 +51,11 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
 public class FinancialDQNAgent<T> : TradingAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The online Q-network. Its target copy is excluded, as it was before -- a target is refreshed FROM these weights, not trained alongside them.</remarks>
+    protected override void RegisterComponents()
+        => RegisterParameterComponent(_qNetwork);
     #region Fields
 
     private readonly FinancialDQNAgentOptions<T> _options;
@@ -68,9 +73,6 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _qNetwork.ParameterCount;
 
     #endregion
 
@@ -350,26 +352,6 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     public override void Deserialize(byte[] data)
     {
         _qNetwork.Deserialize(data);
-        UpdateTargetNetwork();
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, GetParameters performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters() => _qNetwork.GetParameters();
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, SetParameters performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.SetParameters(parameters);
         UpdateTargetNetwork();
     }
 

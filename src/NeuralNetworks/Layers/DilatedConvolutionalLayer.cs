@@ -40,7 +40,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
+// Roles from OnFirstForward, which names both accepted forms itself: "requires rank-3 [C,H,W] or
+// rank-4 [B,C,H,W] input". BatchOptional folds them into one declaration, and it must cover both
+// because this layer's [LayerProperty(ExpectedInputRank = 4)] pins the batched form.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The number of channels in the input data.
@@ -323,29 +331,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     private bool _gpuAddedBatchDimension;
     private FusedActivationType _gpuActivationType;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because this layer has trainable parameters (kernels and biases).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates that the dilated convolutional layer supports training through backpropagation.
-    /// The layer has trainable parameters (kernels and biases) that are updated during the training process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer adjusts its filters and biases during training
-    /// - It improves over time as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// This is different from some layers (like pooling layers) that don't have
-    /// trainable parameters and therefore don't "learn" in the same way.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -510,6 +495,46 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         }
 
         ResolveShapes(new[] { c, h, w }, new[] { _outputDepth, outH, outW });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The two <c>outH</c>/<c>outW</c> lines directly above are the sliding-window formula verbatim -
+    /// <c>(in + 2*padding - dilation*(kernel-1) - 1) / stride + 1</c> - so both spatial axes are
+    /// <c>Window</c> with this layer's own <c>_kernelSize</c>, <c>_stride</c>, <c>_padding</c> and
+    /// <c>_dilation</c>. Dilation is the whole point of this layer and is passed through explicitly:
+    /// omitting it would collapse the contract onto a plain convolution and OVERSTATE the output,
+    /// since dilation widens the kernel's reach and therefore shrinks the result.
+    /// </para>
+    /// <para>
+    /// Hand-written rather than generated for the reason <c>MaxPoolingLayer</c> gives: the window is a
+    /// caller-chosen relation, and a probe run at one configuration cannot tell a stride-1 dilated
+    /// convolution (which happens to look shape-preserving at the right padding) from the general case.
+    /// The channel axis is <c>Fixed(_outputDepth)</c>, the constructor argument <c>ResolveShapes</c>
+    /// publishes as the leading output dimension.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Ranks 3 and 4 only - exactly the two OnFirstForward accepts before it throws.
+        if (inputRank is not (3 or 4) || _kernelSize <= 0 || _stride <= 0 || _dilation <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputDepth));
+        var height = new OutputAxisContract(
+            TensorAxis.Height,
+            AxisRelation.Window(TensorAxis.Height, _kernelSize, _stride, _padding, _dilation));
+        var width = new OutputAxisContract(
+            TensorAxis.Width,
+            AxisRelation.Window(TensorAxis.Width, _kernelSize, _stride, _padding, _dilation));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
     }
 
     /// <summary>
@@ -908,101 +933,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         // Reset gradients
         _kernelGradients = null;
         _biasGradients = null;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) of the layer as a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving
-    /// and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the layer's learnable values into a single list.
-    /// 
-    /// The parameters include:
-    /// - All the filter weights (the majority of the parameters)
-    /// - All the bias values (one per output channel)
-    /// 
-    /// This combined list is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need all parameters together
-    /// 
-    /// Think of it like packing all the knowledge the layer has learned into a single container.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights and biases) of the layer from a single vector.
-    /// This is useful for loading saved model weights or for implementing optimization algorithms
-    /// that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the exact right length
-    /// - The values are distributed back to the filter weights and biases
-    /// - This allows loading previously trained weights
-    /// 
-    /// Use cases include:
-    /// - Restoring a saved model
-    /// - Using pre-trained weights
-    /// - Testing specific weight configurations
-    /// 
-    /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if shape isn't resolved yet (placeholder _kernels with
-        // Length 0), infer inputDepth from the parameter vector layout
-        // (kernels + biases = inputDepth*outputDepth*kernelSize² + outputDepth)
-        // and call ResolveFromShape with kernelSize as dummy spatial dims.
-        if (!IsShapeResolved)
-        {
-            int kernelArea = _kernelSize * _kernelSize;
-            int candidateInputDepth = (parameters.Length - _outputDepth) / (_outputDepth * kernelArea);
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * _outputDepth * kernelArea + _outputDepth != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for DilatedConvolutionalLayer from {parameters.Length} parameters " +
-                    $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
-            }
-            // Dilated kernel needs spatial dims >= dilation*(kernelSize-1)+1
-            // for the OnFirstForward shape check. Use that as the dummy size.
-            int minSpatial = _dilation * (_kernelSize - 1) + 1;
-            ResolveFromShape(new[] { candidateInputDepth, minSpatial, minSpatial });
-        }
-
-        int expectedLength = _kernels.Length + _biases.Length;
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Expected {expectedLength} parameters, but got {parameters.Length}");
-        }
-
-        var kernelVec = parameters.Slice(0, _kernels.Length);
-        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
-
-        _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize], kernelVec);
-        _biases = new Tensor<T>([_outputDepth], biasVec);
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

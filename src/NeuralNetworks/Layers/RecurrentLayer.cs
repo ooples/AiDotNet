@@ -47,8 +47,65 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class RecurrentLayer<T> : LayerBase<T>
+// TIME-MAJOR, not batch-major, and the declaration has to say so or every reader will assume the usual
+// order. ForwardTraced's rank-3 branch is explicit: "Standard 3D: [sequenceLength, batchSize, inputSize]"
+// - sequence is the LEADING axis and batch sits in the middle. The rank-2 branch drops batch rather than
+// time ("2D: [sequenceLength, inputSize] -> add batch dim"), which is why Batch is not marked optional
+// here: it is not the leading axis, and an optional axis in the middle cannot be resolved by rank.
+//
+// Rank 1 is declared because the layer accepts it - "1D: [inputSize] -> treat as single timestep, single
+// batch" - and returns [hiddenSize]. Rank 4+ also runs, collapsing the middle axes into batch, but each
+// collapsed axis would need its own role to be named and there is no second batch-like role to give it.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Batch, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Time-major: [sequenceLength, batchSize, inputSize].")]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One axis changes and it is always the last one. <c>ForwardTraced</c> stacks the per-step hidden
+    /// states into <c>[sequenceLength, batchSize, hiddenSize]</c> and then restores the caller's rank -
+    /// <c>Reshape(output, new[] { sequenceLength, hiddenSize })</c> for rank 2 and
+    /// <c>Reshape(output, new[] { hiddenSize })</c> for rank 1. So the trailing feature axis becomes
+    /// <c>Fixed(_hiddenSize)</c> and everything before it is carried.
+    /// </para>
+    /// <para>
+    /// The sequence length is never fixed by this layer. The recurrence runs one step per timestep and
+    /// its parameters are sized by <c>_hiddenSize</c> and the input width alone, so pinning Time would
+    /// make a correct layer look as though it rejected sequences of any other length.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                features,
+            },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and hidden neurons.
     /// </summary>
@@ -100,20 +157,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// <see cref="EnsureInitialized"/> on first forward to flip this true.)
     /// </summary>
     private bool _isInitialized;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in this recurrent layer.
-    /// </summary>
-    /// <remarks>
-    /// The parameter count includes all weights and biases:
-    /// - Input weights: inputSize × hiddenSize
-    /// - Hidden weights: hiddenSize × hiddenSize
-    /// - Biases: hiddenSize
-    /// </remarks>
-    public override long ParameterCount =>
-        // Weight/bias tensors are zero-sized placeholders before first forward, so
-        // .Length already returns 0. Result matches GetParameters().Length.
-        _inputWeights.Length + _hiddenWeights.Length + _biases.Length;
 
     /// <summary>
     /// Stores the input tensor from the most recent forward pass for use in backpropagation.
@@ -758,42 +801,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the recurrent layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters (input weights, hidden weights, and biases).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters of the recurrent layer as a single vector.
-    /// The input weights are stored first, followed by the hidden weights, and finally the biases.
-    /// This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the recurrent layer.
-    /// 
-    /// The parameters:
-    /// - Are the weights and biases that the recurrent layer learns during training
-    /// - Control how the layer processes sequence information
-    /// - Are returned as a single list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// The input weights are stored first in the vector, followed by the hidden weights, and finally the biases.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // VECTORIZED: Concatenate tensor data using Vector.Concatenate
-        return Vector<T>.Concatenate(
-            _inputWeights.ToVector(),
-            _hiddenWeights.ToVector(),
-            _biases.ToVector()
-        );
-    }
-
-    /// <summary>
     /// Gets all parameter gradients of the recurrent layer as a single vector.
     /// </summary>
     /// <returns>A vector containing all parameter gradients (input weight gradients, hidden weight gradients, and bias gradients).</returns>
@@ -811,90 +818,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
             _hiddenWeightsGradient.ToVector(),
             _biasesGradient.ToVector()
         );
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the recurrent layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters (input weights, hidden weights, and biases) to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters of the recurrent layer from a single vector.
-    /// The vector should contain the input weight values first, followed by the hidden weight values,
-    /// and finally the bias values. This is useful for loading saved model weights or for
-    /// implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the weights and biases in the recurrent layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct total length
-    /// - The first part of the vector is used for the input weights
-    /// - The middle part of the vector is used for the hidden weights
-    /// - The last part of the vector is used for the biases
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if not initialized but params have content, infer
-        // inputSize from the param vector. Layout:
-        //   inputWeights [hiddenSize, inputSize] + hiddenWeights [hiddenSize, hiddenSize] + biases [hiddenSize]
-        //   = hiddenSize * (inputSize + hiddenSize + 1)
-        // → inputSize = total/hiddenSize - hiddenSize - 1
-        if (!_isInitialized && parameters.Length > 0 && _hiddenSize > 0)
-        {
-            if (parameters.Length % _hiddenSize == 0)
-            {
-                int candidateInput = parameters.Length / _hiddenSize - _hiddenSize - 1;
-                if (candidateInput > 0)
-                {
-                    ResolveFromShape(new[] { candidateInput });
-                }
-            }
-        }
-
-        if (!_isInitialized && parameters.Length > 0)
-        {
-            throw new InvalidOperationException(
-                $"RecurrentLayer.SetParameters({parameters.Length}) called before the lazy " +
-                $"input width was resolved, and inference from {parameters.Length} parameters with " +
-                $"hiddenSize={_hiddenSize} did not yield a valid inputSize. Call ResolveFromShape(...) " +
-                "or run a Forward(input) pass first so the layer can allocate weight tensors of the correct shape.");
-        }
-
-        int inputWeightsSize = _inputWeights.Length;
-        int hiddenWeightsSize = _hiddenWeights.Length;
-        int totalParams = inputWeightsSize + hiddenWeightsSize + _biases.Length;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Create new tensors to ensure independence from cloned layers
-        int idx = 0;
-        _inputWeights = new Tensor<T>(_inputWeights._shape);
-        for (int i = 0; i < inputWeightsSize; i++)
-            _inputWeights[i] = parameters[idx++];
-
-        _hiddenWeights = new Tensor<T>(_hiddenWeights._shape);
-        for (int i = 0; i < hiddenWeightsSize; i++)
-            _hiddenWeights[i] = parameters[idx++];
-
-        _biases = new Tensor<T>(_biases._shape);
-        for (int i = 0; i < _biases.Length; i++)
-            _biases[i] = parameters[idx++];
-
-        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <inheritdoc/>

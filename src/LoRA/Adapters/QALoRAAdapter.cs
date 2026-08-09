@@ -399,32 +399,6 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Updates parameter gradients from both layers.
-    /// </summary>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
-    }
-
-    /// <summary>
     /// Merges the LoRA adaptation into the base layer and returns a quantized merged layer.
     /// </summary>
     /// <returns>A new layer with LoRA weights merged and quantized into the base layer's weights.</returns>

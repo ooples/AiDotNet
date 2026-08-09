@@ -33,8 +33,53 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class RBMLayer<T> : LayerBase<T>
+// Ranks 1 and 2. ForwardTraced reshapes a rank-1 input to [1, _visibleUnits] and strips the batch axis
+// again on the way out (return result.Reshape([_hiddenUnits])), so one BatchOptional declaration covers
+// both. Higher ranks also round-trip - their leading axes are flattened for the matmul and restored from
+// _originalInputShape - but an RBM is a flat visible/hidden model with nothing to say about what a third
+// axis would mean, so naming one would be invention rather than description.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Visible units in, hidden units out: <c>ForwardTraced</c> sets the trailing axis to
+    /// <c>_hiddenUnits</c> on every exit - directly for rank 1
+    /// (<c>result.Reshape([_hiddenUnits])</c>), and via <c>outputShape[rank - 1] = _hiddenUnits</c> for
+    /// higher ranks. The width comes from
+    /// <c>Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, ...)</c> against <c>_weights</c> of
+    /// <c>[_hiddenUnits, _visibleUnits]</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_hiddenUnits)</c> is safe for the LAZY constructor too. That constructor defers only the
+    /// VISIBLE width (<c>_visibleUnits = -1</c> until <c>OnFirstForward</c> reads
+    /// <c>input.Shape[^1]</c>); the hidden count is a required argument on both constructors, so this
+    /// contract is answerable before the first forward rather than only after it.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenUnits <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenUnits));
+
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// Gets the number of units in the visible layer.
     /// </summary>
@@ -991,55 +1036,6 @@ public partial class RBMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method collects all trainable parameters of the RBM (weights, visible biases, and
-    /// hidden biases) into a single vector. The parameters are arranged in the order: weights
-    /// (row-major), visible biases, hidden biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method packs all the RBM's learnable values into one list.
-    /// 
-    /// The returned vector contains:
-    /// - All weight values (connections between visible and hidden units)
-    /// - All visible bias values (default preferences for visible units)
-    /// - All hidden bias values (default sensitivities for hidden units)
-    /// 
-    /// This is useful for:
-    /// - Saving the RBM's state to a file
-    /// - Loading a previously trained RBM
-    /// - Using optimization algorithms that work on all parameters at once
-    /// 
-    /// Think of it as taking a snapshot of everything the RBM has learned.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_visibleBiases.ToArray()),
-            new Vector<T>(_hiddenBiases.ToArray())
-        );
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        // _weights is a 2D Tensor [visibleUnits, hiddenUnits]
-        for (int i = 0; i < _weights.Length; i++)
-            _weights.SetFlat(i, parameters[idx++]);
-        // _visibleBiases is a 1D Tensor [visibleUnits]
-        for (int i = 0; i < _visibleBiases.Length; i++)
-            _visibleBiases.SetFlat(i, parameters[idx++]);
-        // _hiddenBiases is a 1D Tensor [hiddenUnits]
-        for (int i = 0; i < _hiddenBiases.Length; i++)
-            _hiddenBiases.SetFlat(i, parameters[idx++]);
-        // _weightsTCache invalidation removed — Forward no longer caches.
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -1090,21 +1086,6 @@ public partial class RBMLayer<T> : LayerBase<T>
         _visibleBiasesGradient = null;
         _hiddenBiasesGradient = null;
     }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    public override long ParameterCount =>
-        _visibleUnits > 0
-            ? (long)_visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits
-            // Lazy-ctor instance hasn't seen its first Forward yet — visible
-            // dim is unknown, all parameter tensors are zero-sized
-            // placeholders, and EnsureInitialized hasn't run. Reporting a
-            // count that doesn't match the actual GetParameters().Length
-            // would break the optimizer's per-parameter state allocation
-            // (it sizes its bookkeeping arrays from ParameterCount and
-            // walks GetParameters() to fill them).
-            : 0L;
 
     /// <summary>
     /// Indicates whether this layer supports training.

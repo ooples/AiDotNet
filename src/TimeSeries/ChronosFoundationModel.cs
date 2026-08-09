@@ -1119,7 +1119,20 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
 /// Now uses Tensor<T> and proper backpropagation.
 /// </summary>
-internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1, in equals out - a pre-norm transformer block is shape-preserving by construction, and the
+// code says so twice. Both constructors declare the same width on each side
+// (`base(new[] { embeddingDim }, new[] { embeddingDim })`), and Forward ends on
+// `AddResidual(_cachedResidual1, ffnOutput)`: a residual add can only return the shape it was added
+// to, so attention and the 4x FFN expansion both come back to _embeddingDim before the layer exits.
+// The single-tensor ForwardTraced wraps its argument as a one-position sequence and returns that
+// sequence's last element, so the same relation holds on the traced path.
+//
+// No hand-written OutputAxesFor: with matching layouts the generator derives Same(Features), which
+// is exactly the relation above.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
     private int _embeddingDim;
     private int _numHeads;
@@ -1151,11 +1164,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
     private List<Tensor<T>>? _cachedNorm2;
     private List<Tensor<T>>? _cachedFfnHidden;
 
-    public override long ParameterCount =>
-        _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
-        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
-
     public override bool SupportsTraining => true;
 
     public override void ResetState()
@@ -1174,20 +1182,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         var seqInput = new List<Tensor<T>> { input };
         var seqOutput = Forward(seqInput);
         return seqOutput.Count > 0 ? seqOutput[seqOutput.Count - 1] : input;
-    }
-
-    public override void UpdateParameters(T learningRate)
-    {
-        // Apply gradient descent to all weight tensors
-        // Gradients are computed and applied by the model's ApplyGradients method
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var tensor in new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
-            for (int i = 0; i < tensor.Length; i++) allParams.Add(tensor[i]);
-        return new Vector<T>(allParams.ToArray());
     }
 
     public ChronosTransformerLayerTensor(int embeddingDim, int numHeads, int seed = 42)

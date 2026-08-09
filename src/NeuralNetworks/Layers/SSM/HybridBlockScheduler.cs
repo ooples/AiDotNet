@@ -1,4 +1,7 @@
 using AiDotNet.Autodiff;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -81,7 +84,25 @@ public enum HybridSchedulePattern
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public partial class HybridBlockScheduler<T> : LayerBase<T>
+// A STACK of residual blocks, so it is shape-preserving for the same reason any pre-norm residual
+// stack is: ForwardTraced does `current = Engine.TensorAdd(current, blockOut)` per block, which forces
+// every sub-layer to return the shape it was given, and then reshapes back to the shape it came in
+// with - `return Engine.Reshape(result, _originalInputShape)`. Nothing here can resize anything.
+// Axes are named rather than left to [ElementWiseShape] because they are not anonymous: ForwardTraced
+// reads seqLen = Shape[rank-2] and modelDim = Shape[rank-1] and flattens everything before them into
+// batch, and the base constructor declares [sequenceLength, modelDimension]. Time and Features are
+// real roles here, and a hybrid SSM/attention stack chained onto anything else is worth checking
+// against them.
+// BatchOptional covers the unbatched [Time, Features] form, which ForwardTraced handles explicitly
+// (`if (rank == 2) return Engine.Reshape(result, new[] { seqLen, modelDim })`).
+// Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output,
+    Note = "Pre-norm -> sub-layer -> residual, repeated; the residual add pins every axis.")]
+[AutoParameters]
+public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _sequenceLength;
@@ -134,32 +155,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// SSM blocks vs. attention blocks. See <see cref="HybridSchedulePattern"/> for available patterns.</para>
     /// </remarks>
     public HybridSchedulePattern SchedulePattern => _schedulePattern;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters across all blocks and norms.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The total count of learnable numbers across all blocks
-    /// (both SSM and attention) plus normalization parameters. Shared attention blocks
-    /// (Zamba-style) count their parameters only once.</para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Accumulate in long so multi-block schedulers (e.g. 64+ Mamba/SSM
-            // blocks each with multi-billion-parameter state) don't wrap
-            // before reaching ToFlatVectorSize.
-            long count = 0;
-            foreach (var block in _blocks)
-                count += block.ParameterCount;
-            foreach (var gamma in _normGammas)
-                count += gamma.Length;
-            foreach (var beta in _normBetas)
-                count += beta.Length;
-            return count;
-        }
-    }
 
     /// <summary>
     /// Creates a new hybrid block scheduler.
@@ -362,53 +357,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         }
 
         return dInput;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            var blockParams = _blocks[i].GetParameters();
-            for (int j = 0; j < blockParams.Length; j++)
-                parameters[index++] = blockParams[j];
-
-            for (int j = 0; j < _normGammas[i].Length; j++)
-                parameters[index++] = _normGammas[i][j];
-
-            for (int j = 0; j < _normBetas[i].Length; j++)
-                parameters[index++] = _normBetas[i][j];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            int blockParamCount = (int)_blocks[i].ParameterCount;
-            var blockParams = new Vector<T>(blockParamCount);
-            for (int j = 0; j < blockParamCount; j++)
-                blockParams[j] = parameters[index++];
-            _blocks[i].SetParameters(blockParams);
-
-            for (int j = 0; j < _normGammas[i].Length; j++)
-                _normGammas[i][j] = parameters[index++];
-
-            for (int j = 0; j < _normBetas[i].Length; j++)
-                _normBetas[i][j] = parameters[index++];
-        }
     }
 
     /// <inheritdoc />

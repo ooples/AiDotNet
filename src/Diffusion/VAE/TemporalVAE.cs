@@ -66,6 +66,13 @@ namespace AiDotNet.Diffusion.VAE;
     [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
 public class TemporalVAE<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Same layers, same order, as the previous GetParameters walked.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var layer in EnumerateAllLayers()) RegisterParameterComponent(layer);
+    }
+
     /// <summary>
     /// Standard Stable Video Diffusion latent scale factor.
     /// </summary>
@@ -190,9 +197,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
-
-    /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -746,83 +750,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        long count = 0;
-
-        // Input conv
-        count += _inputChannels * _baseChannels * 9 + _baseChannels;
-
-        // Encoder blocks
-        for (int level = 0; level < _channelMultipliers.Length; level++)
-        {
-            var channels = _baseChannels * _channelMultipliers[level];
-            count += channels * channels * 2; // Spatial
-            count += _numTemporalLayers * channels * channels; // Temporal
-            if (level < _channelMultipliers.Length - 1)
-            {
-                count += channels * channels * 9; // Downsample
-            }
-        }
-
-        // Latent projections
-        var lastChannels = _baseChannels * _channelMultipliers[^1];
-        count += lastChannels * _latentChannels * 9 * 2; // mean + logvar
-        count += _latentChannels * lastChannels * 9; // post-quant
-
-        // Decoder blocks (similar to encoder)
-        for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
-        {
-            var channels = _baseChannels * _channelMultipliers[level];
-            count += channels * channels * 2;
-            count += _numTemporalLayers * channels * channels;
-            if (level > 0)
-            {
-                count += channels * channels * 9;
-            }
-        }
-
-        // Output conv
-        count += _baseChannels * _inputChannels * 9 + _inputChannels;
-
-        return (int)Math.Min(count, int.MaxValue);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        AddLayerParameters(parameters, _inputConv);
-
-        foreach (var layer in _encoderSpatialLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        foreach (var layer in _encoderTemporalLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        AddLayerParameters(parameters, _meanConv);
-        AddLayerParameters(parameters, _logVarConv);
-        AddLayerParameters(parameters, _postQuantConv);
-
-        foreach (var layer in _decoderSpatialLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        foreach (var layer in _decoderTemporalLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        AddLayerParameters(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
-    }
 
     private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
     {
@@ -885,41 +812,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
             foreach (var parameter in EnumerateMaterializedParameters(subLayer))
                 yield return parameter;
         }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _preserveMaterializedParameters = true;
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-
-        foreach (var layer in _encoderSpatialLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        foreach (var layer in _encoderTemporalLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_meanConv, parameters, ref index);
-        SetLayerParameters(_logVarConv, parameters, ref index);
-        SetLayerParameters(_postQuantConv, parameters, ref index);
-
-        foreach (var layer in _decoderSpatialLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        foreach (var layer in _decoderTemporalLayers)
-        {
-            SetLayerParameters(layer, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
     }
 
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)

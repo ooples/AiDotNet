@@ -43,6 +43,16 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("FRCRN: Boosting Feature Representation Using Frequency Recurrence for Monaural Speech Enhancement", "https://arxiv.org/abs/2206.07293", Year = 2022, Authors = "Shengkui Zhao, Bin Ma, Karn N. Watcharasupat, Woon-Seng Gan")]
 public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured on <c>PredictCore</c>, which folds <c>Layers</c> and returns the last activation -
+    /// note it does NOT call <c>PostprocessOutput</c> (the inverse STFT runs only inside
+    /// <c>Enhance</c>). The final layer of <c>CreateDefaultFRCRNLayers</c> is the complex-mask head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * 2)</c>, real and imaginary per bin, fed from
+    /// <c>_options.NumFreqBins</c>. Hence 2x, not <c>NumFreqBins</c>.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly FRCRNOptions _options;

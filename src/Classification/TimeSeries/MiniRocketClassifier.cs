@@ -263,6 +263,10 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     }
 
     /// <inheritdoc />
+    /// <remarks>The count came from ClassifierBase as NumFeatures * NumClasses, which is unrelated to what this classifier serializes -- measured 0 against a 6-element vector after a restore, so a saved vector could not be reloaded. Derived from the vector instead, as AdaptiveRandomForestClassifier, BalancedBaggingClassifier, CalibratedClassifier and four other siblings already do.</remarks>
+    public override long ParameterCount => GetParameters().Length;
+
+    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         return _weights?.Clone() ?? new Vector<T>(0);

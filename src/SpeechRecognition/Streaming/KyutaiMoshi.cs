@@ -44,8 +44,18 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Moshi: a speech-text foundation model for real-time dialogue", "https://arxiv.org/abs/2410.00037", Year = 2024, Authors = "Kyutai")]
-public class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from this model's own output construction, not from a name. <c>PredictCore</c> folds
+    /// every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
+    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
+    /// whose LAST emitted layer is the CTC output head <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>.
+    /// <c>PostprocessOutput</c> is the identity, so the trailing axis is the CTC vocabulary.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly KyutaiMoshiOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

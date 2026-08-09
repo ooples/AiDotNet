@@ -48,6 +48,16 @@ namespace AiDotNet.Audio.Effects;
 [ResearchPaper("Real Time Speech Enhancement in the Waveform Domain", "https://doi.org/10.48550/arXiv.2006.12847", Year = 2020, Authors = "Alexandre Défossez, Gabriel Synnaeve, Yossi Adi")]
 public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> in order and <c>PostprocessOutput</c> is the
+    /// identity. <c>CreateDefaultDemucsNoiseLayers</c> ends its decoder with the "output projection
+    /// back to 1 channel (mono clean audio)" layer, <c>FullyConnectedLayer&lt;T&gt;(1)</c>, so the
+    /// feature axis is 1. <c>_options.HiddenChannels</c> / <c>LSTMHiddenSize</c> size interior blocks
+    /// only.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly DemucsNoiseOptions _options;

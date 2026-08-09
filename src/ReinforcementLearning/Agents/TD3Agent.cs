@@ -61,6 +61,19 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
     Authors = "Fujimoto, S., van Hoof, H., & Meger, D.")]
 public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_actorNetwork);
+        RegisterParameterComponent(_targetActorNetwork);
+        RegisterParameterComponent(_critic1Network);
+        RegisterParameterComponent(_critic2Network);
+        RegisterParameterComponent(_targetCritic1Network);
+        RegisterParameterComponent(_targetCritic2Network);
+    }
     private TD3Options<T> _options;
 
     // Actor-update hyperparameters (named rather than magic literals). ActorPolicyGradientStep is the
@@ -472,64 +485,6 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
         };
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var actorParams = _actorNetwork.GetParameters();
-        var targetActorParams = _targetActorNetwork.GetParameters();
-        var critic1Params = _critic1Network.GetParameters();
-        var critic2Params = _critic2Network.GetParameters();
-        var targetCritic1Params = _targetCritic1Network.GetParameters();
-        var targetCritic2Params = _targetCritic2Network.GetParameters();
-
-        var total = actorParams.Length + targetActorParams.Length + critic1Params.Length +
-                    critic2Params.Length + targetCritic1Params.Length + targetCritic2Params.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in actorParams) vector[idx++] = p;
-        foreach (var p in targetActorParams) vector[idx++] = p;
-        foreach (var p in critic1Params) vector[idx++] = p;
-        foreach (var p in critic2Params) vector[idx++] = p;
-        foreach (var p in targetCritic1Params) vector[idx++] = p;
-        foreach (var p in targetCritic2Params) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var actorParams = _actorNetwork.GetParameters();
-        var targetActorParams = _targetActorNetwork.GetParameters();
-        var critic1Params = _critic1Network.GetParameters();
-        var critic2Params = _critic2Network.GetParameters();
-        var targetCritic1Params = _targetCritic1Network.GetParameters();
-        var targetCritic2Params = _targetCritic2Network.GetParameters();
-
-        int idx = 0;
-        var actorVec = new Vector<T>(actorParams.Length);
-        var targetActorVec = new Vector<T>(targetActorParams.Length);
-        var critic1Vec = new Vector<T>(critic1Params.Length);
-        var critic2Vec = new Vector<T>(critic2Params.Length);
-        var targetCritic1Vec = new Vector<T>(targetCritic1Params.Length);
-        var targetCritic2Vec = new Vector<T>(targetCritic2Params.Length);
-
-        for (int i = 0; i < actorParams.Length; i++) actorVec[i] = parameters[idx++];
-        for (int i = 0; i < targetActorParams.Length; i++) targetActorVec[i] = parameters[idx++];
-        for (int i = 0; i < critic1Params.Length; i++) critic1Vec[i] = parameters[idx++];
-        for (int i = 0; i < critic2Params.Length; i++) critic2Vec[i] = parameters[idx++];
-        for (int i = 0; i < targetCritic1Params.Length; i++) targetCritic1Vec[i] = parameters[idx++];
-        for (int i = 0; i < targetCritic2Params.Length; i++) targetCritic2Vec[i] = parameters[idx++];
-
-        _actorNetwork.UpdateParameters(actorVec);
-        _targetActorNetwork.UpdateParameters(targetActorVec);
-        _critic1Network.UpdateParameters(critic1Vec);
-        _critic2Network.UpdateParameters(critic2Vec);
-        _targetCritic1Network.UpdateParameters(targetCritic1Vec);
-        _targetCritic2Network.UpdateParameters(targetCritic2Vec);
     }
 
     /// <inheritdoc/>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -39,7 +40,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// while adapting to domain-specific patterns.
 /// </para>
 /// </remarks>
-public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
+[AutoParameters]
+public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Matrix storing the cumulative weight deltas (changes over time).
@@ -53,7 +55,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Instead of "what are the weights", it tracks "how much have they changed".
     /// </para>
     /// </remarks>
-    private Matrix<T> _deltaWeights;
+    private Tensor<T> _deltaWeights;
 
     /// <summary>
     /// Scaling factor applied to delta updates before adding to the output.
@@ -122,25 +124,6 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public double MomentumFactor => _momentumFactor;
 
     /// <summary>
-    /// Gets the total number of trainable parameters including delta weights.
-    /// </summary>
-    /// <remarks>
-    /// Includes base layer (if not frozen), LoRA layer, and delta weights matrix parameters.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // long throughout — base layer + LoRA layer + delta weights
-            // can sum past int.MaxValue on foundation-model scales.
-            // Closes #1271.7BnX.
-            long baseCount = base.ParameterCount;
-            long deltaCount = (long)_deltaWeights.Rows * _deltaWeights.Columns;
-            return baseCount + deltaCount;
-        }
-    }
-
-    /// <summary>
     /// Initializes a new Delta-LoRA adapter wrapping an existing layer.
     /// </summary>
     /// <param name="baseLayer">The layer to adapt with Delta-LoRA.</param>
@@ -194,7 +177,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Use [inputSize, outputSize] to match DenseLayer's industry standard convention
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int inputSize = GetInputShape()[0];
-        _deltaWeights = new Matrix<T>(inputSize, outputSize);
+        _deltaWeights = new Tensor<T>([inputSize, outputSize]);
         _velocity = new Matrix<T>(inputSize, outputSize);
 
         // Initialize to zero
@@ -241,8 +224,8 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
         // Compute delta contribution: delta_weights @ input * delta_scaling — vectorized
-        var deltaWeightsTensor = Tensor<T>.FromMatrix(_deltaWeights);
-        var inputCol = input.Reshape(_deltaWeights.Columns, 1);
+        var deltaWeightsTensor = _deltaWeights;
+        var inputCol = input.Reshape(_deltaWeights.Shape[1], 1);
         var deltaOutput = Engine.TensorMatMul(deltaWeightsTensor, inputCol).Reshape(baseOutput._shape);
         deltaOutput = Engine.TensorMultiplyScalar(deltaOutput, NumOps.FromDouble(_deltaScaling));
 
@@ -287,9 +270,9 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
             T momentumT = NumOps.FromDouble(_momentumFactor);
             T oneMinusMomentumT = NumOps.FromDouble(1.0 - _momentumFactor);
 
-            for (int i = 0; i < _deltaWeights.Rows; i++)
+            for (int i = 0; i < _deltaWeights.Shape[0]; i++)
             {
-                for (int j = 0; j < _deltaWeights.Columns; j++)
+                for (int j = 0; j < _deltaWeights.Shape[1]; j++)
                 {
                     // Update velocity: v = momentum * v + (1 - momentum) * gradient
                     _velocity[i, j] = NumOps.Add(
@@ -321,83 +304,15 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public Matrix<T> GetCurrentDelta()
     {
-        Matrix<T> copy = new Matrix<T>(_deltaWeights.Rows, _deltaWeights.Columns);
-        for (int i = 0; i < _deltaWeights.Rows; i++)
+        Matrix<T> copy = new Matrix<T>(_deltaWeights.Shape[0], _deltaWeights.Shape[1]);
+        for (int i = 0; i < _deltaWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _deltaWeights.Columns; j++)
+            for (int j = 0; j < _deltaWeights.Shape[1]; j++)
             {
                 copy[i, j] = _deltaWeights[i, j];
             }
         }
         return copy;
-    }
-
-    /// <summary>
-    /// Gets the current parameters including base layer, LoRA layer, and delta weights.
-    /// </summary>
-    /// <returns>Vector containing all parameters (base + LoRA + delta weights flattened).</returns>
-    /// <remarks>
-    /// Parameters are packed in order: [base layer params (if not frozen)], [LoRA params], [delta weights].
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> baseParams = base.GetParameters(); // Base layer + LoRA layer
-        Vector<T> allParams = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        int idx = 0;
-
-        // Copy base and LoRA parameters
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            allParams[idx++] = baseParams[i];
-        }
-
-        // Pack delta weights
-        for (int i = 0; i < _deltaWeights.Rows; i++)
-        {
-            for (int j = 0; j < _deltaWeights.Columns; j++)
-            {
-                allParams[idx++] = _deltaWeights[i, j];
-            }
-        }
-
-        return allParams;
-    }
-
-    /// <summary>
-    /// Sets the layer parameters including base layer, LoRA layer, and delta weights.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count doesn't match expected count.</exception>
-    /// <remarks>
-    /// Parameters must be packed in order: [base layer params (if not frozen)], [LoRA params], [delta weights].
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        int baseLoraCount = checked((int)base.ParameterCount);
-
-        // Extract base and LoRA parameters
-        Vector<T> baseLoraParams = new Vector<T>(baseLoraCount);
-        for (int i = 0; i < baseLoraCount; i++)
-        {
-            baseLoraParams[i] = parameters[i];
-        }
-        base.SetParameters(baseLoraParams);
-
-        // Extract delta weights
-        int idx = baseLoraCount;
-        for (int i = 0; i < _deltaWeights.Rows; i++)
-        {
-            for (int j = 0; j < _deltaWeights.Columns; j++)
-            {
-                _deltaWeights[i, j] = parameters[idx++];
-            }
-        }
     }
 
     /// <summary>
@@ -441,7 +356,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         else
         {
             // If no gradients computed yet, fill with zeros
-            int deltaCount = _deltaWeights.Rows * _deltaWeights.Columns;
+            int deltaCount = _deltaWeights.Shape[0] * _deltaWeights.Shape[1];
             for (int i = 0; i < deltaCount; i++)
             {
                 allGrads[idx++] = NumOps.Zero;

@@ -80,6 +80,17 @@ namespace AiDotNet.Diffusion.Audio;
 [ResearchPaper("Simple and Controllable Music Generation", "https://arxiv.org/abs/2306.05284", Year = 2023, Authors = "Copet et al.")]
 public class MusicGenModel<T> : AudioDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_musicVAE);
+        RegisterParameterComponent(_melodyEncoder);
+        RegisterParameterComponent(_rhythmEncoder);
+    }
+
     #region Constants
 
     /// <summary>
@@ -934,82 +945,11 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var vaeParams = _musicVAE.GetParameters();
-        var melodyParams = _melodyEncoder.GetParameters();
-        var rhythmParams = _rhythmEncoder.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length +
-                         melodyParams.Length + rhythmParams.Length;
-        var combined = new Vector<T>(totalLength);
 
-        int offset = 0;
 
-        for (int i = 0; i < unetParams.Length; i++)
-            combined[offset + i] = unetParams[i];
-        offset += unetParams.Length;
-
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[offset + i] = vaeParams[i];
-        offset += vaeParams.Length;
-
-        for (int i = 0; i < melodyParams.Length; i++)
-            combined[offset + i] = melodyParams[i];
-        offset += melodyParams.Length;
-
-        for (int i = 0; i < rhythmParams.Length; i++)
-            combined[offset + i] = rhythmParams[i];
-
-        return combined;
-    }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var unetCount = checked((int)_unet.ParameterCount);
-        int vaeCount = checked((int)_musicVAE.ParameterCount);
-        int melodyCount = checked((int)_melodyEncoder.ParameterCount);
-        int rhythmCount = checked((int)_rhythmEncoder.ParameterCount);
-
-        var expected = unetCount + vaeCount + melodyCount + rhythmCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int offset = 0;
-
-        var unetParams = new Vector<T>(unetCount);
-        for (int i = 0; i < unetCount; i++)
-            unetParams[i] = parameters[offset + i];
-        offset += unetCount;
-
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[offset + i];
-        offset += vaeCount;
-
-        var melodyParams = new Vector<T>(melodyCount);
-        for (int i = 0; i < melodyCount; i++)
-            melodyParams[i] = parameters[offset + i];
-        offset += melodyCount;
-
-        var rhythmParams = new Vector<T>(rhythmCount);
-        for (int i = 0; i < rhythmCount; i++)
-            rhythmParams[i] = parameters[offset + i];
-
-        _unet.SetParameters(unetParams);
-        _musicVAE.SetParameters(vaeParams);
-        _melodyEncoder.SetParameters(melodyParams);
-        _rhythmEncoder.SetParameters(rhythmParams);
-    }
-
-    /// <inheritdoc />
-    public override long ParameterCount =>
-        _unet.ParameterCount + _musicVAE.ParameterCount +
-        _melodyEncoder.ParameterCount + _rhythmEncoder.ParameterCount;
-
     #endregion
 
     #region ICloneable Implementation
@@ -1071,7 +1011,7 @@ public enum MusicGenSize
 /// Melody encoder for extracting melodic features from audio.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-public class MelodyEncoder<T>
+public class MelodyEncoder<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Matrix<T> _convWeights;
@@ -1248,7 +1188,7 @@ public class MelodyEncoder<T>
 /// Rhythm encoder for extracting beat/rhythm features from audio.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-public class RhythmEncoder<T>
+public class RhythmEncoder<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Matrix<T> _weights;

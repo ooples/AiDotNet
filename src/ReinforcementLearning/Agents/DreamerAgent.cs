@@ -65,6 +65,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
     Authors = "Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M.")]
 public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Every network this agent owns, in the order Networks yields them, which is the
+    /// order the hand-written concatenation used.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var network in Networks) RegisterParameterComponent(network);
+    }
     private DreamerOptions<T> _options;
 
     /// <inheritdoc/>
@@ -470,45 +478,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             "Dreamer agent deserialization is not supported. " +
             "Use GetParameters()/SetParameters() for parameter transfer, " +
             "or load individual network weights separately.");
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        foreach (var network in Networks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        var paramVector = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            paramVector[i] = allParams[i];
-        }
-
-        return paramVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        foreach (var network in Networks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines.Gpu;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.MultiLabel;
 
 /// <summary>
@@ -158,12 +159,77 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <returns>Probability matrix.</returns>
     public abstract Matrix<T> PredictMultiLabelProbabilities(Matrix<T> input);
 
-    /// <inheritdoc />
-    public abstract Vector<T> GetParameters();
+    /// <summary>
+    /// The components the parameters of this model live in. Empty until the model registers
+    /// some, in which case the surfaces below fall back to what they always did.
+    /// </summary>
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
 
-    /// <inheritdoc />
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <summary>
+    /// Declares a component whose parameters belong to the surface of this model.
+    /// Registration
+    /// order is serialization order, so keep it stable.
+    /// </summary>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+        => _parameterRegistry.Register(component);
 
+    /// <summary>
+    /// Declare the trainable components of this model here with
+    /// <see cref="RegisterParameterComponent"/>. Called once, lazily, so it runs after the
+    /// constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private ParameterComponentRegistry<T> Registry
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+                _componentsRegistered = _parameterRegistry.HasComponents;
+            }
+            return _parameterRegistry;
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Virtual rather than abstract: a model that registers its components inherits all
+    /// three surfaces and writes no parameter plumbing. It was abstract, which FORCED every
+    /// descendant to hand-write the triple -- the same defect ModelBase and LayerBase had.
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+        => Registry.HasComponents ? Registry.GetParameters() : new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (!Registry.HasComponents) return;
+        Registry.SetParameters(parameters);
+        OnParametersRestored();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Folds the same enumeration the vector does once components are registered. The
+    /// previous expression is kept for models not yet converted -- and it is exactly why the
+    /// two could disagree: it described the MODEL, not the vector. Measured on
+    /// CausalForest: 5 against a 6-element vector after any restore.
+    /// </remarks>
+    public virtual long ParameterCount
+        => Registry.HasComponents ? Registry.ParameterCount : GetParameters().Length;
     /// <summary>
     /// Gets the model type for this classifier.
     /// </summary>
@@ -188,9 +254,6 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         var updated = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
         SetParameters(updated);
     }
-
-    /// <inheritdoc />
-    public virtual long ParameterCount => GetParameters().Length;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;

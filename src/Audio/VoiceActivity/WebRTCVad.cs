@@ -41,6 +41,16 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ResearchPaper("WebRTC Voice Activity Detector", "https://webrtc.googlesource.com/src/+/refs/heads/main/common_audio/vad/")]
 public class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
+    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
+    /// <c>LayerHelper.CreateDefaultWebRTCVadLayers</c> ends with
+    /// <c>new FullyConnectedLayer&lt;T&gt;(1, identity)</c>, commented "Binary classification output".
+    /// A structural 1 - <c>FrameSize</c> is the input width and <c>HiddenDim</c> an interior one.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly WebRTCVadOptions _options;

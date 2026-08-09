@@ -426,32 +426,6 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBase)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack LoRA parameters
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
     }
 
     /// <summary>

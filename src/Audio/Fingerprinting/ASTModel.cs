@@ -44,6 +44,17 @@ namespace AiDotNet.Audio.Fingerprinting;
     Authors = "Yuan Gong, Yu-An Chung, James Glass")]
 public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> over the mel input and <c>PostprocessOutput</c>
+    /// is the identity. The <c>CreateDefaultASTLayers</c> overload this model calls ends with
+    /// <c>SequenceTokenSliceLayer</c> (take the CLS token) then
+    /// <c>DenseLayer&lt;T&gt;(outputSize: numClasses)</c>, supplied from <c>_options.NumClasses</c> -
+    /// AudioSet class LOGITS, not the <c>EmbeddingDim</c> the transformer stack runs at.
+    /// <c>Classify</c> corroborates it: it reads <c>probs.Shape[^1]</c> as the class count.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumClasses;
+
     private readonly ASTModelOptions _options;
     private readonly bool _useNativeMode;
 
