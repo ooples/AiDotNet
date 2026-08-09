@@ -600,34 +600,6 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Computes gradients (not applicable for tree ensembles).
-    /// </summary>
-    /// <param name="input">Input feature matrix.</param>
-    /// <param name="target">Target labels.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <returns>Zero gradient vector.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree ensembles don't use gradient descent.</para>
-    /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        return new Vector<T>(1) { [0] = NumOps.Zero };
-    }
-
-    /// <summary>
-    /// Applies gradients (not applicable for tree ensembles).
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <param name="learningRate">Learning rate.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tree ensembles don't support gradient updates.</para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Tree ensembles don't support gradient-based updates
-    }
-
-    /// <summary>
     /// Gets feature importance based on split usage.
     /// </summary>
     /// <returns>Dictionary mapping feature names to importance scores.</returns>

@@ -747,19 +747,6 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         return new HoeffdingTreeClassifier<T>(_options);
     }
 
-    /// <inheritdoc />
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Tree-based model - no gradients
-        return new Vector<T>(0);
-    }
-
-    /// <inheritdoc />
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Tree-based model - no gradient application
-    }
-
     /// <summary>
     /// Serializes the trained Hoeffding tree including all nodes and statistics.
     /// </summary>
