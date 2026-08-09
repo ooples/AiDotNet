@@ -2939,6 +2939,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Specialized layers can override this to combine inputs in different ways.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// True when this layer's single-tensor <see cref="Forward(Tensor{T})"/> cannot serve it, and every
+    /// caller must reach it with the separate inputs instead.
+    /// </summary>
+    /// <remarks>
+    /// AddLayer, MultiplyLayer and ConcatenateLayer throw from the single-input path, because "add" is
+    /// not defined for one tensor. That throw is the correct contract, but it is only discoverable by
+    /// triggering it -- so a caller holding an <c>ILayer&lt;T&gt;</c> (LayerGraph, executing a join) had
+    /// no way to know it must not pass one combined tensor, and the failure surfaced as a
+    /// NotSupportedException at the first forward. This makes the requirement something a caller can
+    /// ask about beforehand. It is declared here rather than on <c>ILayer&lt;T&gt;</c> because the
+    /// project still targets net471, where a default interface member is not available.
+    /// </remarks>
+    public virtual bool RequiresMultipleInputs => false;
+
     public Tensor<T> Forward(params Tensor<T>[] inputs)
     {
         var observer = LayerForwardObserver<T>.Current;

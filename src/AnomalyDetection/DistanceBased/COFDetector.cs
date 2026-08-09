@@ -82,6 +82,20 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// IN-SAMPLE SCORING REQUIRES THE SAME INSTANCE, not an equal one. The training path is selected
+    /// by <see cref="object.ReferenceEquals(object, object)"/> against the matrix passed to Fit, so
+    /// that each training point can exclude ITSELF from its own neighbourhood.
+    /// </para>
+    /// <para>
+    /// Pass a value-identical copy and it takes the query path instead: every point keeps itself as a
+    /// zero-distance neighbour, the chain cost collapses toward zero, and scores come out far lower
+    /// than the in-sample call produced. The contamination threshold chosen during Fit was calibrated
+    /// with self-exclusion, so the two are not comparable and <c>Predict</c> can label a training
+    /// point differently than Fit did.
+    /// </para>
+    /// </remarks>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
@@ -92,13 +106,22 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        // Both fitted fields are resolved ONCE, before either branch. The two arms previously
+        // repeated the same _trainingDistanceMatrix null guard, and reached the training data
+        // through a null-forgiving operator that would have surfaced as a NullReferenceException
+        // from inside ComputeDistanceMatrix rather than as a "not fitted" message.
+        var trainingDistanceMatrix = _trainingDistanceMatrix
+            ?? throw new InvalidOperationException(
+                $"{nameof(COFDetector<T>)} is not fitted: the training distance matrix is missing.");
+        var trainingData = _trainingData
+            ?? throw new InvalidOperationException(
+                $"{nameof(COFDetector<T>)} is not fitted: the training data is missing.");
+
         var scores = new Vector<T>(X.Rows);
         bool scoringTrainingData = ReferenceEquals(X, _trainingData);
         var distanceMatrix = scoringTrainingData
-            ? _trainingDistanceMatrix ?? throw new InvalidOperationException("_trainingDistanceMatrix has not been initialized.")
-            : ComputeDistanceMatrix(X, _trainingData!);
-        var trainingDistanceMatrix = _trainingDistanceMatrix
-            ?? throw new InvalidOperationException("_trainingDistanceMatrix has not been initialized.");
+            ? trainingDistanceMatrix
+            : ComputeDistanceMatrix(X, trainingData);
 
         for (int i = 0; i < X.Rows; i++)
         {

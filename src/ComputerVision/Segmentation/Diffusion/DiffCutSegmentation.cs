@@ -56,26 +56,37 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", "https://arxiv.org/abs/2406.02842", Year = 2024, Authors = "Couairon et al.")]
-public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
+public class DiffCutSegmentation<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly DiffCutSegmentationOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only DiffCut's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from SemanticSegmentationBase -> SegmentationModelBase.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
     /// <summary>
-    /// Gets whether using native mode (trainable) or ONNX mode (inference only).
+    /// Gets whether this DiffCutSegmentation instance supports training.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -98,10 +109,15 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         DiffCutSegmentationOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DiffCutSegmentationOptions(); Options = _options;
-        _dropRate = dropRate;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         var nativeOptions = ValidateAndCopyNativeOptions(_options);
         _channelDims = nativeOptions.ChannelDimensions;
         _depths = nativeOptions.StageDepths;
@@ -127,23 +143,45 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
     public DiffCutSegmentation(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         DiffCutSegmentationOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DiffCutSegmentationOptions(); Options = _options;
-        _dropRate = 0;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"DiffCutSegmentation ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         var nativeOptions = ValidateAndCopyNativeOptions(_options);
         _channelDims = nativeOptions.ChannelDimensions;
         _depths = nativeOptions.StageDepths;
         _decoderDim = nativeOptions.DecoderDimension;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load DiffCutSegmentation ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
-        => Optimizer ?? base.GetOrCreateBaseOptimizer();
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     #region Public Methods
+    /// <summary>
+    /// Runs a forward pass to produce segmentation logits.
+    /// </summary>
+    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
+    /// <returns>Segmentation logits tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
     /// <summary>
     /// Performs one training step.
     /// </summary>
@@ -161,7 +199,7 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -171,8 +209,7 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
     #endregion
 
     #region Private Methods
-    /// <inheritdoc />
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -181,8 +218,7 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    /// <inheritdoc />
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -199,24 +235,10 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    /// <summary>Adds a leading batch axis through a RECORDED reshape, so it stays on the autodiff tape.</summary>
-    /// <remarks>
-    /// <para>
-    /// These deliberately SHADOW <c>SegmentationModelBase</c>'s versions. The base allocates a new
-    /// tensor and copies raw spans into it, which DETACHES the result from the tape;
-    /// <c>Engine.Reshape</c> records the operation instead. This model trains - <see cref="Train"/>
-    /// calls <c>TrainWithTape</c> - and <see cref="Forward"/> routes any unbatched (rank-3) input
-    /// through both helpers, so inheriting the copying versions would break the gradient chain and
-    /// train nothing at all. VideoLISA, EfficientTAM, OneFormer, GroundedSAM2 and ViTCoMer carry the
-    /// same shadowing for the same measured reason (zero-gradient failures in
-    /// GradientFlow_ShouldBeNonZeroAndFinite).
-    /// </para>
-    /// </remarks>
-    private new Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
         => Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
 
-    /// <summary>Drops the leading batch axis through a RECORDED reshape. See <see cref="AddBatchDimension"/>.</summary>
-    private new Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         int[] s = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < s.Length; i++)
@@ -354,8 +376,32 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
                 _numClasses, clonedOptions);
     }
 
-    // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
-    // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment / GetClassMap / GetProbabilityMap
-    // all arrive from SemanticSegmentationBase with identical bodies.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region ISemanticSegmentation Implementation
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
+
     #endregion
 }

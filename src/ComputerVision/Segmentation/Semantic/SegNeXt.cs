@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegNeXt: Rethinking Convolutional Attention Design for Semantic Segmentation", "https://arxiv.org/abs/2209.08575", Year = 2022, Authors = "Guo et al.")]
-public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
+public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly SegNeXtOptions _options;
 
@@ -79,21 +79,40 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 
     #region Fields
 
-    // Only SegNeXt's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from SemanticSegmentationBase -> SegmentationModelBase.
+    private readonly int _height;
+    private readonly int _width;
+    private readonly int _channels;
+    private readonly int _numClasses;
     private readonly SegNeXtModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+
+    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
-    // same thing, so re-declaring them here would only create two sources of one fact.
+    /// <summary>
+    /// Gets whether this SegNeXt instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SegNeXt can run in two modes: native mode (supports both training
+    /// and inference) and ONNX mode (inference only, using a pre-trained model file). This property
+    /// returns <c>true</c> when the model was created with the native constructor and <c>false</c>
+    /// when loaded from an ONNX file. If you need to train SegNeXt on your own data,
+    /// use the native constructor.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
 
     /// <summary>
     /// Gets whether using native mode (trainable) or ONNX mode (inference only).
@@ -104,6 +123,11 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// Gets the model size variant (Tiny through Large).
     /// </summary>
     internal SegNeXtModelSize ModelSize => _modelSize;
+
+    /// <summary>
+    /// Gets the number of semantic classes this model predicts.
+    /// </summary>
+    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -148,12 +172,19 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         SegNeXtModelSize modelSize = SegNeXtModelSize.Tiny,
         double dropRate = 0.1,
         SegNeXtOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegNeXtOptions();
         Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = dropRate;
+        _useNativeMode = true;
+        _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
 
@@ -191,14 +222,36 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         int numClasses = 150,
         SegNeXtModelSize modelSize = SegNeXtModelSize.Tiny,
         SegNeXtOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegNeXtOptions();
         Options = _options;
+
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"SegNeXt ONNX model not found: {onnxModelPath}");
+
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = 0.0;
+        _useNativeMode = false;
+        _onnxModelPath = onnxModelPath;
+        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+
+        try
+        {
+            _onnxSession = new InferenceSession(onnxModelPath);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Failed to load SegNeXt ONNX model: {ex.Message}", ex);
+        }
 
         InitializeLayers();
     }
@@ -265,7 +318,7 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -320,7 +373,7 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     ///    (Non-negative Matrix Factorization) for global context, then produces per-pixel predictions.
     /// </para>
     /// </remarks>
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch)
@@ -360,7 +413,7 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX session was not initialized.</exception>
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
@@ -403,6 +456,52 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
             result = RemoveBatchDimension(result);
         }
 
+        return result;
+    }
+
+    /// <summary>
+    /// Adds a batch dimension to an unbatched [C, H, W] tensor, producing [1, C, H, W].
+    /// </summary>
+    /// <param name="tensor">An unbatched image tensor.</param>
+    /// <returns>A batched tensor with shape [1, C, H, W].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Neural networks process images in batches. When you pass a single image,
+    /// this wraps it in a batch of size 1 so the layers can process it correctly.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    {
+        int c = tensor.Shape[0];
+        int h = tensor.Shape[1];
+        int w = tensor.Shape[2];
+
+        var result = new Tensor<T>([1, c, h, w]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    /// <summary>
+    /// Removes the batch dimension from a [1, C, H, W] tensor, producing [C, H, W].
+    /// </summary>
+    /// <param name="tensor">A batched tensor with shape [1, C, H, W].</param>
+    /// <returns>An unbatched tensor with shape [C, H, W].</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> After processing a single image, this strips the batch dimension
+    /// to return output in the same format as the original input.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        int[] newShape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < newShape.Length; i++)
+        {
+            newShape[i] = tensor.Shape[i + 1];
+        }
+
+        var result = new Tensor<T>(newShape);
+        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -632,6 +731,47 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
             return new SegNeXt<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
         }
     }
+
+    /// <summary>
+    /// Releases managed resources held by this SegNeXt instance.
+    /// </summary>
+    /// <param name="disposing"><c>true</c> when called from Dispose(); <c>false</c> from finalizer.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When done using a SegNeXt model, calling Dispose() frees memory
+    /// and file handles used by the ONNX runtime session. Use a <c>using</c> statement:
+    /// <c>using var model = new SegNeXt&lt;float&gt;(...);</c>
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _onnxSession?.Dispose();
+                _onnxSession = null;
+            }
+            _disposed = true;
+        }
+        base.Dispose(disposing);
+    }
+
+    #endregion
+
+    #region ISemanticSegmentation Implementation
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

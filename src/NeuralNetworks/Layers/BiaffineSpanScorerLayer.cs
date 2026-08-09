@@ -36,61 +36,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // Finite-difference gradchecks require a stationary forward function. Disable dropout only in the
 // generated fixture while preserving the paper-faithful 0.2 production default below.
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null, 0.0, 2")]
-// Exactly the two ranks ForwardTraced admits - "expects rank-2 [S, D] or rank-3 [B, S, D]" - and it
-// really does accept both: the rank-2 path promotes to a single-element batch and squeezes the batch
-// axis back off the result. Declared as two layouts rather than one BatchOptional layout, because the
-// OUTPUT roles are not the input roles, so nothing here could be derived by matching them anyway.
-//
-// The output's middle axis is the flattened S x S span grid, indexed `start * S + end`. That is not a
-// sequence position and not a feature, so it takes Other - the escape hatch, used here for exactly what
-// it is documented for: a real axis whose role is genuinely model-specific.
-[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Other, TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Classes,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
+public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Read off the two returns at the end of <c>ForwardTraced</c>:
-    /// <c>Engine.Reshape(summed, [S * S, C])</c> unbatched and <c>[B, S * S, C]</c> batched, which the
-    /// class docs state as "input <c>[B, S, D]</c> ... output <c>[B, S * S, C]</c>".
-    /// </para>
-    /// <para>
-    /// <c>S * S</c> is <c>Product(Time, Time)</c> and not an approximation: a product resolves each named
-    /// source against the input, so naming the sequence axis twice multiplies its size by itself. Writing
-    /// it as <c>Scaled</c> would be impossible - the factor is the sequence length, which is not known
-    /// until an input arrives - and writing it as <c>Unknown</c> would throw away a shape that is in fact
-    /// completely determined.
-    /// </para>
-    /// <para>
-    /// The last axis is <c>Fixed(_numCategories)</c>, the entity-category count the constructor takes;
-    /// the feature width <c>D</c> does not survive, because the boundary FFNNs project it to
-    /// <c>_spanDim</c> and the biaffine form contracts it away entirely.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank is not (2 or 3) || _numCategories <= 0) return null;
-
-        var spans = new OutputAxisContract(
-            TensorAxis.Other, AxisRelation.Product(TensorAxis.Time, TensorAxis.Time));
-        var categories = new OutputAxisContract(
-            TensorAxis.Classes, AxisRelation.Fixed(_numCategories));
-
-        return inputRank == 2
-            ? new[] { spans, categories }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                spans, categories,
-            };
-    }
-
     private readonly int _inputDim;
     private readonly int _spanDim;
     private readonly int _numCategories;
@@ -121,6 +68,11 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override long ParameterCount =>
+        SumParameterCounts(_startFfnn) + SumParameterCounts(_endFfnn) +
+        _bilinear.Length + _additive.Length + _bias.Length;
 
     /// <summary>
     /// Initializes a new biaffine span scorer.
@@ -237,7 +189,7 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
     {
         // Xavier/Glorot scale; deterministic so repeated construction is reproducible.
         double scale = Math.Sqrt(6.0 / (fanIn + _numCategories));
-        var rng = new Random(_inputDim * 31 + _spanDim * 17 + _numCategories);
+        var rng = RandomHelper.CreateSeededRandom(_inputDim * 31 + _spanDim * 17 + _numCategories);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = NumOps.FromDouble(((rng.NextDouble() * 2.0) - 1.0) * scale);
     }
@@ -371,6 +323,48 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var start = StackParameters(_startFfnn);
+        var end = StackParameters(_endFfnn);
+        int total = start.Length + end.Length + _bilinear.Length + _additive.Length + _bias.Length;
+
+        var flat = new Vector<T>(total);
+        int k = 0;
+        for (int i = 0; i < start.Length; i++) flat[k++] = start[i];
+        for (int i = 0; i < end.Length; i++) flat[k++] = end[i];
+        for (int i = 0; i < _bilinear.Length; i++) flat[k++] = _bilinear[i];
+        for (int i = 0; i < _additive.Length; i++) flat[k++] = _additive[i];
+        for (int i = 0; i < _bias.Length; i++) flat[k++] = _bias[i];
+
+        return flat;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // The boundary FFNNs allocate lazily on first Forward. Resolve their shapes from this
+        // layer's known geometry first, or restoring a trained scorer into a fresh instance
+        // compares the payload against a count of just the bilinear/additive/bias tensors.
+        ResolveChildShapes();
+
+        var start = StackParameters(_startFfnn);
+        var end = StackParameters(_endFfnn);
+        int expected = start.Length + end.Length + _bilinear.Length + _additive.Length + _bias.Length;
+
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+
+        int k = 0;
+        SetStackParameters(_startFfnn, parameters, ref k);
+        SetStackParameters(_endFfnn, parameters, ref k);
+
+        for (int i = 0; i < _bilinear.Length; i++) _bilinear[i] = parameters[k++];
+        for (int i = 0; i < _additive.Length; i++) _additive[i] = parameters[k++];
+        for (int i = 0; i < _bias.Length; i++) _bias[i] = parameters[k++];
+    }
+
+    /// <inheritdoc/>
     /// <remarks>
     /// Includes the boundary FFNNs' tensors as well as this layer's own, because the base
     /// implementation does not recurse into registered sub-layers.
@@ -415,6 +409,16 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
         _bilinear = parameters[at];
         _additive = parameters[at + 1];
         _bias = parameters[at + 2];
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Tape-based autodiff drives the update through the optimizer and the registered trainable
+    /// tensors, so there is no manual gradient step here. The boundary FFNNs are updated through
+    /// their own registration as sub-layers.
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
     }
 
     /// <inheritdoc/>

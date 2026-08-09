@@ -79,6 +79,21 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
+
+        // n is a divisor in CenterData, WhitenData and FastICA, so too few samples fills the returned
+        // adjacency with meaningless numbers instead of returning an empty graph. n == 1 is the worst
+        // case and passes a naive n == 0 check: centring one sample gives exactly zero, so the
+        // covariance is the zero matrix, every eigenvalue is floored to 1e-12, the whitening scale
+        // becomes 1e6, and FastICA runs on an all-zero sample. d < 2 puts the eigen decomposition and
+        // the row-assignment step on degenerate matrices.
+        //
+        // The bound matches the sibling RCDAlgorithm's: d + 3 samples, enough for the covariance to
+        // have a chance of being estimable at all. PNLAlgorithm returns an empty matrix for its own
+        // degenerate case and RCDAlgorithm throws; returning empty is the quieter of the two and is
+        // what this method's callers already handle.
+        if (d < 2 || n < d + 3) return new Matrix<T>(d, d);
+
+
         var centered = CenterData(data, n, d);
         var (whitened, whiteningMatrix) = WhitenData(centered, n, d);
 
@@ -354,14 +369,25 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         for (; next < initiallyPruned; next++)
             pruned[entries[next].Row, entries[next].Column] = 0.0;
 
-        while (true)
+        // Zero the smallest-magnitude entries one at a time until what remains admits a causal order.
+        while (next < entries.Count)
         {
             int[]? order = TryFindCausalOrder(pruned, d);
             if (order is not null) return order;
-            if (next >= entries.Count) return Enumerable.Range(0, d).ToArray();
+
             pruned[entries[next].Row, entries[next].Column] = 0.0;
             next++;
         }
+
+        // Exhaustion is a real terminal state, but not a failure: every entry is now zero, and an
+        // edgeless matrix has no incoming edge for any variable, so this call returns a complete
+        // order. The previous code returned the natural order here instead, which read as a safety
+        // net for a case that cannot arise. If it ever does, that is a broken invariant in
+        // TryFindCausalOrder, and inventing an order would hide it behind a plausible-looking graph.
+        return TryFindCausalOrder(pruned, d)
+            ?? throw new InvalidOperationException(
+                $"{nameof(FindCausalOrder)}: no causal order was found for an all-zero matrix of "
+                + $"{d} variables, which has no edges to order around.");
     }
 
     private static int[]? TryFindCausalOrder(double[,] B, int d)

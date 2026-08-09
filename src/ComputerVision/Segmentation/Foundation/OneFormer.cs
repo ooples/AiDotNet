@@ -65,7 +65,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OneFormer: One Transformer to Rule Universal Image Segmentation", "https://arxiv.org/abs/2211.06220", Year = 2023, Authors = "Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi")]
-public class OneFormer<T> : Common.PanopticSegmentationBase<T>
+public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly OneFormerOptions _options;
 
@@ -82,9 +82,10 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
 
     #region Fields
 
-    // Only OneFormer's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from PanopticSegmentationBase -> SegmentationModelBase.
+    private readonly int _height;
+    private readonly int _width;
+    private readonly int _channels;
+    private readonly int _numClasses;
     private readonly int _numQueries;
     private readonly OneFormerModelSize _modelSize;
     private readonly int[] _channelDims;
@@ -95,15 +96,30 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
     private readonly int _patchSize;
     private readonly int _mlpRatio;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
-    // SegmentationModelBase and say exactly the same thing.
+    /// <summary>
+    /// Gets whether this OneFormer instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode (trainable) and <c>false</c>
+    /// in ONNX mode. OneFormer is trained on panoptic data which jointly trains for all tasks.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal OneFormerModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -138,19 +154,19 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
         OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
         double dropRate = 0.1,
         OneFormerOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture.
-        // OneFormer keeps its own class-axis-1 loss default, which the base does not know about.
-        : base(architecture, optimizer, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(classAxis: 1),
-               numClasses, Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(classAxis: 1))
     {
         _options = options ?? new OneFormerOptions();
         Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = dropRate;
-        // Resolved EAGERLY, not through the base's lazy CreateDefaultOptimizer(): OneFormer's
-        // override validates LearningRate/WeightDecay/MaxGradientNorm, and that validation has
-        // always fired at construction time rather than at the first training step.
+        _useNativeMode = true;
+        _onnxModelPath = null;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         (_channelDims, _depths, _decoderDim) = ResolveModelConfig(modelSize, _options);
@@ -182,22 +198,32 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
         int numQueries = 150,
         OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
         OneFormerOptions? options = null)
-        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
-        // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>(classAxis: 1))
     {
-        // The base's ONNX constructor installs a plain CrossEntropyWithLogitsLoss because it has no
-        // lossFunction parameter. OneFormer's channel-first output needs classAxis 1, so restore it.
-        LossFunction = new CrossEntropyWithLogitsLoss<T>(classAxis: 1);
         _options = options ?? new OneFormerOptions();
         Options = _options;
+
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"OneFormer ONNX model not found: {onnxModelPath}");
+
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = 0.0;
+        _useNativeMode = false;
+        _onnxModelPath = onnxModelPath;
+        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = ResolveModelConfig(modelSize, _options);
         (_attentionHeads, _windowSize, _patchSize, _mlpRatio) = ResolveEncoderConfig(_options, _channelDims);
+
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load OneFormer ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -280,7 +306,7 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
         };
     }
 
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
         if (_options.LearningRate <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(_options.LearningRate), "Learning rate must be positive.");
@@ -342,7 +368,7 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
             throw new ArgumentException("OneFormer requires exactly four positive stage values.", parameterName);
     }
 
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -373,7 +399,7 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
         return base.GetNamedLayerActivations(input);
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -391,11 +417,7 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
         return result;
     }
 
-    // DELIBERATELY NOT the base's AddBatchDimension/RemoveBatchDimension. Those allocate a new
-    // tensor and copy into it; OneFormer reshapes through the Engine so the operation stays on the
-    // gradient tape, which its ForwardForTraining path depends on. Hiding is intentional, and safe
-    // because OneFormer overrides Forward and PredictOnnx, so no base method reaches the base pair.
-    private new Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
         => Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
 
     private Tensor<T> AddLeadingBatchDimension(Tensor<T> tensor)
@@ -406,7 +428,7 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
         return Engine.Reshape(tensor, shape);
     }
 
-    private new Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         int[] newShape = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
@@ -556,24 +578,40 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
             : new OneFormer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, new OneFormerOptions(_options));
     }
 
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
-    // and OneFormer owns no further unmanaged resources.
+    /// <summary>
+    /// Releases managed resources.
+    /// </summary>
+    /// <param name="disposing">True from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees ONNX session resources.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
+        base.Dispose(disposing);
+    }
 
     #endregion
 
     #region IPanopticSegmentation Implementation
 
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, NumStuffClasses and NumThingClasses
-    // are all supplied by SegmentationModelBase / PanopticSegmentationBase.
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
+    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
 
-    /// <inheritdoc/>
-    public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
+    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        int numStuff = NumStuffClasses;
+        int numStuff = Math.Max(1, _numClasses / 3);
         var instanceMap = new Tensor<T>([h, w]);
         var panopticMap = new Tensor<T>([h, w]);
         var segments = new List<PanopticSegment<T>>();

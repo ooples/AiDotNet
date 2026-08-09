@@ -57,25 +57,37 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LISA: Reasoning Segmentation via Large Language Model", "https://arxiv.org/abs/2308.00692", Year = 2024, Authors = "Lai et al.")]
-public class LISA<T> : Common.ReferringSegmentationBase<T>
+public class LISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly LISAOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only LISA's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from ReferringSegmentationBase -> SegmentationModelBase.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode and MaxTextLength (512)
-    // are all inherited and say exactly the same thing.
+    /// <summary>
+    /// Gets whether this LISA instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -98,15 +110,15 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         LISAOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
-        // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new LISAOptions(); Options = _options;
-        // LISA's own fallback input geometry is 1024x1024, not the base's 512.
-        if (architecture.InputHeight <= 0) _height = 1024;
-        if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = dropRate;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;
@@ -131,18 +143,23 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
     public LISA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         LISAOptions? options = null)
-        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
-        // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new LISAOptions(); Options = _options;
-        // LISA's own fallback input geometry is 1024x1024, not the base's 512.
-        if (architecture.InputHeight <= 0) _height = 1024;
-        if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = 0;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"LISA ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load LISA ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -177,7 +194,7 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -187,7 +204,7 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
     #endregion
 
     #region Private Methods
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -196,7 +213,7 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -212,6 +229,12 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
+
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -302,19 +325,31 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new LISA<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new LISA<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and latches
-    // _disposed, and LISA owns no other unmanaged resource.
+
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IReferringSegmentation Implementation
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, MaxTextLength (512) and
-    // SupportsVideoInput (false) all come from the base; only the model-specific members remain.
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IReferringSegmentation<T>.MaxTextLength => 512;
+    bool IReferringSegmentation<T>.SupportsConversation => true;
+    bool IReferringSegmentation<T>.SupportsVideoInput => false;
 
-    /// <inheritdoc/>
-    public override bool SupportsConversation => true;
-
-    /// <inheritdoc/>
-    public override ReferringSegmentationResult<T> SegmentFromExpression(Tensor<T> image, string expression)
+    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromExpression(Tensor<T> image, string expression)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
@@ -343,31 +378,24 @@ public class LISA<T> : Common.ReferringSegmentationBase<T>
         return new ReferringSegmentationResult<T> { Masks = masks, TextResponse = response, Confidence = confidence, BoundingBoxes = boxes };
     }
 
-    /// <inheritdoc/>
-    public override ReferringSegmentationResult<T> SegmentFromConversation(
+    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromConversation(
         Tensor<T> image, IReadOnlyList<(string Role, string Message)> conversationHistory, string currentQuery)
     {
         var context = string.Join(" ", conversationHistory.Select(c => c.Message));
         var fullQuery = string.IsNullOrEmpty(context) ? currentQuery : $"{context} {currentQuery}";
-        return SegmentFromExpression(image, fullQuery);
+        return ((IReferringSegmentation<T>)this).SegmentFromExpression(image, fullQuery);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Overrides the public method rather than the base's SupportsVideoInput-gated
-    /// SegmentVideoFromExpressionInternal hook: LISA reports SupportsVideoInput = false yet has
-    /// always returned real per-frame results here, and re-parenting must not change that.
-    /// </remarks>
-    public override List<ReferringSegmentationResult<T>> SegmentVideoFromExpression(Tensor<T> frames, string expression)
+    List<ReferringSegmentationResult<T>> IReferringSegmentation<T>.SegmentVideoFromExpression(Tensor<T> frames, string expression)
     {
         var results = new List<ReferringSegmentationResult<T>>();
-        if (frames.Rank == 3) { var r = SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
+        if (frames.Rank == 3) { var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
         int nf = frames.Shape[0], c = frames.Shape[1], fh = frames.Shape[2], fw = frames.Shape[3];
         for (int f = 0; f < nf; f++)
         {
             var frame = new Tensor<T>([c, fh, fw]);
             for (int ch = 0; ch < c; ch++) for (int y = 0; y < fh; y++) for (int x = 0; x < fw; x++) frame[ch, y, x] = frames[f, ch, y, x];
-            var r = SegmentFromExpression(frame, expression);
+            var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frame, expression);
             r.FrameIndex = f; results.Add(r);
         }
         return results;

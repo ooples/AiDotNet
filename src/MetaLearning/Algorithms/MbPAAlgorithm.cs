@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -191,9 +191,39 @@ public class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 }
             }
 
-            // The embedding network is trained on the query set, in the ordinary way.
-            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-            embeddingGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+            // THE QUERY LOSS GOES THROUGH THE HEAD, and this is the whole invariant of the method.
+            // MetaModel emits a KEY, not a prediction. Comparing that key with the label directly --
+            // which ComputeLossFromOutput(MetaModel.Predict(...), QueryOutput) did -- trains f_gamma to
+            // output the label itself, leaves _outputParams out of the meta-objective entirely, and
+            // then adapts locally on top of an embedding that was optimized for a different function.
+            // MbPAHeadLoss composes g_theta onto the embedding so both the reported loss and the
+            // gradient describe the same, correct objective; theta is a constant inside it, so only
+            // the embedding is trained here and only the support loop above moves the head.
+            var headLoss = new MbPAHeadLoss<T>(
+                _outputParams, _algoOptions.FeatureDimension, _algoOptions.OutputDimension,
+                _algoOptions.OutputDistribution);
+
+            // ConvertToVector returns null for an output shape it cannot flatten. Feeding that to the
+            // loss would surface as a null reference inside the loss function, naming neither the task
+            // nor the conversion that actually failed.
+            var queryPrediction = ConvertToVector(MetaModel.Predict(task.QueryInput))
+                ?? throw new InvalidOperationException(
+                    "MbPA could not convert the model's query prediction to a vector.");
+            var queryTarget = ConvertToVector(task.QueryOutput)
+                ?? throw new InvalidOperationException(
+                    "MbPA could not convert the task's query target to a vector.");
+
+            losses.Add(headLoss.CalculateLoss(queryPrediction, queryTarget));
+            embeddingGradients.Add(ClipGradients(
+                ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput, headLoss)));
+        }
+
+        // AN EMPTY TASK BATCH PRODUCES NO GRADIENTS AND NO LOSSES. ComputeMean over an empty
+        // list has no defined value, and ApplyOuterUpdate would step on nothing.
+        // LFTAlgorithm.MetaTrain already guards this exact case; this override was the odd one out.
+        if (losses.Count == 0)
+        {
+            return NumOps.Zero;
         }
 
         ApplyOuterUpdate(initParams, embeddingGradients, _algoOptions.OuterLearningRate);
@@ -221,6 +251,11 @@ public class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        // Adapt is public API, and both sibling algorithms (LFT, SparseMAML) guard this. Without
+        // it the very next line dereferences task and reports a NullReferenceException, which
+        // names neither the parameter nor the caller's mistake.
+        if (task is null) throw new ArgumentNullException(nameof(task));
+
         // The new task's support set becomes memory. This is how MbPA absorbs a distribution shift:
         // by remembering it, not by retraining on it.
         WriteToMemory(task.SupportInput, task.SupportOutput);

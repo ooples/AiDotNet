@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
@@ -21,6 +21,12 @@ public class SeACoOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
+        // below; Seed is not declared here, so it was silently dropped and a copied configuration
+        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
+        // the most to diagnose, because the two configurations compare equal on everything visible.
+        Seed = other.Seed;
+
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
@@ -33,6 +39,25 @@ public class SeACoOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
+
+        // SeACo's own properties, as opposed to the shared ASR ones above. Omitting any of them
+        // is silent data loss: the clone keeps the default while the original keeps the
+        // configured value. LearningRate is the one that bites hardest - a clone would train at
+        // a different rate than the model it was copied from.
+        NumDecoderLayers = other.NumDecoderLayers;
+        NumBiasEncoderLayers = other.NumBiasEncoderLayers;
+        FeedForwardDim = other.FeedForwardDim;
+        LearningRate = other.LearningRate;
+        TrainingStage = other.TrainingStage;
+        CeWeight = other.CeWeight;
+        MaeWeight = other.MaeWeight;
+        BiasMergeLambda = other.BiasMergeLambda;
+        SamplerLambda = other.SamplerLambda;
+        HotwordMinLength = other.HotwordMinLength;
+        HotwordMaxLength = other.HotwordMaxLength;
+        HotwordMaskTokenId = other.HotwordMaskTokenId;
+        HotwordBatchRatio = other.HotwordBatchRatio;
+        HotwordUtteranceRatio = other.HotwordUtteranceRatio;
     }
 
     public int SampleRate { get; set; } = 16000;
@@ -95,7 +120,8 @@ public class SeACoOptions : ModelOptions
     public double MaeWeight { get; set; } = 1.0;
 
     /// <summary>
-    /// Token id substituted at non-hotword positions when computing SeACo's bias loss. Default: 0.
+    /// Token id substituted at non-hotword positions when computing SeACo's bias loss. Defaults to
+    /// <c>null</c>, which resolves to <see cref="VocabSize"/> -- the appended no-bias slot.
     /// </summary>
     /// <remarks>
     /// SeACo §3.1 states that "an additional token (counted as #, means no-bias) is appended to the ASR

@@ -82,7 +82,16 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
     public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
-    public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    /// <summary>Returns a model of THIS type carrying <paramref name="parameters"/>.</summary>
+    /// <remarks>
+    /// Virtual for the same reason <see cref="Predict"/> and <see cref="DeepCopy"/> are: a
+    /// non-virtual implementation that hard-codes `new LinearVectorModel(...)` slices any derived
+    /// type. IdentityEmbeddingModel came back as a plain LinearVectorModel and silently lost its
+    /// identity embedding, which is exactly the scalar collapse its remarks warn about -- and
+    /// meta-learning algorithms build an adapted model from a parameter vector routinely, so this
+    /// is on the path MbPA actually takes.
+    /// </remarks>
+    public virtual IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
         var model = new LinearVectorModel(_inputFeatures);
         model.SetParameters(parameters);
@@ -535,5 +544,20 @@ internal sealed class IdentityEmbeddingModel : LinearVectorModel
         var copy = new IdentityEmbeddingModel(_featureCount);
         copy.SetParameters(GetParameters());
         return copy;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Overridden alongside <see cref="DeepCopy"/>: without it the base built a plain
+    /// LinearVectorModel and the identity embedding vanished mid-test, leaving the retrieval
+    /// geometry a line and the nearest-neighbour assertions unable to tell a correct MbPA from
+    /// several incorrect ones. `Clone` delegates to DeepCopy, so this was the one remaining path
+    /// that sliced the type.
+    /// </remarks>
+    public override IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    {
+        var model = new IdentityEmbeddingModel(_featureCount);
+        model.SetParameters(parameters);
+        return model;
     }
 }

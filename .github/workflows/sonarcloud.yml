@@ -1,4 +1,4 @@
-﻿name: Build & SonarCloud
+name: Build & SonarCloud
 
 # Primary build workflow - other workflows depend on this.
 # Runs on ubuntu-latest; net471 targets cross-compile via the modern .NET SDK's
@@ -299,6 +299,16 @@ jobs:
         with:
           name: nuget-packages
           path: ./artifacts/*.nupkg
+      # SHARD COVERAGE IS VERIFIED, NOT MAINTAINED BY HAND. The generated-layer
+      # shards select classes by first-letter prefix, so a class emitted later
+      # under an unlisted letter matches no shard, never runs, and nothing reports
+      # it -- a silent loss of coverage on a green pipeline, which is worse than a
+      # failing test. Runs here because this job has already built the assembly the
+      # generator emits those classes into.
+      - name: Verify every generated test class is covered by a shard
+        shell: pwsh
+        run: ./.github/scripts/check-shard-coverage.ps1
+
 
   # Sharded test execution for fast, parallel feedback and coverage generation (net10.0).
   # Coverage artifacts are consumed by the SonarCloud analysis job below.
@@ -897,16 +907,30 @@ jobs:
               (FullyQualifiedName~Generated.ST|FullyQualifiedName~Generated.SU|
               FullyQualifiedName~Generated.SV|FullyQualifiedName~Generated.Sw|
               FullyQualifiedName~Generated.Sy)
-          # The T-Z tail is 201 model classes / 4,378 tests. T remains isolated.
+          # The T-Z tail is 201 model classes / 4,378 tests. T is split in two (see below).
           # U-Z contains 2,676 tests across 119 classes and hit the 45-minute job limit
           # after exposing only 999 results. Isolating each substantial initial fixed U/W/X/Y-Z,
           # but V still reached the limit after 892/1,000 results. Split its 43 classes into four
           # prefix groups: VA-VF=247, Video=224, Vi-VM=346, Vo-VR=183 tests.
-          - name: ModelFamily - Generated Layers T
+          # T as a single lane does not fit the 45-minute budget. Measured under runner parity
+          # (--cpus 4, --memory 16g), its 83 classes split into two lanes that each finished:
+          # T A-Tac = 40 classes / 880 tests / 25m26s, T Tem-Tri = 43 classes / 881 tests / 26m21s.
+          # Combined that is ~52 minutes, so the isolated T lane would be cut off at the limit.
+          # The split is balanced on measured per-class cost: TemplateNER (218 s), TriaffineNER
+          # (175 s) and Timer (144 s) all land in the second lane, so the first lane absorbs the
+          # 17-class Tab* family and Tra* to compensate.
+          - name: ModelFamily - Generated Layers T A-Tac
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
-              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.T
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.T5R|FullyQualifiedName~Generated.TCD|FullyQualifiedName~Generated.TCN|FullyQualifiedName~Generated.TD3|FullyQualifiedName~Generated.TDP|FullyQualifiedName~Generated.TDT|FullyQualifiedName~Generated.TFC|FullyQualifiedName~Generated.TFG|FullyQualifiedName~Generated.TFT|FullyQualifiedName~Generated.TLB|FullyQualifiedName~Generated.TLe|FullyQualifiedName~Generated.TOT|FullyQualifiedName~Generated.TRI|FullyQualifiedName~Generated.TRP|FullyQualifiedName~Generated.TS2|FullyQualifiedName~Generated.TSF|FullyQualifiedName~Generated.TTT|FullyQualifiedName~Generated.TTV|FullyQualifiedName~Generated.TVA|FullyQualifiedName~Generated.Tab|FullyQualifiedName~Generated.Tac)
+          - name: ModelFamily - Generated Layers T Tem-Tri
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri)
           - name: ModelFamily - Generated Layers U
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1055,16 +1079,6 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.ComponentTests|FullyQualifiedName~AiDotNet.Tests.AdversarialRobustness|FullyQualifiedName~AiDotNet.Tests.EndToEndTests)'
-          # The shape-contract gate. AiDotNet.Tests.NeuralNetworks matched NO shard filter until now,
-          # so LayerShapeDiscoverySweepTests, ShapeContractConformanceTests, TracedChainValidationTests
-          # and LayerGraphTests had never run in CI at all - the suite that verifies all 317 layer
-          # shape contracts against real forward passes was not gating anything. It is seconds of work
-          # (the conformance sweep is ~15 s) and it is the only thing standing between a wrong contract
-          # and production, so it belongs in a gating shard rather than a nightly report.
-          - name: TopLevel - NeuralNetworks (shape contracts)
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.NeuralNetworks'
           # =====================================================================
           # SERVING TESTS
           # =====================================================================
@@ -1211,7 +1225,8 @@ jobs:
             'ModelFamily - Generated Layers SAN-Sig',
             'ModelFamily - Generated Layers Sil-Sq',
             'ModelFamily - Generated Layers St-Sy',
-            'ModelFamily - Generated Layers T',
+            'ModelFamily - Generated Layers T A-Tac',
+            'ModelFamily - Generated Layers T Tem-Tri',
             'ModelFamily - Generated Layers U',
             'ModelFamily - Generated Layers VA-VF',
             'ModelFamily - Generated Layers Video',
@@ -1402,19 +1417,63 @@ jobs:
             $memSampler = [powershell]::Create()
             [void]$memSampler.AddScript({
               param($tracePath)
-              $traceLineCount = 0
+
+              # A HELD READ POSITION, NOT A RE-READ. `Get-Content | Select-Object -Skip N` still
+              # opens the file and enumerates every line before discarding the first N, so each
+              # two-second tick re-read the whole trace and the sampler's own I/O grew quadratically
+              # across a long heavy shard -- on the one job already documented as memory-bound.
+              #
+              # The reader is opened once with FileShare.ReadWrite so the test host can keep
+              # appending, and each tick reads only what has arrived since. Both handles are disposed
+              # in the finally below, which runs when the runspace is stopped.
+              $traceStream = $null
+              $traceReader = $null
+              try {
               while ($true) {
-                if (Test-Path $tracePath) {
-                  $traceLines = @(Get-Content -Path $tracePath)
-                  while ($traceLineCount -lt $traceLines.Count) {
-                    [Console]::Out.WriteLine($traceLines[$traceLineCount])
-                    $traceLineCount++
+                # A THROW HERE ENDS THE SAMPLER SILENTLY. The runspace's IAsyncResult is discarded
+                # at BeginInvoke and nobody calls EndInvoke, so any exception is swallowed whole:
+                # sampling stops for the rest of the shard and the log reads like a clean run right
+                # up to the OOM kill -- defeating the entire purpose of a sampler that exists to
+                # show what memory did BEFORE the kill.
+                #
+                # Both known throwers are in this loop. The test host APPENDS to $tracePath while
+                # this reads it, so a read can hit a sharing violation; and Select-String returns
+                # $null when there is no match, making .Line a property access on $null.
+                try {
+                  if ($null -eq $traceReader -and (Test-Path $tracePath)) {
+                    # ReadWrite sharing: the test host holds this file open for append.
+                    $traceStream = [System.IO.FileStream]::new(
+                      $tracePath,
+                      [System.IO.FileMode]::Open,
+                      [System.IO.FileAccess]::Read,
+                      [System.IO.FileShare]::ReadWrite)
+                    $traceReader = [System.IO.StreamReader]::new($traceStream)
                   }
+
+                  if ($null -ne $traceReader) {
+                    # StreamReader returns null at end-of-stream and resumes from the same position
+                    # on the next tick once more has been appended, so this reads each line once.
+                    while ($null -ne ($line = $traceReader.ReadLine())) {
+                      [Console]::Out.WriteLine($line)
+                    }
+                  }
+                  $memLine = Select-String -Path /proc/meminfo -Pattern '^MemAvailable:' -ErrorAction Stop | Select-Object -First 1
+                  $avail = if ($memLine) { ($memLine.Line -replace '\s+', ' ').Trim() } else { 'MemAvailable: (unreadable)' }
+                  [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
+                  [Console]::Out.Flush()
+                } catch {
+                  # Reported, never fatal: a sampler that dies quietly is worse than one that says
+                  # it stumbled and carries on.
+                  [Console]::Out.WriteLine("[memdiag] sampler iteration failed: $($_.Exception.Message)")
+                  [Console]::Out.Flush()
                 }
-                $avail = ((Select-String -Path /proc/meminfo -Pattern '^MemAvailable:').Line -replace '\s+', ' ').Trim()
-                [Console]::Out.WriteLine("[memdiag $([DateTime]::UtcNow.ToString('HH:mm:ss'))] $avail")
-                [Console]::Out.Flush()
                 Start-Sleep -Seconds 2
+              }
+              }
+              finally {
+                # The runspace is torn down with Stop(), so this is where the handles are released.
+                if ($null -ne $traceReader) { try { $traceReader.Dispose() } catch { } }
+                if ($null -ne $traceStream) { try { $traceStream.Dispose() } catch { } }
               }
             })
             [void]$memSampler.AddArgument($testTrace)
@@ -1473,13 +1532,33 @@ jobs:
   parameter-enumeration-sweep:
     name: Parameter sweep (${{ matrix.sweep }})
     runs-on: ubuntu-latest
+    # LEAST PRIVILEGE, DECLARED. With no permissions block this job inherited the workflow
+    # or repository default token scope, which on a repository defaulting to read/write hands
+    # a job that only checks out, builds and uploads an artifact the ability to push commits.
+    # It needs contents: read and nothing else -- actions/upload-artifact uses the Actions
+    # service, not the token's write scopes.
+    permissions:
+      contents: read
     # Constructs every model in the assembly and measures both parameter APIs on each. Long by
     # nature, which is exactly why it is not allowed inside a test shard: dropped into
     # "Integration P-Q" (which its class name matches) it would consume that shard's whole budget.
     # The Sweep category keeps it out of every shard filter; this job is the only thing that runs it.
     timeout-minutes: 60
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please') }}"
-    continue-on-error: true   # a reporter, never a gate - see below
+    # THE SAME CONDITION AS EVERY OTHER JOB IN THIS FILE, and it was not.
+    # 'release-please' without the trailing double dash also matches an unrelated
+    # branch such as release-please-notes, and the release-push guard was missing
+    # entirely -- on a push github.head_ref is empty, so this job ran on release
+    # commits while every other job skipped, building the whole solution and
+    # holding a runner for up to 60 minutes to do it.
+    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # NO continue-on-error. It made the guards below decorative: the step printed
+    # `::error::Sweep harness failed to START` and exited 1, and the job was marked
+    # green anyway -- the loud failure those guards promise could never be heard.
+    # The step already separates the two cases and only one exits non-zero: a
+    # FINDING is written to the report and passes, while an infrastructure fault
+    # (did not start / no summary / killed mid-run) fails. So the job stays a
+    # reporter for findings and a gate for its own brokenness, which is what the
+    # surrounding comments claimed all along.
     # One runner PER sweep. Each of these constructs every model in the library, so running them
     # together in a single job is what killed the first attempt: the step was cancelled after 6m48s
     # against a 60-minute limit, which is a runner OOM, not a timeout. Splitting gives each sweep a
@@ -1491,12 +1570,6 @@ jobs:
           - ParameterCountContractTests
           - ParameterChunkParityTests
           - ParameterEnumerationParityTests
-          # Derives each model's shape relation by probing Predict under several construction
-          # profiles. Same shape as the sweeps above - constructs every candidate, long by nature,
-          # Category=Sweep so no shard filter picks it up - so it belongs on this job's runner
-          # rather than in a gating shard. Measured ~14 s per model locally, which is why it is
-          # here under a 60-minute budget and not anywhere near the 45 gating shards.
-          - ModelShapeDiscoveryProbeTests
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -1538,11 +1611,24 @@ jobs:
           # but the output is inspected afterwards: if the harness could not START, or produced
           # no summary, that is an infrastructure fault and fails loudly. A reporter that cannot
           # tell "nothing to report" from "never ran" is worse than no reporter.
+          # ONE INVOCATION. A duplicate `dotnet test` used to sit here, ending in a line
+          # continuation that swallowed the comment below, so the sweep ran twice -- and
+          # because the step runs under `bash -e`, the first (uninstrumented) run aborted the
+          # step on any nonzero exit before a single guard below could inspect it.
+          #
+          # PIPESTATUS, NOT THE PIPE. `dotnet test ... | tee` reports TEE's status, so the
+          # pipeline succeeded whenever tee did and `|| true` was measuring nothing. The real
+          # exit code is captured before anything else can overwrite it.
+          set -o pipefail
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
             --filter "FullyQualifiedName~${{ matrix.sweep }}" \
             --logger 'console;verbosity=detailed' \
             --logger 'trx;LogFileName=sweep.trx' \
-            --results-directory TestResults 2>&1 | tee sweep-output.txt || true
+            --results-directory TestResults 2>&1 | tee sweep-output.txt
+          dotnet_status=${PIPESTATUS[0]}
+          set +o pipefail
+          echo "dotnet test exited ${dotnet_status}"
+
           if grep -qE 'MSBUILD : error|MSB1008|error MSB[0-9]|No test source files' sweep-output.txt; then
             echo '::error::Sweep harness failed to START -- infrastructure fault, not a finding.'
             exit 1
@@ -1552,18 +1638,47 @@ jobs:
             exit 1
           fi
 
+          # THE THIRD STATE THE TWO GREPS CANNOT SEE: a harness that starts, prints a partial
+          # summary, and is then OOM-killed. That run still emits `Total tests`, so guard 2
+          # passes and the job reports success on a truncated sweep -- which is exactly what
+          # happened once already (cancelled at 6m48s against a 60-minute limit, i.e. a runner
+          # OOM). A kill shows up as a non-zero dotnet status with a summary present, so the
+          # two facts together are what distinguish it.
+          if [ "${dotnet_status}" -gt 1 ]; then
+            echo "::error::Sweep harness was killed (exit ${dotnet_status}) after printing a partial summary -- the findings are INCOMPLETE."
+            exit 1
+          fi
+
+      # STAGED INTO THE WORKSPACE FIRST. The upload listed absolute /tmp paths, which
+      # ties the artifact to runner-temp layout and makes `if-no-files-found: error`
+      # unusable -- a findings file that is legitimately absent is indistinguishable
+      # from one the uploader simply could not reach. Copying what exists into a
+      # workspace directory means the upload has one root, and an empty root then
+      # genuinely means the sweep produced nothing.
+      - name: Stage sweep findings
+        if: always()
+        run: |
+          mkdir -p sweep-artifacts
+          for f in /tmp/parameter-enumeration-parity.tsv \
+                   /tmp/parameter-count-violations.txt \
+                   /tmp/chunk-parity.txt; do
+            [ -f "$f" ] && cp "$f" sweep-artifacts/ || echo "absent: $f"
+          done
+          cp sweep-output.txt sweep-artifacts/ 2>/dev/null || true
+          ls -la sweep-artifacts/
+
       - name: Upload sweep report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: parameter-sweep-${{ matrix.sweep }}-${{ github.sha }}
           path: |
-            sweep-output.txt
-            /tmp/parameter-enumeration-parity.tsv
-            /tmp/parameter-count-violations.txt
-            /tmp/chunk-parity.txt
+            sweep-artifacts/
             TestResults/
-          if-no-files-found: warn
+          # ERROR, NOT WARN. These files ARE the job's output; an upload that finds
+          # none of them means the sweep produced nothing, and `warn` let that pass
+          # silently as a green job with an empty artifact.
+          if-no-files-found: error
           retention-days: 14
 
   sonarcloud:

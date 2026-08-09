@@ -160,10 +160,13 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     // tensors are the model's trainable parameters for the conv stages; they are surfaced via
     // GetExtraTrainableTensors so the base tape watches/updates them and GetParameters / serialization
     // round-trip them, exactly like ViT cls/pos tokens.
-    private readonly System.Collections.Generic.List<Tensor<T>> _encWr = [];
-    private readonly System.Collections.Generic.List<Tensor<T>> _encWi = [];
-    private readonly System.Collections.Generic.List<Tensor<T>> _decWr = [];
-    private readonly System.Collections.Generic.List<Tensor<T>> _decWi = [];
+    // Element type is nullable because a stage's kernels are allocated lazily on first use:
+    // the list is padded to the stage index and filled in afterwards. Saying so in the type
+    // removes the null-forgiving suppressions that padding previously needed.
+    private readonly System.Collections.Generic.List<Tensor<T>?> _encWr = [];
+    private readonly System.Collections.Generic.List<Tensor<T>?> _encWi = [];
+    private readonly System.Collections.Generic.List<Tensor<T>?> _decWr = [];
+    private readonly System.Collections.Generic.List<Tensor<T>?> _decWi = [];
 
     // Per-stage BatchNorm applied after each complex conv (encoder: numStages; decoder: numStages-1, the
     // final output stage has none). These stay as real BatchNorm layers over the 2*C real channels.
@@ -537,7 +540,21 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try { _ = ForwardNative(dummy); }
-        catch { /* best-effort; a genuine forward failure surfaces on the real Train/Predict */ }
+        catch (Exception ex)
+        {
+            // Best-effort by design: this is a warm-up forward whose only job is to materialize lazy
+            // shapes, and a genuine forward failure surfaces again on the real Train/Predict with a
+            // real input. What the bare `catch { }` cost was the ability to tell those two apart --
+            // a warm-up that fails for a REASON (a mis-sized dummy, a stage count the strides cannot
+            // support) looked identical to one that succeeded, and the model then failed later with
+            // no hint that shape resolution had already gone wrong here.
+            //
+            // Debug.WriteLine matches how the neighbouring audio models surface this class of
+            // diagnostic; the exception is still swallowed, which is the intended contract.
+            System.Diagnostics.Debug.WriteLine(
+                $"DCCRN warm-up forward failed on a [1, 2, {numBins}, {frames}] probe; lazy shapes " +
+                $"may be unresolved. {ex.GetType().Name}: {ex.Message}");
+        }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 
@@ -900,11 +917,11 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// overwrite them with the source weights.
     /// </summary>
     private Tensor<T> ComplexConv2D(Tensor<T> input,
-        System.Collections.Generic.List<Tensor<T>> wrList, System.Collections.Generic.List<Tensor<T>> wiList,
+        System.Collections.Generic.List<Tensor<T>?> wrList, System.Collections.Generic.List<Tensor<T>?> wiList,
         int stageIdx, int coutComplex, bool transpose)
     {
         int cinComplex = input.Shape[1] / 2;
-        while (wrList.Count <= stageIdx) { wrList.Add(null!); wiList.Add(null!); }
+        while (wrList.Count <= stageIdx) { wrList.Add(null); wiList.Add(null); }
         if (wrList[stageIdx] is null)
         {
             // Conv2D kernel layout [Cout, Cin, kH, kW]; ConvTranspose2D layout [Cin, Cout, kH, kW].
@@ -914,8 +931,11 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             wrList[stageIdx] = InitComplexKernel(kshape, cinComplex, coutComplex, (transpose ? 5000 : 0) + stageIdx);
             wiList[stageIdx] = InitComplexKernel(kshape, cinComplex, coutComplex, (transpose ? 6000 : 1000) + stageIdx);
         }
-        var wr = wrList[stageIdx];
-        var wi = wiList[stageIdx];
+        // Non-null from here: the block above allocates both whenever the slot was empty.
+        var wr = wrList[stageIdx]
+            ?? throw new InvalidOperationException($"Real kernel for stage {stageIdx} was not allocated.");
+        var wi = wiList[stageIdx]
+            ?? throw new InvalidOperationException($"Imaginary kernel for stage {stageIdx} was not allocated.");
 
         int b = input.Shape[0], f = input.Shape[2], t = input.Shape[3];
         var xr = Engine.TensorSlice(input, [0, 0, 0, 0], [b, cinComplex, f, t]);
@@ -1092,7 +1112,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>Writes a list of complex-conv kernels as [count]([rank][dims...][values...] | -1 for null).</summary>
-    private static void WriteComplexKernels(BinaryWriter writer, System.Collections.Generic.List<Tensor<T>> kernels)
+    private static void WriteComplexKernels(BinaryWriter writer, System.Collections.Generic.List<Tensor<T>?> kernels)
     {
         writer.Write(kernels.Count);
         foreach (var k in kernels)
@@ -1112,14 +1132,15 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// from the serialized shapes so a freshly-deserialized clone carries the trained weights instead of
     /// dropping them (the Clone_AfterTraining #1221 class).
     /// </summary>
-    private void ReadComplexKernels(BinaryReader reader, System.Collections.Generic.List<Tensor<T>> kernels)
+    private void ReadComplexKernels(BinaryReader reader, System.Collections.Generic.List<Tensor<T>?> kernels)
     {
         kernels.Clear();
         int count = reader.ReadInt32();
         for (int i = 0; i < count; i++)
         {
             int rank = reader.ReadInt32();
-            if (rank < 0) { kernels.Add(null!); continue; }
+            // A negative rank is the on-disk marker for a stage that was never allocated.
+            if (rank < 0) { kernels.Add(null); continue; }
             var shape = new int[rank];
             for (int r = 0; r < rank; r++) shape[r] = reader.ReadInt32();
             var t = new Tensor<T>(shape);

@@ -38,46 +38,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, initializationStrategy: new global::AiDotNet.Initialization.EagerInitializationStrategy<double>(new System.Random(42))", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-// Rank 2 - [numNodes, inputFeatures] - is what the forward's own restore branch names ("Original was 2D
-// [N, F] -> return [N, outputFeatures]") and the only form [LayerProperty(TestInputShape = "4, 8")]
-// exercises. Other ranks ARE handled, but their node count must agree with the separately-installed
-// adjacency matrix, so a declaration there would be a claim about a tensor this layer never sees alone.
-//
-// The node axis is TensorAxis.Other: graph nodes are neither a sequence nor a spatial extent, and naming
-// them Time or Length would licence a downstream causal or convolutional layer to read an ordering into
-// them that does not exist.
-[TensorLayout(TensorAxis.Other, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
-[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// HAND-WRITTEN because the emitted width is set by the MLP's SECOND layer, which is configuration:
-    /// the aggregation runs at <c>_mlpHiddenDim</c> and only the final projection
-    /// (<c>_mlpWeights2 = new Tensor&lt;T&gt;([_mlpHiddenDim, _outputFeatures])</c>) fixes the width the
-    /// layer actually emits. A relation derived from the hidden dimension would be right only where the
-    /// two happen to coincide.
-    /// </para>
-    /// <para>
-    /// The node axis is Same: GIN sums each node's neighbourhood into that node, so nodes are neither
-    /// created nor removed.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 2 || _outputFeatures <= 0) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures)),
-        };
-    }
-
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly int _mlpHiddenDim;
@@ -181,6 +143,10 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// and GPU-accelerated MLP computation.
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
+
+    /// <inheritdoc/>
+    public override long ParameterCount =>
+        _mlpWeights1.Length + _mlpWeights2.Length + _mlpBias1.Length + _mlpBias2.Length + (_learnEpsilon ? 1 : 0);
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -503,6 +469,86 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         metadata["LearnEpsilon"] = _learnEpsilon.ToString();
         metadata["InitialEpsilon"] = NumOps.ToDouble(_epsilon).ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var paramList = new List<T>();
+
+        // MLP weights 1
+        for (int i = 0; i < _mlpWeights1.Length; i++)
+        {
+            paramList.Add(_mlpWeights1.GetFlat(i));
+        }
+
+        // MLP bias 1
+        for (int i = 0; i < _mlpBias1.Length; i++)
+        {
+            paramList.Add(_mlpBias1[i]);
+        }
+
+        // MLP weights 2
+        for (int i = 0; i < _mlpWeights2.Length; i++)
+        {
+            paramList.Add(_mlpWeights2.GetFlat(i));
+        }
+
+        // MLP bias 2
+        for (int i = 0; i < _mlpBias2.Length; i++)
+        {
+            paramList.Add(_mlpBias2[i]);
+        }
+
+        // Epsilon (if learnable)
+        if (_learnEpsilon)
+        {
+            paramList.Add(_epsilon);
+        }
+
+        return new Vector<T>(paramList.ToArray());
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int weights1Count = _mlpWeights1.Length;
+        int bias1Count = _mlpBias1.Length;
+        int weights2Count = _mlpWeights2.Length;
+        int bias2Count = _mlpBias2.Length;
+        int expectedParams = weights1Count + bias1Count + weights2Count + bias2Count + (_learnEpsilon ? 1 : 0);
+
+        if (parameters.Length != expectedParams)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedParams} parameters, but got {parameters.Length}", nameof(parameters));
+        }
+
+        int index = 0;
+
+        // Set MLP weights 1
+        _mlpWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, weights1Count))
+            .Reshape(_mlpWeights1._shape);
+        index += weights1Count;
+
+        // Set MLP bias 1
+        _mlpBias1 = Tensor<T>.FromVector(parameters.SubVector(index, bias1Count));
+        index += bias1Count;
+
+        // Set MLP weights 2
+        _mlpWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, weights2Count))
+            .Reshape(_mlpWeights2._shape);
+        index += weights2Count;
+
+        // Set MLP bias 2
+        _mlpBias2 = Tensor<T>.FromVector(parameters.SubVector(index, bias2Count));
+        index += bias2Count;
+
+        // Set epsilon (if learnable)
+        if (_learnEpsilon)
+        {
+            _epsilon = parameters[index];
+        }
     }
 
     public override void ClearGradients()

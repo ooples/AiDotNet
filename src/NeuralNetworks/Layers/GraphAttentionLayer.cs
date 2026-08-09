@@ -39,48 +39,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-// Rank 2 - [numNodes, inputFeatures] - is the form both forward paths name in their own comments
-// ("Original was [numNodes, inputFeatures], output should be [numNodes, outputFeatures]") and the only
-// one [LayerProperty(TestInputShape = "4, 8")] exercises. Higher ranks ARE handled, but their node count
-// has to agree with the separately-installed adjacency matrix, so a declaration at those ranks would be
-// making a claim about a tensor this layer never sees on its own; they are left undeclared deliberately.
-//
-// The node axis is TensorAxis.Other because there is no shared role for it: graph nodes are neither a
-// sequence nor a spatial extent, and calling them Time or Length would licence a causal or convolutional
-// layer to consume this output as if the ordering meant something. Other participates in rank checks and
-// still resolves Same(), which is all this relation needs.
-[TensorLayout(TensorAxis.Other, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
-[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// HAND-WRITTEN because the emitted width is not <c>outputFeatures</c> but
-    /// <c>_combinedOutputFeatures</c>, and that difference is the whole point of multi-head attention:
-    /// <c>concatenateHeads ? checked(outputFeatures * numHeads) : outputFeatures</c>. Both forward paths
-    /// end at that field - the sparse one allocates <c>[batchSize, numNodes, _combinedOutputFeatures]</c>,
-    /// the dense one concatenates the heads on axis 2 - so declaring <c>Fixed(_outputFeatures)</c> here
-    /// would be wrong by a factor of numHeads for every concatenating configuration, which is the default.
-    /// </para>
-    /// <para>
-    /// The node axis is Same: attention re-weights neighbours, it never adds or removes a node.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 2 || _combinedOutputFeatures <= 0) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_combinedOutputFeatures)),
-        };
-    }
-
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly int _numHeads;
@@ -208,6 +168,9 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// for efficient attention computation on large graphs.
     /// </remarks>
     protected override bool SupportsGpuExecution => !_concatenateHeads;
+
+    /// <inheritdoc/>
+    public override long ParameterCount => _weights.Length + _attentionWeights.Length + _bias.Length;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;
@@ -491,7 +454,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // softmax over neighbours; dropout on the normalized coefficients, §3.3) but expresses
         // every step with Engine ops that reference the ACTUAL parameter tensors, so autodiff
         // derives exact gradients for _weights, _attentionWeights and _bias.
-        var adjacency = _adjacencyMatrix!;
+        // Validated on entry to Forward (see the _useSparseAggregation check), but the compiler
+        // cannot carry that across the call, so state the requirement where it is relied on.
+        var adjacency = _adjacencyMatrix
+            ?? throw new InvalidOperationException(
+                "The dense attention path requires an adjacency matrix; call SetAdjacencyMatrix first.");
         bool adjacency2D = adjacency.Shape.Length == 2;
         T maskNegInf = NumOps.FromDouble(-1e9);
 
@@ -567,9 +534,15 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 denseHeadSum = denseHeadSum is null ? headOutput : Engine.TensorAdd(denseHeadSum, headOutput);
         }
 
-        var combinedHeads = _concatenateHeads
+        // denseHeadSum is accumulated in the head loop above and is non-null whenever heads are
+        // averaged rather than concatenated, since _numHeads is at least one. Assert it so the
+        // averaging branch cannot silently dereference null if that ever stops holding.
+        if (!_concatenateHeads && denseHeadSum is null)
+            throw new InvalidOperationException("Head averaging was requested but no head outputs were accumulated.");
+
+        var combinedHeads = _concatenateHeads || denseHeadSum is null
             ? Engine.Concat(denseHeadOutputs, 2)
-            : Engine.TensorDivideScalar(denseHeadSum!, NumOps.FromDouble(_numHeads));
+            : Engine.TensorDivideScalar(denseHeadSum, NumOps.FromDouble(_numHeads));
         var denseBias = Engine.Reshape(_bias, [1, 1, _combinedOutputFeatures]);
         output = Engine.TensorBroadcastAdd(combinedHeads, denseBias);
 
@@ -883,6 +856,46 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(weightsGrad, attnGrad, biasGrad);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_attentionWeights.ToArray()),
+            new Vector<T>(_bias.ToArray())
+        );
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int weightsCount = _weights.Length;
+        int attnCount = _attentionWeights.Length;
+        int biasCount = _bias.Length;
+        int totalParams = weightsCount + attnCount + biasCount;
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        int index = 0;
+
+        _weights = Tensor<T>.FromVector(parameters.SubVector(index, weightsCount)).Reshape(_weights._shape);
+        index += weightsCount;
+
+        _attentionWeights = Tensor<T>.FromVector(parameters.SubVector(index, attnCount))
+            .Reshape(_attentionWeights._shape);
+        index += attnCount;
+
+        _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
+
+        // Notify GPU that tensor data has changed
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_attentionWeights);
+        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <summary>

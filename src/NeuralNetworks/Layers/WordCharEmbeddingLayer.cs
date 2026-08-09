@@ -57,51 +57,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-// Rank 2 and ONLY rank 2 - ForwardTraced opens with an explicit guard that throws for anything else:
-// "expects rank-2 packed input [sequenceLength, 1 + maxWordLength]". No batch axis is declared because
-// the layer does not have one; a sentence IS the unit, and the character BiLSTM already spends the
-// batch slot on words (the comment in ForwardTraced: "words as batch, characters as time").
-//
-// Axis 0 is Time - it is the sentence's token position, the same axis the downstream BiLSTM-CRF treats
-// as its sequence dimension. Axis 1 is Features on both sides, but it means different things: on the
-// way in it is the PACKED column [word index, char indices...], on the way out the fused embedding.
-// That is exactly why the output is Fixed and not Same - see OutputAxesFor.
-[TensorLayout(TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "Packed integer indices: column 0 is the word id, columns 1.. are its character ids.")]
-[TensorLayout(TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
+public partial class WordCharEmbeddingLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Hand-written because the two axes behave oppositely and the generator's default would make both
-    /// <c>Same</c>. The sentence length is carried through untouched - <c>ForwardTraced</c> reads
-    /// <c>seq = input.Shape[0]</c> and every intermediate keeps it - while the width is replaced
-    /// outright: the packed <c>1 + maxWordLength</c> INDEX columns are consumed and what leaves is the
-    /// concatenation of the two embedding streams.
-    /// </para>
-    /// <para>
-    /// <c>Fixed(OutputEmbeddingDim)</c> is read off the layer's own property, which is
-    /// <c>_wordEmbeddingDim + _charHiddenDim</c> - the same expression the base constructor uses for its
-    /// declared output shape (<c>[sequenceLength, wordEmbeddingDim + charHiddenDim]</c>) and the size
-    /// <c>Engine.TensorConcatenate([wordFeat, charFeat], axis: 1)</c> actually produces. It is NOT
-    /// derivable from the input width, so no relation to the input axis exists.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 2 || OutputEmbeddingDim <= 0) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputEmbeddingDim)),
-        };
-    }
-
     private readonly DenseLayer<T> _wordEmbedding;
     private readonly DenseLayer<T> _charEmbedding;
     private readonly BidirectionalLayer<T> _charBiLstm;
@@ -279,6 +236,32 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // "unknown", not "absent". Falls back to PAD only for a degenerate size-1 vocabulary.
         if (idx >= vocabSize) return vocabSize > 1 ? 1 : 0;
         return idx;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Concatenates child parameters in a fixed order: word table, char table, char BiLSTM.</remarks>
+    public override Vector<T> GetParameters()
+    {
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(_wordEmbedding.GetParameters(), _charEmbedding.GetParameters()),
+            _charBiLstm.GetParameters());
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int wordLen = _wordEmbedding.GetParameters().Length;
+        int charLen = _charEmbedding.GetParameters().Length;
+        int biLen = _charBiLstm.GetParameters().Length;
+
+        if (parameters.Length != wordLen + charLen + biLen)
+            throw new ArgumentException(
+                $"Expected {wordLen + charLen + biLen} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+
+        _wordEmbedding.SetParameters(parameters.Slice(0, wordLen));
+        _charEmbedding.SetParameters(parameters.Slice(wordLen, charLen));
+        _charBiLstm.SetParameters(parameters.Slice(wordLen + charLen, biLen));
     }
 
     /// <inheritdoc/>

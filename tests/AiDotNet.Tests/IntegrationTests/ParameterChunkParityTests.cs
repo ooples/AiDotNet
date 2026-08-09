@@ -59,10 +59,32 @@ public class ParameterChunkParityTests
         var divergent = new List<string>();
         var noChunks = new List<string>();
         int compared = 0, unmeasurable = 0, tooLarge = 0, unsized = 0;
+        // THE GC CADENCE COUNTS CONSTRUCTIONS, NOT SUCCESSFUL COMPARISONS. Keying it off
+        // `compared` meant that while `compared` was still 0 -- every model that is
+        // unmeasurable, too large, unsized, or has no chunk API leaves it there -- `0 % 50 == 0`
+        // held, forcing a blocking full collection plus finalizer wait for EVERY model at the
+        // start of the sweep. ParameterCountContractTests already does it this way.
+        int constructed = 0;
 
         var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "chunk-parity.txt");
+        // DISPOSED ON EVERY PATH, AND A FAILURE TO OPEN IS REPORTED. The manual dispose ran only
+        // on the normal path, so a throw from the enumeration below -- Assembly.GetTypes() raises
+        // ReflectionTypeLoadException, and this sweep calls it -- leaked the handle and left the
+        // partial log the comment above calls "the deliverable" unflushed. The empty catch was the
+        // other half: when the file could not be opened at all, every later write silently went
+        // nowhere and the run looked like one that simply found nothing.
         System.IO.StreamWriter? log = null;
-        try { log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true }; } catch { }
+        try
+        {
+            log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true };
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"NOTE: could not open {logPath} ({ex.GetType().Name}: {ex.Message}); " +
+                              "the console output below is the only record of this run.");
+        }
+
+        using var _logHandle = log;
 
         foreach (var closedType in GetConstructableModelTypes())
         {
@@ -160,10 +182,8 @@ public class ParameterChunkParityTests
                 (instance as IDisposable)?.Dispose();
             }
 
-            if (compared % 50 == 0) { GC.Collect(); GC.WaitForPendingFinalizers(); }
+            if (++constructed % 50 == 0) { GC.Collect(); GC.WaitForPendingFinalizers(); }
         }
-
-        log?.Dispose();
 
         _output.WriteLine($"Compared {compared} models; {noChunks.Count} expose no chunk API; " +
                           $"{tooLarge} too large to enumerate; {unsized} not sized yet; " +
@@ -174,7 +194,16 @@ public class ParameterChunkParityTests
         // Reported, not enforced. This measures whether a planned refactor is safe; it is not
         // itself a contract anyone has agreed to yet, and failing the build on it would block
         // work on a question we are still answering.
-        Assert.True(true);
+        // THE HARNESS GATES ITSELF, NOT THE PARITY RESULT. This is a reporting sweep, so a
+        // mismatch is recorded rather than failed -- but Assert.True(true) also made "classified
+        // hundreds of models" indistinguishable from "aborted after three", while holding a
+        // 30-minute CI slot either way. A harness that produced no evidence is a failure of the
+        // harness even when it is not a failure of the thing under test.
+        Assert.True(compared > 0,
+            "The chunk-parity sweep compared NOTHING. It holds a 30-minute slot, so a run that " +
+            "measured nothing is an infrastructure failure rather than a clean report. " +
+            $"Skipped: {noChunks.Count} with no chunk API, {tooLarge} too large to enumerate, " +
+            $"{unsized} not sized yet, {unmeasurable} unmeasurable.");
     }
 
     private static bool ReadBool(object instance, string propertyName)

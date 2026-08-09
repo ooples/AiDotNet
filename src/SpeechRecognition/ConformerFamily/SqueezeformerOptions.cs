@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
@@ -24,6 +24,12 @@ public class SqueezeformerOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
+        // below; Seed is not declared here, so it was silently dropped and a copied configuration
+        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
+        // the most to diagnose, because the two configurations compare equal on everything visible.
+        Seed = other.Seed;
+
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
@@ -39,7 +45,13 @@ public class SqueezeformerOptions : ModelOptions
         WarmupSteps = other.WarmupSteps;
         WeightDecay = other.WeightDecay;
         Language = other.Language;
-        Vocabulary = other.Vocabulary;
+        // CLONED, NOT SHARED. `Vocabulary = other.Vocabulary` hands the copy the SAME array
+        // instance, so a later write through either options object is seen by both -- the copy
+        // constructor exists precisely to prevent that coupling, and for a reference type a bare
+        // assignment does not. Null is preserved as null rather than becoming an empty array,
+        // which would silently change "unset" into "set to nothing".
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        UseLayerNormalization = other.UseLayerNormalization;
     }
 
     public int SampleRate { get; set; } = 16000;

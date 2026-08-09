@@ -37,17 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 2, 8", TestConstructorArgs = "4, 3, 1, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-// Rank 3 ONLY, and that is enforced rather than assumed: OnFirstForward throws
-// "Conv1DLayer requires rank-3 [B, C, T] input" for any other rank, so no other layout is declared.
-// The axis names are this layer's own - the class summary says "[B, C_in, T]" in and "[B, C_out, T_out]" out.
-// OutputAxesFor is hand-written because every one of the three relations depends on constructor
-// arguments (output channels, kernel, stride, padding, dilation) that no attribute can see.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
+public partial class Conv1DLayer<T> : LayerBase<T>
 {
     private int _inputChannels;
     private readonly int _outputChannels;
@@ -62,41 +52,6 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// Taken straight from this layer's own length arithmetic in <see cref="OnFirstForward"/>:
-    /// <c>tOut = (tIn + 2*_padding - _dilation*(_kernelSize - 1) - 1) / _stride + 1</c>, which is
-    /// exactly what <c>AxisRelation.Window</c> evaluates. Channels are set by configuration
-    /// (<c>_outputChannels</c>), not by the input, and the batch axis is carried through - the forward
-    /// reshapes to <c>[B, C, 1, T]</c>, convolves, and reshapes back with <c>activated.Shape[0]</c>
-    /// untouched.
-    /// </para>
-    /// <para>
-    /// Note that <see cref="OnFirstForward"/> deliberately publishes <c>LayerShape.Dynamic</c> for the
-    /// output length rather than a resolved number, precisely because the length follows the input.
-    /// A relation is the right home for that: it says HOW the length follows instead of freezing one
-    /// value that goes stale the moment a different sequence arrives.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 3 || _outputChannels <= 0 || _kernelSize <= 0 || _stride <= 0
-            || _padding < 0 || _dilation <= 0)
-        {
-            return null;
-        }
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
-            new OutputAxisContract(
-                TensorAxis.Time,
-                AxisRelation.Window(TensorAxis.Time, _kernelSize, _stride, _padding, _dilation)),
-        };
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
     /// Paired with <see cref="ParameterCount"/> and <see cref="GetParameters"/>, which both report
     /// nothing until the input channel count arrives. Without this the layer said "I have no
     /// parameters" AND "nothing is pending" at once -- both false, since it certainly gains weights
@@ -104,6 +59,43 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
     /// or a pending flag, so MusicSourceSeparator failed it the moment the count became honest.
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
+
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="GetParameters"/> in every state, which it previously did not. When the
+    /// input channel count was unknown this GUESSED <c>inputChannels = 1</c> and returned
+    /// <c>outputChannels * 1 * kernelSize + outputChannels</c>, while the getter returned either the
+    /// deferred pending vector or an empty one. A deferred Conv1D therefore claimed 516 parameters
+    /// and handed back 0 — the mismatch MusicSourceSeparator reports, since
+    /// <c>NeuralNetworkBase.ParameterCount</c> sums layer counts while its <c>GetParameters</c> sums
+    /// layer vectors.
+    /// </para>
+    /// <para>
+    /// The guess did second damage through <c>SetParameters</c>: a parent slices the flat vector by
+    /// each child's ParameterCount, so a child claiming 516 while its real resolved size is 144
+    /// misaligns every slice after it. That surfaced as
+    /// <c>"Expected 144 parameters, but got 32"</c> from ApplyResolvedParameters on the first
+    /// forward — a restore that had already silently corrupted the layout.
+    /// </para>
+    /// <para>
+    /// This is the same correction <see cref="ConvolutionalLayer{T}"/> already carries: a deferred
+    /// convolution reports what it actually has, and callers distinguish "no parameters" from "not
+    /// sized yet" via <c>HasUninitializedParameters</c> rather than by reading a fabricated count.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            if (!IsShapeResolved)
+            {
+                // Exactly what GetParameters() hands back in this state.
+                return _pendingParameters?.Length ?? 0;
+            }
+
+            return ((long)_outputChannels * _inputChannels * _kernelSize) + _outputChannels;
+        }
+    }
 
     public override bool SupportsTraining => true;
 
@@ -302,6 +294,77 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         // [B, C_out, 1, T_out] -> [B, C_out, T_out]
         return Engine.Reshape(activated,
             new[] { activated.Shape[0], activated.Shape[1], activated.Shape[3] });
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Tape-based autodiff drives parameter updates through the
+        // engine's optimizer integration; manual UpdateParameters is a
+        // legacy hook kept only for API completeness. No-op here — the
+        // tape's Backward pass already accumulated and applied gradients
+        // to _kernels / _biases via the registered trainable parameters.
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        if (!IsShapeResolved)
+        {
+            // Hand back whatever SetParameters deferred, so a save -> load -> save round trip is
+            // LOSSLESS even when no forward has run in between. Returning an empty vector here would
+            // silently drop restored weights for a model that is cloned twice before use. PyTorch has no
+            // equivalent: state_dict() on a lazy module reports uninitialized parameters.
+            if (_pendingParameters is not null) return _pendingParameters.Clone();
+
+            // Caller asked for parameters before first Forward — return
+            // an empty vector that round-trips with SetParameters'
+            // pre-resolved branch below. This matches DenseLayer's
+            // pre-init contract.
+            return new Vector<T>(0);
+        }
+        return Vector<T>.Concatenate(
+            new Vector<T>(_kernels.ToArray()),
+            new Vector<T>(_biases.ToArray()));
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Infer input channels from the parameter layout when the layer
+        // hasn't seen a Forward yet — needed for Clone() paths that
+        // SetParameters(GetParameters()) on a fresh clone before
+        // PredictNoise has run. (C_out * C_in * K) + C_out = params.Length,
+        // solve for C_in.
+        if (!IsShapeResolved)
+        {
+            // DEFER instead of guessing. Inferring inputChannels here also forces a resolution, and the
+            // only length available is a PLACEHOLDER (MinValidInputLength()) rather than the shape the
+            // original layer actually resolved against. The weights then land correctly — a restored
+            // model's flat parameter vector compares bit-identical — while the layer computes a
+            // different function, measured on a MusicSourceSeparator clone as Encoder_0 diverging by
+            // 7.93e-01 on the FIRST layer with 0 of 5892 parameters differing.
+            //
+            // Holding the parameters until the first real Forward keeps the layer fully lazy and
+            // resolves geometry from the ACTUAL input, so a restore reproduces the original exactly.
+            // PyTorch cannot do this at all: nn.Conv1d requires in_channels up front and
+            // load_state_dict refuses a lazy module until a forward has run.
+            // An EMPTY vector carries nothing to defer. GetParameters() returns empty in this state
+            // when no parameters were ever deferred, and ParameterCount now agrees with it, so
+            // SetParameters(GetParameters()) on an un-forwarded clone legitimately round-trips
+            // "nothing yet". Storing that empty vector as pending made the first forward hand it to
+            // ApplyResolvedParameters, which needs the full complement and threw
+            // "Expected 72 parameters, but got 0" -- a clone failing outright because it faithfully
+            // copied a layer that had nothing to copy. Leaving _pendingParameters null lets the
+            // layer initialize normally on first Forward, which is exactly what it would have done
+            // had the clone never happened.
+            if (parameters.Length == 0) return;
+
+            _pendingParameters = parameters.Clone();
+            return;
+        }
+
+        ApplyResolvedParameters(parameters);
     }
 
     /// <summary>Parameters handed to <see cref="SetParameters"/> before the shape was known.</summary>

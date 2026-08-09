@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Components;
 using AiDotNet.Models.Options;
 using AiDotNet.Validation;
@@ -40,30 +40,42 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <summary>Gets or sets T, tasks per meta-iteration. Default 20, the paper's value.</summary>
     public int MetaBatchSize { get; set; } = 20;
 
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.NumMetaIterations"/>
     public int NumMetaIterations { get; set; } = 1000;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.GradientClipThreshold"/>
     public double? GradientClipThreshold { get; set; } = 10.0;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.RandomSeed"/>
     public int? RandomSeed { get => Seed; set => Seed = value; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EvaluationTasks"/>
     public int EvaluationTasks { get; set; } = 100;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EvaluationFrequency"/>
     public int EvaluationFrequency { get; set; } = 100;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EnableCheckpointing"/>
     public bool EnableCheckpointing { get; set; } = false;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.CheckpointFrequency"/>
     public int CheckpointFrequency { get; set; } = 500;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
     public ILossFunction<T>? LossFunction { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
     /// Gets or sets the latent noise width for the implicit posterior generator. Default 128, the paper's
     /// value.
     /// </summary>
-    public int LatentDimension { get; set; } = ImplicitPosteriorGenerator<double>.PaperLatentDimension;
+    public int LatentDimension { get; set; } = SImPaPaperConstants.LatentDimension;
 
     /// <summary>Gets or sets the generator's first hidden width. Default 256, the paper's value.</summary>
-    public int GeneratorFirstHiddenWidth { get; set; } = ImplicitPosteriorGenerator<double>.PaperFirstHiddenWidth;
+    public int GeneratorFirstHiddenWidth { get; set; } = SImPaPaperConstants.FirstHiddenWidth;
 
     /// <summary>Gets or sets the generator's second hidden width. Default 512, the paper's value.</summary>
-    public int GeneratorSecondHiddenWidth { get; set; } = ImplicitPosteriorGenerator<double>.PaperSecondHiddenWidth;
+    public int GeneratorSecondHiddenWidth { get; set; } = SImPaPaperConstants.SecondHiddenWidth;
 
     /// <summary>
     /// Gets or sets the posterior samples drawn per task while META-TRAINING. Default 1, the paper's value.
@@ -88,7 +100,7 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <summary>
     /// Gets or sets the Monte Carlo samples used to train the phi-network. Default 512, the paper's value.
     /// </summary>
-    public int KLMonteCarloSamples { get; set; } = CompressionLemmaKLEstimator<double>.PaperMonteCarloSamples;
+    public int KLMonteCarloSamples { get; set; } = SImPaPaperConstants.MonteCarloSamples;
 
     /// <summary>Gets or sets the ascent steps taken on the compression-lemma objective. Default 32.</summary>
     public int KLEstimatorSteps { get; set; } = 32;

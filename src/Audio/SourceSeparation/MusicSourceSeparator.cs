@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -260,22 +260,42 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             return;
         }
 
-        // Faithful waveform-Demucs (Défossez et al. 2019): L conv encoder blocks — Conv1d(kernel=8,
-        // stride=4)+ReLU then a 1x1 Conv1d that doubles channels feeding a channel-split GLU — an LSTM
+        // Faithful waveform-Demucs (Défossez et al. 2019): L conv encoder blocks — Conv1d(kernel,
+        // stride)+ReLU then a 1x1 Conv1d that doubles channels feeding a channel-split GLU — an LSTM
         // bottleneck, and L mirrored decoder blocks — a 1x1 Conv1d(2*C)+channel-GLU then a transposed
-        // Conv1d(kernel=8, stride=4) upsample (ReLU except the final block) — with U-Net skip
-        // connections wired in PredictCore. Channels double each encoder level (base 8 -> 16). The
-        // final decoder block emits StemCount source channels. Test-scale depth/width (kernel 8 /
-        // stride 4 / padding 2 keeps encoder+decoder lengths aligned for the skip-add: L -> L/4 -> L/16
-        // and back) keeps the invariant suite fast while preserving the paper's architecture — this
-        // replaces the previous Dense->LayerNorm->MHA MLP stub, which was not Demucs and collapsed to a
-        // constant, input-insensitive output (DifferentInputs / GradientFlow failures).
-        const int depth = 2, baseChannels = 8, kernel = 8, stride = 4, padding = 2;
+        // Conv1d(kernel, stride) upsample (ReLU except the final block) — with U-Net skip connections
+        // wired in PredictCore. Channels double each encoder level. The final decoder block emits
+        // StemCount source channels. Padding keeps encoder and decoder lengths aligned for the
+        // skip-add: L -> L/stride -> L/stride^2 and back.
+        //
+        // FROM THE OPTIONS, WITH THE PAPER'S DEFAULTS. These were `const int depth = 2, baseChannels =
+        // 8, ...` with a comment saying the small values "keep the invariant suite fast": a test
+        // constraint fixing a production model's entire capacity, at a size (two levels, eight
+        // channels) with no ability to separate real music. A caller could configure nothing but
+        // StemCount. The paper's six levels at base 64 are the defaults now, and a test that wants a
+        // small network asks for one.
+        int depth = _options.DemucsDepth;
+        int baseChannels = _options.DemucsBaseChannels;
+        int kernel = _options.DemucsKernelSize;
+        int stride = _options.DemucsStride;
+        int padding = _options.DemucsPadding;
+
+        if (depth < 1)
+            throw new InvalidOperationException($"DemucsDepth must be at least 1; got {depth}.");
+        if (baseChannels < 1)
+            throw new InvalidOperationException($"DemucsBaseChannels must be at least 1; got {baseChannels}.");
+        if (kernel < 1)
+            throw new InvalidOperationException($"DemucsKernelSize must be at least 1; got {kernel}.");
+        if (stride < 1)
+            throw new InvalidOperationException($"DemucsStride must be at least 1; got {stride}.");
+        if (padding < 0)
+            throw new InvalidOperationException($"DemucsPadding cannot be negative; got {padding}.");
+
         _demucsDepth = depth;
 
         for (int i = 0; i < depth; i++)
         {
-            int outCh = baseChannels << i; // 8, 16
+            int outCh = baseChannels << i; // base, 2*base, 4*base, ...
             var conv = new Conv1DLayer<T>(outputChannels: outCh, kernelSize: kernel, stride: stride,
                 padding: padding, activation: new AiDotNet.ActivationFunctions.ReLUActivation<T>());
             var gate = new Conv1DLayer<T>(outputChannels: outCh * 2, kernelSize: 1, stride: 1,
@@ -286,14 +306,14 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             Layers.Add(gate);
         }
 
-        int topCh = baseChannels << (depth - 1); // 16
+        int topCh = baseChannels << (depth - 1); // the deepest encoder level's width
         _demucsBottleneck = new LSTMLayer<T>(hiddenSize: topCh);
         Layers.Add(_demucsBottleneck);
 
         for (int i = depth - 1; i >= 0; i--)
         {
-            int inCh = baseChannels << i;                                         // 16, 8
-            int outCh = i == 0 ? _options.StemCount : (baseChannels << (i - 1));  // 8, then StemCount
+            int inCh = baseChannels << i;                                         // mirrors the encoder, deepest first
+            int outCh = i == 0 ? _options.StemCount : (baseChannels << (i - 1));  // last block emits the stems
             var gate = new Conv1DLayer<T>(outputChannels: inCh * 2, kernelSize: 1, stride: 1,
                 padding: 0, activation: new AiDotNet.ActivationFunctions.IdentityActivation<T>());
             var deconv = new Conv1DTransposeLayer<T>(outputChannels: outCh, kernelSize: kernel,
@@ -570,13 +590,48 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
     // Faithful waveform-Demucs forward with U-Net skip connections. A flat layer walk cannot express
     // the skips (encoder output added to the matching decoder input), so the forward is explicit here.
-    private Tensor<T> DemucsForward(Tensor<T> input)
+    private Tensor<T> DemucsForward(Tensor<T> input) => RunDemucs(input, activations: null);
+
+    /// <summary>
+    /// The one waveform-Demucs forward pass, optionally recording each stage into
+    /// <paramref name="activations"/>.
+    /// </summary>
+    /// <param name="input">Any-rank tensor holding a mono waveform; it is flattened to its total length.</param>
+    /// <param name="activations">When non-null, receives a clone of each stage's output.</param>
+    /// <returns>The separated stems as <c>[StemCount, length]</c>.</returns>
+    /// <remarks>
+    /// ONE COPY, because there were two. <c>DemucsForward</c> and
+    /// <see cref="GetNamedLayerActivations"/> restated this body almost token for token -- same
+    /// reshape, same encoder loop, same permute-LSTM-permute bottleneck, same null check with the same
+    /// comment, same decoder loop -- differing only in the <c>activations[...] = x.Clone()</c> lines.
+    /// Two copies of one forward pass diverge: any fix to the shapes or padding had to be made twice
+    /// or the captured activations would describe a network that no longer matched the trained one.
+    /// </remarks>
+    private Tensor<T> RunDemucs(
+        Tensor<T> input,
+        System.Collections.Generic.Dictionary<string, Tensor<T>>? activations)
     {
         var eng = Engine;
 
         // Treat the input as a mono waveform of the given total length: [batch=1, channels=1, length].
         int total = 1;
         for (int d = 0; d < input.Rank; d++) total *= input.Shape[d];
+
+        // Each encoder level divides the time axis by the stride, so a waveform shorter than
+        // stride^depth runs out of samples partway down and the bottleneck sees a zero-length
+        // sequence. Checked here, once, against the depth actually built -- the alternative is a
+        // shape error thrown from inside whichever conv happens to be the one that runs dry.
+        long minimumLength = 1;
+        for (int i = 0; i < _demucsDepth; i++) minimumLength *= _options.DemucsStride;
+        if (total < minimumLength)
+        {
+            throw new ArgumentException(
+                $"The waveform has {total} samples, but a {_demucsDepth}-level Demucs stack at stride " +
+                $"{_options.DemucsStride} needs at least {minimumLength}. Supply longer audio, or build " +
+                "the model with a smaller SourceSeparationOptions.DemucsDepth.",
+                nameof(input));
+        }
+
         var x = eng.Reshape(input, new[] { 1, 1, total });
 
         var skips = new System.Collections.Generic.List<Tensor<T>>(_demucsDepth);
@@ -585,13 +640,19 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             x = _demucsEncConv[i].Forward(x);        // Conv1d(k8,s4) + ReLU -> [1, C, L/4]
             var gated = _demucsEncGate[i].Forward(x); // 1x1 Conv1d -> [1, 2C, L/4]
             x = ChannelGlu(gated);                    // channel-split GLU -> [1, C, L/4]
+            if (activations is not null) activations[$"Encoder_{i}"] = x.Clone();
             skips.Add(x);
         }
 
         // LSTM bottleneck over the time axis: [1, C, T] -> [1, T, C] -> LSTM -> [1, T, C] -> [1, C, T].
         var overTime = eng.TensorPermute(x, new[] { 0, 2, 1 });
-        overTime = _demucsBottleneck!.Forward(overTime);
+        // Non-null whenever the Demucs stack is bound, which is the only path that reaches here;
+        // assert the invariant rather than suppress it, so a binding regression names itself.
+        if (_demucsBottleneck is null)
+            throw new InvalidOperationException("The Demucs LSTM bottleneck has not been bound.");
+        overTime = _demucsBottleneck.Forward(overTime);
         x = eng.TensorPermute(overTime, new[] { 0, 2, 1 });
+        if (activations is not null) activations["Bottleneck"] = x.Clone();
 
         for (int i = 0; i < _demucsDepth; i++)
         {
@@ -599,6 +660,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             var gated = _demucsDecGate[i].Forward(x);          // 1x1 Conv1d -> [1, 2C, T]
             x = ChannelGlu(gated);                             // channel GLU -> [1, C, T]
             x = _demucsDecDeconv[i].Forward(x);                // transposed Conv1d(k8,s4) upsample
+            if (activations is not null) activations[$"Decoder_{i}"] = x.Clone();
         }
 
         // Drop the synthetic batch axis: [1, StemCount, length] -> [StemCount, length].
@@ -636,35 +698,10 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             return base.GetNamedLayerActivations(input);
         }
 
-        var eng = Engine;
-        int total = 1;
-        for (int d = 0; d < input.Rank; d++) total *= input.Shape[d];
-        var x = eng.Reshape(input, new[] { 1, 1, total });
-
-        var skips = new System.Collections.Generic.List<Tensor<T>>(_demucsDepth);
-        for (int i = 0; i < _demucsDepth; i++)
-        {
-            x = _demucsEncConv[i].Forward(x);
-            var gated = _demucsEncGate[i].Forward(x);
-            x = ChannelGlu(gated);
-            activations[$"Encoder_{i}"] = x.Clone();
-            skips.Add(x);
-        }
-
-        var overTime = eng.TensorPermute(x, new[] { 0, 2, 1 });
-        overTime = _demucsBottleneck!.Forward(overTime);
-        x = eng.TensorPermute(overTime, new[] { 0, 2, 1 });
-        activations["Bottleneck"] = x.Clone();
-
-        for (int i = 0; i < _demucsDepth; i++)
-        {
-            x = eng.TensorAdd(x, skips[_demucsDepth - 1 - i]);
-            var gated = _demucsDecGate[i].Forward(x);
-            x = ChannelGlu(gated);
-            x = _demucsDecDeconv[i].Forward(x);
-            activations[$"Decoder_{i}"] = x.Clone();
-        }
-
+        // The SAME forward Predict and Train run, asked to record as it goes -- see RunDemucs. The
+        // activations cannot describe a different network than the one being trained if there is only
+        // one network to describe.
+        RunDemucs(input, activations);
         return activations;
     }
 
@@ -822,8 +859,18 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         // The base deserializer has just replaced Layers with the restored instances.
         // Rebind the explicit Demucs forward to those instances so inference and
         // training consume the restored weights rather than constructor-fresh layers.
-        if (_useNativeMode)
-            TryBindDemucsTopologyFromLayers();
+        // THE RETURN VALUE DECIDES WHETHER THE MODEL IS USABLE, so discarding it defeated the point
+        // of returning it. On failure the method has already cleared every typed list and set
+        // _demucsDepth to 0, so HasBoundDemucsTopology goes false, PredictCore silently routes to
+        // base.PredictCore, and the caller gets separations from a generic forward pass rather than
+        // Demucs -- from a model they just deserialized and have every reason to believe is intact.
+        if (_useNativeMode && !TryBindDemucsTopologyFromLayers())
+        {
+            throw new InvalidOperationException(
+                "Deserialization restored the layer list, but it does not match the Demucs topology, so " +
+                "the explicit Demucs forward could not be rebound. Continuing would silently fall back " +
+                "to a generic forward pass and return separations that are not Demucs's.");
+        }
     }
 
     /// <summary>
@@ -867,6 +914,16 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
     private SourceSeparationResult<T> SeparateWithNativeNetwork(Tensor<T> audio)
     {
+        // DEMUCS IS A WAVEFORM MODEL, so it does not belong in the spectrogram-masking pipeline below.
+        // Its forward returns [StemCount, length] -- the separated audio itself, not masks over an STFT
+        // magnitude. Routing it through the mask path fed a rank-2 tensor to ApplyMasksAndReconstruct,
+        // whose branches test for rank >= 4 and rank >= 3; both fail, `mask` stays at its 0 initializer,
+        // and EVERY stem reconstructs as silence. Nothing throws, and the result object is well-formed.
+        if (HasBoundDemucsTopology)
+        {
+            return SeparateWithDemucs(audio);
+        }
+
         var stft = _stft.Forward(audio);
         var magnitude = ComputeMagnitude(stft);
         var phase = ComputePhase(stft);
@@ -884,6 +941,54 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         masks = PostprocessOutput(masks);
 
         return ApplyMasksAndReconstruct(audio, stft, magnitude, phase, masks);
+    }
+
+    /// <summary>
+    /// Separates in the waveform domain, the way Demucs is defined (Defossez et al. 2019): the network
+    /// maps the mixture waveform straight to one waveform per stem, with no STFT anywhere in the path.
+    /// </summary>
+    private SourceSeparationResult<T> SeparateWithDemucs(Tensor<T> audio)
+    {
+        // [StemCount, length]. The row order matches SupportedSources, which is the order the final
+        // decoder block's output channels were trained against.
+        var stems = DemucsForward(audio);
+
+        int stemRows = stems.Shape[0];
+        int stemLength = stems.Shape[1];
+        var sourceNames = SupportedSources;
+
+        var sources = new Dictionary<string, Tensor<T>>();
+        for (int stem = 0; stem < NumStems && stem < sourceNames.Count; stem++)
+        {
+            var waveform = new Tensor<T>([stemLength]);
+            if (stem < stemRows)
+            {
+                for (int i = 0; i < stemLength; i++)
+                {
+                    waveform[i] = stems[stem, i];
+                }
+            }
+            else
+            {
+                // Fewer output channels than named stems means the decoder was built for a different
+                // StemCount than the model is being asked for. Silence would look like a separation
+                // that simply found nothing in this stem, which is the failure this method exists to
+                // stop being silent about.
+                throw new InvalidOperationException(
+                    $"The Demucs decoder emits {stemRows} stem channels but {NumStems} stems were " +
+                    $"requested. Rebuild the model with StemCount = {NumStems}.");
+            }
+
+            sources[sourceNames[stem]] = waveform;
+        }
+
+        return new SourceSeparationResult<T>
+        {
+            Sources = sources,
+            OriginalMix = audio,
+            SampleRate = _options.SampleRate,
+            Duration = (double)audio.Length / _options.SampleRate
+        };
     }
 
     private SourceSeparationResult<T> SeparateSpectral(Tensor<T> audio)

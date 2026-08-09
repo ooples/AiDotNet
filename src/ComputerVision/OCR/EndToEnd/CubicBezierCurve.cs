@@ -264,10 +264,8 @@ public readonly struct CubicBezierCurve<T>
 
             for (int r = col + 1; r < n; r++)
             {
-                // No exact-zero shortcut on `factor`: a magnitude test cannot stand in for one
-                // (a 1e-300 factor against a 1e300 pivot row still contributes), and at 4x4 the
-                // skip saves five multiply-subtracts. Always eliminate.
                 double factor = m[r, col] / m[col, col];
+                if (factor == 0.0) continue;
                 for (int c = col; c <= n; c++) m[r, c] -= factor * m[col, c];
             }
         }

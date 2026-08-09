@@ -45,15 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 2, 4, 2, 0, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-// Roles come from this layer's own guard in OnFirstForward - "requires rank-3 [B, C, T] input" - so
-// rank 3 is the ONLY declared form and Batch is NOT optional: a rank-2 input is rejected outright,
-// and BatchOptional would advertise a form the layer throws on.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
+public partial class Conv1DTransposeLayer<T> : LayerBase<T>
 {
     private int _inputChannels;
     private readonly int _outputChannels;
@@ -76,6 +68,26 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
     /// or a pending flag, so MusicSourceSeparator failed it the moment the count became honest.
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
+
+    /// <remarks>
+    /// Mirrors <see cref="GetParameters"/>, which returns an EMPTY vector until the shape resolves.
+    /// This guessed <c>inputChannels = 1</c> in that state and reported a full parameter total for
+    /// weights that did not exist, so the two surfaces disagreed for every unresolved instance.
+    /// MusicSourceSeparator is the visible case — its Demucs decoder is built from these — but the
+    /// damage is not limited to the reported number: a parent slices the flat vector by each
+    /// child's ParameterCount, so a child claiming parameters it cannot supply misaligns every
+    /// slice after it during a restore. Same correction as <see cref="Conv1DLayer{T}"/> and
+    /// <see cref="ConvolutionalLayer{T}"/>; "not sized yet" is reported by
+    /// <c>HasUninitializedParameters</c>, never by a fabricated count.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            if (!IsShapeResolved) return 0L;
+            return ((long)_inputChannels * _outputChannels * _kernelSize) + _outputChannels;
+        }
+    }
 
     public override bool SupportsTraining => true;
 
@@ -215,51 +227,6 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
         return 1 + (deficit + _stride - 1) / _stride;
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Hand-written because the time axis follows <see cref="ComputeOutputLength"/>, which is the
-    /// INVERSE of a sliding window: <c>T_out = (T-1)*stride - 2*padding + dilation*(K-1) +
-    /// outputPadding + 1</c>. <c>Window</c> models the forward direction only, so it cannot express
-    /// this - a transposed convolution GROWS its axis by roughly <c>stride</c>, and reading the
-    /// window formula backwards would understate the output by that whole factor.
-    /// </para>
-    /// <para>
-    /// Rewriting the formula as <c>T_out = T*stride + C</c> with
-    /// <c>C = dilation*(K-1) + outputPadding + 1 - stride - 2*padding</c> shows the one case that IS
-    /// in the vocabulary: when <c>C</c> is zero the layer is exactly <c>Scaled(Time, stride)</c>.
-    /// That is not an edge case - it is the configuration HiFi-GAN uses
-    /// (<c>kernel = 2*rate, stride = rate, padding = rate/2</c>), so the vocoder stacks this
-    /// annotation is written for resolve their lengths precisely rather than stopping at Unknown.
-    /// When <c>C</c> is non-zero the length is a genuine affine offset and no relation carries it,
-    /// so it is declared Unknown WITH the offset in the reason rather than approximated.
-    /// </para>
-    /// <para>
-    /// The channel count is <c>Fixed</c> from <c>_outputChannels</c> - that is the one output axis
-    /// <c>OnFirstForward</c> pins: <c>ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels,
-    /// LayerShape.Dynamic })</c>. The <c>Dynamic</c> on the second axis there is the same statement
-    /// this contract makes, expressed as a relation instead of a placeholder.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 3) return null;
-
-        int offset = _dilation * (_kernelSize - 1) + _outputPadding + 1 - _stride - 2 * _padding;
-        var time = offset == 0
-            ? AxisRelation.Scaled(TensorAxis.Time, _stride)
-            : AxisRelation.Unknown(
-                $"Transposed-convolution length is T*{_stride} + {offset}; an affine offset on a "
-                + "scaled axis is not in the relation vocabulary.");
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
-            new OutputAxisContract(TensorAxis.Time, time),
-        };
-    }
-
     /// <inheritdoc/>
     protected override void OnFirstForward(Tensor<T> input)
     {
@@ -318,6 +285,79 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>, IShapeContract
         // [B, C_out, 1, T_out] -> [B, C_out, T_out]
         return Engine.Reshape(activated,
             new[] { activated.Shape[0], activated.Shape[1], activated.Shape[3] });
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Tape autodiff drives updates through the registered trainable parameters;
+        // this manual hook is a no-op (parity with Conv1DLayer / DeconvolutionalLayer).
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        if (!IsShapeResolved)
+        {
+            return new Vector<T>(0);
+        }
+        return Vector<T>.Concatenate(
+            new Vector<T>(_kernels.ToArray()),
+            new Vector<T>(_biases.ToArray()));
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (!IsShapeResolved)
+        {
+            // Nothing to restore. GetParameters() returns an empty vector while the shape is
+            // deferred, and ParameterCount now agrees with it, so an empty vector here is the
+            // faithful round-trip of "this layer had nothing to save yet" -- not a malformed
+            // payload. Inferring C_in from a length of 0 is impossible, and throwing made a clone
+            // of an un-forwarded model fail outright ("Cannot infer inputChannels ... from 0
+            // parameters"). The layer stays deferred and sizes itself on the first forward,
+            // exactly as it would have without the round-trip.
+            if (parameters.Length == 0) return;
+
+            // Layout: kernels [C_in, C_out, 1, K] + biases [C_out]. Solve for C_in.
+            int candidateInputChannels = (parameters.Length - _outputChannels) /
+                                         (_outputChannels * _kernelSize);
+            if (candidateInputChannels <= 0
+                || candidateInputChannels * _outputChannels * _kernelSize + _outputChannels != parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Cannot infer inputChannels for Conv1DTransposeLayer from {parameters.Length} parameters " +
+                    $"(outputChannels={_outputChannels}, kernelSize={_kernelSize}).");
+            }
+            _inputChannels = candidateInputChannels;
+            // The placeholder MUST be rank-3 [B, C, T]: ResolveFromShape runs the normal
+            // first-forward resolution and OnFirstForward rejects anything that is not rank-3.
+            // Passing the rank-2 [C, T] shape (the batch axis was omitted) made every Clone /
+            // Deserialize path that reaches SetParameters before the first forward throw
+            // "Conv1DTransposeLayer requires rank-3 [B, C, T] input; got rank 2" — which is what
+            // broke Serialize_Deserialize_ShouldPreserveBehavior.
+            ResolveFromShape(new[] { 1, candidateInputChannels, MinValidInputLength() });
+            _kernels = AllocateLazyWeight([candidateInputChannels, _outputChannels, 1, _kernelSize]);
+            _biases = AllocateLazyWeight([_outputChannels]);
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
+
+        int expectedLength = _kernels.Length + _biases.Length;
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedLength} parameters, but got {parameters.Length}");
+        }
+
+        // In-place copy preserves the persistent-tensor identities registered above
+        // (same pattern as Conv1DLayer.SetParameters).
+        parameters.AsSpan().Slice(0, _kernels.Length).CopyTo(_kernels.Data.Span);
+        parameters.AsSpan().Slice(_kernels.Length, _biases.Length).CopyTo(_biases.Data.Span);
+
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <inheritdoc/>

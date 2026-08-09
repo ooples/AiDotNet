@@ -197,6 +197,32 @@ public class CreditRuleFacadeTrainingTests
         // therefore zero gain against any positive requirement.
         double headroom = 1.0 - beforeAcc;
         double requiredGain = Math.Min(0.10, headroom);
+
+        // A ZERO REQUIREMENT IS NOT A REQUIREMENT. At a baseline of 1.000 the headroom is 0.0, so
+        // the assertion below degenerated to afterAcc >= beforeAcc -- which an UNTRAINED model
+        // handed straight back satisfies at 1.000 >= 1.000. That is precisely the regression the
+        // comment above claims this still catches, and the comment was wrong: the requirement is
+        // positive only while the baseline is below the ceiling. This task has already been
+        // observed at 0.933, so 1.000 is one seed away.
+        //
+        // At the ceiling there is no gain left to demand, so the contract has to change rather than
+        // shrink: the trained model must REACH the ceiling, and reaching it from an untrained start
+        // is the thing being tested. A facade returning the untrained model fails whenever the
+        // baseline is below 1.0, and when the baseline is already 1.0 it must at least not regress
+        // -- which is now asserted separately rather than being the whole test.
+        if (requiredGain <= 0.0)
+        {
+            Assert.True(beforeAcc >= 1.0,
+                $"{rule}: requiredGain collapsed to zero at a baseline of {beforeAcc:F3}, which is "
+                + "below the ceiling. The gain requirement must be positive whenever headroom exists.");
+
+            Assert.True(afterAcc >= 1.0,
+                $"{rule}: the baseline was already perfect ({beforeAcc:F3}) and training made it "
+                + $"WORSE (after={afterAcc:F3}). No gain can be demanded at the ceiling, but a "
+                + "regression away from it is still a failure.");
+            return;
+        }
+
         Assert.True(afterAcc >= beforeAcc + requiredGain,
             $"{rule}: accuracy did not improve enough (before={beforeAcc:F3}, after={afterAcc:F3}, "
             + $"required gain={requiredGain:F3} of available headroom={headroom:F3}).");

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
@@ -100,6 +100,16 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
         if (x.Rows != y.Length)
         {
             throw new ArgumentException("Number of samples in X must match length of y.");
+        }
+
+        // A FEATURELESS MATRIX CANNOT TRAIN A TREE. With NumFeatures = 0 every rule in
+        // CalculateMaxFeatures returns 0 or 1 -- Sqrt and Log2 of 0, and All -- so the forest was
+        // built on a feature count no split can use, and the failure appeared far from its cause.
+        if (x.Columns == 0)
+        {
+            throw new ArgumentException(
+                "Training matrix has no feature columns; a decision tree cannot split on zero "
+                + "features.", nameof(x));
         }
 
         NumFeatures = x.Columns;
@@ -208,7 +218,10 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
         return Options.MaxFeatures switch
         {
             MaxFeatureSelection.Sqrt => (int)Math.Ceiling(Math.Sqrt(NumFeatures)),
-            MaxFeatureSelection.Log2 => (int)Math.Ceiling(Math.Log(NumFeatures, 2)),
+            // Math.Max(1, ...): Log2(1) is 0, and a tree cannot split on zero features. The
+            // explicit-count path above already rejects a non-positive value; the rule path
+            // needs the same floor rather than passing 0 down to every tree.
+            MaxFeatureSelection.Log2 => Math.Max(1, (int)Math.Ceiling(Math.Log(NumFeatures, 2))),
             MaxFeatureSelection.All => NumFeatures,
             _ => throw new InvalidOperationException(
                 $"Unhandled {nameof(MaxFeatureSelection)} value '{Options.MaxFeatures}'.")
@@ -273,6 +286,9 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             MinSamplesSplit = Options.MinSamplesSplit,
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
+            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
+            // silently retrained the clone by the rule instead of the caller's explicit count.
+            MaxFeatureCount = Options.MaxFeatureCount,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,
@@ -290,6 +306,9 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             MinSamplesSplit = Options.MinSamplesSplit,
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
+            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
+            // silently retrained the clone by the rule instead of the caller's explicit count.
+            MaxFeatureCount = Options.MaxFeatureCount,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,

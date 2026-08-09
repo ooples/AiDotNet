@@ -1,7 +1,4 @@
 ﻿using AiDotNet.ActivationFunctions;
-// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
-// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
-using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 
@@ -26,42 +23,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-// Both branches are FullyConnectedLayer<T>(outputDim) over the SAME input, and ForwardTraced combines
-// them elementwise (`Engine.TensorMultiply(transformed, gate)`), so the output shape is just the
-// fully-connected one - the gate cannot change it, only scale it. That fixes the accepted ranks to the
-// two the inner layers handle: rank 1, and rank 2 with a leading batch. OnFirstForward's
-// `_inputDim = input.Shape[rank - 1]` confirms the LAST axis is the feature axis.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>, IShapeContract
+public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// HAND-WRITTEN because the output width is configuration: <c>_outputDim</c>, the constructor
-    /// argument that both inner projections are built with and that OnFirstForward hands to
-    /// <c>ResolveShapes(new[] { _inputDim }, new[] { _outputDim })</c>.
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (_outputDim <= 0) return null;
-
-        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputDim));
-
-        return inputRank switch
-        {
-            1 => new[] { features },
-            2 => new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                features,
-            },
-            _ => null,
-        };
-    }
-
     private int _inputDim;
     private readonly int _outputDim;
 
@@ -78,6 +41,9 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>, IShapeCont
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override long ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
 
     /// <summary>
     /// Initializes a Gated Feature Learning Unit.
@@ -170,4 +136,17 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>, IShapeCont
         _gateTransform.ResetState();
     }
 
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var featureParams = _featureTransform.GetParameters();
+        var gateParams = _gateTransform.GetParameters();
+        var result = new Vector<T>(featureParams.Length + gateParams.Length);
+        int offset = 0;
+        for (int i = 0; i < featureParams.Length; i++)
+            result[offset++] = featureParams[i];
+        for (int i = 0; i < gateParams.Length; i++)
+            result[offset++] = gateParams[i];
+        return result;
+    }
 }

@@ -334,8 +334,18 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         var dummy = new Tensor<T>([3, ImageSize, ImageSize]);
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
+        // The warm-up is genuinely best-effort -- a real forward failure surfaces again on the actual
+        // Train/Predict call -- but a bare `catch { }` also swallowed the diagnosis. When shapes fail to
+        // resolve here, the later failure carries no hint that the warm-up already saw the same problem,
+        // so the exception is reported rather than discarded. It is still not rethrown: the caller has
+        // not asked to run the model yet.
         try { _ = Forward(dummy); }
-        catch { /* best-effort; a real forward failure surfaces on the actual Train/Predict */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"{nameof(UDOP<T>)}: lazy shape resolution failed on a {ImageSize}x{ImageSize} warm-up "
+                + $"pass; shapes stay unresolved until the first real Train/Predict. {ex}");
+        }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 

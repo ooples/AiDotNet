@@ -74,6 +74,16 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     private const double DEFAULT_LEARNING_RATE = 0.0003;
 
     /// <summary>
+    /// The step size below which the inner solve gives up rather than halving further.
+    /// </summary>
+    /// <remarks>
+    /// A step this small moves the iterate by less than double precision can represent against the
+    /// weights themselves, so continuing to halve only spins. Reaching it means no valid M-matrix
+    /// step exists from the current point, and the solve stops there as unconverged.
+    /// </remarks>
+    private const double MIN_LEARNING_RATE = 1e-16;
+
+    /// <summary>
     /// Adam optimizer beta1 (first moment decay).
     /// </summary>
     private const double ADAM_BETA1 = 0.99;
@@ -109,7 +119,18 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
     private readonly double[] _sValues;
     private readonly int? _configuredMaxIterations;
-    private double _learningRate;
+
+    /// <summary>
+    /// The caller's learning rate, never written after construction.
+    /// </summary>
+    /// <remarks>
+    /// The step size DECAYS during a run: every M-matrix domain violation halves it. That decay has
+    /// to live in a per-run local, not in this field. Held here, a second DiscoverStructure call on
+    /// the same instance started from whatever the first call decayed it to -- possibly 1e-16 -- so
+    /// the same model object returned a different graph for identical data.
+    /// </remarks>
+    private readonly double _configuredLearningRate;
+
     private int _lastIterations;
     private double _lastH;
     private double _lastLoss;
@@ -138,8 +159,9 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
         _sValues = [1.0, 0.9, 0.8, 0.7, 0.6];
         _configuredMaxIterations = options?.MaxIterations;
-        _learningRate = options?.LearningRate ?? DEFAULT_LEARNING_RATE;
-        if (double.IsNaN(_learningRate) || double.IsInfinity(_learningRate) || _learningRate <= 0)
+        _configuredLearningRate = options?.LearningRate ?? DEFAULT_LEARNING_RATE;
+        if (double.IsNaN(_configuredLearningRate) || double.IsInfinity(_configuredLearningRate)
+            || _configuredLearningRate <= 0)
             throw new ArgumentException("LearningRate must be a positive finite value.", nameof(options));
     }
 
@@ -159,16 +181,28 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
         int T = Math.Min(DEFAULT_T, _sValues.Length);
 
+        // Per-RUN step size. It decays across the outer loop as inner solves hit the M-matrix
+        // boundary, which is intended within one run, and it starts from the configured value on
+        // every call, which is what makes repeated calls on one instance reproducible.
+        double learningRate = _configuredLearningRate;
+
         for (int t = 0; t < T; t++)
         {
             double s = _sValues[t];
+            // DEVIATION, stated explicitly: CausalDiscoveryOptions.MaxIterations documents an OUTER
+            // iteration budget, and the other continuous-optimization algorithms honour that. DAGMA
+            // fixes its outer loop at DEFAULT_T = 5 central-path steps -- that count is the schedule
+            // in _sValues, not a budget a caller can spend -- so the option is applied to the inner
+            // Adam loop instead, as a CAP on the reference's own inner counts rather than a target.
+            // Consequence to be aware of: MaxIterations = 100 permits up to 5 x 100 = 500 Adam steps
+            // in total, not 100.
             int defaultInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
             int maxInner = _configuredMaxIterations.HasValue
                 ? Math.Min(defaultInner, _configuredMaxIterations.Value)
                 : defaultInner;
 
             int actualIter;
-            (W, actualIter) = SolveInnerProblem(data, W, mu, s, d, maxInner);
+            (W, actualIter) = SolveInnerProblem(data, W, mu, s, d, maxInner, ref learningRate);
 
             mu *= DEFAULT_MU_FACTOR;
             _lastIterations += actualIter;
@@ -189,7 +223,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     /// Solves the inner optimization problem using Adam optimizer.
     /// Minimizes: score(W) + mu * h(W, s)
     /// </summary>
-    private (Matrix<T> W, int ActualIterations) SolveInnerProblem(Matrix<T> X, Matrix<T> W, double mu, double s, int d, int maxIter)
+    private (Matrix<T> W, int ActualIterations) SolveInnerProblem(Matrix<T> X, Matrix<T> W, double mu, double s, int d, int maxIter, ref double learningRate)
     {
         // Flatten W to double[] for Adam state management
         int vecLen = d * d;
@@ -239,7 +273,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                 double mHat = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
                 double vHat = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
 
-                w[i] -= _learningRate * mHat / (Math.Sqrt(vHat) + 1e-8);
+                w[i] -= learningRate * mHat / (Math.Sqrt(vHat) + 1e-8);
             }
 
             // Zero diagonal
@@ -265,25 +299,61 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             var invCheck = InvertMatrix(checkM, d);
             if (invCheck is null || HasNegativeEntry(invCheck, d))
             {
-                // Stepped outside M-matrix domain — halve learning rate and retry
-                double tempLr = _learningRate;
-                // Undo step
-                for (int i = 0; i < vecLen; i++)
+                // Stepped outside the M-matrix domain. RETRY UNTIL THE STEP IS VALID, rather than
+                // halving once and hoping: the single replacement step was never itself checked, so
+                // if it also landed outside the domain the next iteration computed a log-determinant
+                // on an invalid matrix and fell through to the fallback gradient.
+                //
+                // Each attempt restarts from the last VALID weights, which is why the undo is inside
+                // the loop -- undoing a step taken at one rate and redoing it at another only lands
+                // back on the same point if the rate used for the undo is the rate that took it.
+                bool recovered = false;
+                double appliedRate = learningRate;
+
+                while (learningRate >= MIN_LEARNING_RATE)
                 {
-                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
-                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-                    w[i] += tempLr * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                    // Undo whatever rate produced the current (invalid) position.
+                    for (int i = 0; i < vecLen; i++)
+                    {
+                        double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                        double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                        w[i] += appliedRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                    }
+
+                    learningRate *= 0.5;
+                    if (learningRate < MIN_LEARNING_RATE) break;
+
+                    for (int i = 0; i < vecLen; i++)
+                    {
+                        double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                        double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                        w[i] -= learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                    }
+                    for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
+                    appliedRate = learningRate;
+
+                    var retryW = UnflattenMatrix(w, d);
+                    var retryM = new Matrix<T>(d, d);
+                    for (int ci = 0; ci < d; ci++)
+                    {
+                        retryM[ci, ci] = NumOps.FromDouble(s);
+                        for (int cj = 0; cj < d; cj++)
+                            retryM[ci, cj] = NumOps.Subtract(retryM[ci, cj],
+                                NumOps.Multiply(retryW[ci, cj], retryW[ci, cj]));
+                    }
+
+                    var retryInv = InvertMatrix(retryM, d);
+                    if (retryInv is not null && !HasNegativeEntry(retryInv, d))
+                    {
+                        recovered = true;
+                        break;
+                    }
                 }
-                _learningRate *= 0.5;
-                if (_learningRate < 1e-16) break;
-                // Redo with smaller step
-                for (int i = 0; i < vecLen; i++)
-                {
-                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
-                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-                    w[i] -= _learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
-                }
-                for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
+
+                // The rate floor was reached with no valid step available. The last undo left w on
+                // the previous valid iterate, so the solve stops there as unconverged rather than
+                // continuing from a point outside the domain.
+                if (!recovered) break;
             }
 
             // Convergence check at checkpoint intervals

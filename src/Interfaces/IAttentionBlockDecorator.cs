@@ -1,4 +1,4 @@
-namespace AiDotNet.Interfaces;
+﻿namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// A layer that WRAPS an attention block, adding something to its output without replacing how the

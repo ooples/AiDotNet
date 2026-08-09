@@ -91,7 +91,15 @@ public class TTVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new TTVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // TTVSR (Liu et al., CVPR 2022) trains with Adam at 2e-4, which TTVSROptions.LearningRate
+        // already carried as its default -- but building the optimizer bare ignored it and ran on
+        // AdamW's 1e-3, and Train() then dropped the optimizer entirely on the two-argument
+        // TrainWithTape overload.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

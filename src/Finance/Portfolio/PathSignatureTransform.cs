@@ -118,17 +118,25 @@ public class PathSignatureTransform<T>
         var running = new double[dim];
         var second = _level == 2 ? new double[dim * dim] : Array.Empty<double>();
 
+        // The step's increments are computed ONCE per step and reused. The inner j loop previously
+        // recomputed dj for every i, so each step made 2 * dim^2 NumOps.ToDouble calls where 2 * dim
+        // suffice. The transform runs per window over an asset panel, so this is a hot path.
+        var increment = new double[dim];
+
         for (int k = 1; k < steps; k++)
         {
             for (int i = 0; i < dim; i++)
+                increment[i] = NumOps.ToDouble(path[(k * dim) + i]) - NumOps.ToDouble(path[((k - 1) * dim) + i]);
+
+            for (int i = 0; i < dim; i++)
             {
-                double di = NumOps.ToDouble(path[(k * dim) + i]) - NumOps.ToDouble(path[((k - 1) * dim) + i]);
+                double di = increment[i];
 
                 if (_level == 2)
                 {
                     for (int j = 0; j < dim; j++)
                     {
-                        double dj = NumOps.ToDouble(path[(k * dim) + j]) - NumOps.ToDouble(path[((k - 1) * dim) + j]);
+                        double dj = increment[j];
                         // running[i] is X_i at the left endpoint, relative to the path's start.
                         second[(i * dim) + j] += (running[i] * dj) + (0.5 * di * dj);
                     }

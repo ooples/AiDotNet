@@ -291,20 +291,35 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(learningRate));
 
         SetAdjacencyMatrix(adjacencyMatrix);
+
+        // The mask is applied to the LOSS, not to the labels.
+        //
+        // Zeroing a held-out node's one-hot row does not hold it out. Under this network's default
+        // CrossEntropyWithLogitsLoss the gradient of an all-zero target row is
+        // softmax(logits) - 0 = softmax(logits), which is non-zero: it drives every logit of every
+        // held-out node downward on every step. That is worse than no signal, because it is a
+        // consistent wrong one. MaskedRowLoss instead selects the training rows, so an excluded node
+        // is not on the tape at all and its gradient is exactly zero -- matching what the older
+        // hand-written ComputeLossGradient achieved with its `continue`.
+        //
+        // The forward pass still runs over the whole graph, which is the point of transductive
+        // training: attention over a held-out node's neighbourhood is how the training nodes see it.
         Tensor<T> trainingLabels = labels;
+        LossFunctionBase<T>? maskedLoss = null;
         if (trainMask is not null)
         {
             if (labels.Rank < 2 || trainMask.Length != labels.Shape[0])
                 throw new ArgumentException("The training mask must contain one entry per labeled node.", nameof(trainMask));
 
-            trainingLabels = labels.Clone();
-            int valuesPerNode = labels.Length / labels.Shape[0];
-            for (int node = 0; node < trainMask.Length; node++)
+            if (_lossFunction is not LossFunctionBase<T> maskableLoss)
             {
-                if (trainMask[node]) continue;
-                for (int i = 0; i < valuesPerNode; i++)
-                    trainingLabels.SetFlat(node * valuesPerNode + i, NumOps.Zero);
+                throw new InvalidOperationException(
+                    "Masked graph training needs a loss derived from LossFunctionBase<T> so the held-out " +
+                    $"rows can be excluded from the tape; '{_lossFunction.GetType().Name}' does not derive " +
+                    "from it. Train without a mask, or supply a loss that does.");
             }
+
+            maskedLoss = new MaskedRowLoss<T>(maskableLoss, trainMask);
         }
 
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> trainingOptimizer =
@@ -318,17 +333,34 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
                         UseAMSGrad = false,
                     });
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        // Swapped for the duration of the run and restored unconditionally: TrainWithTape reads the
+        // base LossFunction field, and leaving a mask-bound loss installed afterwards would silently
+        // apply this call's node split to every later Predict-time loss evaluation and to any
+        // subsequent training on a different mask.
+        var originalLoss = LossFunction;
+        if (maskedLoss is not null)
         {
-            SetTrainingMode(true);
-            try
+            LossFunction = maskedLoss;
+        }
+
+        try
+        {
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                TrainWithTape(nodeFeatures, trainingLabels, trainingOptimizer);
+                SetTrainingMode(true);
+                try
+                {
+                    TrainWithTape(nodeFeatures, trainingLabels, trainingOptimizer);
+                }
+                finally
+                {
+                    SetTrainingMode(false);
+                }
             }
-            finally
-            {
-                SetTrainingMode(false);
-            }
+        }
+        finally
+        {
+            LossFunction = originalLoss;
         }
     }
 
@@ -482,6 +514,23 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
             count += (int)layer.ParameterCount;
         }
         return count;
+    }
+
+    /// <summary>
+    /// Gets all parameters as a vector.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                allParams.Add(layerParams[i]);
+            }
+        }
+        return new Vector<T>([.. allParams]);
     }
 
     #region LoRA Fine-Tuning Support

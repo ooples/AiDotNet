@@ -36,10 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
-// Adds noise to values; shape is never touched, at any rank.
-[ElementWiseShape(Note = "Adds Gaussian noise during training. Shape untouched at any rank.")]
-[AutoParameters]
-public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
+public partial class GaussianNoiseLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The mean (average value) of the Gaussian noise distribution.
@@ -301,6 +298,59 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
         // Use Engine to generate Gaussian noise in a vectorized manner
         var noiseVector = Engine.GenerateGaussianNoise(new Tensor<T>(shape).Length, _mean, _standardDeviation);
         return new Tensor<T>(shape, noiseVector);
+    }
+
+    /// <summary>
+    /// Updates the parameters of the layer based on the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is a required override from the base class, but the Gaussian noise layer has no
+    /// trainable parameters to update, so it performs no operation.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method does nothing because noise layers have no adjustable weights.
+    /// 
+    /// Unlike most layers (like convolutional or fully connected layers):
+    /// - Gaussian noise layers don't have weights or biases to learn
+    /// - They just add random noise based on fixed settings
+    /// - There's nothing to update during training
+    /// 
+    /// This method exists only to fulfill the requirements of the base layer class.
+    /// The noise layer influences the network by making training more robust,
+    /// not by adjusting internal parameters.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // No parameters to update for this layer
+    }
+
+    /// <summary>
+    /// Gets the trainable parameters of the layer.
+    /// </summary>
+    /// <returns>
+    /// An empty vector since this layer has no trainable parameters.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method is a required override from the base class, but the Gaussian noise layer has no
+    /// trainable parameters to retrieve, so it returns an empty vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns an empty list because noise layers have no learnable values.
+    /// 
+    /// Unlike layers with weights and biases:
+    /// - Gaussian noise layers don't have any parameters that change during training
+    /// - They perform a fixed operation (adding noise) that doesn't involve learning
+    /// - There are no values to save when storing a trained model
+    /// 
+    /// This method returns an empty vector, indicating there are no parameters to collect.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // GaussianNoiseLayer has no trainable parameters
+        return Vector<T>.Empty();
     }
 
     /// <summary>

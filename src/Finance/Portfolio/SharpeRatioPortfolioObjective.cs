@@ -49,6 +49,19 @@ public class SharpeRatioPortfolioObjective<T>
     public const double MeanReturnFloor = 1e-12;
 
     /// <summary>
+    /// The loss floor assigned to a portfolio whose mean return is not positive.
+    /// </summary>
+    /// <remarks>
+    /// Chosen to exceed any loss a profitable portfolio can reach. The profitable branch returns
+    /// <c>-ln(mu) + ln(sigma)</c>; with <c>mu</c> above zero and <c>sigma</c> floored at
+    /// <see cref="MeanReturnFloor"/>, that stays well inside +/-100 for every input a return series
+    /// can produce. Adding <c>-mean</c> on top keeps losing portfolios ordered among themselves by
+    /// how far under water they are, so an optimizer still has a gradient to follow between two bad
+    /// candidates.
+    /// </remarks>
+    public const double LosingPortfolioPenalty = 1e3;
+
+    /// <summary>
     /// Mean and (population) standard deviation of a portfolio return series.
     /// </summary>
     public (double Mean, double Volatility) Moments(double[] portfolioReturns)
@@ -96,14 +109,29 @@ public class SharpeRatioPortfolioObjective<T>
     {
         var (mean, volatility) = Moments(portfolioReturns);
 
-        double safeMean = Math.Max(mean, MeanReturnFloor);
+        // A NON-POSITIVE mean is its own case, not a floored one. Flooring both terms with the same
+        // constant destroyed the ordering this objective documents: a degenerate losing series with
+        // mean = -0.01 and volatility = 1e-15 collapsed to -ln(1e-12) + ln(1e-12) = 0, while an
+        // honest profitable series with mean = 0.01 and volatility = 0.02 scored about 0.69. Minimizing
+        // the objective therefore PREFERRED the losing portfolio.
+        //
+        // A losing portfolio now returns a large finite penalty that no volatility term can offset,
+        // which is what "a losing portfolio scores worse than any profitable one" requires. Finite
+        // rather than infinity so an optimizer can still compare two losing candidates by how far
+        // under water they are.
+        if (mean <= 0.0)
+        {
+            return LosingPortfolioPenalty - mean;
+        }
 
-        // Zero volatility would send ln(sigma) to -infinity. Floor it on the same principle: a
-        // degenerate series must not produce a non-finite loss.
+        // Zero volatility would send ln(sigma) to -infinity. Floor it so a degenerate series cannot
+        // produce a non-finite loss. Only reachable now for a PROFITABLE portfolio, where the mean
+        // term is already bounded.
         double safeVolatility = Math.Max(volatility, MeanReturnFloor);
 
-        return -Math.Log(safeMean) + Math.Log(safeVolatility);
+        return -Math.Log(mean) + Math.Log(safeVolatility);
     }
+
 
     /// <summary>
     /// Portfolio return series for a fixed allocation: <c>r_pt = sum_i w_i * r_it</c>.

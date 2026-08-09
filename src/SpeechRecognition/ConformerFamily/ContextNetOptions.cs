@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
@@ -20,6 +20,12 @@ public class ContextNetOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
+        // below; Seed is not declared here, so it was silently dropped and a copied configuration
+        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
+        // the most to diagnose, because the two configurations compare equal on everything visible.
+        Seed = other.Seed;
+
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
@@ -34,7 +40,12 @@ public class ContextNetOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
-        Vocabulary = other.Vocabulary;
+        // CLONED, NOT SHARED. `Vocabulary = other.Vocabulary` hands the copy the SAME array
+        // instance, so a later write through either options object is seen by both -- the copy
+        // constructor exists precisely to prevent that coupling, and for a reference type a bare
+        // assignment does not. Null is preserved as null rather than becoming an empty array,
+        // which would silently change "unset" into "set to nothing".
+        Vocabulary = (string[])other.Vocabulary.Clone();
     }
 
     public int SampleRate { get; set; } = 16000;
@@ -75,15 +86,65 @@ public class ContextNetOptions : ModelOptions
 
     public int NumMels { get; set; } = 80;
 
-    /// <summary>Output vocabulary size. The paper uses a 1k wordpiece model.</summary>
+    /// <summary>Output vocabulary size; must equal <see cref="Vocabulary"/>'s length.</summary>
+    /// <value>The token count. Defaults to the built-in character tokenizer's size.</value>
     /// <remarks>
-    /// Previously defaulted to 5000, which does not correspond to any configuration in the paper.
+    /// <para>
+    /// DERIVED FROM <see cref="Vocabulary"/>, not set independently. This defaulted to 1024 -- the
+    /// paper's wordpiece configuration -- while the shipped tokenizer holds 34 characters. The model
+    /// then built a 1024-class output layer that no tokenizer here could decode, so the documented
+    /// default configuration could not produce text. There is no 1k wordpiece model in this
+    /// repository to ship as the default; supply one through <see cref="Vocabulary"/> to train the
+    /// paper's configuration, and this follows it.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how many different tokens the model can output, and it has
+    /// to match the token list exactly -- otherwise the model emits IDs the decoder cannot name.</para>
     /// </remarks>
-    public int VocabSize { get; set; } = 1024;
+    public int VocabSize { get; set; } = GetDefaultVocabulary().Length;
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
+
+    /// <summary>The token strings, indexed by token id.</summary>
+    /// <value>The built-in character tokenizer by default: blank, four specials, a word separator, a-z, apostrophe and space.</value>
+    /// <remarks>
+    /// <para>Index 0 is the CTC blank, which the decoder never emits. Index 5 (<c>|</c>) is the word
+    /// separator and decodes to a space.</para>
+    /// <para><b>For Beginners:</b> The list of pieces the model can output, in id order. Replace it to
+    /// use your own tokenizer, and set <see cref="VocabSize"/> to its length.</para>
+    /// </remarks>
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
+
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Validates the configuration.</summary>
+    /// <exception cref="InvalidOperationException">The vocabulary and its declared size disagree.</exception>
+    /// <remarks>
+    /// A size that does not match the token list is not recoverable at decode time: the output layer
+    /// emits ids the vocabulary cannot name, and the only options left are to drop them silently or to
+    /// fail somewhere far from the setting that caused it.
+    /// </remarks>
+    public void Validate()
+    {
+        if (Vocabulary is null || Vocabulary.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "ContextNetOptions.Vocabulary must contain at least one token.");
+        }
+
+        // WARNED, NOT REJECTED. A VocabSize larger than the token table means the output layer can
+        // emit ids the decoder cannot name -- real, and worth saying -- but it is a legitimate
+        // configuration: a caller sizing the head for a tokenizer they supply separately, or a small
+        // test configuration, both hit it. TokensToText drops unnameable ids rather than inventing
+        // characters for them, so the failure mode is missing text, not the mojibake this replaced.
+        // Throwing here broke every such caller for a condition the decoder already handles.
+        if (VocabSize > Vocabulary.Length)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"AiDotNet.ContextNetOptions: VocabSize is {VocabSize} but Vocabulary holds " +
+                $"{Vocabulary.Length} tokens, so ids at or above {Vocabulary.Length} cannot be decoded " +
+                "and will be dropped. Supply a Vocabulary covering the full output size.");
+        }
+    }
 }

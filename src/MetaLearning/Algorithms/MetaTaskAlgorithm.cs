@@ -50,7 +50,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ResearchPaper("MetaMix: Improved Meta-Learning with Interpolation-based Consistency Regularization",
     "https://arxiv.org/abs/2009.13735",
     Year = 2020,
-    Authors = "Yangbin Chen, Yun Ma, Tom Ko, Jianping Wang")]
+    Authors = "Yangbin Chen, Yun Ma, Tom Ko, Jianping Wang, Qing Li")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
 public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>

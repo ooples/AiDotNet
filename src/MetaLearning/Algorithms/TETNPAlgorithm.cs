@@ -41,7 +41,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ResearchPaper("Gridded Transformer Neural Processes for Large Unstructured Spatio-Temporal Data",
     "https://arxiv.org/abs/2410.06731",
     Year = 2024,
-    Authors = "Ashman, M., Diaconu, C., Kim, J., Sherborne, J., Sherborne, T., & Turner, R. E.")]
+    Authors = "Matthew Ashman, Cristiana Diaconu, Eric Langezaal, Adrian Weller, Richard E. Turner")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
 public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>

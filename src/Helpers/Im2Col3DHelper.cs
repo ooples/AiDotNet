@@ -45,6 +45,21 @@ namespace AiDotNet.Helpers;
 internal static class Im2Col3DHelper
 {
     /// <summary>
+    /// True when <c>Array.Clear</c> -- which writes <c>default(T)</c> -- produces the same value as
+    /// the element type's numeric zero, and a bulk clear may therefore stand in for a fill.
+    /// </summary>
+    /// <remarks>
+    /// Every built-in element type satisfies this, so the fast path is the one normally taken. It is
+    /// checked rather than assumed because <typeparamref name="T"/> is unconstrained here: a custom
+    /// numeric type whose default-constructed value is not its zero would be silently mis-cleared,
+    /// and that is the kind of wrongness that shows up as a slightly wrong gradient rather than a
+    /// crash. The comparison is over two <typeparamref name="T"/> values, not a shape or a float
+    /// tolerance, so exact equality is the right test.
+    /// </remarks>
+    private static bool ZeroIsDefault<T>(T zero) =>
+        System.Collections.Generic.EqualityComparer<T>.Default.Equals(zero, default);
+
+    /// <summary>
     /// Fills <paramref name="m"/> from <paramref name="x"/> per the im2col 3D mapping
     /// described in the class summary. <paramref name="x"/> must be rank-5
     /// <c>[B, CI, ID, IH, IW]</c>; <paramref name="m"/> must be rank-2
@@ -84,11 +99,32 @@ internal static class Im2Col3DHelper
         long mOffset = m.LogicalToStorageIndex(0);
 
         // Zero-fill only logical destination elements so views cannot clear unrelated storage.
-        for (int row = 0; row < rowsTotal; row++)
+        // Uses the numeric zero rather than default(T): T is a tensor element type, so zero is what
+        // is meant, and it needs no suppression for an unconstrained generic.
+        //
+        // Making this stride-aware is what cost the bulk clear it used to do, and this fill writes the
+        // same B*OD*OH*OW * CI*KD*KH*KW elements the Parallel.For below does -- so it cannot be the one
+        // serial step on the path. Two shapes, in order of preference:
+        //  - a densely packed destination at offset 0 maps its logical elements onto storage [0, span)
+        //    bijectively, so Array.Clear covers exactly them and nothing else, vectorized;
+        //  - anything else is a view, and gets the stride-aware fill parallelized over rows (rows are
+        //    disjoint in storage, so no false sharing beyond a shared cache line at the row edges).
+        var zero = MathHelper.GetNumericOperations<T>().Zero;
+        long mSpan = (long)rowsTotal * colsPerRow;
+        bool mDenselyPacked = mOffset == 0 && mStrides[1] == 1 && mStrides[0] == colsPerRow
+            && mData.LongLength >= mSpan && mSpan <= int.MaxValue;
+        if (mDenselyPacked && ZeroIsDefault(zero))
         {
-            long mRow = mOffset + (long)row * mStrides[0];
-            for (int col = 0; col < colsPerRow; col++)
-                mData[mRow + (long)col * mStrides[1]] = default!;
+            Array.Clear(mData, 0, (int)mSpan);
+        }
+        else
+        {
+            Parallel.For(0, rowsTotal, row =>
+            {
+                long mRow = mOffset + (long)row * mStrides[0];
+                for (int col = 0; col < colsPerRow; col++)
+                    mData[mRow + (long)col * mStrides[1]] = zero;
+            });
         }
 
         // For each output spatial position, copy the receptive field into the
@@ -192,23 +228,42 @@ internal static class Im2Col3DHelper
         long mOffset = m.LogicalToStorageIndex(0);
 
         // Clear only logical destination elements; x may be a view over larger storage.
-        for (int bi = 0; bi < b; bi++)
+        // Numeric zero rather than default(T), for the same reason as Im2Col3D above.
+        //
+        // Same two shapes as Im2Col3D's fill, and for the same reason: this writes B*CI*ID*IH*IW
+        // elements and must not be the serial step ahead of the parallel scatter below. The
+        // parallel-over-batch split matches that scatter's, and is race-free for the same reason --
+        // per-batch slices are disjoint in the gradient buffer.
+        var zeroFill = MathHelper.GetNumericOperations<T>().Zero;
+        long xSpan = (long)b * ci * id * ih * iw;
+        bool xDenselyPacked = xOffset == 0 && xStrides[4] == 1 && xStrides[3] == iw
+            && xStrides[2] == (long)ih * iw && xStrides[1] == (long)id * ih * iw
+            && xStrides[0] == (long)ci * id * ih * iw
+            && xData.LongLength >= xSpan && xSpan <= int.MaxValue;
+        if (xDenselyPacked && ZeroIsDefault(zeroFill))
         {
-            long xBaseB = xOffset + (long)bi * xStrides[0];
-            for (int cci = 0; cci < ci; cci++)
+            Array.Clear(xData, 0, (int)xSpan);
+        }
+        else
+        {
+            Parallel.For(0, b, bi =>
             {
-                long xBaseCi = xBaseB + (long)cci * xStrides[1];
-                for (int dd = 0; dd < id; dd++)
+                long xBaseB = xOffset + (long)bi * xStrides[0];
+                for (int cci = 0; cci < ci; cci++)
                 {
-                    long xBaseD = xBaseCi + (long)dd * xStrides[2];
-                    for (int hh = 0; hh < ih; hh++)
+                    long xBaseCi = xBaseB + (long)cci * xStrides[1];
+                    for (int dd = 0; dd < id; dd++)
                     {
-                        long xBaseH = xBaseD + (long)hh * xStrides[3];
-                        for (int ww = 0; ww < iw; ww++)
-                            xData[xBaseH + (long)ww * xStrides[4]] = default!;
+                        long xBaseD = xBaseCi + (long)dd * xStrides[2];
+                        for (int hh = 0; hh < ih; hh++)
+                        {
+                            long xBaseH = xBaseD + (long)hh * xStrides[3];
+                            for (int ww = 0; ww < iw; ww++)
+                                xData[xBaseH + (long)ww * xStrides[4]] = zeroFill;
+                        }
                     }
                 }
-            }
+            });
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();

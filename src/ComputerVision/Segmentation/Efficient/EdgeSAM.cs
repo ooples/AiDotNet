@@ -55,26 +55,37 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EdgeSAM: Prompt-In-the-Loop Distillation for On-Device Deployment of SAM", "https://arxiv.org/abs/2312.06660", Year = 2024, Authors = "Chong Zhou, Xiangtai Li, Chen Change Loy, Bo Dai")]
-public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
+public class EdgeSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly EdgeSAMOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only EdgeSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed, _encoderLayerEnd and
-    // _imageEmbedding all come from PromptableSegmentationBase -> SegmentationModelBase.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
     /// <summary>
-    /// Gets whether using native mode (trainable) or ONNX mode (inference only).
+    /// Gets whether this EdgeSAM instance supports training.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -97,11 +108,15 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         EdgeSAMOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EdgeSAMOptions(); Options = _options;
-        ApplySamDefaultGeometry(architecture);
-        _dropRate = dropRate;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _channelDims = [48, 96, 192, 384];
         _depths = [1, 1, 3, 1];
         _decoderDim = 256;
@@ -126,33 +141,40 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     public EdgeSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         EdgeSAMOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EdgeSAMOptions(); Options = _options;
-        ApplySamDefaultGeometry(architecture);
-        _dropRate = 0;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"EdgeSAM ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         _channelDims = [48, 96, 192, 384];
         _depths = [1, 1, 3, 1];
         _decoderDim = 256;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load EdgeSAM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Restores EdgeSAM's own 1024x1024 fallback for unspecified input geometry.
-    /// </summary>
-    /// <remarks>
-    /// SegmentationModelBase falls back to 512x512 when the architecture leaves the input size
-    /// unset; every SAM variant has always fallen back to SAM's native 1024x1024 instead, so that
-    /// stays the model's own rule rather than becoming the shared default.
-    /// </remarks>
-    private void ApplySamDefaultGeometry(NeuralNetworkArchitecture<T> architecture)
-    {
-        if (architecture.InputHeight <= 0) _height = 1024;
-        if (architecture.InputWidth <= 0) _width = 1024;
     }
     #endregion
 
     #region Public Methods
+    /// <summary>
+    /// Runs a forward pass to produce segmentation logits.
+    /// </summary>
+    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
+    /// <returns>Segmentation logits tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
     /// <summary>
     /// Performs one training step.
     /// </summary>
@@ -170,7 +192,7 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -180,8 +202,7 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     #endregion
 
     #region Private Methods
-    /// <inheritdoc />
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -190,8 +211,7 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    /// <inheritdoc />
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -208,7 +228,11 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase.
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -300,30 +324,39 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         ? new EdgeSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new EdgeSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
-    // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IPromptableSegmentation Implementation
-    // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment and the four Supports*Prompts
-    // flags all arrive from PromptableSegmentationBase with identical values.
+    private Tensor<T>? _imageEmbedding;
     private Tensor<T>? _imageProbabilities;
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    bool IPromptableSegmentation<T>.SupportsPointPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsBoxPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsMaskPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsTextPrompts => false;
 
-    /// <inheritdoc />
-    protected override Tensor<T> EncodeImage(Tensor<T> image) => Predict(image);
-
-    /// <inheritdoc />
-    public override void SetImage(Tensor<T> image)
+    void IPromptableSegmentation<T>.SetImage(Tensor<T> image)
     {
-        base.SetImage(image);
-        var embedding = _imageEmbedding;
-        if (embedding is not null)
-        {
-            _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(embedding);
-        }
+        _imageEmbedding = Predict(image);
+        _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(_imageEmbedding);
     }
 
-    /// <inheritdoc />
-    public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -349,8 +382,7 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc />
-    public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromBox(Tensor<T> box)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -367,8 +399,7 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc />
-    public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromMask(Tensor<T> mask)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -383,8 +414,7 @@ public class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc />
-    public override List<PromptedSegmentationResult<T>> SegmentEverything()
+    List<PromptedSegmentationResult<T>> IPromptableSegmentation<T>.SegmentEverything()
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);

@@ -33,74 +33,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 3, 32, 32",
     TestConstructorArgs = "3, 32, 32, 16, new int[] { 8, 12, 16, 24 }, new int[] { 1, 1, 1, 1 }, 8, 4, 0.0")]
-// Roles from this layer's own guard - "requires [B,C,H,W] input" in ForwardTraced, which also accepts
-// the unbatched rank-3 form (bool unbatched = input.Rank == 3) and throws for every other rank. One
-// declaration with BatchOptional covers both, and covers the rank the layer is tested at
-// ([LayerProperty(TestInputShape = "1, 3, 32, 32")]).
-// OutputAxesFor below is HAND-WRITTEN: the class count and the stem's stride are configuration.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output,
-    Note = "Dense-prediction logits: one channel per class, at the pyramid's 1/4-resolution C1 level.")]
-[AutoParameters]
-public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>, IShapeContract
+public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// CHANNELS become the class axis. <c>Fixed(_numClasses)</c>, read off the constructor argument the
-    /// final <c>_classifier</c> is built with (<c>CreateConv(decoderDim, numClasses, 1, 1, 0, ...)</c>)
-    /// and echoed in the unbatched return, <c>Reshape(logits, new[] { _numClasses, _levelHeights[0],
-    /// _levelWidths[0] })</c>. The input channel count does not survive the stem.
-    /// </para>
-    /// <para>
-    /// SPATIAL lands at the pyramid's C1 level, which the constructor comment places precisely: "two
-    /// stride-2 stem convolutions produce C1 at 1/4". Both are <c>kernel 3, stride 2, padding 1</c>
-    /// (<c>_cnnStem1</c> and <c>_cnnStem2</c>), and everything downstream of them is
-    /// extent-preserving - <c>Resize</c> pulls all four pyramid levels back to
-    /// <c>_levelHeights[0]</c>/<c>_levelWidths[0]</c>, then a 3x3 stride-1 padding-1 fusion and a 1x1
-    /// classifier leave it alone.
-    /// </para>
-    /// <para>
-    /// TWO STRIDE-2 WINDOWS FOLD INTO ONE, left to right: <c>k = k1 + (k2-1)*s1 = 3 + 2*2 = 7</c>,
-    /// <c>s = s1*s2 = 4</c>, <c>p = p1 + p2*s1 = 1 + 1*2 = 3</c>. That evaluates to <c>ceil(H/4)</c>,
-    /// which is exactly what the constructor computes for <c>_levelHeights[0]</c> by applying its own
-    /// <c>ConvOutput(size, 3, 2, 1)</c> twice - so the folded window and the field agree by
-    /// construction, and stating the window says WHY rather than restating a number.
-    /// </para>
-    /// <para>
-    /// Note this is <c>ceil</c>, not <c>floor</c>. The base constructor's placeholder output shape uses
-    /// <c>inputHeight / 4</c>, which differs on extents that are not multiples of four; the forward path
-    /// and <c>_levelHeights[0]</c> are the authority, and they round up.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank is not (3 or 4) || _numClasses <= 0) return null;
-
-        // The two stem convolutions (3, stride 2, padding 1) folded into a single window.
-        const int stemKernel = 7;
-        const int stemStride = 4;
-        const int stemPadding = 3;
-
-        var classes = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_numClasses));
-        var height = new OutputAxisContract(
-            TensorAxis.Height,
-            AxisRelation.Window(TensorAxis.Height, stemKernel, stemStride, stemPadding));
-        var width = new OutputAxisContract(
-            TensorAxis.Width,
-            AxisRelation.Window(TensorAxis.Width, stemKernel, stemStride, stemPadding));
-
-        return inputRank == 3
-            ? new[] { classes, height, width }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                classes, height, width,
-            };
-    }
-
     private readonly int _inputChannels;
     private readonly int _inputHeight;
     private readonly int _inputWidth;
@@ -464,6 +398,35 @@ public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>, IShapeContract
         foreach (var layer in _decoderProjections) yield return layer;
         yield return _decoderFusion;
         yield return _classifier;
+    }
+
+    /// <inheritdoc/>
+    public override long ParameterCount => OrderedLayers().Sum(layer => layer.ParameterCount);
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var values = new List<T>((int)ParameterCount);
+        foreach (var layer in OrderedLayers())
+        {
+            var parameters = layer.GetParameters();
+            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
+        }
+        return new Vector<T>(values.ToArray());
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
+        int offset = 0;
+        foreach (var layer in OrderedLayers())
+        {
+            int count = (int)layer.ParameterCount;
+            layer.SetParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     /// <inheritdoc/>

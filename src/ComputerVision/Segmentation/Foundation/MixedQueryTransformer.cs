@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
     Year = 2024,
     Authors = "Pei Wang, Zhaowei Cai, Hao Yang, Ashwin Swaminathan, R. Manmatha, Stefano Soatto")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
+public class MixedQueryTransformer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly MixedQueryTransformerOptions _options;
 
@@ -78,24 +78,39 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
 
     #region Fields
 
-    // Only MixedQueryTransformer's OWN configuration lives here. _height, _width, _channels,
-    // _numClasses, _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and
-    // _encoderLayerEnd all come from PanopticSegmentationBase -> SegmentationModelBase.
+    private readonly int _height;
+    private readonly int _width;
+    private readonly int _channels;
+    private readonly int _numClasses;
     private readonly int _numQueries;
     private readonly MixedQueryTransformerModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
-    // SegmentationModelBase and say exactly the same thing.
+    /// <summary>
+    /// Gets whether this MixedQueryTransformer instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal MixedQueryTransformerModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -128,18 +143,27 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
         MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
         double dropRate = 0.1,
         MixedQueryTransformerOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture, and
-        // defaults `optimizer` LAZILY via CreateDefaultOptimizer() - which is why null is passed
-        // straight through instead of `optimizer ?? new AdamWOptimizer<...>(this)`, an expression
-        // that cannot appear in a constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MixedQueryTransformerOptions();
         Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = dropRate;
+        _useNativeMode = true;
+        _onnxModelPath = null;
+        // THE PAPER'S RATE, NOT THE LIBRARY DEFAULT. Constructed with no options this trained at
+        // InitialLearningRate = 1e-3, ten times the published rate and unreachable by a caller.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+            });
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
@@ -169,18 +193,31 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
         int numQueries = 200,
         MixedQueryTransformerModelSize modelSize = MixedQueryTransformerModelSize.R50,
         MixedQueryTransformerOptions? options = null)
-        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
-        // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MixedQueryTransformerOptions();
         Options = _options;
+
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"MixedQueryTransformer ONNX model not found: {onnxModelPath}");
+
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = 0.0;
+        _useNativeMode = false;
+        _onnxModelPath = onnxModelPath;
+        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load MixedQueryTransformer ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -224,7 +261,7 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -246,7 +283,7 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
         };
     }
 
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -257,7 +294,7 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
         return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -276,7 +313,21 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
         return result;
     }
 
-    // AddBatchDimension and RemoveBatchDimension come from SegmentationModelBase.
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        int[] newShape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
+        var result = new Tensor<T>(newShape);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
 
     #endregion
 
@@ -425,28 +476,48 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new MixedQueryTransformer<T>(Architecture, Optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
+            ? new MixedQueryTransformer<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
             : new MixedQueryTransformer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
-    // and MixedQueryTransformer owns no further unmanaged resources.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; }
+            _disposed = true;
+        }
+        base.Dispose(disposing);
+    }
 
     #endregion
 
     #region IPanopticSegmentation Implementation
 
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, NumStuffClasses and NumThingClasses
-    // are all supplied by SegmentationModelBase / PanopticSegmentationBase.
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
+    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
 
-    /// <inheritdoc/>
-    public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
+    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        int numStuff = NumStuffClasses;
+        int numStuff = Math.Max(1, _numClasses / 3);
         var instanceMap = new Tensor<T>([h, w]);
         var panopticMap = new Tensor<T>([h, w]);
         var segments = new List<PanopticSegment<T>>();

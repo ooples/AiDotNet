@@ -31,22 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
-// Roles are this layer's own, quoted from its guard: "expects rank-2 [S, D] or rank-3 [B, S, D]".
-// S is the sequence position (Time), D the model width (Features). Batch is optional rather than a
-// second declaration because ForwardTraced treats the rank-2 case as literally the same computation —
-// it reshapes to [1, S, D], runs, and reshapes back — so there is no second relation to describe.
-//
-// NOT [ElementWiseShape], even though [LayerProperty(ChangesShape = false)] is accurate. That
-// shorthand generates an identity across EVERY rank, and this layer throws for any rank but 2 and 3;
-// it is also not element-wise in the sense the shorthand implies, since attention mixes across
-// positions. Declaring the two ranks it really accepts, with named axes, is the honest form.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output,
-    Note = "Attention re-weights positions in place: every axis survives at its input size.")]
-[AutoParameters]
-public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
+public partial class ClozeAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDim;
 
@@ -57,6 +42,10 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override long ParameterCount =>
+        _query.ParameterCount + _key.ParameterCount + _value.ParameterCount + _output.ParameterCount;
 
     /// <summary>Initializes a new bidirectional cloze attention block.</summary>
     /// <param name="modelDim">Model width; input and output are both this wide.</param>
@@ -137,6 +126,52 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var parts = new[]
+        {
+            _query.GetParameters(), _key.GetParameters(),
+            _value.GetParameters(), _output.GetParameters()
+        };
+
+        int total = 0;
+        foreach (var p in parts) total += p.Length;
+
+        var flat = new Vector<T>(total);
+        int at = 0;
+        foreach (var p in parts)
+            for (int i = 0; i < p.Length; i++) flat[at++] = p[i];
+
+        return flat;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var targets = new[] { _query, _key, _value, _output };
+
+        // The four projections allocate lazily on first Forward. Resolve their shapes from the
+        // known model width rather than running a probe forward: ResolveFromShape allocates the
+        // parameters and nothing else, whereas a probe would execute the full attention — mask,
+        // softmax and both matmuls — purely for a side effect, and leave state behind that a
+        // behaviour-preservation test then detects.
+        ResolveChildShapes();
+
+        var sizes = targets.Select(t => t.GetParameters().Length).ToArray();
+
+        if (parameters.Length != sizes.Sum())
+            throw new ArgumentException($"Expected {sizes.Sum()} parameters, got {parameters.Length}.", nameof(parameters));
+
+        int at = 0;
+        for (int t = 0; t < targets.Length; t++)
+        {
+            var slice = new Vector<T>(sizes[t]);
+            for (int i = 0; i < sizes[t]; i++) slice[i] = parameters[at++];
+            targets[t].SetParameters(slice);
+        }
+    }
+
+    /// <inheritdoc/>
     /// <remarks>
     /// Explicitly includes the projections' tensors: <c>LayerBase</c> does not recurse into
     /// registered sub-layers, and a composite that omits them reports an empty trainable set
@@ -167,6 +202,12 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
             targets[t].SetTrainableParameters(parameters.Skip(at).Take(counts[t]).ToList());
             at += counts[t];
         }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Tape-based autodiff drives the update; no manual gradient step here.</remarks>
+    public override void UpdateParameters(T learningRate)
+    {
     }
 
     /// <inheritdoc/>

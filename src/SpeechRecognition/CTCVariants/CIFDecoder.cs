@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -41,18 +41,8 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition", "https://arxiv.org/abs/1905.11235", Year = 2020, Authors = "Dong and Xu")]
-public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
-    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>,
-    /// whose LAST emitted layer is <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. The
-    /// continuous-integrate-and-fire step reduces the TIME axis (frames to tokens); it does not change
-    /// the feature axis, and <c>PostprocessOutput</c> is the identity.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly CIFDecoderOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -60,7 +50,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     public bool SupportsWordTimestamps => false;
 
     public CIFDecoder(NeuralNetworkArchitecture<T> architecture, string modelPath, CIFDecoderOptions? options = null) : base(architecture) { _options = options ?? new CIFDecoderOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public CIFDecoder(NeuralNetworkArchitecture<T> architecture, CIFDecoderOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new CIFDecoderOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0002 }); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public CIFDecoder(NeuralNetworkArchitecture<T> architecture, CIFDecoderOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new CIFDecoderOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate }); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using CIF-based alignment with parallel decoding.

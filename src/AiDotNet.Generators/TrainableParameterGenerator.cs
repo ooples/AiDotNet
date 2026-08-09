@@ -839,13 +839,31 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     }
 
     /// <summary>True when the class itself declares any of the named members.</summary>
+    /// <summary>True when the class already declares one of the methods this generator emits.</summary>
+    /// <remarks>
+    /// MATCHED ON SIGNATURE, NOT NAME. Any member sharing the name suppressed the whole class's
+    /// generation -- an unrelated overload such as `GetTrainableParameters(bool includeFrozen)` was
+    /// enough. That silently reintroduced stale parameter rebinding, or dropped sub-layer
+    /// registration, for a class whose author had not overridden anything the generator writes.
+    /// </remarks>
     private static bool DeclaresAny(INamedTypeSymbol type, params string[] names)
     {
         foreach (var name in names)
         {
             foreach (var member in type.GetMembers(name))
             {
-                if (member is IMethodSymbol) return true;
+                if (member is not IMethodSymbol m) continue;
+
+                // The generated shapes, exactly:
+                //   EnsureInitialized()
+                //   GetTrainableParameters()
+                //   SetTrainableParameters(IReadOnlyList<Tensor<T>>)
+                bool matches = name switch
+                {
+                    "SetTrainableParameters" => m.Parameters.Length == 1,
+                    _ => m.Parameters.Length == 0,
+                };
+                if (matches) return true;
             }
         }
         return false;

@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -45,28 +45,13 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("SeACo-Paraformer: A Non-Autoregressive ASR System with Flexible and Effective Hot-Word Customization Ability", "https://arxiv.org/abs/2308.03266", Year = 2023, Authors = "An et al.")]
 public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from the output construction, which is a CUSTOM branching forward, not a layer-walk:
-    /// <c>PredictCore</c> runs the Paraformer backbone and returns EITHER <c>pAsr</c> - the output of
-    /// the backbone's final vocabulary projection, <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>
-    /// from <c>LayerHelper.CreateDefaultParaformerLayers</c>, built with
-    /// <c>vocabSize: _options.VocabSize</c> - or, when hotwords are active,
-    /// <c>MergeBiasedProbabilities(pAsr, pBias)</c>, documented and implemented as returning merged
-    /// logits of shape <c>[.., V]</c>. Both branches are therefore <c>VocabSize</c> wide, so the width
-    /// does not depend on whether biasing fires. Notably NOT <c>V + 1</c>: the bias branch's extra
-    /// &lt;no-bias&gt; slot exists only inside <c>pBias</c> and is consumed by the merge.
-    /// <c>PostprocessOutput</c> is the identity.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly SeACoOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SeACo(NeuralNetworkArchitecture<T> architecture, string modelPath, SeACoOptions? options = null) : base(architecture) { _options = options ?? new SeACoOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public SeACo(NeuralNetworkArchitecture<T> architecture, string modelPath, SeACoOptions? options = null) : base(architecture) { _options = options ?? new SeACoOptions(); _useNativeMode = false; _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
     // Paraformer / SeACo-Paraformer (Gao et al., arXiv 2206.08317; Shi et al., arXiv 2308.03266) train
     // the token head with CROSS-ENTROPY over the vocabulary (alongside CTC and the predictor's MAE),
     // never a regression loss. AudioNeuralNetworkBase defaults to MeanSquaredErrorLoss, so this model
@@ -74,7 +59,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     // paper never uses and one that cannot be fitted, which is why extra training made the measured
     // loss RISE (0.99 -> 44.38) while parameters barely moved (L2 195.796 -> 195.852). The head emits
     // raw logits, so use the fused log-softmax/NLL form, matching the other logit-head models here.
-    public SeACo(NeuralNetworkArchitecture<T> architecture, SeACoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SeACoOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateParaformerOptimizer(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); InstallParaformerObjective(); }
+    public SeACo(NeuralNetworkArchitecture<T> architecture, SeACoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SeACoOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateParaformerOptimizer(); _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); InstallParaformerObjective(); }
 
     /// <summary>
     /// Builds the optimizer Paraformer / SeACo-Paraformer specify.
@@ -201,6 +186,48 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Layers.AddRange(bias);
         _backboneLayerCount = backbone.Count;
         _biasLayerCount = bias.Count;
+
+        ValidateBiasBranchLayout(bias);
+    }
+
+    /// <summary>Number of layers <c>CreateSeACoBiasLayers</c> is contracted to emit.</summary>
+    /// <remarks>
+    /// ApplyHotwordBias indexes <c>biasStart</c> through <c>biasStart + 4</c> and CASTS positions +2
+    /// and +3 to <see cref="MultiHeadAttentionLayer{T}"/>. Those five reads are a contract with the
+    /// factory that nothing checked: a factory change, or a layout this model does not support, showed
+    /// up as an ArgumentOutOfRangeException or an InvalidCastException thrown from the middle of an
+    /// inference call, naming an index rather than the mismatch. Checked once at construction instead.
+    /// </remarks>
+    private const int SeACoBiasLayerCount = 5;
+
+    /// <summary>
+    /// Confirms the bias branch has the shape the hotword forward indexes into, before any inference
+    /// can reach it.
+    /// </summary>
+    private void ValidateBiasBranchLayout(List<ILayer<T>> bias)
+    {
+        if (bias.Count == 0)
+        {
+            // No bias branch is a supported configuration: Eq 5 then returns P_ASR unchanged, and
+            // HasBiasBranch already gates every hotword path on it.
+            return;
+        }
+
+        if (bias.Count < SeACoBiasLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"SeACo's bias branch needs {SeACoBiasLayerCount} layers (embedding, LSTM, two " +
+                $"multi-head attentions, normalization) but {bias.Count} were supplied. Hotword " +
+                "biasing cannot be applied to this layout.");
+        }
+
+        if (bias[2] is not MultiHeadAttentionLayer<T> || bias[3] is not MultiHeadAttentionLayer<T>)
+        {
+            throw new InvalidOperationException(
+                "SeACo's bias branch expects multi-head attention at bias positions 2 and 3 (the " +
+                $"decoder- and encoder-attending blocks), but found {bias[2].GetType().Name} and " +
+                $"{bias[3].GetType().Name}. Hotword biasing cannot be applied to this layout.");
+        }
     }
 
     /// <summary>Number of leading layers that form the Paraformer ASR backbone.</summary>
@@ -279,8 +306,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// Eq 5 is per-position and conditional:
     /// <c>P_m = P_ASR</c> when <c>argmax P_bi = &lt;no-bias&gt;</c>, else
     /// <c>lambda * P_bi + (1 - lambda) * P_ASR</c>. The argmax is a discrete decision and is read
-    /// off-tape; the blended values are produced with Engine ops so gradient still reaches both
-    /// branches wherever a hotword IS detected.
+    /// off-tape as a 0/1 gate; the blended values are produced with Engine ops so gradient still
+    /// reaches both branches wherever a hotword IS detected.
     /// </remarks>
     private Tensor<T> MergeBiasedProbabilities(Tensor<T> pAsr, Tensor<T> pBias)
     {
@@ -288,37 +315,56 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int noBias = vocab;                       // appended '#' slot
         int rowsAsr = Math.Max(1, pAsr.Length / Math.Max(1, vocab));
         int rowsBias = Math.Max(1, pBias.Length / Math.Max(1, vocab + 1));
-        int rows = Math.Min(rowsAsr, rowsBias);
 
-        T lambda = NumOps.FromDouble(_options.BiasMergeLambda);
-        T oneMinusLambda = NumOps.FromDouble(1.0 - _options.BiasMergeLambda);
+        // The two branches describe the same positions, so a disagreement is a shape bug upstream.
+        // Silently blending the shorter prefix would train the bias branch against positions the
+        // backbone scored differently.
+        if (rowsAsr != rowsBias)
+        {
+            throw new InvalidOperationException(
+                $"The ASR branch produced {rowsAsr} positions but the bias branch produced {rowsBias}. " +
+                "Eq 5 merges them position by position, so they must agree.");
+        }
 
-        var merged = pAsr.Clone();
+        int rows = rowsAsr;
+        var eng = Engine;
+        var originalShape = pAsr.Shape.ToArray();
+
+        // WHERE the blend applies is a discrete argmax, so it is read off-tape -- that matches the
+        // paper, which makes a hard per-position choice. WHAT the blend computes must stay on tape,
+        // and that is what this rewrite fixes: the previous body wrote scalars into a Clone()'s
+        // Data.Span, and raw span writes are invisible to autodiff. Stage 2 trains the bias branch, so
+        // its gradient path ran through a tensor nothing had recorded and the bias parameters got no
+        // signal from this blend at all.
+        var gate = new Tensor<T>([rows, 1]);
+        var biasSpan = pBias.Data.Span;
         for (int r = 0; r < rows; r++)
         {
-            // argmax over the bias distribution, including the <no-bias> slot.
             int argmax = 0;
             double best = double.NegativeInfinity;
             for (int v = 0; v <= vocab; v++)
             {
-                double val = NumOps.ToDouble(pBias.Data.Span[(r * (vocab + 1)) + v]);
+                double val = NumOps.ToDouble(biasSpan[(r * (vocab + 1)) + v]);
                 if (val > best) { best = val; argmax = v; }
             }
 
             // "no hotword detected" -> keep P_ASR for this position.
-            if (argmax == noBias) continue;
-
-            for (int v = 0; v < vocab; v++)
-            {
-                T asr = pAsr.Data.Span[(r * vocab) + v];
-                T bias = pBias.Data.Span[(r * (vocab + 1)) + v];
-                merged.Data.Span[(r * vocab) + v] = NumOps.Add(
-                    NumOps.Multiply(lambda, bias),
-                    NumOps.Multiply(oneMinusLambda, asr));
-            }
+            gate[r, 0] = argmax == noBias ? NumOps.Zero : NumOps.One;
         }
 
-        return merged;
+        // Eq 5, written so both branches stay differentiable:
+        //   merged = P_ASR + gate * lambda * (P_bias - P_ASR)
+        // gate 0 leaves P_ASR exactly; gate 1 gives lambda*P_bias + (1-lambda)*P_ASR. The [rows, 1]
+        // gate broadcasts across the vocabulary axis.
+        var asr2d = eng.Reshape(pAsr, new[] { rows, vocab });
+        var bias2d = eng.Reshape(
+            eng.TensorNarrow(pBias, pBias.Rank - 1, 0, vocab), new[] { rows, vocab });
+
+        var delta = eng.TensorSubtract(bias2d, asr2d);
+        var scaled = eng.TensorMultiplyScalar(delta, NumOps.FromDouble(_options.BiasMergeLambda));
+        var merged = eng.TensorAdd(asr2d, eng.TensorMultiply(scaled, gate));
+
+        return eng.Reshape(merged, originalShape);
     }
 
     /// <summary>
@@ -459,11 +505,17 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             return Transcribe(audio, language, includeTimestamps);
         }
 
+        // PREPROCESSED, LIKE EVERY OTHER INFERENCE PATH. This passed the raw waveform straight into
+        // PredictCore while the sibling Transcribe overload calls PreprocessAudio first, so the biased
+        // and unbiased paths read from different input domains -- one mel features, one audio samples --
+        // through the same encoder. Whichever of the two does not throw on the shape is the more
+        // dangerous outcome: it returns a transcription computed from noise.
         Tensor<T> biased;
+        var biasedFeatures = PreprocessAudio(audio);
         _activeHotwordIds = BuildHotwordIds(hotwords);
         try
         {
-            biased = PredictCore(audio);
+            biased = PredictCore(biasedFeatures);
         }
         finally
         {
@@ -690,7 +742,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var order = new List<int>(mismatched);
         if (order.Count < substitutions)
         {
-            var rng = new Random(GlmSamplerSeed);
+            var rng = RandomHelper.CreateSeededRandom(GlmSamplerSeed);
             for (int n = 0; n < comparable && order.Count < substitutions; n++)
             {
                 if (!mismatched.Contains(n) && rng.NextDouble() < 0.5) order.Add(n);
@@ -757,8 +809,12 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         LossFunction = new ParaformerObjective<T>(
             new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(),
             () => Layers.OfType<CifAlignmentLayer<T>>().FirstOrDefault()?.LastPredictedTokenCount,
-            _options.CeWeight,
-            _options.MaeWeight);
+            // NAMED, because ParaformerObjective's third parameter is the optional targetTokenCount
+            // Func -- passing the weights positionally put CeWeight there and would not compile once
+            // both slices of #1789 are in one assembly. The target count is genuinely absent here:
+            // SeACo supervises the predicted count against the label length inside the objective.
+            ceWeight: _options.CeWeight,
+            maeWeight: _options.MaeWeight);
     }
 
     /// <summary>
@@ -853,7 +909,14 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         // r_b: this batch may be inactive entirely, in which case the default <blank> hotword applies
         // and NO position is treated as a hotword.
-        var rng = new Random(HotwordSamplingSeed);
+        //
+        // ONE GENERATOR PER MODEL, NOT ONE PER CALL. Constructing a fresh seeded generator here meant
+        // every training step replayed the identical draw sequence: the r_b gate below always compared
+        // the SAME first value against HotwordBatchRatio, so it was not a ratio at all -- it either
+        // admitted every step or none of them for the whole run -- and every admitted step then selected
+        // the identical spans. SeACo's criterion depends on the sampling varying across steps; frozen,
+        // the bias branch sees one fixed masking pattern and the ratio options do nothing.
+        var rng = _hotwordRng;
         if (rng.NextDouble() >= _options.HotwordBatchRatio)
         {
             return _ => false;
@@ -882,9 +945,19 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     /// <summary>
-    /// Fixed seed for hotword sampling so each training step is reproducible.
+    /// The default hotword-sampling seed, used when the caller sets no <see cref="ModelOptions.Seed"/>.
     /// </summary>
+    /// <remarks>
+    /// Seeding is still the default so a run is reproducible end to end. What changed is the SCOPE: the
+    /// generator advances across the whole run instead of being rebuilt per step, so successive steps
+    /// draw different spans while the sequence as a whole stays deterministic.
+    /// </remarks>
     private const int HotwordSamplingSeed = 1337;
+
+    /// <summary>
+    /// The hotword sampler's generator, created once and advanced across training steps.
+    /// </summary>
+    private readonly Random _hotwordRng;
 
     /// <summary>
     /// Applies SeACo's hotword-position-aware criterion to a label tensor.
@@ -924,8 +997,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SeACo-Native" : "SeACo-ONNX", Description = "SeACo-Paraformer: hot-word biased CIF ASR (Alibaba, 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
+    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.NumDecoderLayers); w.Write(_options.FeedForwardDim); w.Write(_options.NumBiasEncoderLayers); w.Write(_options.LearningRate); w.Write((int)_options.TrainingStage); w.Write(_options.CeWeight); w.Write(_options.MaeWeight); w.Write(_options.BiasMergeLambda); w.Write(_options.SamplerLambda); w.Write(_options.HotwordMinLength); w.Write(_options.HotwordMaxLength); w.Write(_options.HotwordMaskTokenId.HasValue); w.Write(_options.HotwordMaskTokenId ?? 0); w.Write(_options.HotwordBatchRatio); w.Write(_options.HotwordUtteranceRatio); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); bool More() => r.BaseStream.Position < r.BaseStream.Length; if (More()) _options.NumDecoderLayers = r.ReadInt32(); if (More()) _options.FeedForwardDim = r.ReadInt32(); if (More()) _options.NumBiasEncoderLayers = r.ReadInt32(); if (More()) _options.LearningRate = r.ReadDouble(); if (More()) _options.TrainingStage = (SeACoTrainingStage)r.ReadInt32(); if (More()) _options.CeWeight = r.ReadDouble(); if (More()) _options.MaeWeight = r.ReadDouble(); if (More()) _options.BiasMergeLambda = r.ReadDouble(); if (More()) _options.SamplerLambda = r.ReadDouble(); if (More()) _options.HotwordMinLength = r.ReadInt32(); if (More()) _options.HotwordMaxLength = r.ReadInt32(); if (More()) { bool hasMask = r.ReadBoolean(); int maskId = More() ? r.ReadInt32() : 0; _options.HotwordMaskTokenId = hasMask ? maskId : null; } if (More()) _options.HotwordBatchRatio = r.ReadDouble(); if (More()) _options.HotwordUtteranceRatio = r.ReadDouble(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new SeACo<T>(Architecture, mp, new SeACoOptions(_options)); return new SeACo<T>(Architecture, new SeACoOptions(_options)); }
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }

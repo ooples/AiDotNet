@@ -94,7 +94,56 @@ public sealed class MbPAEpisodicMemory<T>
             distances[i] = (i, sum);
         }
 
-        Array.Sort(distances, (a, b) => a.DistanceSquared.CompareTo(b.DistanceSquared));
+        // PARTIAL SELECTION, NOT A FULL SORT. Retrieve runs once per MbPA prediction per batch item,
+        // and LocallyAdapt SUMS over the neighbours -- it never needs them ordered. A full sort cost
+        // O(n log n) in the memory size on every prediction to produce an ordering nothing reads.
+        //
+        // A bounded max-heap of size `take` keeps the running k-smallest in O(n log k): the root is
+        // the worst kept candidate, so a new entry is compared against it and either discarded or
+        // swapped in. For the usual k << MemorySize that is close to a single linear scan.
+        var kept = new List<(int Index, double DistanceSquared)>(take);
+
+        void SiftUp(int child)
+        {
+            while (child > 0)
+            {
+                int parent = (child - 1) / 2;
+                if (kept[parent].DistanceSquared >= kept[child].DistanceSquared) break;
+                (kept[parent], kept[child]) = (kept[child], kept[parent]);
+                child = parent;
+            }
+        }
+
+        void SiftDown(int parent)
+        {
+            while (true)
+            {
+                int left = (2 * parent) + 1;
+                if (left >= kept.Count) break;
+                int worst = left;
+                int right = left + 1;
+                if (right < kept.Count && kept[right].DistanceSquared > kept[left].DistanceSquared) worst = right;
+                if (kept[parent].DistanceSquared >= kept[worst].DistanceSquared) break;
+                (kept[parent], kept[worst]) = (kept[worst], kept[parent]);
+                parent = worst;
+            }
+        }
+
+        for (int i = 0; i < distances.Length; i++)
+        {
+            if (kept.Count < take)
+            {
+                kept.Add(distances[i]);
+                SiftUp(kept.Count - 1);
+            }
+            else if (distances[i].DistanceSquared < kept[0].DistanceSquared)
+            {
+                kept[0] = distances[i];
+                SiftDown(0);
+            }
+        }
+
+        for (int i = 0; i < take; i++) distances[i] = kept[i];
 
         var kernels = new double[take];
         double total = 0.0;

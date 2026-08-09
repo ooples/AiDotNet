@@ -56,47 +56,37 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PixelLM: Pixel Reasoning with Large Multimodal Model", "https://arxiv.org/abs/2312.02228", Year = 2024, Authors = "Ren et al.")]
-public class PixelLM<T> : Common.ReferringSegmentationBase<T>
+public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly PixelLMOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only PixelLM's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from ReferringSegmentationBase -> SegmentationModelBase.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode and MaxTextLength (512)
-    // are all inherited and say exactly the same thing.
-    internal bool UseNativeMode => _useNativeMode;
-
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets whether this PixelLM instance supports training.
+    /// </summary>
     /// <remarks>
-    /// PixelLM's default optimizer is driven entirely by <see cref="PixelLMOptions"/>, so it
-    /// overrides the base's plain-AdamW default rather than accepting it.
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
     /// </remarks>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                BatchSize = _options.OptimizerBatchSize,
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = _options.OptimizerBeta1,
-                Beta2 = _options.OptimizerBeta2,
-                Epsilon = _options.OptimizerEpsilon,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = false,
-                MaxGradientNorm = 0.0,
-            });
+    public override bool SupportsTraining => _useNativeMode;
+    internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -119,16 +109,29 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         PixelLMOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
-        // defaults `optimizer` lazily via CreateDefaultOptimizer() - which PixelLM overrides above
-        // with its options-driven AdamW - so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PixelLMOptions(); Options = _options;
-        // PixelLM's own fallback input geometry is 1024x1024, not the base's 512.
-        if (architecture.InputHeight <= 0) _height = 1024;
-        if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = dropRate;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                BatchSize = _options.OptimizerBatchSize,
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+                MaxGradientNorm = 0.0,
+            });
         ValidateArchitectureOptions(_options);
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.StageDepths.Clone();
@@ -154,19 +157,24 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
     public PixelLM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         PixelLMOptions? options = null)
-        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
-        // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PixelLMOptions(); Options = _options;
-        // PixelLM's own fallback input geometry is 1024x1024, not the base's 512.
-        if (architecture.InputHeight <= 0) _height = 1024;
-        if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = 0;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"PixelLM ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         ValidateArchitectureOptions(_options);
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.StageDepths.Clone();
         _decoderDim = _options.DecoderDimension;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load PixelLM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -201,7 +209,7 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -234,7 +242,7 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
         }
     }
 
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -243,7 +251,7 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -259,6 +267,12 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
+
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -352,17 +366,31 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
         : new PixelLM<T>(Architecture,
             _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
             _numClasses, new PixelLMOptions(_options));
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and latches
-    // _disposed, and PixelLM owns no other unmanaged resource.
+
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IReferringSegmentation Implementation
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, MaxTextLength (512),
-    // SupportsConversation (false) and SupportsVideoInput (false) all come from the base;
-    // only the model-specific members remain.
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IReferringSegmentation<T>.MaxTextLength => 512;
+    bool IReferringSegmentation<T>.SupportsConversation => false;
+    bool IReferringSegmentation<T>.SupportsVideoInput => false;
 
-    /// <inheritdoc/>
-    public override ReferringSegmentationResult<T> SegmentFromExpression(Tensor<T> image, string expression)
+    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromExpression(Tensor<T> image, string expression)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
@@ -391,35 +419,24 @@ public class PixelLM<T> : Common.ReferringSegmentationBase<T>
         return new ReferringSegmentationResult<T> { Masks = masks, TextResponse = response, Confidence = confidence, BoundingBoxes = boxes };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Overrides the public method rather than the base's SupportsConversation-gated
-    /// SegmentFromConversationInternal hook: PixelLM reports SupportsConversation = false yet has
-    /// always concatenated the history and answered, and re-parenting must not change that.
-    /// </remarks>
-    public override ReferringSegmentationResult<T> SegmentFromConversation(
+    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromConversation(
         Tensor<T> image, IReadOnlyList<(string Role, string Message)> conversationHistory, string currentQuery)
     {
         var context = string.Join(" ", conversationHistory.Select(c => c.Message));
         var fullQuery = string.IsNullOrEmpty(context) ? currentQuery : $"{context} {currentQuery}";
-        return SegmentFromExpression(image, fullQuery);
+        return ((IReferringSegmentation<T>)this).SegmentFromExpression(image, fullQuery);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Overrides the public method rather than the base's SupportsVideoInput-gated
-    /// SegmentVideoFromExpressionInternal hook, for the same reason as SegmentFromConversation.
-    /// </remarks>
-    public override List<ReferringSegmentationResult<T>> SegmentVideoFromExpression(Tensor<T> frames, string expression)
+    List<ReferringSegmentationResult<T>> IReferringSegmentation<T>.SegmentVideoFromExpression(Tensor<T> frames, string expression)
     {
         var results = new List<ReferringSegmentationResult<T>>();
-        if (frames.Rank == 3) { var r = SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
+        if (frames.Rank == 3) { var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
         int nf = frames.Shape[0], c = frames.Shape[1], fh = frames.Shape[2], fw = frames.Shape[3];
         for (int f = 0; f < nf; f++)
         {
             var frame = new Tensor<T>([c, fh, fw]);
             for (int ch = 0; ch < c; ch++) for (int y = 0; y < fh; y++) for (int x = 0; x < fw; x++) frame[ch, y, x] = frames[f, ch, y, x];
-            var r = SegmentFromExpression(frame, expression);
+            var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frame, expression);
             r.FrameIndex = f; results.Add(r);
         }
         return results;

@@ -32,6 +32,15 @@ public class PriorGradOptions : VocoderOptions
         HiddenDim = 64;
         LearningRate = 2e-4;
         WeightDecay = 0.0;
+
+        // PriorGrad's attention stack is 2 heads, and this has to be stated HERE rather than left
+        // to the base. PriorGrad.InitializeLayers used to pass a hardcoded 2 to
+        // CreateDefaultDiffusionVocoderLayers; replacing that with _options.NumHeads made the value
+        // configurable, but nothing assigned it, so it silently inherited TtsModelOptions.NumHeads =
+        // 8 and every default-constructed PriorGrad got a 4x wider attention stack than before.
+        // That is a change to the trained architecture, not a refactor: existing checkpoints no
+        // longer match the layer set they were trained into.
+        NumHeads = 2;
     }
 
     /// <summary>Gets or sets the number of residual layers. The paper default is 30.</summary>

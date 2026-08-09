@@ -1,5 +1,4 @@
-﻿using AiDotNet.Attributes;
-using System.Threading;
+﻿using System.Threading;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -28,11 +27,7 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// - Safety-critical applications (knowing when to defer to a human expert)
 /// </para>
 /// </remarks>
-// Value-only: zeroes elements at inference too (that is the point - it samples), never resizes.
-[AiDotNet.Attributes.ElementWiseShape(
-    Note = "Dropout kept active at inference for MC sampling; shape untouched at any rank.")]
-[AutoParameters]
-public partial class MCDropoutLayer<T> : LayerBase<T>, IShapeContract
+public partial class MCDropoutLayer<T> : LayerBase<T>
 {
     private readonly double _dropoutRate;
     private readonly T _scale;
@@ -127,6 +122,33 @@ public partial class MCDropoutLayer<T> : LayerBase<T>, IShapeContract
 
         var outputTensor = Tensor<T>.FromVector(outputVector);
         return input.Shape.Length > 1 ? Engine.Reshape(outputTensor, input._shape) : outputTensor;
+    }
+
+    /// <summary>
+    /// Updates the parameters (no-op for dropout layers).
+    /// </summary>
+    public override void UpdateParameters(T learningRate)
+    {
+        // No parameters to update
+    }
+
+    /// <summary>
+    /// Gets the trainable parameters (empty for dropout layers).
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        return new Vector<T>(0);
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters (no-op for dropout layers).
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != 0)
+        {
+            throw new ArgumentException($"Expected 0 parameters, but got {parameters.Length}");
+        }
     }
 
     /// <summary>

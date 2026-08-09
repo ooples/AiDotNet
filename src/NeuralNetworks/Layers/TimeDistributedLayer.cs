@@ -35,107 +35,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true)]
-// A COMPOSING decorator, not a delegating one. ForwardTraced builds
-// `outputShape = new[] { batchSize, timeSteps }.Concat(_innerLayer.GetOutputShape())`, so the leading
-// two axes are this layer's (carried straight through from the input) and every trailing axis is the
-// INNER layer's own output extent. The rank is therefore 2 + the inner layer's rank, which is why this
-// cannot simply forward OutputAxesFor to the inner layer the way LoRAAdapterBase does.
-//
-// Rank 2 is the degenerate case the same method spells out: `timeSteps = rank == 2 ? 1 : Shape[1]`,
-// the input is reshaped to [batch, 1, features], and the single-step result is reshaped back to
-// [batch] ++ inner - so at rank 2 no Time axis survives into the output.
-//
-// The declared ranks are the ones ForwardTraced genuinely handles (it throws only below rank 2) paired
-// with an inner layer whose output axes can be NAMED: rank 3 [Batch, Time, Features] over a
-// per-position projection, and rank 5 [Batch, Time, Channels, Height, Width] over a per-frame
-// convolution - the video case the class docs describe. Output rank 4 is declared because the rank-2
-// input form with a 3-axis inner layer would produce it.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input,
-    Note = "Degenerate single-step form: folded to [batch, 1, features] and unfolded again.")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "One feature vector per time step; the inner layer sees [batch, features].")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input,
-    Note = "One frame per time step; the inner layer sees [batch, channels, height, width].")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
+public partial class TimeDistributedLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Composed from the inner layer rather than delegated to it, because this wrapper PREPENDS axes.
-    /// Read straight off <c>ForwardTraced</c>:
-    /// <c>var outputShape = new[] { batchSize, timeSteps }.Concat(_innerLayer.GetOutputShape())</c> -
-    /// batch and time are the input's own, and the trailing extents are whatever the inner layer
-    /// reports, independent of the input's trailing extents.
-    /// </para>
-    /// <para>
-    /// The trailing axes are therefore <c>Fixed</c> off <c>GetOutputShape()</c> - a real read of the
-    /// wrapped instance, not a transcribed literal - and NOT a delegation to the inner contract. That
-    /// distinction is the implementation's, not a simplification: the forward never re-derives the
-    /// inner extents from the per-step input, it copies the shape the inner layer already reports.
-    /// </para>
-    /// <para>
-    /// Only expressible because <c>OutputAxesFor</c> is an INSTANCE method: the trailing sizes belong to
-    /// the layer this wrapper was constructed around. Where they cannot be named or are not yet
-    /// resolved, this declines rather than guessing.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        // ForwardTraced: "if (rank < 2) throw ... requires at least 2D input".
-        if (inputRank < 2) return null;
-
-        var inner = _innerLayer.GetOutputShape();
-        if (inner is null || inner.Length == 0) return null;
-
-        foreach (int extent in inner)
-        {
-            // A lazy inner layer reports placeholder extents until its first forward resolves them, and
-            // AxisRelation.Fixed rejects a non-positive size. Claiming nothing beats claiming zero.
-            if (extent <= 0) return null;
-        }
-
-        // GetOutputShape() gives the inner extents but not their ROLES - it is a list of numbers. Only
-        // the arrangements this wrapper is documented and used for can be named without inventing a
-        // role, and a role invented here would be propagated as fact by everything downstream.
-        TensorAxis[] innerRoles = inner.Length switch
-        {
-            1 => [TensorAxis.Features],
-            3 => [TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width],
-            _ => [],
-        };
-
-        if (innerRoles.Length == 0) return null;
-
-        var axes = new List<OutputAxisContract>(2 + inner.Length)
-        {
-            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-        };
-
-        // At rank 2 the wrapper runs exactly one step and reshapes the time axis back out, so it is
-        // absent from the result: "activated = Engine.Reshape(activated, [batchSize] ++ innerOutputShape)".
-        if (inputRank >= 3)
-        {
-            axes.Add(new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)));
-        }
-
-        for (int i = 0; i < inner.Length; i++)
-        {
-            axes.Add(new OutputAxisContract(innerRoles[i], AxisRelation.Fixed(inner[i])));
-        }
-
-        return axes;
-    }
-
     /// <summary>
     /// The inner layer that is applied to each time step.
     /// </summary>
@@ -205,8 +106,34 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private Tensor<T>? _lastOutput;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> if the inner layer supports training; otherwise, <c>false</c>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates whether the time distributed layer can be trained. It simply forwards the value of
+    /// the inner layer's SupportsTraining property, as the time distributed layer's trainability depends entirely
+    /// on whether its inner layer can be trained.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// Rather than having its own answer, this layer checks if the inner layer can learn:
+    /// - If the inner layer supports training, this layer also supports training
+    /// - If the inner layer doesn't support training, this layer also doesn't support training
+    /// 
+    /// This makes sense because:
+    /// - The time distributed layer doesn't have its own trainable parameters
+    /// - It just organizes how the inner layer is applied to sequences
+    /// - The actual learning happens in the inner layer
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
+    public override void SetParameters(Vector<T> parameters) => _innerLayer.SetParameters(parameters);
     public override Vector<T> GetParameterGradients() =>
         _accumulatedGradients ?? _innerLayer.GetParameterGradients();
     public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); _accumulatedGradients = null; }
@@ -535,6 +462,36 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     public override void UpdateParameters(T learningRate)
     {
         _innerLayer.UpdateParameters(learningRate);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the inner layer.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters from the inner layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters from the inner layer. The time distributed layer itself doesn't
+    /// have trainable parameters; it simply delegates to the inner layer.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from the inner layer.
+    /// 
+    /// Since the time distributed layer:
+    /// - Doesn't have its own parameters to learn
+    /// - Simply applies the inner layer multiple times
+    /// 
+    /// It returns the inner layer's parameters, which are:
+    /// - The numbers that the neural network learns during training
+    /// - The same across all time steps (parameter sharing)
+    /// 
+    /// This parameter sharing is a key feature - it means the layer learns patterns
+    /// that can be applied to any time step, rather than learning different patterns
+    /// for different positions in the sequence.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Return the parameters of the inner layer
+        return _innerLayer.GetParameters();
     }
 
     /// <summary>

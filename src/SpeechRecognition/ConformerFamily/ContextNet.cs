@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,20 +44,8 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ContextNet: Improving Convolutional Neural Networks for Automatic Speech Recognition with Global Context", "https://arxiv.org/abs/2005.03191", Year = 2020, Authors = "Han et al.")]
-public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
-    /// <c>LayerHelper&lt;T&gt;.CreateDefaultContextNetLayers(..., vocabSize: _options.VocabSize, ...)</c>.
-    /// That factory's encoder is channels-first, so it emits a <c>TransposeLayer</c> and THEN
-    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c> — its own comment states the result is
-    /// <c>[B, T, vocab]</c>. <c>PostprocessOutput</c> is the identity, so the last axis is the vocabulary.
-    /// Note this is NOT a channel count: the block channels scale with <c>WidthScaling</c> and are
-    /// consumed by the transpose before the head.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly ContextNetOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -72,6 +60,7 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        _options.Validate();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -88,6 +77,7 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        _options.Validate();
         _useNativeMode = true;
         // Global-norm gradient clipping. The default-constructed optimizer applied no
         // clipping at all, so a single update could move a deep CTC stack far enough to
@@ -201,8 +191,38 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
             ["Language"] = _options.Language
         }
     };
+    /// <summary>
+    /// Marks a payload as carrying a version number, distinguishing it from the unversioned layout.
+    /// </summary>
+    /// <remarks>
+    /// <b>0xFF is a value the first byte of a v1 payload cannot hold.</b> That payload began with a
+    /// <see cref="bool"/>, which <see cref="BinaryWriter"/> writes as exactly 0x00 or 0x01, so a leading
+    /// 0xFF is an unambiguous discriminator rather than a guess. Without one there is no way to tell the
+    /// two layouts apart at all: both are opaque byte streams that begin with a plausible value.
+    /// </remarks>
+    private const byte SerializationVersionMarker = 0xFF;
+
+    /// <summary>
+    /// Version 2 inserted <c>NumSubBlocks</c>, <c>KernelSize</c> and <c>WidthScaling</c>.
+    /// </summary>
+    private const int SerializationVersion = 2;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>The three v2 fields were inserted MID-STREAM, not appended, which is why this needs a version
+    /// rather than a length check.</b> A v1 payload runs ... EncoderDim, NumBlocks,
+    /// SqueezeExcitationRatio, NumMels ...; reading the v2 layout against it consumes
+    /// SqueezeExcitationRatio as NumSubBlocks and then misaligns every remaining field, including the
+    /// <see cref="double"/> and the length-prefixed string. The result is not an exception -- it is a
+    /// model that loads successfully with silently wrong architecture options.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
+        w.Write(SerializationVersionMarker);
+        w.Write(SerializationVersion);
+
         w.Write(_useNativeMode);
         w.Write(_options.ModelPath ?? string.Empty);
         w.Write(_options.SampleRate);
@@ -219,9 +239,31 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         w.Write(_options.Language);
     }
 
+    /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
     {
-        _useNativeMode = r.ReadBoolean();
+        // The first byte decides the layout. 0xFF means a versioned payload; 0x00 or 0x01 is the v1
+        // bool that used to lead, and is consumed as that bool rather than re-read.
+        byte lead = r.ReadByte();
+        int version;
+        if (lead == SerializationVersionMarker)
+        {
+            version = r.ReadInt32();
+            if (version > SerializationVersion)
+            {
+                throw new InvalidOperationException(
+                    $"This ContextNet payload was written by a newer AiDotNet (serialization version " +
+                    $"{version}); this build reads up to version {SerializationVersion}. Upgrade AiDotNet " +
+                    $"to load it. Refusing rather than reading it as version {SerializationVersion}, which " +
+                    $"would load a model configured with whatever the extra bytes happened to decode to.");
+            }
+            _useNativeMode = r.ReadBoolean();
+        }
+        else
+        {
+            version = 1;
+            _useNativeMode = lead != 0;
+        }
 
         string mp = r.ReadString();
         if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
@@ -230,9 +272,16 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         _options.MaxAudioLengthSeconds = r.ReadInt32();
         _options.EncoderDim = r.ReadInt32();
         _options.NumBlocks = r.ReadInt32();
-        _options.NumSubBlocks = r.ReadInt32();
-        _options.KernelSize = r.ReadInt32();
-        _options.WidthScaling = r.ReadDouble();
+
+        // Absent from v1. Left at their defaults there, which is the closest thing to the truth
+        // available: the payload was written by a build for which these were not configurable.
+        if (version >= 2)
+        {
+            _options.NumSubBlocks = r.ReadInt32();
+            _options.KernelSize = r.ReadInt32();
+            _options.WidthScaling = r.ReadDouble();
+        }
+
         _options.SqueezeExcitationRatio = r.ReadInt32();
         _options.NumMels = r.ReadInt32();
         _options.VocabSize = r.ReadInt32();
@@ -254,7 +303,33 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// as a best-effort fallback for models with Unicode-based token vocabularies.
     /// ONNX models typically include their own tokenizer; this path is for native mode.
     /// </summary>
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    /// <summary>Renders CTC token ids as text using the configured vocabulary.</summary>
+    /// <remarks>
+    /// THROUGH THE VOCABULARY, not as Unicode code points. This used to cast each id straight to a
+    /// char, which ignored <c>ContextNetOptions.Vocabulary</c> entirely: token 6 rendered as the
+    /// control character U+0006 rather than as "a". Every transcript the native path produced was
+    /// mojibake, and nothing threw. Index 0 is the CTC blank and is skipped; the word separator "|"
+    /// becomes a space; an id outside the vocabulary is skipped rather than guessed at.
+    /// </remarks>
+    private string TokensToText(List<int> tokens)
+    {
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (var t in tokens)
+        {
+            if (t <= 0 || t >= vocabulary.Length) continue;
+
+            string piece = vocabulary[t];
+            if (piece == "|") { sb.Append(' '); continue; }
+
+            // Remaining specials (<pad>, <s>, </s>, <unk>) carry no text.
+            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
+
+            sb.Append(piece);
+        }
+
+        return sb.ToString().Trim();
+    }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private string ClassifyLanguageFromTokens(List<int> _) => _options.Language;
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ContextNet<T>)); }

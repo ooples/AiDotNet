@@ -36,11 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "(AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-// Adds the input back to the inner layer's output; both have the same shape, so shape is carried
-// through unchanged at any rank.
-[ElementWiseShape(Note = "Adds the skip connection element-wise; shape is unchanged.")]
-[AutoParameters]
-public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
+public partial class ResidualLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The inner layer that transforms the input before being added back to the original input.
@@ -594,9 +590,23 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
+    public override long ParameterCount => _innerLayer?.ParameterCount ?? 0;
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         return _innerLayer?.GetParameterGradients() ?? new Vector<T>(0);
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        return _innerLayer?.GetParameters() ?? Vector<T>.Empty();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _innerLayer?.SetParameters(parameters);
     }
 
     /// <summary>

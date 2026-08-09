@@ -114,7 +114,11 @@ public class AbcNetSpottingTests
         // Guards against a threshold that is read but never applied — the head's sigmoid keeps scores
         // near 0.5 on an untrained model, so a threshold above that must empty the result.
         var options = Options(32);
-        options.ConfidenceThreshold = 1.5;   // unreachable through a sigmoid
+        // 1.0, not 1.5: the option is now range-checked to [0, 1] by ABCNetOptions.Validate,
+        // which the constructor calls. The test's intent is unchanged because a sigmoid maps to
+        // the OPEN interval (0, 1) -- it never actually reaches 1.0 -- so this threshold is still
+        // unreachable and must still empty the result.
+        options.ConfidenceThreshold = 1.0;
         var model = new ABCNet<double>(options);
 
         Assert.Empty(model.DetectInstances(Image(32, 3)));

@@ -43,13 +43,16 @@ public class ImplicitPosteriorGenerator<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>The paper's latent dimension: <c>z ~ U[0,1]^128</c>.</summary>
-    public const int PaperLatentDimension = 128;
+    /// <remarks>Alias for <see cref="SImPaPaperConstants.LatentDimension"/>, where the value lives.</remarks>
+    public const int PaperLatentDimension = SImPaPaperConstants.LatentDimension;
 
     /// <summary>The paper's first hidden width.</summary>
-    public const int PaperFirstHiddenWidth = 256;
+    /// <remarks>Alias for <see cref="SImPaPaperConstants.FirstHiddenWidth"/>.</remarks>
+    public const int PaperFirstHiddenWidth = SImPaPaperConstants.FirstHiddenWidth;
 
     /// <summary>The paper's second hidden width.</summary>
-    public const int PaperSecondHiddenWidth = 512;
+    /// <remarks>Alias for <see cref="SImPaPaperConstants.SecondHiddenWidth"/>.</remarks>
+    public const int PaperSecondHiddenWidth = SImPaPaperConstants.SecondHiddenWidth;
 
     private readonly int _latent;
     private readonly int _hidden1;
@@ -79,10 +82,30 @@ public class ImplicitPosteriorGenerator<T>
     /// <param name="secondHiddenWidth">Second hidden width; the paper's value is 512.</param>
     /// <param name="rng">Seeded source for the initial generator weights.</param>
     /// <remarks>
+    /// <para>
     /// The generator's weight count grows as <c>secondHiddenWidth * outputDimension</c>, so generating the
     /// parameters of a large network is expensive by construction — the paper applies this to the small
     /// networks few-shot benchmarks use. The widths are settable so that cost can be traded off
     /// deliberately rather than by accident.
+    /// </para>
+    /// <para>
+    /// <b>THE MULTIPLIER IS 512x AT THE PAPER'S DEFAULTS, and it is worth stating in figures because the
+    /// cost lands somewhere a caller does not look.</b> <c>lambda</c> is what the meta-optimizer perturbs,
+    /// and it is not perturbed by backpropagation — SImPa's meta-update goes through SPSA, which costs
+    /// <c>numSamples + 1</c> full evaluations and touches every one of <see cref="ParameterCount"/> entries
+    /// on each perturbation direction. So a task model with 10,000 parameters does not give a
+    /// 10,000-parameter meta-problem: it gives <c>512 * 10,000 + ...</c>, over five million, perturbed
+    /// three times per meta-step by default. A caller sizing this from a task network's parameter count is
+    /// choosing a number three orders of magnitude larger than the one they typed.
+    /// </para>
+    /// <para>
+    /// <b>Not clamped, deliberately.</b> Silently capping <paramref name="outputDimension"/> would generate
+    /// a parameter vector too short for the model it is meant to parameterize, which fails far away from
+    /// here and much less legibly than a slow run. Capping <paramref name="secondHiddenWidth"/> instead
+    /// would quietly depart from the paper — the thing this class exists to reproduce. The lever is
+    /// <see cref="ParameterCount"/>: read it after construction and lower the widths if it is larger than
+    /// the budget allows.
+    /// </para>
     /// </remarks>
     public ImplicitPosteriorGenerator(
         int outputDimension,
@@ -115,7 +138,7 @@ public class ImplicitPosteriorGenerator<T>
         int total = _w1 + _b1 + _w2 + _b2 + _w3 + _b3;
         _lambda = new Vector<T>(total);
 
-        var random = rng ?? new Random(17);
+        var random = rng ?? RandomHelper.CreateSeededRandom(17);
         InitializeWeights(random);
     }
 

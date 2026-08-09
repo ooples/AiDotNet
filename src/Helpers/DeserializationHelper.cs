@@ -1,4 +1,4 @@
-global using System.Reflection;
+﻿global using System.Reflection;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 
 namespace AiDotNet.Helpers;
@@ -142,6 +142,14 @@ public static class DeserializationHelper
                 RestoreEmbeddingConfiguration(generatedEmbedding, additionalParams);
             else if (generatedLayer is MultiHeadAttentionLayer<T> generatedAttention)
                 RestoreMultiHeadAttentionConfiguration(generatedAttention, additionalParams);
+
+            // THE SAME LAZY PRE-RESOLVE THE OTHER PATHS GET. Returning straight from here bypassed
+            // the block at the end of this method, so a lazy layer rebuilt through
+            // GeneratedLayerFactories stayed unresolved: SetParameters then received a layer whose
+            // ParameterCount is 0 and rejected the saved vector. The generated path is now the
+            // majority path, which makes this the common case rather than an edge one.
+            PreResolveLazyShape((ILayer<T>)generatedLayer, inputShape);
+
             return (ILayer<T>)generatedLayer;
         }
 
@@ -737,16 +745,28 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException(
                     "SetAbstractionLayer deserialize: missing SA_InputChannels metadata.");
 
-            double[] saRadii = (TryGetString(additionalParams, "SA_Radii") ?? "")
-                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => double.Parse(s, inv)).ToArray();
-            int[] saNeighbors = (TryGetString(additionalParams, "SA_NeighborSamples") ?? "")
-                .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => int.Parse(s, inv)).ToArray();
+            // TryParse, NOT Parse. This metadata is external input: a corrupt SA_Radii threw a bare
+            // FormatException (or OverflowException) straight past the branch-failure handling, which
+            // catches only MissingLayerCtorException and message-matched InvalidOperationException. The
+            // caller saw neither the layer name nor the offending key, and the metadata matcher never
+            // got its fallback. Each value now reports which key and which entry failed.
+            double[] saRadii = ParseDelimited(
+                TryGetString(additionalParams, "SA_Radii"), '|', "SA_Radii",
+                token => double.TryParse(token, System.Globalization.NumberStyles.Float, inv, out var d)
+                    ? d
+                    : throw SaMetadataError("SA_Radii", token));
+            int[] saNeighbors = ParseDelimited(
+                TryGetString(additionalParams, "SA_NeighborSamples"), '|', "SA_NeighborSamples",
+                token => int.TryParse(token, System.Globalization.NumberStyles.Integer, inv, out var i)
+                    ? i
+                    : throw SaMetadataError("SA_NeighborSamples", token));
             int[][] saMlp = (TryGetString(additionalParams, "SA_Mlp") ?? "")
                 .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(branch => branch.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => int.Parse(s, inv)).ToArray())
+                .Select(branch => ParseDelimited(
+                    branch, ',', "SA_Mlp",
+                    token => int.TryParse(token, System.Globalization.NumberStyles.Integer, inv, out var i)
+                        ? i
+                        : throw SaMetadataError("SA_Mlp", token)))
                 .ToArray();
 
             if (saRadii.Length == 0 || saRadii.Length != saNeighbors.Length || saRadii.Length != saMlp.Length)
@@ -1013,11 +1033,18 @@ public static class DeserializationHelper
         else if (genericDef == typeof(GraphAttentionLayer<>))
         {
             // GraphAttentionLayer(int inputFeatures, int outputFeatures, int numHeads = 1, double alpha = 0.2, double dropoutRate = 0.0, IActivationFunction<T>? = null)
-            int inputFeatures = inputShape[0];
+            //
+            // THE LAST AXIS, NOT THE FIRST -- the same rule the three sibling graph branches state:
+            // "Graph tensors may include leading batch/node axes, so the feature width is always the
+            // final axis." Reading axis 0 meant a rank-2 [numNodes, features] record reconstructed
+            // inputFeatures = numNodes, so the layer was rebuilt at the wrong width and SetParameters
+            // then rejected the saved vector -- or worse, accepted a coincidentally-matching one.
+            int inputFeatures = inputShape[inputShape.Length - 1];
             int numHeads = TryGetInt(additionalParams, "NumHeads") ?? 1;
             bool concatenateHeads = TryGetBool(additionalParams, "ConcatenateHeads") ?? false;
+            int outputWidth = outputShape[outputShape.Length - 1];
             int outputFeatures = TryGetInt(additionalParams, "HeadOutputFeatures")
-                ?? (concatenateHeads ? outputShape[0] / Math.Max(numHeads, 1) : outputShape[0]);
+                ?? (concatenateHeads ? outputWidth / Math.Max(numHeads, 1) : outputWidth);
             double alpha = TryGetDouble(additionalParams, "Alpha") ?? 0.2;
             double dropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
 
@@ -1334,7 +1361,11 @@ public static class DeserializationHelper
             double dropoutRate = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             bool useResidual = TryGetBool(additionalParams, "UseResidual") ?? true;
-            int seed = TryGetInt(additionalParams, "Seed") ?? 2027;
+            // 0, NOT AN INVENTED 2027. A seed is consumed at construction and the RNG state has
+            // already advanced past it by the time a trained layer is serialized, so a persisted or
+            // invented seed describes nothing about the restored layer -- it only looks meaningful.
+            // The NHiTSStackTensor branch reasons this way for the same concept; this now matches it.
+            int seed = TryGetInt(additionalParams, "Seed") ?? 0;
             instance = new ContextNetBlockLayer<T>(
                 inputChannels, outputChannels, kernelSize, numConvolutions,
                 seReductionRatio, dropoutRate, stride, useResidual, seed);
@@ -1378,9 +1409,10 @@ public static class DeserializationHelper
             // string in the metadata.)
             var dsActivationType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? dsActivationObj = TryCreateActivationInstance(additionalParams, "ScalarActivationType", dsActivationType);
-            if (dsActivationObj is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+            if (dsActivationObj is null && additionalParams is not null
+                && additionalParams.TryGetValue("ScalarActivationType", out object? dsActivationTypeName))
                 throw new InvalidOperationException(
-                    $"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for DepthwiseSeparableConvolutionalLayer.");
+                    $"Failed to deserialize activation function of type '{dsActivationTypeName}' for DepthwiseSeparableConvolutionalLayer.");
 
             instance = new DepthwiseSeparableConvolutionalLayer<T>(
                 dsOutputDepth, dsKernelSize, dsStride, dsPadding, dsActivationObj as IActivationFunction<T>);
@@ -3260,7 +3292,23 @@ public static class DeserializationHelper
         // FeedForwardLayer, LayerNormalizationLayer, BatchNormalizationLayer)
         // tolerate ResolveFromShape failures here since SetParameters will
         // recover; for others the layer's first Forward resolves it.
-        if (instance is NeuralNetworks.Layers.LayerBase<T> lb
+        PreResolveLazyShape((ILayer<T>)instance, inputShape);
+
+        return (ILayer<T>)instance;
+    }
+
+    /// <summary>
+    /// Resolves a still-lazy layer's shapes from the recorded input shape, before its parameters are
+    /// restored.
+    /// </summary>
+    /// <remarks>
+    /// Extracted so BOTH reconstruction paths run it. The generated-factory branch used to return
+    /// early and skip this, leaving a lazy layer unresolved with a ParameterCount of 0 -- and
+    /// SetParameters then rejected the saved vector outright.
+    /// </remarks>
+    private static void PreResolveLazyShape<T>(ILayer<T> layer, int[]? inputShape)
+    {
+        if (layer is NeuralNetworks.Layers.LayerBase<T> lb
             && !lb.IsShapeResolved
             && inputShape != null
             && inputShape.Length > 0
@@ -3275,7 +3323,7 @@ public static class DeserializationHelper
                 // Layer's OnFirstForward expects a different input rank.
                 // SetParameters now self-resolves from the parameter vector
                 // size for the lazy-migrated layer family, so the trained
-                // weights still land. Trace it for telemetry — silent swallow
+                // weights still land. Trace it for telemetry -- silent swallow
                 // hid #1221 for too long.
                 System.Diagnostics.Trace.TraceWarning(
                     $"DeserializationHelper: ResolveFromShape failed for {lb.GetType().Name} " +
@@ -3283,8 +3331,6 @@ public static class DeserializationHelper
                     "Layer will resolve via SetParameters or first Forward.");
             }
         }
-
-        return (ILayer<T>)instance;
     }
 
     private static object CreateDenseLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
@@ -3392,12 +3438,18 @@ public static class DeserializationHelper
     /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>
     private static object CreateVocosGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
     {
-        int numMels = TryGetInt(additionalParams, "NumMels") ?? 100;
-        int hiddenDim = TryGetInt(additionalParams, "HiddenDim") ?? 512;
-        int numBackboneBlocks = TryGetInt(additionalParams, "NumBackboneBlocks") ?? 8;
-        int intermediateDim = TryGetInt(additionalParams, "IntermediateDim") ?? 1536;
-        int nFft = TryGetInt(additionalParams, "NFft") ?? 1024;
-        int hopLength = TryGetInt(additionalParams, "HopLength") ?? 256;
+        // STRUCTURAL VALUES ARE REQUIRED, not defaulted. Every one of these fixes the layer's
+        // parameter count, so substituting a literal when the key is absent rebuilds a
+        // differently-sized layer: SetParameters then either fails much later with an opaque count
+        // mismatch, or loads the saved weights into wrong-shaped buffers and produces a model that
+        // runs and is wrong. CreateSTCConnectorLayer sets the standard this follows.
+        int numMels = RequireInt(additionalParams, "NumMels", nameof(VocosGeneratorLayer<T>));
+        int hiddenDim = RequireInt(additionalParams, "HiddenDim", nameof(VocosGeneratorLayer<T>));
+        int numBackboneBlocks = RequireInt(additionalParams, "NumBackboneBlocks", nameof(VocosGeneratorLayer<T>));
+        int intermediateDim = RequireInt(additionalParams, "IntermediateDim", nameof(VocosGeneratorLayer<T>));
+        int nFft = RequireInt(additionalParams, "NFft", nameof(VocosGeneratorLayer<T>));
+        int hopLength = RequireInt(additionalParams, "HopLength", nameof(VocosGeneratorLayer<T>));
+
         return new VocosGeneratorLayer<T>(
             numMels,
             hiddenDim,
@@ -3410,9 +3462,21 @@ public static class DeserializationHelper
     /// <summary>Reconstructs the complete native ViT-CoMer graph from serialized metadata.</summary>
     private static object CreateViTCoMerSegmentationLayer<T>(Dictionary<string, object>? additionalParams)
     {
-        static int[] ParseList(string? value, int[] fallback)
+        string layerName = nameof(ViTCoMerSegmentationLayer<T>);
+
+        // THROWS on an unparseable element rather than falling back. Returning the default list for
+        // a malformed entry silently rebuilds a different network: the channel widths and stage
+        // depths determine every weight shape downstream.
+        int[] ParseRequiredList(string key)
         {
-            if (string.IsNullOrWhiteSpace(value)) return fallback;
+            string? value = TryGetString(additionalParams, key);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(
+                    $"{layerName} deserialization requires '{key}' metadata; it determines the "
+                    + "layer's weight shapes and cannot be defaulted.");
+            }
+
             // net471's nullable-flow analysis does not learn the non-null state from
             // string.IsNullOrWhiteSpace, even though the guard above has returned.
             var parts = value!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -3424,9 +3488,12 @@ public static class DeserializationHelper
                 if (!int.TryParse(parts[i], System.Globalization.NumberStyles.Integer,
                     System.Globalization.CultureInfo.InvariantCulture, out result[i]))
                 {
-                    return fallback;
+                    throw new InvalidOperationException(
+                        $"{layerName} deserialization could not parse element {i} of '{key}' "
+                        + $"('{parts[i]}') as an integer.");
                 }
             }
+
             return result;
         }
 
@@ -3434,29 +3501,47 @@ public static class DeserializationHelper
             TryGetInt(additionalParams, "InputChannels") ?? 3,
             TryGetInt(additionalParams, "InputHeight") ?? 512,
             TryGetInt(additionalParams, "InputWidth") ?? 512,
-            TryGetInt(additionalParams, "EmbedDim") ?? 384,
-            ParseList(TryGetString(additionalParams, "CnnChannels"), [64, 128, 320, 512]),
-            ParseList(TryGetString(additionalParams, "Depths"), [2, 2, 6, 2]),
-            TryGetInt(additionalParams, "DecoderDim") ?? 256,
-            TryGetInt(additionalParams, "NumClasses") ?? 150,
+            RequireInt(additionalParams, "EmbedDim", layerName),
+            ParseRequiredList("CnnChannels"),
+            ParseRequiredList("Depths"),
+            RequireInt(additionalParams, "DecoderDim", layerName),
+            RequireInt(additionalParams, "NumClasses", layerName),
+            // DropRate is a true behavioural default: it changes nothing about tensor shapes.
             TryGetDouble(additionalParams, "DropRate") ?? 0.1);
     }
 
     /// <summary>Reconstructs the complete native VideoGigaGAN generator from layer metadata.</summary>
     private static object CreateVideoGigaGANGeneratorLayer<T>(Dictionary<string, object>? additionalParams)
     {
+        string layerName = nameof(VideoGigaGANGeneratorLayer<T>);
+
         return new VideoGigaGANGeneratorLayer<T>(
             TryGetInt(additionalParams, "InputChannels") ?? 3,
             TryGetInt(additionalParams, "InputHeight") ?? 64,
             TryGetInt(additionalParams, "InputWidth") ?? 64,
-            TryGetInt(additionalParams, "NumFeatures") ?? 128,
-            TryGetInt(additionalParams, "NumResBlocks") ?? 23,
-            TryGetInt(additionalParams, "NumStyleLayers") ?? 14,
-            TryGetInt(additionalParams, "ScaleFactor") ?? 4,
-            TryGetInt(additionalParams, "FlowPyramidLevels") ?? 5,
+            RequireInt(additionalParams, "NumFeatures", layerName),
+            RequireInt(additionalParams, "NumResBlocks", layerName),
+            RequireInt(additionalParams, "NumStyleLayers", layerName),
+            RequireInt(additionalParams, "ScaleFactor", layerName),
+            RequireInt(additionalParams, "FlowPyramidLevels", layerName),
+            // HFShuttleWeight is a true behavioural default: it changes nothing about tensor shapes.
             TryGetDouble(additionalParams, "HFShuttleWeight") ?? 0.5);
     }
 
+    /// <summary>
+    /// Reads a metadata value that fixes a layer's parameter count, failing when it is absent.
+    /// </summary>
+    /// <remarks>
+    /// The distinction that matters: a BEHAVIOURAL default such as a dropout rate can be substituted
+    /// safely, because the rebuilt layer still has the same weight shapes. A STRUCTURAL value cannot
+    /// -- defaulting it produces a layer of a different size, and the failure then arrives later as
+    /// an opaque parameter-count mismatch, or not at all if the counts happen to line up.
+    /// </remarks>
+    private static int RequireInt(Dictionary<string, object>? additionalParams, string key, string layerName)
+        => TryGetInt(additionalParams, key)
+            ?? throw new InvalidOperationException(
+                $"{layerName} deserialization requires '{key}' metadata; it determines the layer's "
+                + "parameter count and cannot be defaulted.");
     /// <summary>
     /// Reconstructs an <see cref="STCConnectorLayer{T}"/> from the metadata persisted by
     /// <c>STCConnectorLayer.GetMetadata</c>. All RegStage, Conv3D, and MLP weights travel in the
@@ -3903,7 +3988,12 @@ public static class DeserializationHelper
         if (additionalParams != null && additionalParams.TryGetValue("InputMode", out var modeObj))
         {
             var modeStr = modeObj?.ToString();
-            if (!Enum.TryParse<EmbeddingInputMode>(modeStr, out var mode))
+            // ignoreCase to match RestoreMultiHeadAttentionConfiguration below, and IsDefined because
+            // Enum.TryParse succeeds for ANY numeric string: "999" parsed into an EmbeddingInputMode
+            // with no matching member and sailed through the very check meant to reject malformed
+            // values, leaving the layer interpreting its input in a mode that does not exist.
+            if (!Enum.TryParse<EmbeddingInputMode>(modeStr, ignoreCase: true, out var mode)
+                || !Enum.IsDefined(typeof(EmbeddingInputMode), mode))
                 throw new InvalidOperationException(
                     $"EmbeddingLayer metadata 'InputMode' has an unparseable value '{modeStr}'. " +
                     $"Expected one of: {string.Join(", ", Enum.GetNames(typeof(EmbeddingInputMode)))}.");
@@ -3925,7 +4015,17 @@ public static class DeserializationHelper
         MultiHeadAttentionLayer<T> attention,
         Dictionary<string, object>? additionalParams)
     {
-        attention.UseCausalMask = TryGetBool(additionalParams, "UseCausalMask") ?? false;
+        // ONLY WHEN THE KEY IS PRESENT. This wrote false whenever the key was absent, which is the
+        // opposite of every other restore in this file -- RestoreEmbeddingConfiguration directly above
+        // leaves the constructor default alone. It matters most on the generated-factory path, where
+        // [LayerState] may already have supplied useCausalMask as a constructor argument: that value
+        // was then overwritten with false and a causal attention layer silently reloaded as
+        // bidirectional, which changes what the model attends to without failing anywhere.
+        bool? causalMask = TryGetBool(additionalParams, "UseCausalMask");
+        if (causalMask.HasValue)
+        {
+            attention.UseCausalMask = causalMask.Value;
+        }
 
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
         if (string.IsNullOrWhiteSpace(positionalEncoding)
@@ -3941,6 +4041,41 @@ public static class DeserializationHelper
             TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
         attention.ConfigurePositionalEncoding(positionalType, ropeTheta, maxSequenceLength);
     }
+
+    /// <summary>
+    /// Splits a delimited metadata value and converts each token, reporting the key and the offending
+    /// token when a token is malformed.
+    /// </summary>
+    /// <remarks>
+    /// Serialized metadata is external input, so a malformed token has to surface as a diagnosable
+    /// <see cref="InvalidOperationException"/> naming the key -- not as a bare <c>FormatException</c>
+    /// from deep inside a LINQ projection, which escapes the branch-failure handling entirely.
+    /// </remarks>
+    private static TValue[] ParseDelimited<TValue>(
+        string? raw, char separator, string keyName, Func<string, TValue> convert)
+    {
+        // `raw is null` rather than string.IsNullOrEmpty: the net471 reference assemblies carry no
+        // [NotNullWhen] on that method, so its result does not narrow the nullability of `raw` and
+        // the split below is a CS8602 on that target only. Spelling the check out satisfies both.
+        if (raw is null || raw.Length == 0)
+        {
+            return Array.Empty<TValue>();
+        }
+
+        var tokens = raw.Split(new[] { separator }, StringSplitOptions.RemoveEmptyEntries);
+        var values = new TValue[tokens.Length];
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            values[i] = convert(tokens[i].Trim());
+        }
+
+        return values;
+    }
+
+    private static InvalidOperationException SaMetadataError(string keyName, string token) =>
+        new InvalidOperationException(
+            $"SetAbstractionLayer deserialize: metadata '{keyName}' contains a value that is not a "
+            + $"number: '{token}'. The payload is corrupt or was written by an incompatible build.");
 
     private static int? TryGetInt(Dictionary<string, object>? parameters, string key)
     {
@@ -3974,6 +4109,77 @@ public static class DeserializationHelper
         {
             if (!int.TryParse(parts[i], out result[i]))
                 return null;
+        }
+        return result;
+    }
+
+    /// <summary>Reads a <c>double[]</c> constructor argument, parsing the serialized string form.</summary>
+    /// <remarks>
+    /// Mirrors <see cref="TryGetIntArray"/>, which is what lets a layer round-trip an array through
+    /// string metadata. Without a double[] reader the reflective matcher had no arm for that type at
+    /// all, so any constructor taking one (SetAbstractionLayer's multi-scale radii) could never be
+    /// satisfied from metadata no matter how the keys were named.
+    /// InvariantCulture, matching TryGetDouble: a model saved under a comma-decimal locale must load
+    /// under a period-decimal one.
+    /// </remarks>
+    private static double[]? TryGetDoubleArray(Dictionary<string, object>? parameters, string key)
+    {
+        if (parameters is null || !parameters.TryGetValue(key, out var value) || value is null)
+            return null;
+
+        if (value is double[] arr)
+            return arr;
+
+        string str = value.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(str))
+            return null;
+
+        var parts = str.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var result = new double[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!double.TryParse(parts[i], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out result[i]))
+                return null;
+        }
+        return result;
+    }
+
+    /// <summary>Reads an <c>int[][]</c> argument: groups separated by ';', values within a group by ','.</summary>
+    /// <remarks>
+    /// The int[][] arm previously accepted only a value that was ALREADY int[][], so a jagged array
+    /// serialized into string metadata could never be read back and fell through to a shape-derived
+    /// placeholder.
+    /// </remarks>
+    private static int[][]? TryGetIntJagged(Dictionary<string, object>? parameters, string key)
+    {
+        if (parameters is null || !parameters.TryGetValue(key, out var value) || value is null)
+            return null;
+
+        if (value is int[][] jagged)
+            return jagged;
+
+        string str = value.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(str))
+            return null;
+
+        // None, NOT RemoveEmptyEntries: the option stripped malformed groups before the
+        // parts.Length == 0 check below could reject them, so ";;" parsed to a non-null EMPTY
+        // jagged array and was then accepted downstream as valid metadata. Keeping the empty
+        // groups lets the existing validation see them and return null.
+        var groups = str.Split(new[] { ';' }, StringSplitOptions.None);
+        var result = new int[groups.Length][];
+        for (int g = 0; g < groups.Length; g++)
+        {
+            var parts = groups[g].Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return null;
+            result[g] = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out result[g][i]))
+                    return null;
+            }
         }
         return result;
     }
@@ -4799,6 +5005,24 @@ public static class DeserializationHelper
                     continue;
                 }
 
+                // 1b. double[] parameters — e.g. SetAbstractionLayer's multi-scale radii. Without
+                // this arm the matcher had no case for the type and fell through to the generic
+                // fallback, so the constructor could never be satisfied from metadata.
+                if (pType == typeof(double[]))
+                {
+                    var darr = TryGetDoubleArray(additionalParams, capName);
+                    if (darr is not null) { args[pi] = darr; metadataMatches++; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    // NO INVENTED VALUE. This used to substitute new double[] { 1.0 }, which for
+                    // SetAbstractionLayer is the multi-scale RADII -- they select neighbourhoods, so a
+                    // made-up value makes a restored model produce different results from the one that
+                    // was saved, silently and with a successful-looking load. With no metadata and no
+                    // constructor default there is nothing to restore from, so the constructor is left
+                    // unresolved and the matcher moves on to another one or reports the payload
+                    // incomplete -- the same signal every other unsatisfiable parameter raises.
+                    allResolved = false; break;
+                }
+
                 // 2. int parameters
                 if (pType == typeof(int))
                 {
@@ -4929,9 +5153,11 @@ public static class DeserializationHelper
                 //    composite layers expect at least two input shapes).
                 if (pType == typeof(int[][]))
                 {
-                    if (additionalParams != null
-                        && additionalParams.TryGetValue(capName, out var jv)
-                        && jv is int[][] jarr)
+                    // Parses the serialized "1,2;3,4" form as well as an already-typed int[][], so a
+                    // jagged argument survives a string-metadata round-trip instead of falling
+                    // through to the shape-derived placeholder below.
+                    var jarr = TryGetIntJagged(additionalParams, capName);
+                    if (jarr is not null)
                     {
                         args[pi] = jarr;
                         metadataMatches++;

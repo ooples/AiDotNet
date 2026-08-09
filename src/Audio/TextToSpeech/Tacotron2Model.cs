@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -70,29 +70,6 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ResearchPaper("Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions", "https://arxiv.org/abs/1712.05884", Year = 2018, Authors = "Jonathan Shen, Ruoming Pang, Ron J. Weiss, Mike Schuster, Navdeep Jaitly, Zongheng Yang, Zhifeng Chen, Yu Zhang, Yuxuan Wang, RJ Skerry-Ryan, Rif A. Saurous, Yannis Agiomyrgiannakis, Yonghui Wu")]
 public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Declines: emits a FRAME axis. Measured, [1,64] returns [1,2000,80] - 80 mels over up to 2000
-    /// autoregressive frames - not the rank-2 [1,80] the inherited contract would claim. The mel width
-    /// is correct; the frame count is a decode cap unrelated to input length, so no relation to an
-    /// input axis can be stated without measuring it separately.
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from the output construction, which is a CUSTOM autoregressive forward, not a
-    /// layer-walk: <c>PredictCore</c> calls <c>ForwardNative</c>, which ends with
-    /// <c>Engine.TensorAdd(melSpectrogram, residual)</c>, and <c>PostprocessOutput</c> is the identity.
-    /// Both addends carry the same last axis: <c>CombineMelFrames</c> narrows each grouped decoder
-    /// frame into <c>NumMels</c>-wide slices (yielding <c>[1, frames * _numMelsPerFrame, NumMels]</c>),
-    /// and the post-net's last layer is <c>new DenseLayer&lt;T&gt;(numMels, identity)</c> in
-    /// <c>LayerHelper.CreateTacotron2Layers</c>. So the width is <c>NumMels</c>.
-    /// Deliberately NOT the decoder's mel head width, which is <c>numMels * numMelsPerFrame</c>: that
-    /// grouped frame is split back apart by <c>CombineMelFrames</c> before the output is formed.
-    /// </remarks>
-    protected override int OutputFeatureWidth => NumMels;
-
     private readonly Tacotron2ModelOptions _options;
 
     /// <inheritdoc/>
@@ -989,9 +966,9 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
         if (expectedOutput.Shape[^1] % NumMels != 0)
             throw new ArgumentException($"expectedOutput last dimension ({expectedOutput.Shape[^1]}) must be divisible by NumMels ({NumMels}).", nameof(expectedOutput));
-        int melFrameCount = expectedOutput.Shape[1] / _numMelsPerFrame;
+        int melFrameCount = MelFrameCount(expectedOutput);
         if (melFrameCount == 0)
-            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[1]} mel values but _numMelsPerFrame is {_numMelsPerFrame}, resulting in zero frames.", nameof(expectedOutput));
+            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[^1]} mel values in its last axis but NumMels is {NumMels}, resulting in zero frames.", nameof(expectedOutput));
 
         _teacherForcingTarget = expectedOutput;
         try
@@ -1259,7 +1236,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         var encoderOutput = _encoderLstm?.Forward(encoderInput) ?? encoderInput;
 
-        int numFrames = targetMel.Rank >= 2 ? targetMel.Shape[^2] : 0;
+        int numFrames = MelFrameCount(targetMel);
         var melFrames = new List<Tensor<T>>();
         var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
         var decoderState = new Tensor<T>([1, _decoderDim]);
@@ -1320,8 +1297,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Assembles the decoder's per-step mel outputs into [1, steps * numMelsPerFrame, numMels] using
     /// recorded reshape/concatenate ops, so gradients flow back through every decoder step.
-    /// <see cref="CombineMelFrames"/> builds the same tensor by assigning elements one at a time,
-    /// which produces a value the tape cannot differentiate through.
+    /// <see cref="CombineMelFrames"/> is the fallback for a decoder that emits a different width; it
+    /// is ALSO tape-safe, building its result from <c>Engine.TensorNarrow</c> and
+    /// <c>Engine.TensorStack</c>. This comment used to say it assigned elements one at a time and so
+    /// could not be differentiated through -- that described an implementation removed when the
+    /// detached-tape bug was fixed, and left the fallback looking like a gradient-losing path when it
+    /// is not.
     /// </summary>
     private Tensor<T> CombineMelFramesTapeSafe(List<Tensor<T>> frames)
     {
@@ -1421,10 +1402,33 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         return Engine.TensorConcatenate(new[] { a2d, b2d }, axis: 1);
     }
 
+    /// <summary>
+    /// The number of mel frames in a teacher-forcing target, under either supported layout.
+    /// </summary>
+    /// <remarks>
+    /// ONE PLACE THAT DECIDES THIS. There are two accepted layouts and they put the frame axis
+    /// somewhere different:
+    /// <list type="bullet">
+    /// <item>rank 3, <c>[batch, frames, mels]</c> -- the frame count is <c>Shape[^2]</c>;</item>
+    /// <item>rank 2, <c>[batch, frames*mels]</c> -- the frames are FLATTENED INTO the last axis, so
+    /// the count is <c>Shape[^1] / NumMels</c> and <c>Shape[^2]</c> is the batch.</item>
+    /// </list>
+    /// Reading <c>Shape[^2]</c> for both is what went wrong: on a rank-2 target the frame count came
+    /// back as the batch size, so <c>decoderSteps</c> collapsed to 1 for a target of any length and
+    /// the loss compared a single decoder step against the whole utterance. It produced a finite,
+    /// decreasing loss the whole time -- nothing about it looked like a failure.
+    /// </remarks>
+    private int MelFrameCount(Tensor<T> mel)
+    {
+        if (mel.Rank >= 3) return mel.Shape[^2];
+        if (mel.Rank == 2) return mel.Shape[^1] / NumMels;
+        return 0;
+    }
+
     private Tensor<T> ExtractMelFrameGroup(Tensor<T> mel, int firstFrame)
     {
         var group = new Tensor<T>([1, NumMels * _numMelsPerFrame]);
-        int availableFrames = mel.Rank >= 2 ? mel.Shape[^2] : 0;
+        int availableFrames = MelFrameCount(mel);
         for (int f = 0; f < _numMelsPerFrame; f++)
         {
             int frame = firstFrame + f;
@@ -1432,9 +1436,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 break;
             for (int m = 0; m < NumMels; m++)
             {
+                // Rank 2 is [batch, frames*mels], so the frame's mels are a contiguous NumMels-wide
+                // run inside the last axis -- NOT mel[frame, m], which indexed the batch axis by a
+                // frame number and read whatever row happened to be there.
                 group[0, f * NumMels + m] = mel.Rank >= 3
                     ? mel[0, frame, m]
-                    : mel[frame, m];
+                    : mel[0, frame * NumMels + m];
             }
         }
         return group;
@@ -1458,6 +1465,14 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                     melFrames.Add(Engine.TensorNarrow(groupedOutput, groupedOutput.Rank - 1, start, NumMels));
             }
         }
+        // A NON-EMPTY `frames` CAN STILL YIELD NO SLICES. The narrow above is conditional, so if every
+        // grouped output is narrower than NumMels the list stays empty and TensorStack is handed a
+        // zero-length array. The early return only covers `frames` being empty, which is a different
+        // condition. Return the same empty mel the caller already handles rather than failing inside
+        // the engine on a shape it cannot explain.
+        if (melFrames.Count == 0)
+            return new Tensor<T>([1, 0, NumMels]);
+
         return Engine.TensorStack(melFrames.ToArray(), axis: 1);
     }
 

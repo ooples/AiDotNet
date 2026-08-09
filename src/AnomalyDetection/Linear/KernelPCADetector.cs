@@ -47,6 +47,10 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Nonlinear Component Analysis as a Kernel Eigenvalue Problem", "https://doi.org/10.1162/089976698300017467", Year = 1998, Authors = "Bernhard Scholkopf, Alexander Smola, Klaus-Robert Muller")]
+// Scholkopf 1998 gives kernel PCA itself; the NOVELTY SCORE this detector reports -- the
+// reconstruction error in feature space -- is Hoffmann's, and that is the rule the scoring
+// semantics have to be judged against.
+[ResearchPaper("Kernel PCA for Novelty Detection", "https://doi.org/10.1016/j.patcog.2006.07.009", Year = 2007, Authors = "Heiko Hoffmann")]
 public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _gamma;

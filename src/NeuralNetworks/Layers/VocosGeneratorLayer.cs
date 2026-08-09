@@ -29,69 +29,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High,
     TestInputShape = "1, 8, 4", TestConstructorArgs = "8, 16, 2, 32, 16, 4")]
-// Roles and ranks from this layer's own guard in ForwardTraced - "requires [mel, frames] or
-// [batch, mel, frames] input" - which throws for every other rank. The mel axis is named Channels
-// rather than Features because that is what the code itself calls it: it is the input channel count of
-// _inputEmbedding (a Conv1DLayer(numMels -> hiddenDim)), and the line after that forward is commented
-// "// [B, C, T]". Naming it Channels also makes the hand-off from a mel front-end legible.
-//
-// THE RANK DROPS BY ONE. This layer is a vocoder: it consumes a time-frequency map and emits a
-// WAVEFORM, so the mel axis does not survive - [B, mel, frames] leaves as [B, samples]. One output
-// declaration with BatchOptional covers both the rank-2 and rank-1 results, mirroring the input pair.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input,
-    Note = "Mel spectrogram: the channel axis is the mel filterbank, the last axis is frames.")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output,
-    Note = "Raw waveform samples; the mel axis is consumed by the Fourier head and inverse STFT.")]
-[AutoParameters]
-public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
+public partial class VocosGeneratorLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Read off the two lines that close <c>ForwardTraced</c>:
-    /// <c>int waveformLength = frames * _hopLength;</c> then
-    /// <c>Reshape(waveform, new[] { waveformLength })</c> for the unbatched case, or the batched
-    /// <c>waveform</c> ([B, frames * hopLength]) as it stands. So the single surviving non-batch axis is
-    /// the frame count multiplied by the hop length - <c>Scaled(Time, _hopLength)</c>, with the factor
-    /// read off the constructor argument.
-    /// </para>
-    /// <para>
-    /// <c>Scaled</c> and not <c>Window</c>: overlap-add synthesis advances by exactly one hop per frame,
-    /// and nothing here rounds. The class remarks state the same relation directly - "Output is
-    /// [batch, frames * hopLength] or [frames * hopLength]".
-    /// </para>
-    /// <para>
-    /// THE MEL AXIS HAS NO OUTPUT COUNTERPART, which is why this is hand-written and why the returned
-    /// list is one shorter than the input rank. Its width is not resized, it is CONSUMED: the backbone
-    /// has already replaced it with <c>_hiddenDim</c> at the very first convolution, the Fourier head
-    /// projects that to <c>n_fft + 2</c> magnitude/phase coefficients, and the inverse STFT turns those
-    /// into samples along time. Declaring any relation for it would invent an axis the output does not
-    /// have.
-    /// </para>
-    /// <para>
-    /// Note also that <c>_nFft</c> does NOT appear in the relation, which is easy to expect and wrong.
-    /// It sizes the analysis window and therefore the per-frame overlap, but the same-padded ISTFT
-    /// trims back to one hop per frame, so the FFT size cancels out of the length entirely.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank is not (2 or 3) || _hopLength <= 0) return null;
-
-        var samples = new OutputAxisContract(
-            TensorAxis.Time, AxisRelation.Scaled(TensorAxis.Time, _hopLength));
-
-        return inputRank == 2
-            ? new[] { samples }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                samples,
-            };
-    }
-
     private readonly int _numMels;
     private readonly int _hiddenDim;
     private readonly int _numBackboneBlocks;
@@ -444,6 +383,27 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorMultiplyScalar(real, NumOps.FromDouble(1.0 / _nFft));
     }
 
+    /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            long count = _inputEmbedding.ParameterCount
+                + _inputNormalization.ParameterCount
+                + _outputNormalization.ParameterCount
+                + _fourierProjection.ParameterCount;
+            for (int i = 0; i < _numBackboneBlocks; i++)
+            {
+                count += _depthwiseConvolutions[i].ParameterCount
+                    + _blockNormalizations[i].ParameterCount
+                    + _blockExpansions[i].ParameterCount
+                    + _blockProjections[i].ParameterCount
+                    + _layerScales[i].Length;
+            }
+            return count;
+        }
+    }
+
     private IEnumerable<(ILayer<T>? Layer, Tensor<T>? Scale)> OrderedParameterParts()
     {
         yield return (_inputEmbedding, null);
@@ -458,6 +418,49 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
         }
         yield return (_outputNormalization, null);
         yield return (_fourierProjection, null);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var values = new List<T>((int)ParameterCount);
+        foreach (var (layer, scale) in OrderedParameterParts())
+        {
+            if (layer is not null)
+            {
+                var parameters = layer.GetParameters();
+                for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
+            }
+            else if (scale is not null)
+            {
+                for (int i = 0; i < scale.Length; i++) values.Add(scale[i]);
+            }
+        }
+        return new Vector<T>(values.ToArray());
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
+
+        int offset = 0;
+        foreach (var (layer, scale) in OrderedParameterParts())
+        {
+            if (layer is not null)
+            {
+                int count = (int)layer.ParameterCount;
+                layer.SetParameters(parameters.Slice(offset, count));
+                offset += count;
+            }
+            else if (scale is not null)
+            {
+                parameters.AsSpan().Slice(offset, scale.Length).CopyTo(scale.Data.Span);
+                Engine.InvalidatePersistentTensor(scale);
+                offset += scale.Length;
+            }
+        }
     }
 
     /// <inheritdoc/>

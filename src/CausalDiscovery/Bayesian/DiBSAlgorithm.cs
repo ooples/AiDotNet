@@ -200,38 +200,6 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
         return result;
     }
 
-    /// <summary>
-    /// Standardizes each column to zero mean / unit variance so the downstream covariance is the
-    /// scale-invariant correlation matrix. A (near-)constant column is left mean-centered (std=1)
-    /// so it contributes no spurious correlation.
-    /// </summary>
-    private Matrix<T> StandardizeColumns(Matrix<T> data)
-    {
-        int n = data.Rows;
-        int d = data.Columns;
-        var result = new Matrix<T>(n, d);
-        for (int j = 0; j < d; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dev = NumOps.ToDouble(data[i, j]) - mean;
-                variance += dev * dev;
-            }
-            variance /= n;
-            double std = Math.Sqrt(variance);
-            if (std < 1e-10) std = 1.0;
-
-            for (int i = 0; i < n; i++)
-                result[i, j] = NumOps.FromDouble((NumOps.ToDouble(data[i, j]) - mean) / std);
-        }
-        return result;
-    }
-
     private Matrix<T> ComputeLogPosteriorGradient(Matrix<T> Z, Matrix<T> cov, int d, T tau, int n)
     {
         var grad = new Matrix<T>(d, d);

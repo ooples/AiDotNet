@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -71,29 +71,6 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli")]
 public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Declines: emits a TIME axis. Measured, [1,64] returns [1,2,34] - per-frame CTC logits over a
-    /// convolutionally downsampled time axis - not the rank-2 [1,34] the inherited contract would
-    /// claim. The vocabulary width is correct; the frame count depends on the feature encoder's stride
-    /// stack and needs measuring in its own right before any relation is declared.
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from the output construction, which here is a CUSTOM forward rather than a layer-walk:
-    /// <c>PredictCore</c> calls <c>RunModel</c>, whose last step is
-    /// <c>x = _ctcProjection.Forward(x)</c> taking <c>[1,T',hidden] -&gt; [1,T',vocab]</c>, and
-    /// <c>PostprocessOutput</c> is the identity. <c>_ctcProjection</c> is bound to <c>Layers[^1]</c>,
-    /// which <c>LayerHelper.CreateWav2Vec2Layers</c> emits as <c>new DenseLayer&lt;T&gt;(vocabSize)</c>
-    /// from <c>vocabSize: _vocabSize</c>. <c>_vocabSize</c> is <c>_vocabulary.Length</c>, so the width
-    /// tracks the loaded vocabulary rather than a fixed constant - and it is the same value
-    /// <c>CTCLoss</c> is constructed with (<c>numClasses: _vocabSize</c>), which confirms it
-    /// independently of the layer stack.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _vocabSize;
-
     private readonly Wav2Vec2ModelOptions _options;
 
     /// <inheritdoc/>
@@ -489,6 +466,23 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         int featureEncoderCount = 9;
         int transformerCount = _numTransformerLayers;
+
+        // CHECKED BEFORE DISTRIBUTING, because every loop below is bounded by `i < Layers.Count` and
+        // therefore cannot fail. With too few layers each loop simply stops early: _transformerLayers
+        // ends up short, _posConv stays null, and _ctcProjection is taken from Layers[^1] -- which is
+        // then a transformer block rather than the projection. Nothing throws. The model runs and
+        // produces logits from a stack that is missing pieces, and the only visible symptom is poor
+        // recognition. The expected count is the feature encoder, the positional convolution, the
+        // transformer blocks, and the CTC projection.
+        int expectedLayerCount = featureEncoderCount + 1 + transformerCount + 1;
+        if (Layers.Count != expectedLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"Wav2Vec2 native mode expects exactly {expectedLayerCount} layers " +
+                $"({featureEncoderCount} feature encoder + 1 positional conv + {transformerCount} " +
+                $"transformer + 1 CTC projection) but found {Layers.Count}. Distributing them anyway " +
+                "would bind a partial stack and degrade recognition with no error.");
+        }
 
         for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
             _featureEncoderLayers.Add(Layers[i]);

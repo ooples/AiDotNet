@@ -56,25 +56,37 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", "https://arxiv.org/abs/2412.04533", Year = 2025, Authors = "Yongkang Li, Tianheng Cheng, Wenyu Liu, Xinggang Wang")]
-public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
+public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly MaskAdapterOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only MaskAdapter's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from OpenVocabSegmentationBase -> SegmentationModelBase.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, MaxCategories (256)
-    // and MaxPromptLength (77) are all supplied identically by the base.
+    /// <summary>
+    /// Gets whether this MaskAdapter instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -97,19 +109,25 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 150,
         double dropRate = 0.1,
         MaskAdapterOptions? options = null)
-        // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
-        // lazily via CreateDefaultOptimizer(), overridden below to keep Mask-Adapter's 1e-4 AdamW.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MaskAdapterOptions(); Options = _options;
-        // Mask-Adapter defaults to 640x640, not the base's 512x512, so the fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _dropRate = dropRate;
-        // Hand the resolved optimizer to the base training loop. Without this call training
-        // silently falls back to the base default Adam, whose 1e-3 learning rate diverges on
-        // this deep, unnormalized conv encoder/decoder (the loss explodes geometrically).
-        SetBaseTrainOptimizer(Optimizer);
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        // Wire a training-stable AdamW as the model's actual training optimizer. Two bugs were
+        // fixed here: (1) the previously-constructed AdamW was never handed to the base training
+        // loop (SetBaseTrainOptimizer was never called), so training silently fell back to the
+        // base default Adam; (2) that default's 1e-3 learning rate diverges on this deep,
+        // unnormalized conv encoder/decoder (the loss explodes geometrically). Mask-Adapter
+        // fine-tunes at a low learning rate; use 1e-4 with gradient clipping (the AdamW default)
+        // for a stable step.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
+        SetBaseTrainOptimizer(_optimizer);
         _channelDims = [64, 128, 320, 512];
         _depths = [2, 2, 4, 2];
         _decoderDim = 256;
@@ -134,28 +152,25 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     public MaskAdapter(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 150,
         MaskAdapterOptions? options = null)
-        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
-        // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MaskAdapterOptions(); Options = _options;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"MaskAdapter ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
-        _dropRate = 0.1;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0.1;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         _channelDims = [64, 128, 320, 512];
         _depths = [2, 2, 4, 2];
         _decoderDim = 256;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load MaskAdapter ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
-
-    /// <summary>
-    /// Mask-Adapter fine-tunes at a low learning rate: AdamW at 1e-4 with the default gradient
-    /// clipping. The framework default of 1e-3 diverges on this deep, unnormalized encoder/decoder.
-    /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
     #endregion
 
     #region Public Methods
@@ -192,7 +207,7 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -202,7 +217,7 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     #endregion
 
     #region Private Methods
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -211,7 +226,7 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -228,8 +243,11 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase; the copies
-    // that used to live here were line-for-line identical apart from the base's extra rank guards.
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -321,13 +339,29 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
         ? new MaskAdapter<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new MaskAdapter<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
-    // and MaskAdapter owns no other unmanaged resource.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IOpenVocabSegmentation Implementation
-    /// <inheritdoc/>
-    public override OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IOpenVocabSegmentation<T>.MaxCategories => 256;
+    int IOpenVocabSegmentation<T>.MaxPromptLength => 77;
+
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
@@ -362,8 +396,7 @@ public class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
         return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classNames.ToArray(), Scores = scores, SemanticMap = semanticMap };
     }
 
-    /// <inheritdoc/>
-    public override OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt)
-        => SegmentWithText(image, new[] { prompt });
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithPrompt(Tensor<T> image, string prompt)
+        => ((IOpenVocabSegmentation<T>)this).SegmentWithText(image, new[] { prompt });
     #endregion
 }

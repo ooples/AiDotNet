@@ -105,14 +105,64 @@ public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
     /// network structure and adding noise to the marginals — see
     /// <see cref="StructureBudgetFraction"/>.
     /// </remarks>
-    public double PrivacyBudget { get; set; } = 1.0;
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when set to a value that is not positive and finite. Epsilon appears in a denominator
+    /// when the noise scale is computed, so zero or negative is not a weaker guarantee -- it is no
+    /// guarantee, arrived at silently.
+    /// </exception>
+    public double PrivacyBudget
+    {
+        get => _privacyBudget;
+        set
+        {
+            if (value <= 0.0 || double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(PrivacyBudget), value,
+                    "PrivacyBudget (epsilon) must be a positive, finite number. It divides the noise "
+                    + "scale, so a non-positive budget disables the privacy noise rather than "
+                    + "tightening it.");
+            }
+
+            _privacyBudget = value;
+        }
+    }
+
+    private double _privacyBudget = 1.0;
 
     /// <summary>
     /// Gets or sets the fraction of the total privacy budget spent on learning the network structure,
     /// with the remainder spent on noising the conditional distributions.
     /// </summary>
     /// <value>Defaults to 0.5, the paper's even epsilon/2 split between its two phases.</value>
-    public double StructureBudgetFraction { get; set; } = 0.5;
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when set outside the exclusive range (0, 1).
+    /// </exception>
+    /// <remarks>
+    /// VALIDATED BECAUSE BOTH ENDPOINTS FAIL SILENTLY, AND ONE OF THEM FAILS UNSAFELY. The second
+    /// phase spends <c>PrivacyBudget * (1 - StructureBudgetFraction)</c>, and the noise scale is
+    /// computed only when that share is positive -- otherwise it is left at zero. A fraction of 1.0
+    /// therefore emits the conditional distributions with NO noise at all while the object still
+    /// reports differential privacy as enabled, which is a privacy failure that looks like a working
+    /// configuration. A fraction of 0.0 spends nothing on structure and learns it non-privately.
+    /// </remarks>
+    public double StructureBudgetFraction
+    {
+        get => _structureBudgetFraction;
+        set
+        {
+            if (value <= 0.0 || value >= 1.0 || double.IsNaN(value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(StructureBudgetFraction), value,
+                    "StructureBudgetFraction must be strictly between 0 and 1. At 1 the second phase "
+                    + "receives no budget and its distributions are published without privacy noise; "
+                    + "at 0 the structure is learned without any.");
+            }
+
+            _structureBudgetFraction = value;
+        }
+    }
+
+    private double _structureBudgetFraction = 0.5;
 
     #endregion
 }

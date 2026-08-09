@@ -481,6 +481,18 @@ public class VideoExtendedIntegrationTests
     private static double[] ExtractSecondOrderSlice(Tensor<double> alignInput)
     {
         int channels = alignInput.Shape[0];
+
+        // THE COMPUTED CHANNEL COUNT IS USED, NOT DISCARDED. The bounds below were derived from the
+        // SecondOrderFeatures constant alone while `channels` only sized perChannel, so an alignment
+        // tensor carrying anything other than 3 x SecondOrderFeatures channels made this read the
+        // wrong region and return silently -- both callers then compared two wrong slices, and a
+        // difference between them still satisfied the maxDelta assertion. The test reported success
+        // while measuring the wrong tensor.
+        //
+        // Asserted here rather than relying on the sibling test that checks the 3x relationship: a
+        // helper must not depend on another test having run.
+        Assert.Equal(3 * SecondOrderFeatures, channels);
+
         int perChannel = alignInput.Length / channels;
         int start = 2 * SecondOrderFeatures * perChannel;
         int count = SecondOrderFeatures * perChannel;
@@ -701,6 +713,14 @@ public class VideoExtendedIntegrationTests
 
         var sourceAfter = source.GetParameters();
         var cloneAfter = clone.GetParameters();
+
+        // LENGTHS FIRST. The loop below bounds on cloneBefore.Length and indexes all four vectors
+        // with it. Clone() is the behaviour under test, so a clone that materializes a different set
+        // of lazy parameters than its source is a contract violation this test DETECTED -- and then
+        // reported as an IndexOutOfRangeException instead of as a readable failure.
+        Assert.Equal(sourceBefore.Length, cloneBefore.Length);
+        Assert.Equal(cloneBefore.Length, cloneAfter.Length);
+        Assert.Equal(sourceBefore.Length, sourceAfter.Length);
         double sourceMaxDelta = 0.0;
         double cloneMaxDelta = 0.0;
         for (int i = 0; i < cloneBefore.Length; i++)

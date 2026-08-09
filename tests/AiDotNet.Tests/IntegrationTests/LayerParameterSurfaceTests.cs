@@ -48,11 +48,31 @@ public class LayerParameterSurfaceTests
         await System.Threading.Tasks.Task.Yield();
 
         var violations = new List<string>();
-        int checkedCount = 0, unconstructable = 0, unsized = 0;
+        // EVERY VISITED LAYER LANDS IN A BUCKET. A layer with no public GetParameters() used to
+        // be skipped with a bare continue, incrementing nothing, so the summary reported a total
+        // that silently omitted it -- inflating coverage in exactly the way the counting exists
+        // to prevent.
+        int checkedCount = 0, unconstructable = 0, unsized = 0, noParameterApi = 0;
 
         var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "layer-parameter-surface.txt");
+        // DISPOSED ON EVERY PATH, AND A FAILURE TO OPEN IS REPORTED. The manual dispose ran only
+        // on the normal path, so a throw from the enumeration below -- Assembly.GetTypes() raises
+        // ReflectionTypeLoadException, and this sweep calls it -- leaked the handle and left the
+        // partial log the comment above calls "the deliverable" unflushed. The empty catch was the
+        // other half: when the file could not be opened at all, every later write silently went
+        // nowhere and the run looked like one that simply found nothing.
         System.IO.StreamWriter? log = null;
-        try { log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true }; } catch { }
+        try
+        {
+            log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true };
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"NOTE: could not open {logPath} ({ex.GetType().Name}: {ex.Message}); " +
+                              "the console output below is the only record of this run.");
+        }
+
+        using var _logHandle = log;
 
         foreach (var closed in GetConstructableLayerTypes())
         {
@@ -78,7 +98,7 @@ public class LayerParameterSurfaceTests
 
                 var m = closed.GetMethod("GetParameters", BindingFlags.Public | BindingFlags.Instance,
                     null, Type.EmptyTypes, null);
-                if (m is null) continue;
+                if (m is null) { noParameterApi++; continue; }
                 var vec = m.Invoke(layer, null);
                 long actual = vec is null ? 0
                     : Convert.ToInt64(vec.GetType().GetProperty("Length")!.GetValue(vec));
@@ -98,9 +118,8 @@ public class LayerParameterSurfaceTests
             }
         }
 
-        log?.Dispose();
-
         _output.WriteLine($"Checked {checkedCount} layers; {unsized} agree at zero (deferred); " +
+                          $"{noParameterApi} expose no public GetParameters(); " +
                           $"{unconstructable} not constructable; {violations.Count} violations.");
         foreach (var v in violations.OrderBy(v => v, StringComparer.Ordinal))
             _output.WriteLine("  " + v);

@@ -48,6 +48,10 @@ public class RWKVForecastingOptions<T> : TimeSeriesRegressionOptions<T>
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
         ModelDimension = other.ModelDimension;
@@ -59,6 +63,8 @@ public class RWKVForecastingOptions<T> : TimeSeriesRegressionOptions<T>
         AdamBeta1 = other.AdamBeta1;
         AdamBeta2 = other.AdamBeta2;
         AdamEpsilon = other.AdamEpsilon;
+        UseReversibleNormalization = other.UseReversibleNormalization;
+        RevInEpsilon = other.RevInEpsilon;
     }
 
     /// <summary>

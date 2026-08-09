@@ -152,9 +152,22 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
                         // Gradient w.r.t. W_eff = loss grad + augmented acyclicity grad
                         // plus an L1 sparsity subgradient on the effective edge
                         // (paper penalizes lambda * ||g_tau(U)||_1).
+                        //
+                        // sign(NaN) is taken as 0 rather than passed to Math.Sign, which THROWS on
+                        // NaN ("Function does not accept floating point Not-a-Number values"). This
+                        // loop can produce NaN: rho multiplies by 10 on every outer iteration that
+                        // fails the constraint gate, up to _rhoMax = 1e16, so augCoeff * hGrad
+                        // overflows to Infinity and the Adam update writes Infinity or NaN into W.
+                        // The throw then tears the run down with no recovery path, where the outer
+                        // rho ceiling would otherwise have clamped it. Treating a NaN coordinate as
+                        // contributing no L1 subgradient matches the sklearn/scipy convention and is
+                        // the guard NOTEARSLowRank already applies for the same failure.
+                        double effectiveEdge = wVal * maskVal;
+                        double signEdge = double.IsNaN(effectiveEdge) ? 0.0 : Math.Sign(effectiveEdge);
+
                         double gEff = NumOps.ToDouble(lossGrad[i, j])
                                     + augCoeff * NumOps.ToDouble(hGrad[i, j])
-                                    + Lambda1 * Math.Sign(wVal * maskVal);
+                                    + Lambda1 * signEdge;
 
                         // Chain rule to the underlying parameters:
                         //   dL/dW = gEff * mask

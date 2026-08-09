@@ -157,7 +157,19 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Built bare, every value GpuResidentFusedStep.TryResolveOptimizerConfig reads back off this
+        // optimizer -- learning rate, betas, epsilon and WEIGHT DECAY -- came from whatever the bare
+        // constructor happened to leave, and the fused step then applied them verbatim. Parameters
+        // went NaN after a single step (L2 28.2080 -> NaN). Set them explicitly from the paper's
+        // Adam configuration so the fused path has well-defined values to resolve.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+            });
         SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _lastCommitmentLoss = NumOps.Zero;
@@ -183,7 +195,19 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Built bare, every value GpuResidentFusedStep.TryResolveOptimizerConfig reads back off this
+        // optimizer -- learning rate, betas, epsilon and WEIGHT DECAY -- came from whatever the bare
+        // constructor happened to leave, and the fused step then applied them verbatim. Parameters
+        // went NaN after a single step (L2 28.2080 -> NaN). Set them explicitly from the paper's
+        // Adam configuration so the fused path has well-defined values to resolve.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+            });
         SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _lastCommitmentLoss = NumOps.Zero;
@@ -381,7 +405,16 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
                         "the forward closure, violating its documented Fwd-then-Loss ordering.");
                 return Engine.TensorAdd(recon, commit);
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryResolveOptimizerConfig(
+            // The fused path REPLAYS a compiled plan, but ComputeLossCombined reads
+            // capturedCommitment -- state produced by the forward closure during tracing. On replay
+            // that reference is not re-derived as a tape node, so the commitment term contributes no
+            // valid gradient and the update drove every parameter to NaN in a single step
+            // (L2 28.2080 -> NaN), unchanged even at a 1e-6 learning rate. Until the fused step can
+            // express a loss that depends on forward-captured extras, take the eager tape route
+            // below, which rebuilds commitment and reconstruction on one live tape.
+            bool fusedStepSupportsForwardCapturedLoss = false;
+            if (fusedStepSupportsForwardCapturedLoss
+                && AiDotNet.Training.GpuResidentFusedStep<T>.TryResolveOptimizerConfig(
                     _optimizer, out var optimizerType, out var learningRate,
                     out var beta1, out var beta2, out var epsilon, out var weightDecay)
                 && AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(

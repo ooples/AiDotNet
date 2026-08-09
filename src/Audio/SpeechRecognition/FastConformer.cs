@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -52,16 +52,6 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ResearchPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://doi.org/10.48550/arXiv.2305.05084", Year = 2023, Authors = "Dima Rekesh, Nithin Rao Koluguri, Samuel Kriman, Somshubra Majumdar, Vahid Noroozi, He Huang, Oleksii Hrinchuk, Krishna Puvvada, Ankur Kumar, Jagadeesh Balam, Boris Ginsburg")]
 public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
-    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
-    /// <c>LayerHelper.CreateDefaultFastConformerLayers</c> ends with the CTC projection
-    /// <c>new FullyConnectedLayer&lt;T&gt;(vocabSize, null)</c>, and <c>InitializeLayers</c> passes
-    /// <c>vocabSize: _options.VocabSize</c>. <c>DownsampleFactor</c> shortens the time axis, not this one.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     #region Fields
 
     private readonly FastConformerOptions _options;
@@ -265,9 +255,17 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (!_useNativeMode && _options.ModelPath is { } modelPath && !string.IsNullOrEmpty(modelPath))
             return new FastConformer<T>(Architecture, modelPath, new FastConformerOptions(_options));
 
+        // A NON-ADAMW OPTIMIZER IS FORWARDED RATHER THAN DROPPED. The pattern-match rebuilds an AdamW
+        // from its options, which is the right thing when it matches -- the clone gets an independent
+        // optimizer with the same configuration. But the null on the other branch silently discarded a
+        // caller-supplied optimizer of any other type, so cloning an SGD- or Lion-trained model handed
+        // back one that had quietly reverted to the default. There is no generic way to deep-copy an
+        // arbitrary IGradientBasedOptimizer, so the instance is passed through: shared optimizer state
+        // between clone and original is a real limitation, and it is a smaller one than losing the
+        // caller's choice of algorithm without saying so.
         var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
             ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : null;
+            : _optimizer;
         return new FastConformer<T>(Architecture, new FastConformerOptions(_options), cloneOptimizer);
     }
 

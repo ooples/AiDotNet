@@ -38,51 +38,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-// Ranks 1 and 2, which is exactly what ForwardTraced round-trips: an unbatched rank-1 input is reshaped
-// to [1, features] for the kernel and the batch axis is stripped again on the way out
-// ("wasUnbatched ? Engine.Reshape(output, [output.Shape[1]]) : output"). One declaration with
-// BatchOptional says that, rather than two declarations saying it twice. Higher ranks are passed to
-// Engine.RBFKernel unchanged, which is a 2-D kernel, so they are not declared.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
+public partial class RBFLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// One output per RBF centre. <c>_centers</c> is allocated <c>[outputSize, inputSize]</c> and
-    /// <c>Engine.RBFKernel(processedInput, _centers, epsilons)</c> emits one activation per centre per
-    /// row, so the feature axis becomes the centre count and the batch axis is carried through.
-    /// </para>
-    /// <para>
-    /// <c>Fixed(_outputSize)</c> reads the constructor argument, which is the right source here even for
-    /// the LAZY constructor: only the INPUT width is resolved on first forward
-    /// (<c>OnFirstForward</c> sets <c>_inputSize</c> from <c>input.Shape[rank - 1]</c>) - the centre count
-    /// is architectural and known at construction in both constructors, so this contract is answerable
-    /// before any tensor has been seen.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (_outputSize <= 0) return null;
-
-        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
-
-        return inputRank switch
-        {
-            1 => new[] { features },
-            2 => new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                features,
-            },
-            _ => null,
-        };
-    }
-
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _outputSize;
@@ -180,6 +137,30 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     // resolves it from input.Shape[^1]. Eager ctor sets it at construction.
     private int _inputSize;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> for RBF layers, indicating that the layer can be trained through backpropagation.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the RBF layer has trainable parameters (centers and widths) that
+    /// can be optimized during the training process using backpropagation. The gradients of these parameters
+    /// are calculated during the backward pass and used to update the parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer has values (centers and widths) that can be adjusted during training
+    /// - It will improve its performance as it sees more data
+    /// - It participates in the learning process of the neural network
+    /// 
+    /// When you train a neural network containing this layer, the centers and widths will 
+    /// automatically adjust to better match the patterns in your specific data.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -467,6 +448,104 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
 
         var scaledWidthsGradient = Engine.TensorMultiplyScalar(_widthsGradient, learningRate);
         _widths = Engine.TensorSubtract(_widths, scaledWidthsGradient);
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the RBF layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters (centers and widths).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters (centers and widths) of the RBF layer as a
+    /// single vector. The centers are stored first, followed by the widths. This is useful for optimization
+    /// algorithms that operate on all parameters at once, or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from the RBF layer.
+    /// 
+    /// The parameters:
+    /// - Are the centers and widths that the RBF layer learns during training
+    /// - Control where and how widely each neuron responds to inputs
+    /// - Are returned as a single list (vector)
+    /// 
+    /// This is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// 
+    /// The centers are stored first in the vector, followed by all the width values.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Convert tensors to vectors and concatenate
+        var centersData = _centers.ToArray();
+        var widthsData = _widths.ToArray();
+
+        var centersVector = new Vector<T>(centersData);
+        var widthsVector = new Vector<T>(widthsData);
+
+        return Vector<T>.Concatenate(centersVector, widthsVector);
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the RBF layer.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters (centers and widths) to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the trainable parameters (centers and widths) of the RBF layer from a single vector.
+    /// The vector should contain the center values first, followed by the width values. This is useful for loading
+    /// saved model weights or for implementing optimization algorithms that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the centers and widths in the RBF layer.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the correct total length
+    /// - The first part of the vector is used for the centers (positions of the neurons)
+    /// - The second part of the vector is used for the widths (how broadly each neuron responds)
+    /// 
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Transferring parameters from another model
+    /// - Testing different parameter values
+    /// 
+    /// An error is thrown if the input vector doesn't have the expected number of parameters.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Lazy-state guard: the lazy ctor leaves _inputSize = -1 until
+        // OnFirstForward fires. Without this check, a caller passing an
+        // empty Vector that matches the lazy-state ParameterCount==0
+        // would still hit `_numCenters * -1` below and trip a negative-
+        // length slice. Surface a clear contract violation instead so
+        // users know to run a Forward first.
+        if (_inputSize <= 0)
+        {
+            throw new InvalidOperationException(
+                "RBFLayer.SetParameters(): the layer was constructed via the lazy ctor " +
+                "(no inputSize arg) and has not yet seen a Forward call, so its parameter " +
+                "tensors are not yet allocated. Run at least one Forward(input) to resolve " +
+                "the input dimension before loading parameters, or construct via the " +
+                "eager ctor with an explicit inputSize.");
+        }
+
+        int centersSize = _numCenters * _inputSize;
+        int totalParams = centersSize + _numCenters;
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        // Extract and reshape centers from the first portion of parameters
+        var centersVector = parameters.Slice(0, centersSize);
+        _centers = Tensor<T>.FromVector(centersVector, [_numCenters, _inputSize]);
+
+        // Extract widths from the remaining portion
+        var widthsVector = parameters.Slice(centersSize, _numCenters);
+        _widths = Tensor<T>.FromVector(widthsVector, [_numCenters]);
     }
 
     /// <inheritdoc/>

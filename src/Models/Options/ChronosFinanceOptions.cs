@@ -73,6 +73,10 @@ public class ChronosFinanceOptions<T> : TimeSeriesRegressionOptions<T>
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
         NumTokens = other.NumTokens;
@@ -90,6 +94,7 @@ public class ChronosFinanceOptions<T> : TimeSeriesRegressionOptions<T>
         GroupAttentionGroups = other.GroupAttentionGroups;
         UseMultivariate = other.UseMultivariate;
         UsePatchInput = other.UsePatchInput;
+        QuantizationBound = other.QuantizationBound;
     }
 
     /// <summary>

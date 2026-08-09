@@ -1,6 +1,5 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
@@ -32,11 +31,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Combined with spatial attention for full spatio-temporal modeling
 /// </para>
 /// </remarks>
-// Shape-preserving at rank 3 [Batch, Time, Features]; only that rank was probed, so only it is declared.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class CausalTemporalAttention<T> : LayerBase<T>, IShapeContract
+public partial class CausalTemporalAttention<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _numHeads;
@@ -127,6 +122,18 @@ public partial class CausalTemporalAttention<T> : LayerBase<T>, IShapeContract
     public override void UpdateParameters(T learningRate)
     {
         _causalAttention.UpdateParameters(learningRate);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        return _causalAttention.GetParameters();
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _causalAttention.SetParameters(parameters);
     }
 
     /// <inheritdoc />

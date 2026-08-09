@@ -35,58 +35,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4", TestConstructorArgs = "2")]
-// THE OUTPUT GAINS AN AXIS: the trailing feature axis is replaced by TWO axes, [_numSplits, splitSize].
-// ForwardTraced builds exactly that - "outShape[len - 1] = _numSplits; outShape[len] = splitSize" - and
-// CalculateOutputShape returns [numSplits, featureSize / numSplits] for the unbatched case. So a rank-1
-// input yields rank 2 and a rank-2 input yields rank 3, which is why the output layouts below are one
-// rank higher than their input counterparts rather than mirroring them.
-//
-// The split axis is TensorAxis.Other: it indexes groups of features and is none of the spatial, time,
-// or channel roles, so naming it anything else would assert structure the layer does not have.
-[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output,
-    Note = "Unbatched: the feature vector is regrouped into [numSplits, splitSize].")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class SplitLayer<T> : LayerBase<T>, IShapeContract
+public partial class SplitLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// <c>Scaled(Features, 1, _numSplits)</c> is the split size, and <c>Scaled</c> is the right relation
-    /// precisely BECAUSE it refuses uneven division: <c>CalculateOutputShape</c> throws
-    /// "Input size must be divisible by the number of splits" on the same condition, so the contract
-    /// declines exactly where the layer would throw instead of reporting a shape that cannot exist.
-    /// </para>
-    /// <para>
-    /// <c>Fixed(_numSplits)</c> reads the constructor argument. Note this layer REGROUPS rather than
-    /// discards - the element count is unchanged, <c>numSplits * splitSize == featureSize</c> - so the
-    /// two new axes together carry what the single feature axis carried before.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (_numSplits <= 0) return null;
-
-        var splits = new OutputAxisContract(TensorAxis.Other, AxisRelation.Fixed(_numSplits));
-        var splitSize = new OutputAxisContract(
-            TensorAxis.Features, AxisRelation.Scaled(TensorAxis.Features, 1, _numSplits));
-
-        return inputRank switch
-        {
-            1 => new[] { splits, splitSize },
-            2 => new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                splits,
-                splitSize,
-            },
-            _ => null,
-        };
-    }
-
     /// <summary>
     /// The number of parts to split the input tensor into.
     /// </summary>
@@ -404,6 +354,55 @@ public partial class SplitLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Updates the parameters of the layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is a no-op for the split layer since it has no trainable parameters to update.
+    /// It is implemented to satisfy the interface requirements of LayerBase.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method doesn't do anything in the split layer.
+    /// 
+    /// Since the split layer doesn't have any trainable parameters:
+    /// - There's nothing to update during training
+    /// - This method exists just to fulfill the requirements of being a layer
+    /// 
+    /// Other layers would use this method to update their weights and biases,
+    /// but the split layer simply passes data through without modification.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // No parameters to update in this layer
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>An empty vector since this layer has no trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method returns an empty vector since the split layer has no trainable parameters.
+    /// It is implemented to satisfy the interface requirements of LayerBase.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns an empty list because the layer has no parameters.
+    /// 
+    /// Since the split layer doesn't modify the data in any way that requires learning:
+    /// - There are no weights or biases to adjust
+    /// - This method returns an empty vector (a list with no elements)
+    /// 
+    /// Other layers would return their weights and biases here, which would be
+    /// used for saving the model or applying optimization techniques.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // SplitLayer has no trainable parameters, so return an empty vector
+        return Vector<T>.Empty();
     }
 
     /// <summary>

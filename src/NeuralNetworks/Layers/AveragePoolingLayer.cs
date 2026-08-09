@@ -30,55 +30,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "2, 2")]
-// Roles and ranks from this layer's OWN guard, quoted: OnFirstForward "requires rank-3 [C,H,W] or rank-4
-// [B,C,H,W] input" and throws for anything else - so exactly two ranks are declared, no more. Two separate
-// declarations rather than one BatchOptional layout, because a derived contract is keyed on the declared
-// axis count and the batch-dropped rank would otherwise resolve to nothing. OutputAxesFor below is
-// HAND-WRITTEN: the window depends on PoolSize/Strides, which no probe can know.
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class AveragePoolingLayer<T> : LayerBase<T>, IShapeContract
+public partial class AveragePoolingLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Derived from this layer's own arithmetic, not from a probe. <c>OnFirstForward</c> resolves
-    /// <c>outH = (h - PoolSize) / Strides + 1</c> and the same for width, which is the sliding-window
-    /// formula with <c>padding: 0</c> and <c>dilation: 1</c> - the value <c>ForwardTraced</c> then passes
-    /// on literally, as <c>Engine.AvgPool2D(input4D, PoolSize, Strides, padding: 0)</c>.
-    /// </para>
-    /// <para>
-    /// Spelled as <c>Window</c> rather than <c>Scaled(1, Strides)</c> deliberately. The two agree only
-    /// when the extent divides evenly: pooled with kernel 2 / stride 2, a 5-wide axis yields 2, not 2.5
-    /// refused and not 3 - and a shape system that is off by one at the boundary is worse than none.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank is not (3 or 4) || PoolSize <= 0 || Strides <= 0) return null;
-
-        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
-        var height = new OutputAxisContract(
-            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, PoolSize, Strides, padding: 0));
-        var width = new OutputAxisContract(
-            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, PoolSize, Strides, padding: 0));
-
-        return inputRank == 3
-            ? new[] { channels, height, width }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                channels, height, width,
-            };
-    }
-
     /// <summary>
     /// Gets the size of the pooling window.
     /// </summary>
@@ -439,6 +392,44 @@ public partial class AveragePoolingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Average pooling doesn't have an activation function
         return Array.Empty<ActivationFunction>();
+    }
+
+    /// <summary>
+    /// Updates the layer's parameters during training.
+    /// </summary>
+    /// <param name="learningRate">The learning rate that controls how much parameters change.</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method is part of the neural network training process.
+    ///
+    /// During training, most layers need to update their internal values (parameters) to learn
+    /// from data. However, average pooling layers don't have any trainable parameters - they just
+    /// compute the average of values in each window.
+    ///
+    /// Think of it like a simple rule that doesn't need to be adjusted: "Always compute the average."
+    /// Since this rule never changes, there's nothing to update in this method.
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Average pooling layer doesn't have trainable parameters
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer.
+    /// </summary>
+    /// <returns>An empty vector since average pooling layers have no trainable parameters.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method returns all the values that can be adjusted during training.
+    ///
+    /// Many neural network layers have weights and biases that get updated as the network learns.
+    /// However, average pooling layers simply compute the average of values in each window - there are
+    /// no weights or biases to adjust.
+    ///
+    /// This is why the method returns an empty vector (essentially a list with no elements).
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // AveragePoolingLayer has no trainable parameters
+        return Vector<T>.Empty();
     }
 
     /// <summary>
