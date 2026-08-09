@@ -69,15 +69,8 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ResearchPaper("Exploratory Undersampling for Class-Imbalance Learning", "https://doi.org/10.1109/TSMCB.2008.2007853", Year = 2009, Authors = "Xu-Ying Liu, Jianxin Wu, Zhi-Hua Zhou")]
 public class EasyEnsembleClassifier<T> : ClassifierBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
 
+    // Returned _subClassifiers.Count. Same as its two siblings.
     /// <summary>
     /// The ensemble of AdaBoost classifiers.
     /// </summary>
@@ -660,31 +653,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     {
         double score = PredictAdaBoostScore(classifier, x, sampleIdx);
         return score >= 0 ? 1 : 0;
-    }
-
-    /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector with subclassifier count.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Complex ensemble models don't fit into a simple parameter vector.
-    /// Use serialization for full model persistence.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_subClassifiers.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (limited support).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use serialization to save/load ensemble models.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for ensemble models
     }
 
     /// <summary>

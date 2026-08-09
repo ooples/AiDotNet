@@ -79,15 +79,10 @@ namespace AiDotNet.Classification.Online;
 [ResearchPaper("Adaptive Random Forests for Evolving Data Stream Classification", "https://doi.org/10.1007/s10994-017-5642-8", Year = 2017, Authors = "Heitor Murilo Gomes, Albert Bifet, Jesse Read, Jean Paul Barddal, Fabricio Enembreck, Bernhard Pfharinger, Geoff Holmes, Talel Abdessalem")]
 public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
 
+    // Returned a single value described in its own comment as "minimal parameters" for a
+    // structural ensemble. The empty vector the base produces says the same thing without
+    // inventing a number.
     private readonly AdaptiveRandomForestOptions<T> _options;
 
     /// <inheritdoc/>
@@ -534,19 +529,6 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     public double AverageTreeAccuracy => _ensemble.Count > 0
         ? _ensemble.Average(m => m.AccuracyEstimate)
         : 0;
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        // Ensemble is structural, return minimal parameters
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_ensemble.Count) };
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Ensemble structure cannot be set from flat parameters
-    }
 
     /// <inheritdoc />
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

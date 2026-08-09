@@ -5,6 +5,8 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.DiscriminantAnalysis;
 
 /// <summary>
@@ -66,6 +68,20 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The flattened class means, as LinearDiscriminantAnalysis. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     /// <summary>
     /// Gets the QDA-specific options.
     /// </summary>
@@ -676,7 +692,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // QDA doesn't have a simple parameter vector like linear classifiers
         // Return flattened class means for serialization
@@ -699,7 +715,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // QDA computes parameters from class statistics, not direct parameter setting.
         // Accept silently so the optimizer can initialize the model without crashing.

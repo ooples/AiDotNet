@@ -7,6 +7,7 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.Online;
 
 /// <summary>
@@ -76,6 +77,20 @@ namespace AiDotNet.Classification.Online;
 public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The per-class means and variances, packed exactly as before. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     private readonly OnlineNaiveBayesOptions<T> _options;
 
     /// <inheritdoc/>
@@ -337,7 +352,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // Pack means and variances into parameter vector
         if (_classStats.Count == 0 || NumFeatures == 0)
@@ -375,7 +390,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         if (NumFeatures == 0 || _knownClasses.Count == 0)
         {

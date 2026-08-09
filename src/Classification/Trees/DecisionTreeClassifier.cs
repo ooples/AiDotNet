@@ -49,6 +49,9 @@ namespace AiDotNet.Classification.Trees;
     [ResearchPaper("Classification and Regression Trees", "https://doi.org/10.1201/9781315139470")]
 public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBasedClassifier<T>
 {
+
+    // Its own comment: "Decision trees do not have traditional numeric parameters". The base fold
+    // states that directly.
     /// <summary>
     /// Gets the decision tree specific options.
     /// </summary>
@@ -637,33 +640,11 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
-    {
-        // Decision trees don't have traditional numeric parameters
-        // Return feature importances as a representation
-        return FeatureImportances ?? new Vector<T>(0);
-    }
-
-    /// <inheritdoc/>
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = (DecisionTreeClassifier<T>)Clone();
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Decision trees don't use traditional parameters
-        // This is a no-op for compatibility
-        if (parameters.Length == NumFeatures && FeatureImportances != null)
-        {
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                FeatureImportances[i] = parameters[i];
-            }
-        }
     }
 
     /// <inheritdoc/>

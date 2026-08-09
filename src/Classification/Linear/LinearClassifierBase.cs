@@ -4,6 +4,8 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.Linear;
 
 #pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
@@ -40,6 +42,20 @@ namespace AiDotNet.Classification.Linear;
 public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The weight matrix followed by the intercepts, packed exactly as before. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     /// <summary>
     /// Gets the linear classifier specific options.
     /// </summary>
@@ -270,7 +286,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         if (Weights is null)
         {
@@ -292,7 +308,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // When the model is untrained (NumFeatures == 0), infer NumFeatures from the
         // parameter vector. This is required for the optimizer's InitializeRandomSolution

@@ -7,6 +7,7 @@ using AiDotNet.Validation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.SemiSupervised;
 
 /// <summary>
@@ -65,6 +66,20 @@ namespace AiDotNet.Classification.SemiSupervised;
 public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Whatever the wrapped base classifier exposes, forwarded as before. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     private IClassifier<T> _baseClassifier;
     private double _confidenceThreshold;
     private int _maxIterations;
@@ -465,7 +480,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
     /// <summary>
     /// Gets all model parameters as a single vector.
     /// </summary>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         return ((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).GetParameters();
     }
@@ -495,7 +510,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
     /// <summary>
     /// Sets the parameters for this model.
     /// </summary>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         ((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).SetParameters(parameters);
     }

@@ -8,6 +8,7 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.TimeSeries;
 
 /// <summary>
@@ -84,6 +85,15 @@ namespace AiDotNet.Classification.TimeSeries;
 [ResearchPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
 public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>{
+
+    /// <inheritdoc />
+    /// <remarks>The ridge weights over the random kernels, as in MiniRocketClassifier.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _internalWeights,
+            value => _internalWeights = value));
+    }
     private readonly List<RocketKernel> _kernels;
     private readonly RocketOptions<T> _rocketOptions;
     private readonly Random _random;
@@ -470,22 +480,6 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
         }
 
         return probabilities;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>Same as MiniRocketClassifier: the inherited NumFeatures * NumClasses formula reported 0 against a 6-element vector.</remarks>
-    public override long ParameterCount => GetParameters().Length;
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        return _internalWeights?.Clone() ?? new Vector<T>(0);
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        _internalWeights = parameters.Clone();
     }
 
     /// <inheritdoc />
