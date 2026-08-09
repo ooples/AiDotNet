@@ -363,22 +363,29 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionV
         return clone;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
+    /// </summary>
+    /// <param name="input">The input state.</param>
+    /// <param name="target">The target output.</param>
+    /// <param name="lossFunction">The loss to differentiate, or null to use the agent's own.</param>
+    /// <returns>A gradient vector the same length as <c>GetParameters()</c>.</returns>
+    /// <remarks>
+    /// Returns PARAMETER-space gradients, as <c>IGradientComputable</c> documents and as
+    /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
+    /// derivative is written by hand here.
+    /// </remarks>
     public override Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        var loss = lossFunction ?? LossFunction;
-        var inputTensor = Tensor<T>.FromVector(input);
-        var outputTensor = _qNetwork.Predict(inputTensor);
-        var output = outputTensor.ToVector();
-        var lossValue = loss.CalculateLoss(output, target);
-        var gradient = loss.CalculateDerivative(output, target);
-
-        var gradientTensor = Tensor<T>.FromVector(gradient);
-
-        return gradient;
+        return ComputeGradientsForNetwork(
+            _qNetwork,
+            new[] { _qNetwork },
+            input,
+            target,
+            lossFunction);
     }
 
     /// <summary>
