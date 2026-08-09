@@ -150,3 +150,41 @@ public sealed class DelegatingParameterSource<T> : IParameterSource<T>
         _set(parameters);
     }
 }
+
+/// <summary>
+/// Like <see cref="DelegatingParameterSource{T}"/>, but sized BY the vector it is restored from.
+/// </summary>
+/// <remarks>
+/// For a model that packs several pieces into one vector whose width it does not know until it is
+/// fitted -- an online learner writes its weights and then a bias, and learns how many weights
+/// there are from the first vector it sees. Splitting that into two components would put the
+/// variable-length piece FIRST, which the registry cannot slice; owning the whole packing in one
+/// component keeps the layout exactly as it was and still leaves one place that decides it.
+/// </remarks>
+public sealed class VariableLengthParameterSource<T> : IVariableLengthParameterSource<T>
+{
+    private readonly Func<long> _count;
+    private readonly Func<Vector<T>> _get;
+    private readonly Action<Vector<T>> _set;
+
+    /// <summary>Creates a source from count, read and write delegates.</summary>
+    public VariableLengthParameterSource(Func<long> count, Func<Vector<T>> get, Action<Vector<T>> set)
+    {
+        _count = count ?? throw new ArgumentNullException(nameof(count));
+        _get = get ?? throw new ArgumentNullException(nameof(get));
+        _set = set ?? throw new ArgumentNullException(nameof(set));
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => _count();
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters() => _get();
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        _set(parameters);
+    }
+}

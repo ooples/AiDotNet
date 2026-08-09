@@ -6,6 +6,8 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.OnlineLearning;
 
 /// <summary>
@@ -61,6 +63,31 @@ namespace AiDotNet.OnlineLearning;
 [ResearchPaper("Large-Scale Machine Learning with Stochastic Gradient Descent", "https://doi.org/10.1007/978-3-7908-2604-3_16", Year = 2010, Authors = "Léon Bottou")]
 public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The learned weights followed by the bias, the layout the hand-written pair used. Kept as ONE component because the variable-length part comes first and only a LAST component can take the remainder. This also fixes a measured mismatch: the inherited ParameterCount was NumFeatures, which the restore sets to length - 1 to leave room for the bias, so the count reported 5 against a 6-element vector and a saved vector could not be reloaded.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => _weights is null ? 0 : _weights.Length + 1,
+            () =>
+            {
+                if (_weights is null) return new Vector<T>(0);
+                var parameters = new Vector<T>(_weights.Length + 1);
+                for (int i = 0; i < _weights.Length; i++) parameters[i] = _weights[i];
+                parameters[_weights.Length] = _bias;
+                return parameters;
+            },
+            value =>
+            {
+                if (value.Length == 0) return;
+                NumFeatures = value.Length - 1;
+                _weights = new Vector<T>(NumFeatures);
+                for (int i = 0; i < NumFeatures; i++) _weights[i] = value[i];
+                _bias = value[NumFeatures];
+                IsInitialized = true;
+            }));
+    }
     /// <summary>
     /// The weight vector (coefficients).
     /// </summary>
@@ -303,43 +330,6 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     }
 
     #region IFullModel Implementation
-
-    /// <summary>
-    /// Gets the model parameters (weights + bias).
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        if (_weights is null)
-        {
-            return new Vector<T>(0);
-        }
-
-        var parameters = new Vector<T>(_weights.Length + 1);
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            parameters[i] = _weights[i];
-        }
-        parameters[_weights.Length] = _bias;
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length == 0) return;
-
-        NumFeatures = parameters.Length - 1;
-        _weights = new Vector<T>(NumFeatures);
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            _weights[i] = parameters[i];
-        }
-        _bias = parameters[NumFeatures];
-        IsInitialized = true;
-    }
 
     /// <summary>
     /// Creates a new instance with specified parameters.
