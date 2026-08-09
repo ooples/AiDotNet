@@ -49,7 +49,18 @@ public static class CloneRegistry
     public static bool IsVerified(Type type)
     {
         if (type is null) throw new ArgumentNullException(nameof(type));
-        return Generated.ContainsKey(type);
+
+        EnsureGeneratedPlansLoaded();
+
+        if (Generated.ContainsKey(type)) return true;
+
+        // A closed generic whose open form is registered is still compile-time decided: the
+        // property set and the copy kinds came from the generator, and only the PropertyInfo
+        // handles were re-bound. Reporting it as unverified would understate the guarantee exactly
+        // as badly as the reverse would overstate it.
+        return type.IsGenericType
+            && !type.IsGenericTypeDefinition
+            && Generated.ContainsKey(type.GetGenericTypeDefinition());
     }
 
     /// <summary>
@@ -70,9 +81,52 @@ public static class CloneRegistry
 
         EnsureGeneratedPlansLoaded();
 
-        return Generated.TryGetValue(type, out var generated)
-            ? generated
-            : Reflected.GetOrAdd(type, BuildByReflection);
+        if (Generated.TryGetValue(type, out var generated)) return generated;
+
+        // A generic type is registered under its open form -- typeof(Foo<>) -- because that is the
+        // only handle the generator can name. Without this, every closed Foo<double> missed its
+        // generated plan and fell through to reflection, which is nearly every options and layer
+        // type in the library: the compile-time guarantee existed but was not the one in force.
+        if (type.IsGenericType && !type.IsGenericTypeDefinition)
+        {
+            var definition = type.GetGenericTypeDefinition();
+            if (Generated.TryGetValue(definition, out var open))
+            {
+                return Reflected.GetOrAdd(type, t => Close(open, t));
+            }
+        }
+
+        return Reflected.GetOrAdd(type, BuildByReflection);
+    }
+
+    /// <summary>
+    /// Re-binds an open generic's plan against one of its closed forms.
+    /// </summary>
+    /// <param name="open">The plan registered for the generic type definition.</param>
+    /// <param name="closed">The closed type to bind against.</param>
+    /// <returns>A plan whose properties belong to <paramref name="closed"/>.</returns>
+    /// <remarks>
+    /// The entries carry a <see cref="PropertyInfo"/> obtained from the open definition, and such a
+    /// handle cannot read or write an instance of a closed type. Only the property NAME and the
+    /// copy kind survive re-binding; both were decided at compile time, so the result is still the
+    /// generated decision rather than a rediscovered one.
+    /// </remarks>
+    private static ClonePlan Close(ClonePlan open, Type closed)
+    {
+        var entries = new List<ClonePlanEntry>(open.Entries.Count);
+
+        foreach (var entry in open.Entries)
+        {
+            var property = closed.GetProperty(
+                entry.Property.Name, BindingFlags.Public | BindingFlags.Instance);
+
+            if (property is not null && property.CanRead && property.CanWrite)
+            {
+                entries.Add(new ClonePlanEntry(property, entry.Copy));
+            }
+        }
+
+        return new ClonePlan(closed, entries);
     }
 
     private static int _generatedLoaded;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
 namespace AiDotNet.Models;
@@ -40,6 +41,7 @@ public static class CloneEngine
 
         var type = source.GetType();
         var clone = Construct(type);
+        var pending = new List<(ClonePlanEntry Entry, object? Value)>();
 
         foreach (var entry in CloneRegistry.GetPlan(type).Entries)
         {
@@ -64,25 +66,73 @@ public static class CloneEngine
                     ex.InnerException ?? ex);
             }
 
-            try
-            {
-                entry.Property.SetValue(clone, entry.Copy == CloneCopyKind.Deep ? Duplicate(value) : value);
-            }
-            catch (TargetInvocationException ex)
-            {
-                // A validating setter rejecting a value the original holds means the two disagree
-                // about what is valid, which is worth surfacing rather than leaving the clone
-                // quietly short of one property.
-                throw new InvalidOperationException(
-                    $"Assigning {type.Name}.{entry.Property.Name} while cloning threw "
-                    + $"{ex.InnerException?.GetType().Name ?? ex.GetType().Name}: "
-                    + $"{ex.InnerException?.Message ?? ex.Message}. The setter rejected a value the "
-                    + "original already holds.",
-                    ex.InnerException ?? ex);
-            }
+            pending.Add((entry, value));
         }
 
+        Assign(type, clone, pending);
         return clone;
+    }
+
+    /// <summary>
+    /// Applies values in repeated passes until none remain or no pass makes progress.
+    /// </summary>
+    /// <param name="type">The type being cloned, for error messages.</param>
+    /// <param name="clone">The instance being populated.</param>
+    /// <param name="pending">The values to apply.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a pass assigns nothing and values remain, naming each stuck property.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// A setter may validate against ANOTHER property, which makes a single ordered pass unsound:
+    /// <c>TabTransformerOptions.NumHeads</c> requires that it divide <c>EmbeddingDimension</c>, so
+    /// assigning it before the dimension is carried checks it against the constructor default
+    /// instead. No fixed order fixes this in general, since two properties can each constrain the
+    /// other.
+    /// </para>
+    /// <para>
+    /// Retrying works because the original object is internally consistent: some order satisfies
+    /// every constraint, and repeating until nothing more succeeds finds one without the engine
+    /// needing to know what the constraints are. A pass that assigns nothing while values remain is
+    /// a genuine circular constraint rather than a missed ordering, and is reported as such.
+    /// </para>
+    /// </remarks>
+    private static void Assign(Type type, object clone, List<(ClonePlanEntry Entry, object? Value)> pending)
+    {
+        var failures = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        while (pending.Count > 0)
+        {
+            var remaining = new List<(ClonePlanEntry Entry, object? Value)>();
+            failures.Clear();
+
+            foreach (var (entry, value) in pending)
+            {
+                try
+                {
+                    entry.Property.SetValue(
+                        clone, entry.Copy == CloneCopyKind.Deep ? Duplicate(value) : value);
+                }
+                catch (TargetInvocationException ex)
+                {
+                    remaining.Add((entry, value));
+                    failures[entry.Property.Name] =
+                        ex.InnerException?.Message ?? ex.Message;
+                }
+            }
+
+            if (remaining.Count == pending.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Cloning {type.Name} could not assign "
+                    + string.Join(", ", failures.Select(f => $"{f.Key} ({f.Value})"))
+                    + ". Each setter rejected a value the original already holds, and no assignment "
+                    + "order satisfies them, so the constraints between these properties are "
+                    + "circular.");
+            }
+
+            pending = remaining;
+        }
     }
 
     /// <summary>
