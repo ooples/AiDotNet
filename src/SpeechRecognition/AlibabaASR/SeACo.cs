@@ -186,6 +186,48 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Layers.AddRange(bias);
         _backboneLayerCount = backbone.Count;
         _biasLayerCount = bias.Count;
+
+        ValidateBiasBranchLayout(bias);
+    }
+
+    /// <summary>Number of layers <c>CreateSeACoBiasLayers</c> is contracted to emit.</summary>
+    /// <remarks>
+    /// ApplyHotwordBias indexes <c>biasStart</c> through <c>biasStart + 4</c> and CASTS positions +2
+    /// and +3 to <see cref="MultiHeadAttentionLayer{T}"/>. Those five reads are a contract with the
+    /// factory that nothing checked: a factory change, or a layout this model does not support, showed
+    /// up as an ArgumentOutOfRangeException or an InvalidCastException thrown from the middle of an
+    /// inference call, naming an index rather than the mismatch. Checked once at construction instead.
+    /// </remarks>
+    private const int SeACoBiasLayerCount = 5;
+
+    /// <summary>
+    /// Confirms the bias branch has the shape the hotword forward indexes into, before any inference
+    /// can reach it.
+    /// </summary>
+    private void ValidateBiasBranchLayout(List<ILayer<T>> bias)
+    {
+        if (bias.Count == 0)
+        {
+            // No bias branch is a supported configuration: Eq 5 then returns P_ASR unchanged, and
+            // HasBiasBranch already gates every hotword path on it.
+            return;
+        }
+
+        if (bias.Count < SeACoBiasLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"SeACo's bias branch needs {SeACoBiasLayerCount} layers (embedding, LSTM, two " +
+                $"multi-head attentions, normalization) but {bias.Count} were supplied. Hotword " +
+                "biasing cannot be applied to this layout.");
+        }
+
+        if (bias[2] is not MultiHeadAttentionLayer<T> || bias[3] is not MultiHeadAttentionLayer<T>)
+        {
+            throw new InvalidOperationException(
+                "SeACo's bias branch expects multi-head attention at bias positions 2 and 3 (the " +
+                $"decoder- and encoder-attending blocks), but found {bias[2].GetType().Name} and " +
+                $"{bias[3].GetType().Name}. Hotword biasing cannot be applied to this layout.");
+        }
     }
 
     /// <summary>Number of leading layers that form the Paraformer ASR backbone.</summary>
@@ -264,8 +306,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// Eq 5 is per-position and conditional:
     /// <c>P_m = P_ASR</c> when <c>argmax P_bi = &lt;no-bias&gt;</c>, else
     /// <c>lambda * P_bi + (1 - lambda) * P_ASR</c>. The argmax is a discrete decision and is read
-    /// off-tape; the blended values are produced with Engine ops so gradient still reaches both
-    /// branches wherever a hotword IS detected.
+    /// off-tape as a 0/1 gate; the blended values are produced with Engine ops so gradient still
+    /// reaches both branches wherever a hotword IS detected.
     /// </remarks>
     private Tensor<T> MergeBiasedProbabilities(Tensor<T> pAsr, Tensor<T> pBias)
     {
@@ -273,37 +315,56 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int noBias = vocab;                       // appended '#' slot
         int rowsAsr = Math.Max(1, pAsr.Length / Math.Max(1, vocab));
         int rowsBias = Math.Max(1, pBias.Length / Math.Max(1, vocab + 1));
-        int rows = Math.Min(rowsAsr, rowsBias);
 
-        T lambda = NumOps.FromDouble(_options.BiasMergeLambda);
-        T oneMinusLambda = NumOps.FromDouble(1.0 - _options.BiasMergeLambda);
+        // The two branches describe the same positions, so a disagreement is a shape bug upstream.
+        // Silently blending the shorter prefix would train the bias branch against positions the
+        // backbone scored differently.
+        if (rowsAsr != rowsBias)
+        {
+            throw new InvalidOperationException(
+                $"The ASR branch produced {rowsAsr} positions but the bias branch produced {rowsBias}. " +
+                "Eq 5 merges them position by position, so they must agree.");
+        }
 
-        var merged = pAsr.Clone();
+        int rows = rowsAsr;
+        var eng = Engine;
+        var originalShape = pAsr.Shape.ToArray();
+
+        // WHERE the blend applies is a discrete argmax, so it is read off-tape -- that matches the
+        // paper, which makes a hard per-position choice. WHAT the blend computes must stay on tape,
+        // and that is what this rewrite fixes: the previous body wrote scalars into a Clone()'s
+        // Data.Span, and raw span writes are invisible to autodiff. Stage 2 trains the bias branch, so
+        // its gradient path ran through a tensor nothing had recorded and the bias parameters got no
+        // signal from this blend at all.
+        var gate = new Tensor<T>([rows, 1]);
+        var biasSpan = pBias.Data.Span;
         for (int r = 0; r < rows; r++)
         {
-            // argmax over the bias distribution, including the <no-bias> slot.
             int argmax = 0;
             double best = double.NegativeInfinity;
             for (int v = 0; v <= vocab; v++)
             {
-                double val = NumOps.ToDouble(pBias.Data.Span[(r * (vocab + 1)) + v]);
+                double val = NumOps.ToDouble(biasSpan[(r * (vocab + 1)) + v]);
                 if (val > best) { best = val; argmax = v; }
             }
 
             // "no hotword detected" -> keep P_ASR for this position.
-            if (argmax == noBias) continue;
-
-            for (int v = 0; v < vocab; v++)
-            {
-                T asr = pAsr.Data.Span[(r * vocab) + v];
-                T bias = pBias.Data.Span[(r * (vocab + 1)) + v];
-                merged.Data.Span[(r * vocab) + v] = NumOps.Add(
-                    NumOps.Multiply(lambda, bias),
-                    NumOps.Multiply(oneMinusLambda, asr));
-            }
+            gate[r, 0] = argmax == noBias ? NumOps.Zero : NumOps.One;
         }
 
-        return merged;
+        // Eq 5, written so both branches stay differentiable:
+        //   merged = P_ASR + gate * lambda * (P_bias - P_ASR)
+        // gate 0 leaves P_ASR exactly; gate 1 gives lambda*P_bias + (1-lambda)*P_ASR. The [rows, 1]
+        // gate broadcasts across the vocabulary axis.
+        var asr2d = eng.Reshape(pAsr, new[] { rows, vocab });
+        var bias2d = eng.Reshape(
+            eng.TensorNarrow(pBias, pBias.Rank - 1, 0, vocab), new[] { rows, vocab });
+
+        var delta = eng.TensorSubtract(bias2d, asr2d);
+        var scaled = eng.TensorMultiplyScalar(delta, NumOps.FromDouble(_options.BiasMergeLambda));
+        var merged = eng.TensorAdd(asr2d, eng.TensorMultiply(scaled, gate));
+
+        return eng.Reshape(merged, originalShape);
     }
 
     /// <summary>
