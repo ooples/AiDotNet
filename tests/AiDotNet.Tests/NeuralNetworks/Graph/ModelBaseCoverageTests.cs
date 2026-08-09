@@ -82,8 +82,27 @@ public class ModelBaseCoverageTests
         _out.WriteLine($"derive straight from NeuralNetworkBase (no family base): {rootOnly.Count}");
         _out.WriteLine($"distinct abstract bases in the tree                    : {byBase.Count}");
         _out.WriteLine("");
+        // Which bases ALREADY declare a contract. Without this the ranking answers "where is the
+        // leverage" but not "where is the leverage LEFT", and the top of the list stays dominated by
+        // bases that were declared several commits ago.
+        var declaring = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var t in asm.GetTypes())
+        {
+            if (t.IsAbstract && t.GetInterfaces().Any(i => i.Name == "IShapeContract"))
+                declaring.Add(t.Name);
+        }
+
         _out.WriteLine("--- TRANSITIVE coverage per base, richest first (a declaration here reaches all of them) ---");
         foreach (var kv in byBase.OrderByDescending(k => k.Value.Count).Take(40))
+        {
+            string mark = declaring.Contains(kv.Key) ? "declared" : "        ";
+            _out.WriteLine($"  {kv.Value.Count,4}  {mark}  {kv.Key}");
+        }
+
+        _out.WriteLine("");
+        _out.WriteLine("--- richest bases with NO contract yet (this is the remaining work) ---");
+        foreach (var kv in byBase.Where(k => !declaring.Contains(k.Key))
+                                 .OrderByDescending(k => k.Value.Count).Take(25))
         {
             _out.WriteLine($"  {kv.Value.Count,4}  {kv.Key}");
         }
