@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -52,9 +52,9 @@ public abstract class FrameInterpolationTestBase<T> : VideoNNModelTestBase<T>
             double value1 = ConvertToDouble(out1[i]);
             double value2 = ConvertToDouble(out2[i]);
             // Infinity previously passed a NaN-only check.
-            Assert.True(double.IsFinite(value1),
+            Assert.True((!double.IsNaN(value1) && !double.IsInfinity(value1)),
                 $"Frame interpolation output[{i}] for frame 1 is {value1}.");
-            Assert.True(double.IsFinite(value2),
+            Assert.True((!double.IsNaN(value2) && !double.IsInfinity(value2)),
                 $"Frame interpolation output[{i}] for frame 2 is {value2}.");
         }
     }

@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Runtime;
 using System.Threading;
 using AiDotNet.Helpers;
@@ -635,7 +635,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
 
             // A non-finite clone output is a failure in its own right: NaN fails every
             // comparison, so without this it slips through as "not greater than".
-            Assert.True(double.IsFinite(actual),
+            Assert.True((!double.IsNaN(actual) && !double.IsInfinity(actual)),
                 $"Clone() output[{i}] is {actual}; the original was {expected:E6}.");
 
             Assert.True(diff <= allowed,
