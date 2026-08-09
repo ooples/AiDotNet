@@ -25,6 +25,10 @@ public class SambaASROptions : ModelOptions
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
+        StateDimension = other.StateDimension;
+        ExpandFactor = other.ExpandFactor;
+        ConvKernelSize = other.ConvKernelSize;
+        MaxSequenceLength = other.MaxSequenceLength;
         NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
@@ -38,7 +42,16 @@ public class SambaASROptions : ModelOptions
     public int MaxAudioLengthSeconds { get; set; } = 30;
     public int EncoderDim { get; set; } = 512;
     public int NumEncoderLayers { get; set; } = 24;
+    /// <summary>Retained for backward compatibility; unused by the Mamba (attention-free) encoder.</summary>
     public int NumAttentionHeads { get; set; } = 8;
+    /// <summary>SSM latent state size N per Mamba block (Gu &amp; Dao 2023). Default: 16.</summary>
+    public int StateDimension { get; set; } = 16;
+    /// <summary>Mamba inner expansion factor E (inner dim = E · EncoderDim). Default: 2.</summary>
+    public int ExpandFactor { get; set; } = 2;
+    /// <summary>Depthwise causal conv kernel width inside each Mamba block. Default: 4.</summary>
+    public int ConvKernelSize { get; set; } = 4;
+    /// <summary>Maximum encoder frame count the SSM scan is sized for. Default: 750.</summary>
+    public int MaxSequenceLength { get; set; } = 750;
     public int NumMels { get; set; } = 80;
     public int VocabSize { get; set; } = 5000;
     public int MaxTextLength { get; set; } = 512;

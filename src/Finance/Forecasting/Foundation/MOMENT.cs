@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -129,6 +129,13 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics, captured by
+    // ApplyInstanceNormalization so ForwardNative can restore each instance's level on the
+    // way out. Without the reverse step the forecast head emits in normalized space, so the
+    // series' own scale is discarded — a constant-valued input normalizes to all-zeros and
+    // every such series yields a bit-identical forecast.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
     private int _contextLength;
     private int _forecastHorizon;
     private int _patchLength;
@@ -570,47 +577,45 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _revinMean, out _revinStd);
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the forecast
+    /// so it lands on the input series' original scale.
+    /// </summary>
+    /// <remarks>
+    /// MOMENT normalizes every input instance to zero mean / unit variance before the patch
+    /// embedding, which is what lets one pretrained encoder serve series of wildly different
+    /// magnitudes. That transform is only valid if it is undone on the way out — RevIN is
+    /// *reversible* by construction. Without this step the forecast head's output stays in
+    /// normalized space, so a series with level 1000 forecasts near 0, and any constant-valued
+    /// series (variance 0, so every element maps to exactly 0) becomes indistinguishable from
+    /// every other constant series.
+    /// </remarks>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
     {
-        // MOMENT uses RevIN (Reversible Instance Normalization)
-        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
 
-        for (int b = 0; b < batchSize; b++)
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
         {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                {
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-                }
-            }
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
         }
 
-        return result;
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -794,10 +799,41 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         foreach (var layer in Layers)
             current = layer.Forward(current);
 
+        // RevIN reverse step, applied while `current` is still [batch, forecastHorizon] so the
+        // per-instance statistics broadcast down the horizon.
+        current = DenormalizeForecast(current);
+
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
+    }
+
+    /// <summary>
+    /// Captures per-layer activations of the native forward pass. Mirrors
+    /// <see cref="ForwardNative"/>'s RevIN + rank-1 → [1, N] promotion so the first
+    /// ReshapeLayer (which expects <c>contextLength</c> elements per sample) receives a
+    /// batched tensor, rather than the base walk feeding the raw rank-1 input straight in.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode || Layers.Count == 0)
+            return activations;
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <summary>

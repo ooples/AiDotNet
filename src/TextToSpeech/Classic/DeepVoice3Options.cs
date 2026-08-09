@@ -10,6 +10,7 @@ public class DeepVoice3Options : AcousticModelOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public DeepVoice3Options(DeepVoice3Options other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

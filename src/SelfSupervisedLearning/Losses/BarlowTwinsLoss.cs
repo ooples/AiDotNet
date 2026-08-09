@@ -38,10 +38,8 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Barlow Twins: Self-Supervised Learning via Redundancy Reduction", "https://arxiv.org/abs/2103.03230", Year = 2021, Authors = "Jure Zbontar, Li Jing, Ishan Misra, Yann LeCun, Stéphane Deny")]
-public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
+public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly double _lambda;
     private readonly bool _normalize;
@@ -71,7 +69,58 @@ public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
     /// <param name="z1">Embeddings from view 1 [batch_size, dim].</param>
     /// <param name="z2">Embeddings from view 2 [batch_size, dim].</param>
     /// <returns>The computed loss value.</returns>
-    public T ComputeLoss(Tensor<T> z1, Tensor<T> z2)
+    /// <remarks>
+    /// Differentiable Barlow Twins (Zbontar et al. 2021): sum_i (1 - C_ii)^2 + lambda * sum_{i!=j}
+    /// C_ij^2 over the cross-correlation C. Diagonal and off-diagonal terms are selected with
+    /// constant masks and reduced, rather than read out by indexing, so the tape survives.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> z1, Tensor<T> z2)
+    {
+        if (z1 is null) throw new ArgumentNullException(nameof(z1));
+        if (z2 is null) throw new ArgumentNullException(nameof(z2));
+
+        int batchSize = z1.Shape[0];
+        int dim = z1.Shape[1];
+
+        var a = _normalize ? BatchNormalizeDifferentiable(z1) : z1;
+        var b = _normalize ? BatchNormalizeDifferentiable(z2) : z2;
+
+        // C = (a^T @ b) / batchSize
+        var cross = Engine.TensorMatMul(Engine.TensorTranspose(a), b);
+        var c = Engine.TensorDivideScalar(cross, NumOps.FromDouble(batchSize));
+
+        var eye = ObjectiveOps.Identity<T>(dim);
+        var offMask = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(eye, NumOps.FromDouble(-1.0)), NumOps.One);
+
+        // invariance: sum over the diagonal of (1 - C)^2
+        var oneMinusC = Engine.TensorNegate(Engine.TensorAddScalar(c, NumOps.FromDouble(-1.0)));
+        var diagPart = Engine.TensorMultiply(oneMinusC, eye);
+        var invariance = Engine.ReduceSum(Engine.TensorMultiply(diagPart, diagPart), null, keepDims: false);
+
+        // redundancy: sum over the off-diagonal of C^2
+        var offPart = Engine.TensorMultiply(c, offMask);
+        var redundancy = Engine.ReduceSum(Engine.TensorMultiply(offPart, offPart), null, keepDims: false);
+
+        return Engine.TensorAdd(
+            invariance, Engine.TensorMultiplyScalar(redundancy, NumOps.FromDouble(_lambda)));
+    }
+
+    /// <summary>Per-feature standardization across the batch, built from IEngine ops.</summary>
+    private Tensor<T> BatchNormalizeDifferentiable(Tensor<T> z)
+    {
+        int batchSize = z.Shape[0];
+        var mean = Engine.TensorDivideScalar(
+            Engine.ReduceSum(z, new[] { 0 }, keepDims: true), NumOps.FromDouble(batchSize));
+        var centered = Engine.TensorBroadcastSubtract(z, mean);
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true),
+            NumOps.FromDouble(batchSize));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-12)));
+        return Engine.TensorBroadcastDivide(centered, std);
+    }
+
+    private T ComputeLossScalarLegacy(Tensor<T> z1, Tensor<T> z2)
     {
         if (z1 is null) throw new ArgumentNullException(nameof(z1));
         if (z2 is null) throw new ArgumentNullException(nameof(z2));

@@ -118,9 +118,10 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [320, 640, 1280, 1280];
-        _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
+        ValidateArchitectureOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         InitializeLayers();
     }
 
@@ -154,9 +155,10 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0.1;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [320, 640, 1280, 1280];
-        _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
+        ValidateArchitectureOptions(_options);
+        _channelDims = (int[])_options.ChannelDimensions.Clone();
+        _depths = (int[])_options.StageDepths.Clone();
+        _decoderDim = _options.DecoderDimension;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load ODISESegmentation ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -193,7 +195,7 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -203,6 +205,28 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     #endregion
 
     #region Private Methods
+    private static void ValidateArchitectureOptions(ODISESegmentationOptions options)
+    {
+        if (options.ChannelDimensions is null)
+            throw new ArgumentNullException(nameof(options.ChannelDimensions));
+        if (options.StageDepths is null)
+            throw new ArgumentNullException(nameof(options.StageDepths));
+        if (options.ChannelDimensions.Length != 4 || options.StageDepths.Length != 4)
+        {
+            throw new ArgumentException(
+                "ODISE ChannelDimensions and StageDepths must each contain four stages.",
+                nameof(options));
+        }
+        if (options.ChannelDimensions.Any(value => value <= 0) ||
+            options.StageDepths.Any(value => value <= 0) ||
+            options.DecoderDimension <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "All ODISE channel dimensions, stage depths, and the decoder dimension must be positive.");
+        }
+    }
+
     private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -345,9 +369,16 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new ODISESegmentation<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new ODISESegmentation<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new ODISESegmentationOptions(_options);
+        return _useNativeMode
+            ? new ODISESegmentation<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, dropRate: _dropRate, options: options)
+            : new ODISESegmentation<T>(Architecture,
+                _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
+                _numClasses, options);
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

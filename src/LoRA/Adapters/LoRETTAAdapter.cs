@@ -201,7 +201,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         _numCores = numCores;
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Initialize TT-ranks: [1, ttRank, ttRank, ..., ttRank, 1]
         _ttRanks = new int[numCores + 1];
@@ -325,7 +325,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// even though it looks complex mathematically.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store intermediates for backward pass
         _forwardIntermediates = new List<Tensor<T>>();
@@ -386,7 +386,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Extract output
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         Vector<T> outputData = new Vector<T>(batchSize * outputSize);
 
         int idx = 0;
@@ -537,7 +537,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
         int batchSize = outputGradient.Shape[0];
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Apply inverse scaling to output gradient
         T scaling = NumOps.Divide(
@@ -839,7 +839,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights
@@ -886,7 +886,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T> ContractTensorTrainToMatrix()
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Perform sequential contraction of all TT cores
         // Start with first core: [r0=1, n1, r1] → effectively [n1, r1]
@@ -1019,7 +1019,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     public string GetParameterEfficiencyMetrics()
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         int fullParams = inputSize * outputSize;
         int ttParams = (int)(ParameterCount - (_freezeBaseLayer ? 0 : _baseLayer.ParameterCount));

@@ -68,10 +68,21 @@ public class ShiftNetOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the number of encoder/decoder blocks.</summary>
     public int NumBlocks { get; set; } = 4;
 
-    /// <summary>Gets or sets the number of temporal shifts per block.</summary>
+    /// <summary>Gets or sets the number of temporal shift blocks per stage.</summary>
+    /// <remarks>
+    /// The paper alternates forward (FTS) and backward (BTS) temporal shift blocks, so an even count
+    /// gives each direction equal representation. Using only one direction leaves the first or last
+    /// frames unable to receive anything from their neighbours.
+    /// </remarks>
     public int NumShifts { get; set; } = 4;
 
-    /// <summary>Gets or sets the temporal radius for shifting.</summary>
+    /// <summary>Gets or sets how many neighbouring frames each frame draws from.</summary>
+    /// <remarks>
+    /// Distinct from the SPATIAL displacement set, which is fixed by the paper at M = 25 offsets over
+    /// {-9, -5, 0, 5, 9}^2 and is therefore not configurable — see
+    /// <see cref="AiDotNet.Video.Denoising.GroupedSpatialTemporalShift{T}.Displacements"/>. This knob is
+    /// the temporal reach only.
+    /// </remarks>
     public int ShiftRadius { get; set; } = 2;
 
     #endregion

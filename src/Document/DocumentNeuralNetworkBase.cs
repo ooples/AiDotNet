@@ -330,9 +330,11 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
         bool hasPassedConvLayer = false;
         foreach (var layer in Layers)
         {
-            // Track whether we've passed through any convolutional/pooling layer
-            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            // Track whether we've passed through any convolutional/pooling layer. The set mirrors
+            // IsSpatialLayer below: residual conv blocks (BasicBlock/BottleneckBlock) and the
+            // element-wise layers interleaved in a CNN backbone (activation, dropout) all keep the
+            // [B,C,H,W] spatial layout, so passing one still counts as "inside the CNN stem".
+            if (IsSpatialLayer(layer))
             {
                 hasPassedConvLayer = true;
             }
@@ -348,9 +350,12 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
 
             // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
             // Only reshape if we actually went through conv layers (not raw image input)
-            // CNN outputs [B, C, H, W] or [C, H, W]; non-spatial layers expect [SeqLen, EmbDim]
-            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            // CNN outputs [B, C, H, W] or [C, H, W]; non-spatial layers expect [SeqLen, EmbDim].
+            // A residual CNN backbone (PSENet's ResNet: BasicBlock/BottleneckBlock, with the usual
+            // activation/dropout between stages) stays spatial the whole way; without treating those
+            // as spatial the reshape fired at the FIRST residual block, handing the next MaxPool /
+            // block a rank-2 [patches, channels] tensor ("MaxPooling requires rank-3/4; got rank 2").
+            bool isNonSpatialLayer = !IsSpatialLayer(layer);
             if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
             {
                 int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
@@ -374,6 +379,22 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
         }
         return output;
     }
+
+    /// <summary>
+    /// True when <paramref name="layer"/> preserves the CNN spatial layout ([B,C,H,W] / [C,H,W]),
+    /// so the inference Forward's spatial→sequence auto-reshape must NOT fire on it. Covers the
+    /// convolution / normalization / pooling primitives AND the residual conv blocks
+    /// (<see cref="BasicBlock{T}"/>, <see cref="BottleneckBlock{T}"/>) and the element-wise layers
+    /// (activation, dropout) that a residual CNN backbone interleaves between stages — a genuine
+    /// paper-faithful ResNet backbone (e.g. PSENet) is entirely spatial. The reshape still fires at
+    /// the first ACTUAL non-spatial layer (a transformer / attention / dense block), so transformer
+    /// document models are unaffected.
+    /// </summary>
+    private static bool IsSpatialLayer(ILayer<T> layer) =>
+        layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+              or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>
+              or ActivationLayer<T> or DropoutLayer<T>
+              or BasicBlock<T> or BottleneckBlock<T>;
 
     /// <summary>
     /// Validates that an input image tensor has the correct shape.

@@ -10,6 +10,7 @@ public class OpenVoiceV2Options : VoiceCloningOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public OpenVoiceV2Options(OpenVoiceV2Options other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

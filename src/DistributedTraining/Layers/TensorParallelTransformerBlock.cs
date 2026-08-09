@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -23,7 +23,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public sealed class TensorParallelTransformerBlock<T> : LayerBase<T>
+public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>
 {
     private readonly LayerNormalizationLayer<T> _ln1;
     private readonly LayerNormalizationLayer<T> _ln2;
@@ -78,7 +78,7 @@ public sealed class TensorParallelTransformerBlock<T> : LayerBase<T>
     }
 
     /// <summary>Runs the block. Input/output are <c>[batch, seq, embedDim]</c> (output identical across ranks).</summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 3 || input.Shape[2] != _embedDim)
             throw new ArgumentException($"TensorParallelTransformerBlock expects [batch, seq, {_embedDim}]; got [{string.Join(",", input.Shape)}].", nameof(input));

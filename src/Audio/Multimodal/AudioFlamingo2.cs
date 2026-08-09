@@ -169,7 +169,10 @@ public class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        // The native Audio Flamingo graph is the sequential Layers pipeline.
+        // Use the canonical executor for deterministic evaluation, streaming
+        // materialize/release, and per-layer scratch recycling.
+        return base.PredictCore(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -178,7 +181,8 @@ public class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Honor the AdamW optimizer selected by the public constructor.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -234,7 +238,7 @@ public class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new AudioFlamingo2<T>(Architecture, _options);
+        => new AudioFlamingo2<T>(Architecture, new AudioFlamingo2Options(_options));
 
     #endregion
 

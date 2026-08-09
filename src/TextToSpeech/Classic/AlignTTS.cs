@@ -91,7 +91,22 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new AlignTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // AlignTTS (Zeng et al., 2020, arXiv:2003.01950 §4) trains with Adam,
+        // beta1 = 0.9, beta2 = 0.98, epsilon = 1e-9, at a fixed learning rate of 1e-4 -- which is
+        // already the TtsModelOptions default this reads.
+        //
+        // Built with no options at all before this, so it silently ran as AdamW at its own
+        // 1e-3 default with beta2 = 0.999, epsilon = 1e-8 and a decoupled weight decay of
+        // 0.01 that no paper here specifies. Ten times the intended rate is enough to blow
+        // the first step into a region training cannot recover from.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.98,
+                Epsilon = 1e-9
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -223,7 +238,15 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer. The constructor resolves _optimizer from the
+            // caller's argument (falling back to AdamW), but this call site used the
+            // no-optimizer TrainWithTape overload, whose `optimizer` parameter then defaulted
+            // to null and silently trained on the base engine's fallback instead — so both the
+            // AdamW default AND any user-supplied optimizer were discarded. That is what drove
+            // the memorization probe divergence measured on the A-C shard: step 1 loss
+            // 20.729160 rising to step 2 loss 101.557045, a ~5x blow-up rather than a warm-up
+            // transient.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

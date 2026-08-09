@@ -260,7 +260,7 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
     /// which adds noise. The gradients will learn to work despite this noise!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer (unchanged)
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -474,7 +474,7 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Calculate dimensions
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create merged parameters (base + LoRA)
