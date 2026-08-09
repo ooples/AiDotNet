@@ -3224,7 +3224,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual void ResolveLazyLayerShapes()
     {
         if (_layerShapesResolved) return;
-        if (Layers is null || Layers.Count == 0) return;
+        // An EMPTY Layers is not the same as nothing to resolve. A model may hold every weight
+        // in sub-structures it declares through GetExtraTrainableLayers -- a detection backbone
+        // keeps its convolutions in stage objects and owns no Layers at all -- and bailing here
+        // left those at the -1 shape sentinel, so they materialized nothing and the model
+        // reported ZERO parameters. Stop only when there is nothing on either list.
+        bool hasOwnLayers = Layers is not null && Layers.Count > 0;
+        bool hasExtraLayers = false;
+        foreach (var probe in GetExtraTrainableLayers())
+        {
+            if (probe is not null) { hasExtraLayers = true; break; }
+        }
+        if (!hasOwnLayers && !hasExtraLayers) return;
 
         int[]? currentShape = TryGetArchitectureInputShape();
         if (currentShape is null)
@@ -3252,7 +3263,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // across ALL model families, not just whichever layer breaks first.
         int[] lastGoodShape = currentShape;
 
-        for (int i = 0; i < Layers.Count; i++)
+        for (int i = 0; hasOwnLayers && i < Layers!.Count; i++)
         {
             var layer = Layers[i];
             if (layer is null) continue;
@@ -3281,6 +3292,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 break;
             }
         }
+
+            // Continue the same shape chain through the layers a model declares via
+            // GetExtraTrainableLayers. Without this they are counted and serialized but never
+            // SIZED, so they stay at their -1 sentinel, materialize nothing and report zero -- a
+            // detection backbone holds every convolution in stage objects outside Layers and read
+            // 0 parameters for exactly this reason. A model should not have to resolve its own
+            // shapes: it declares WHAT it owns and the base sizes it.
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is null) continue;
+                TryAdvanceLayerShape(extra, ref currentShape, ref lastGoodShape);
+            }
 
         _layerShapesResolved = true;
     }
@@ -5650,7 +5673,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// training data.
     /// </para>
     /// </remarks>
-    public abstract void UpdateParameters(Vector<T> parameters);
+    /// <remarks>
+    /// <para>
+    /// Virtual, and equivalent to <see cref="SetParameters"/>: both distribute a flat vector back
+    /// over the SAME enumeration -- Layers, then GetExtraTrainableLayers(), then
+    /// GetExtraTrainableTensors() -- that ParameterCount and GetParameters fold.
+    /// </para>
+    /// <para>
+    /// It was abstract, and that is why 974 models hand-wrote it and 572 of those simply THREW.
+    /// An abstract member does not ask a model whether it has parameters; it demands an answer,
+    /// and "throw" is the answer that gets written when the weights are not reachable from the
+    /// base walk. Making it virtual removes the demand: a model whose weights ARE reachable now
+    /// gets a correct implementation for free, and one whose weights are not is a plumbing gap to
+    /// close rather than a refusal to document.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParameters(Vector<T> parameters) => SetParameters(parameters);
 
     /// <summary>
     /// Sets the neural network to either training or inference mode.
