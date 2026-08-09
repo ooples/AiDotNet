@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -57,6 +59,12 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Conditional Image Synthesis with Auxiliary Classifier GANs", "https://arxiv.org/abs/1610.09585", Year = 2017, Authors = "Augustus Odena, Christopher Olah, Jonathon Shlens")]
 public class ACGAN<T> : NeuralNetworkBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Generator then discriminator. ParameterCount summed both while GetParameters was never overridden and walked this model's own Layers, which is EMPTY -- measured 49,605 against a vector of length 0, so none of an ACGAN's weights could be saved or restored. Both now come from this one declaration.</remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => Generator.Layers.Cast<LayerBase<T>?>()
+            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
     private readonly ACGANOptions _options;
 
     /// <inheritdoc/>
@@ -112,11 +120,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the ACGAN.
-    /// </summary>
-    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     private readonly ILossFunction<T> _lossFunction;
 
