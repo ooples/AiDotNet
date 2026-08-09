@@ -86,15 +86,59 @@ public class ContextNetOptions : ModelOptions
 
     public int NumMels { get; set; } = 80;
 
-    /// <summary>Output vocabulary size. The paper uses a 1k wordpiece model.</summary>
+    /// <summary>Output vocabulary size; must equal <see cref="Vocabulary"/>'s length.</summary>
+    /// <value>The token count. Defaults to the built-in character tokenizer's size.</value>
     /// <remarks>
-    /// Previously defaulted to 5000, which does not correspond to any configuration in the paper.
+    /// <para>
+    /// DERIVED FROM <see cref="Vocabulary"/>, not set independently. This defaulted to 1024 -- the
+    /// paper's wordpiece configuration -- while the shipped tokenizer holds 34 characters. The model
+    /// then built a 1024-class output layer that no tokenizer here could decode, so the documented
+    /// default configuration could not produce text. There is no 1k wordpiece model in this
+    /// repository to ship as the default; supply one through <see cref="Vocabulary"/> to train the
+    /// paper's configuration, and this follows it.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how many different tokens the model can output, and it has
+    /// to match the token list exactly -- otherwise the model emits IDs the decoder cannot name.</para>
     /// </remarks>
-    public int VocabSize { get; set; } = 1024;
+    public int VocabSize { get; set; } = GetDefaultVocabulary().Length;
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
+
+    /// <summary>The token strings, indexed by token id.</summary>
+    /// <value>The built-in character tokenizer by default: blank, four specials, a word separator, a-z, apostrophe and space.</value>
+    /// <remarks>
+    /// <para>Index 0 is the CTC blank, which the decoder never emits. Index 5 (<c>|</c>) is the word
+    /// separator and decodes to a space.</para>
+    /// <para><b>For Beginners:</b> The list of pieces the model can output, in id order. Replace it to
+    /// use your own tokenizer, and set <see cref="VocabSize"/> to its length.</para>
+    /// </remarks>
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
+
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Validates the configuration.</summary>
+    /// <exception cref="InvalidOperationException">The vocabulary and its declared size disagree.</exception>
+    /// <remarks>
+    /// A size that does not match the token list is not recoverable at decode time: the output layer
+    /// emits ids the vocabulary cannot name, and the only options left are to drop them silently or to
+    /// fail somewhere far from the setting that caused it.
+    /// </remarks>
+    public void Validate()
+    {
+        if (Vocabulary is null || Vocabulary.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "ContextNetOptions.Vocabulary must contain at least one token.");
+        }
+
+        if (VocabSize != Vocabulary.Length)
+        {
+            throw new InvalidOperationException(
+                $"ContextNetOptions.VocabSize is {VocabSize} but Vocabulary holds {Vocabulary.Length} " +
+                "tokens. The output layer is sized from VocabSize and decoded through Vocabulary, so " +
+                "they must agree. Set VocabSize = Vocabulary.Length, or supply a matching tokenizer.");
+        }
+    }
 }

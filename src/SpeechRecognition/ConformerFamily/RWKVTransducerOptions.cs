@@ -71,7 +71,14 @@ public class RWKVTransducerOptions : ModelOptions
     public int NumAttentionHeads { get; set; } = 8;
     public int CgmlpDim { get; set; } = 3072;
     public int NumMels { get; set; } = 80;
-    public int VocabSize { get; set; } = 5000;
+    /// <summary>Output vocabulary size; must equal <see cref="Vocabulary"/>'s length.</summary>
+    /// <value>The token count. Defaults to the built-in character tokenizer's size.</value>
+    /// <remarks>
+    /// This defaulted to 5000 while the shipped tokenizer holds 34 characters, so the model built a
+    /// 5000-class output layer emitting ids no decoder here could name. Supply a matching
+    /// <see cref="Vocabulary"/> to use a larger tokenizer; <c>Validate</c> requires the two to agree.
+    /// </remarks>
+    public int VocabSize { get; set; } = GetDefaultVocabulary().Length;
     public string? ModelPath { get; set; }
 
     /// <summary>
@@ -135,4 +142,23 @@ public class RWKVTransducerOptions : ModelOptions
     public string Language { get; set; } = "en";
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Validates the configuration.</summary>
+    /// <exception cref="InvalidOperationException">The vocabulary and its declared size disagree.</exception>
+    public void Validate()
+    {
+        if (Vocabulary is null || Vocabulary.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "RWKVTransducerOptions.Vocabulary must contain at least one token.");
+        }
+
+        if (VocabSize != Vocabulary.Length)
+        {
+            throw new InvalidOperationException(
+                $"RWKVTransducerOptions.VocabSize is {VocabSize} but Vocabulary holds {Vocabulary.Length} " +
+                "tokens. The output layer is sized from VocabSize and decoded through Vocabulary, so " +
+                "they must agree.");
+        }
+    }
 }

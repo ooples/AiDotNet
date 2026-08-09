@@ -60,6 +60,7 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        _options.Validate();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -76,6 +77,7 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        _options.Validate();
         _useNativeMode = true;
         // Global-norm gradient clipping. The default-constructed optimizer applied no
         // clipping at all, so a single update could move a deep CTC stack far enough to
@@ -301,7 +303,33 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// as a best-effort fallback for models with Unicode-based token vocabularies.
     /// ONNX models typically include their own tokenizer; this path is for native mode.
     /// </summary>
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    /// <summary>Renders CTC token ids as text using the configured vocabulary.</summary>
+    /// <remarks>
+    /// THROUGH THE VOCABULARY, not as Unicode code points. This used to cast each id straight to a
+    /// char, which ignored <c>ContextNetOptions.Vocabulary</c> entirely: token 6 rendered as the
+    /// control character U+0006 rather than as "a". Every transcript the native path produced was
+    /// mojibake, and nothing threw. Index 0 is the CTC blank and is skipped; the word separator "|"
+    /// becomes a space; an id outside the vocabulary is skipped rather than guessed at.
+    /// </remarks>
+    private string TokensToText(List<int> tokens)
+    {
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (var t in tokens)
+        {
+            if (t <= 0 || t >= vocabulary.Length) continue;
+
+            string piece = vocabulary[t];
+            if (piece == "|") { sb.Append(' '); continue; }
+
+            // Remaining specials (<pad>, <s>, </s>, <unk>) carry no text.
+            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
+
+            sb.Append(piece);
+        }
+
+        return sb.ToString().Trim();
+    }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private string ClassifyLanguageFromTokens(List<int> _) => _options.Language;
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ContextNet<T>)); }
