@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 
@@ -33,7 +33,7 @@ namespace AiDotNet.LoRA;
 /// requires 8x1000 + 8x1000 = 16,000 parameters (98.4% reduction!).
 /// </para>
 /// </remarks>
-public class LoRALayer<T> : LayerBase<T>
+public partial class LoRALayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Low-rank matrix A with dimensions (inputSize × rank).
@@ -243,7 +243,7 @@ public class LoRALayer<T> : LayerBase<T>
     /// The result represents the adaptation that gets added to the base layer's output.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 

@@ -261,7 +261,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize or reuse banks
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         lock (_bankLock)
         {
@@ -416,7 +416,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     protected override LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Important: this virtual is invoked from the base constructor, before VB-LoRA banks/indices are initialized.
         // We therefore only construct a standard LoRA layer here and let the derived constructor/Forward() synchronize
@@ -500,7 +500,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
     /// but the memory footprint is much smaller when many adapters share banks.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Sync LoRA layer with current bank state before forward pass
         UpdateLoRALayerFromBanks(_loraLayer);
@@ -615,7 +615,7 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
 
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

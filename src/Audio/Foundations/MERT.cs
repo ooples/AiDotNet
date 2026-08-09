@@ -246,7 +246,7 @@ public class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

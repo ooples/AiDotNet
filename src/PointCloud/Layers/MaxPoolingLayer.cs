@@ -28,7 +28,7 @@ namespace AiDotNet.PointCloud.Layers;
 ///
 /// This is a key component in PointNet for making the network invariant to point order.
 /// </remarks>
-public class MaxPoolingLayer<T> : LayerBase<T>
+public partial class MaxPoolingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
     private int[]? _maxIndices; // Store indices of max values for backward pass
@@ -55,7 +55,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         Parameters = Vector<T>.Empty(); // No trainable parameters
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _numPoints = input.Shape[0];
 

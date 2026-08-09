@@ -311,18 +311,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
         // eager, which is correct and bit-identical across calls.
         if (!s_autoCompiledInferenceEnabled)
-            return eagerFallback();
+            return DetachPlanOutput(eagerFallback());
 
         // #1622 L3b: front the compile host with the verify-then-trust gate so a compiled plan is
         // adopted for a shape only after it matches the eager forward â€” then replayed for the rest of
         // the denoising loop. Output stays numerically identical to eager (rejected shapes stay eager).
-        return _inferenceGate.Run(
+        return DetachPlanOutput(_inferenceGate.Run(
             input,
             _layerStructureVersion,
             eager: eagerFallback,
             compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerFallback),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
-                area: "NoisePredictorBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+                area: "NoisePredictorBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason)));
     }
 
     /// <summary>
@@ -355,16 +355,45 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
         // eager, which is correct and bit-identical across the denoising loop and across calls.
         if (!s_autoCompiledInferenceEnabled)
-            return eagerFallback();
+            return DetachPlanOutput(eagerFallback());
 
-        return _inferenceGate.Run(
+        return DetachPlanOutput(_inferenceGate.Run(
             inputs,
             _layerStructureVersion,
             eager: eagerFallback,
             compiled: () => _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
-                area: "NoisePredictorBase", feature: "AutoCompiledMultiInputInference", enabled: enabled, reason: reason));
+                area: "NoisePredictorBase", feature: "AutoCompiledMultiInputInference", enabled: enabled, reason: reason)));
     }
+
+    /// <summary>
+    /// Returns a tensor the caller can safely RETAIN, copying the compiled plan's resident output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A compiled plan is reused across calls: CompiledModelHost.Predict does SetInputs(...) then
+    /// returns plan.Execute(), and that result IS the plan's resident output buffer, overwritten by the
+    /// next call. These helpers are reached from the concrete predictors' PUBLIC PredictNoise /
+    /// PredictNoiseWithEmbedding overrides, so without this copy two predictions hand back the same
+    /// object.
+    /// </para>
+    /// <para>
+    /// Measured before this fix: ReferenceEquals(PredictNoise(a, t), PredictNoise(b, t)) was true and
+    /// the two results differed by exactly 0 for clearly different latents. That is the same defect
+    /// found in the VAE Encode/Decode path, where it silently defeated every test that predicted twice
+    /// and compared — such a test measures no difference because it holds one buffer twice.
+    /// </para>
+    /// <para>
+    /// The copy is a per-denoising-step allocation of one latent (small next to the UNet forward that
+    /// produced it), which is the deliberate price of a public method returning a tensor the caller
+    /// owns. BOTH paths are detached, not just the compiled one: the eager fallback aliases as well,
+    /// because layers reuse preallocated output buffers on the inference fast path (see
+    /// ConvolutionalLayer's _preAllocatedOutput), so the final layer's output tensor is the same object
+    /// on every call. That was verified by measurement rather than assumed — detaching only the
+    /// compiled path left ReferenceEquals(PredictNoise(a), PredictNoise(b)) still true.
+    /// </para>
+    /// </remarks>
+    private static Tensor<T> DetachPlanOutput(Tensor<T> planOutput) => planOutput.Clone();
 
     /// <summary>
     /// Count of successful multi-input compiled-plan executions on this predictor's compile

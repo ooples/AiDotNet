@@ -32,10 +32,8 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bootstrap Your Own Latent - A New Approach to Self-Supervised Learning", "https://arxiv.org/abs/2006.07733", Year = 2020, Authors = "Jean-Bastien Grill, Florian Strub, Florent Altché, Corentin Tallec, Pierre Richemond, Elena Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar, Bilal Piot, Koray Kavukcuoglu, Rémi Munos, Michal Valko")]
-public class BYOLLoss<T> : IContrastiveLoss<T>
+public class BYOLLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly bool _normalize;
     private readonly bool _symmetric;
@@ -57,7 +55,30 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
     /// <param name="onlinePrediction">Predictions from online network [batch_size, dim].</param>
     /// <param name="targetProjection">Projections from target network [batch_size, dim] (stop-gradient applied).</param>
     /// <returns>The computed loss value.</returns>
-    public T ComputeLoss(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
+    /// <remarks>
+    /// Differentiable: 2 - 2*cos(p, z) averaged over the batch, assembled from IEngine ops so the
+    /// result carries tape history. This previously summed host-side dot products into a bare
+    /// scalar, which could be reported but never backpropagated.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
+    {
+        if (onlinePrediction is null) throw new ArgumentNullException(nameof(onlinePrediction));
+        if (targetProjection is null) throw new ArgumentNullException(nameof(targetProjection));
+
+        var p2 = _normalize ? ObjectiveOps.L2NormalizeRows(onlinePrediction) : onlinePrediction;
+        var z2 = _normalize ? ObjectiveOps.L2NormalizeRows(targetProjection) : targetProjection;
+
+        // rowwise cosine similarity -> mean -> 2 - 2*mean
+        var prod = Engine.TensorMultiply(p2, z2);
+        var perRow = Engine.ReduceSum(prod, new[] { 1 }, keepDims: false);
+        var meanCos = Engine.TensorDivideScalar(
+            Engine.ReduceSum(perRow, null, keepDims: false),
+            NumOps.FromDouble(onlinePrediction.Shape[0]));
+        var twice = Engine.TensorMultiplyScalar(meanCos, NumOps.FromDouble(2.0));
+        return Engine.TensorNegate(Engine.TensorAddScalar(twice, NumOps.FromDouble(-2.0)));
+    }
+
+    private T ComputeLossScalarLegacy(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
     {
         if (onlinePrediction is null) throw new ArgumentNullException(nameof(onlinePrediction));
         if (targetProjection is null) throw new ArgumentNullException(nameof(targetProjection));
@@ -103,14 +124,19 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
     /// <param name="pred2">Predictions from view 2 going to view 1.</param>
     /// <param name="proj1">Target projections from view 1.</param>
     /// <returns>The symmetric loss.</returns>
-    public T ComputeSymmetricLoss(
+    /// <remarks>
+    /// Returns a tape-carrying tensor, like <see cref="ComputeLoss"/>. This is the form BYOL
+    /// actually trains on — both view orderings averaged — so it is the one that most needs to be
+    /// differentiable.
+    /// </remarks>
+    public Tensor<T> ComputeSymmetricLoss(
         Tensor<T> pred1, Tensor<T> proj2,
         Tensor<T> pred2, Tensor<T> proj1)
     {
         var loss1 = ComputeLoss(pred1, proj2);
         var loss2 = ComputeLoss(pred2, proj1);
 
-        return NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(loss1, loss2));
+        return Engine.TensorMultiplyScalar(Engine.TensorAdd(loss1, loss2), NumOps.FromDouble(0.5));
     }
 
     /// <summary>

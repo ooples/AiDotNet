@@ -36,7 +36,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// in a compressed form suitable for diffusion.
 /// </para>
 /// </remarks>
-public class VAEEncoder<T> : LayerBase<T>
+public partial class VAEEncoder<T> : LayerBase<T>
 {
     /// <summary>
     /// Input convolution from image channels to base channels.
@@ -312,7 +312,7 @@ public class VAEEncoder<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input image tensor [batch, inputChannels, H, W].</param>
     /// <returns>Concatenated mean and log variance [batch, 2*latentChannels, H/f, W/f].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
@@ -524,6 +524,13 @@ public class VAEEncoder<T> : LayerBase<T>
     /// <summary>
     /// Updates all learnable parameters using gradient descent.
     /// </summary>
+    // GetParameters / SetParameters are deliberately NOT overridden. LayerBase now implements both
+    // concretely, folding over the same registry ParameterCount sums -- Parameters, this layer's
+    // registered tensors, then each sub-layer -- in one order, so the count, the vector and the
+    // restore cannot describe different tensors. The hand-written versions here walked the child
+    // fields directly while ParameterCount walked the registry, which is why this layer reported 0
+    // against a 56,092-value vector and every model containing it inherited the mismatch.
+
     public override void UpdateParameters(T learningRate)
     {
         _inputConv.UpdateParameters(learningRate);
@@ -544,32 +551,6 @@ public class VAEEncoder<T> : LayerBase<T>
         _quantConv.UpdateParameters(learningRate);
     }
 
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-
-        AddParameters(paramsList, _inputConv.GetParameters());
-
-        foreach (var block in _downBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        foreach (var block in _midBlocks)
-        {
-            AddParameters(paramsList, block.GetParameters());
-        }
-
-        AddParameters(paramsList, _normOut.GetParameters());
-        AddParameters(paramsList, _meanConv.GetParameters());
-        AddParameters(paramsList, _logVarConv.GetParameters());
-        AddParameters(paramsList, _quantConv.GetParameters());
-
-        return new Vector<T>(paramsList.ToArray());
-    }
 
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
@@ -579,30 +560,6 @@ public class VAEEncoder<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        SetLayerParams(_inputConv, parameters, ref index);
-
-        foreach (var block in _downBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
-        }
-
-        foreach (var block in _midBlocks)
-        {
-            SetLayerParams(block, parameters, ref index);
-        }
-
-        SetLayerParams(_normOut, parameters, ref index);
-        SetLayerParams(_meanConv, parameters, ref index);
-        SetLayerParams(_logVarConv, parameters, ref index);
-        SetLayerParams(_quantConv, parameters, ref index);
-    }
 
     private static void SetLayerParams(ILayer<T> layer, Vector<T> parameters, ref int index)
     {

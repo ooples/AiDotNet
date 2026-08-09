@@ -192,7 +192,7 @@ public class EdgeSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

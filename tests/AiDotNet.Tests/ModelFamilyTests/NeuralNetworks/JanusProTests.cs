@@ -40,6 +40,12 @@ public class JanusProTests : VisionLanguageTestBase<float>
     // VisionLanguageModelBase's contract is [batch, channels=3, height, width].
     protected override int[] InputShape => [1, 3, 64, 64];
 
+    // The shared 50-vs-200 workload exceeds this reduced Janus-Pro fixture's
+    // 120-second CPU budget. Retain a meaningful 4x short/long comparison;
+    // the separate memorization invariant covers the longer convergence path.
+    protected override int MoreDataShortIterations => 10;
+    protected override int MoreDataLongIterations => 40;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
     {
         // Architecture image dims must match the options' ImageSize so the

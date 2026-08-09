@@ -80,8 +80,11 @@ namespace AiDotNet.NER.SpanBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+// Citation URL corrected. arXiv 2006.00333 is "Ferromagnetic MnSn monolayer epitaxially grown on
+// silicon substrate", unrelated. This paper is ACL 2020 (pp. 5918-5928) with no arXiv preprint, so the
+// ACL Anthology record is the canonical reference. Title, authors and year were already right.
 [ResearchPaper("Pyramid: A Layered Model for Nested Named Entity Recognition",
-    "https://arxiv.org/abs/2006.00333",
+    "https://aclanthology.org/2020.acl-main.525/",
     Year = 2020,
     Authors = "Jue Wang, Lidan Shou, Ke Chen, Gang Chen")]
 public class PyramidNER<T> : SpanBasedNERBase<T>

@@ -20,6 +20,29 @@ namespace AiDotNet.Audio.Multimodal;
 /// </remarks>
 public class AudioFlamingo2Options : ModelOptions
 {
+    /// <summary>Initializes Audio Flamingo 2 options with paper-default settings.</summary>
+    public AudioFlamingo2Options()
+    {
+    }
+
+    /// <summary>Initializes a new instance by deep-copying all settings.</summary>
+    public AudioFlamingo2Options(AudioFlamingo2Options other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        SampleRate = other.SampleRate;
+        Variant = other.Variant;
+        AudioEncoderDim = other.AudioEncoderDim;
+        LLMHiddenDim = other.LLMHiddenDim;
+        NumPerceiverLayers = other.NumPerceiverLayers;
+        NumPerceiverTokens = other.NumPerceiverTokens;
+        MaxAudioDurationSeconds = other.MaxAudioDurationSeconds;
+        MaxResponseTokens = other.MaxResponseTokens;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Audio
 
     /// <summary>Gets or sets the audio sample rate in Hz.</summary>

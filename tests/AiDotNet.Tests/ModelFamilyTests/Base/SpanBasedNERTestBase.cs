@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for span-based NER models (BiaffineNER, PyramidNER, etc.).
 /// Inherits NER invariants and adds span-specific: bounded span scores and non-empty output.
 /// </summary>
-public abstract class SpanBasedNERTestBase : NERModelTestBase
+public abstract class SpanBasedNERTestBase<T> : NERModelTestBase<T>
 {
     [Fact(Timeout = 120000)]
     public async Task SpanScores_ShouldBeBounded()
@@ -24,8 +24,9 @@ public abstract class SpanBasedNERTestBase : NERModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Span score[{i}] = {output[i]:E4} is unbounded.");
+            double value = ConvertToDouble(output[i]);
+            Assert.True(Math.Abs(value) < 1e6,
+                $"Span score[{i}] = {value:E4} is unbounded.");
         }
     }
 
@@ -41,3 +42,6 @@ public abstract class SpanBasedNERTestBase : NERModelTestBase
         Assert.True(output.Length > 0, "Span-based NER produced empty output.");
     }
 }
+
+/// <summary>Default double-precision alias for existing span-based NER tests.</summary>
+public abstract class SpanBasedNERTestBase : SpanBasedNERTestBase<double> { }

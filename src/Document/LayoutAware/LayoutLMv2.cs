@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -68,7 +68,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -146,7 +146,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 30522,
         int visualBackboneChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMv2Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -168,7 +168,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _visualBackboneChannels = visualBackboneChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -214,7 +214,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 30522,
         int visualBackboneChannels = 256,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutLMv2Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -229,7 +229,7 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _visualBackboneChannels = visualBackboneChannels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperDefaultOptimizer();
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
@@ -241,6 +241,25 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     }
 
     #endregion
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperDefaultOptimizer()
+    {
+        // LayoutLMv2 Appendix B: Adam with lr=2e-5, weight decay=1e-2,
+        // and (beta1,beta2)=(0.9,0.999). AdamW expresses the cited decoupled
+        // weight-decay formulation while keeping every value user-overridable
+        // through the constructor's optimizer parameter.
+        var options = new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            WeightDecay = _options.WeightDecay,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            UseAMSGrad = false,
+            UseAdaptiveLearningRate = false
+        };
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+    }
 
     #region Initialization
 
@@ -885,7 +904,11 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            var gradientOptimizer = _optimizer
+                ?? throw new InvalidOperationException(
+                    "LayoutLMv2 training requires an optimizer implementing " +
+                    "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {

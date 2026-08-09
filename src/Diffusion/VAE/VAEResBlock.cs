@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
-public class VAEResBlock<T> : LayerBase<T>
+public partial class VAEResBlock<T> : LayerBase<T>
 {
     /// <summary>
     /// First GroupNorm layer.
@@ -215,7 +215,7 @@ public class VAEResBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [batch, channels, height, width].</param>
     /// <returns>Output tensor with shape [batch, outChannels, height, width].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
 

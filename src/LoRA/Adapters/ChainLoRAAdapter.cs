@@ -216,7 +216,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Create the chain of LoRA adapters
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         for (int i = 0; i < chainLength; i++)
         {
@@ -399,7 +399,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// to every prediction.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> result = _baseLayer.Forward(input);
@@ -501,7 +501,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create merged parameters starting with base layer weights and biases

@@ -209,7 +209,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         _layerIndex = layerIndex;
 
@@ -430,7 +430,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         // Tied-LoRA doesn't use a standard LoRA layer, but we need to satisfy the base class
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 
@@ -454,7 +454,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// but each layer only has one trainable parameter (layerScaling) to control the strength!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 
@@ -471,7 +471,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             // Tied-LoRA forward: layerScaling * (B_shared * A_shared * input) * (alpha/rank)
             int batchSize = input.Shape[0];
             int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-            int outputSize = GetOutputShape()[0];
+            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
             // Convert input to matrix [batchSize, inputSize]
             Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -685,7 +685,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
             }
 
             int inputSize = GetInputShape()[0];
-            int outputSize = GetOutputShape()[0];
+            int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
             // Compute Tied-LoRA weight contribution: layerScaling * (B_shared * A_shared) * (alpha/rank)
             T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));

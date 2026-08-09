@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -65,7 +65,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _hiddenDim;
     private readonly int _numLayers;
     private readonly int _numHeads;
@@ -144,7 +144,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         int numLayers = 12,
         int numHeads = 12,
         string modelSize = "base",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DiTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -196,7 +196,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         int numLayers = 12,
         int numHeads = 12,
         string modelSize = "base",
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DiTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
@@ -563,7 +563,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);
