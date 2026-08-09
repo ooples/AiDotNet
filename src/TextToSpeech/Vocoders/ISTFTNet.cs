@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Kaneko et al."
 )]
-public class ISTFTNet<T> : TtsModelBase<T>, IVocoder<T>
+public class ISTFTNet<T> : VocoderBase<T>
 {
     private readonly ISTFTNetOptions _options;
 
@@ -87,15 +87,14 @@ public class ISTFTNet<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform by predicting STFT coefficients then applying inverse STFT.
     /// Per the paper (Kaneko et al., 2022): Replaces the final upsample layers of HiFi-GAN with iSTFT, predicting magnitude and phase spectra at a reduced temporal resolution, then applying inverse STFT for exact reconstruction. 2.4x faster than HiFi-GAN.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

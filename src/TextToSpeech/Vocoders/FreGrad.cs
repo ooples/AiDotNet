@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Shin et al."
 )]
-public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
+public class FreGrad<T> : VocoderBase<T>
 {
     private readonly FreGradOptions _options;
 
@@ -87,15 +87,14 @@ public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using FreGrad's frequency-domain diffusion with DWT.
     /// Per the paper (Shin et al., 2022): Decomposes waveform into frequency sub-bands via DWT, applies diffusion in each sub-band conditioned on mel, then reconstructs via inverse DWT. Frequency-aware denoising enables 3x speedup over DiffWave with comparable quality.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

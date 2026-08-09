@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Siuzdak"
 )]
-public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
+public class Vocos<T> : VocoderBase<T>
 {
     private readonly VocosOptions _options;
 
@@ -94,15 +94,14 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using Vocos' ConvNeXt backbone predicting STFT coefficients.
     /// Per the paper (Siuzdak, 2023): a ConvNeXt backbone processes mel features at mel-spectrogram resolution (no learnable upsampling). The output head predicts STFT magnitude and wrapped phase, and the waveform is reconstructed via iSTFT.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
