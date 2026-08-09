@@ -579,7 +579,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // stays as a backstop for a genuinely unavailable filesystem.
             string traceStem = Path.GetFileNameWithoutExtension(tracePath);
             string traceExt = Path.GetExtension(tracePath);
-            string tracePerWriter = $"{traceStem}.{Environment.ProcessId}-{Environment.CurrentManagedThreadId}{traceExt}";
+            string tracePerWriter = $"{traceStem}.{System.Diagnostics.Process.GetCurrentProcess().Id}-{Environment.CurrentManagedThreadId}{traceExt}";
             string traceTarget = string.IsNullOrEmpty(traceDirectory)
                 ? tracePerWriter
                 : Path.Combine(traceDirectory, tracePerWriter);
@@ -3987,7 +3987,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // the consumer already globs this directory.
             var stem = Path.GetFileNameWithoutExtension(file);
             var ext = Path.GetExtension(file);
-            var unique = $"{stem}.{Environment.ProcessId}-{Environment.CurrentManagedThreadId}{ext}";
+            var unique = $"{stem}.{System.Diagnostics.Process.GetCurrentProcess().Id}-{Environment.CurrentManagedThreadId}{ext}";
             File.AppendAllText(Path.Combine(dir, unique), $"{model}\t{message}{Environment.NewLine}");
         }
         catch { /* reporting is best-effort */ }
