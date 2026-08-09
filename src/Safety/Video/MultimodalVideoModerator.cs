@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -78,6 +78,17 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
     /// frames, 1 thumbnail, and text metadata" were fed to the model for each of 19,422 videos.
     /// </summary>
     public const int TaxonomyFrameBudget = 14;
+
+    /// <summary>
+    /// Number of distinct frames the last <see cref="EvaluateVideo"/> call actually sampled.
+    /// </summary>
+    /// <remarks>
+    /// THE COST PROPERTY, OBSERVABLE. The constant alone proves nothing: a moderator that reverted
+    /// to a per-frame rate would still expose TaxonomyFrameBudget == 14. This reports what was really
+    /// drawn -- the thumbnail stand-in plus the content frames, so
+    /// min(TaxonomyFrameBudget, frames.Count - 1), independent of video length.
+    /// </remarks>
+    public int LastSampledFrameCount { get; private set; }
 
     /// <inheritdoc />
     /// <remarks>
@@ -202,6 +213,12 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
                 if (seen.Add(idx)) sampled.Add(idx);
             }
         }
+
+        // CONTENT FRAMES, EXCLUDING THE THUMBNAIL STAND-IN. The documented budget is "14 image frames
+        // plus 1 thumbnail", and index 0 is the thumbnail: counting it too would report 15 against a
+        // budget of 14 and make a correct sampler look rate-based. Recorded from the final set rather
+        // than from the constant, so a video shorter than the budget reports what was really drawn.
+        LastSampledFrameCount = Math.Max(0, sampled.Count - 1);
 
         foreach (int i in sampled)
         {
