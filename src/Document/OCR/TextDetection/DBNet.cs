@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -64,7 +64,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _innerChannels;
     private readonly double _expandRatio;
@@ -132,7 +132,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double expandRatio = 1.5,
         double thresholdK = 50,
         int minTextArea = 16,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
@@ -190,7 +190,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double expandRatio = 1.5,
         double thresholdK = 50,
         int minTextArea = 16,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
@@ -663,40 +663,43 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new NotSupportedException("Training is not supported in ONNX inference mode.");
         }
 
-        SetTrainingMode(true);
-
-        TrainWithTape(input, expectedOutput);
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-        SetTrainingMode(false);}
+        // Delegate to the shared tape-training path (TrainWithTape via TrainCore): LSUV init,
+        // global gradient-norm clipping, and a single optimizer (Adam) step. The previous
+        // override called TrainWithTape — which already applies the optimizer update — and
+        // then applied a SECOND, hardcoded-LR (0.001) raw-SGD step using the STALE, unclipped
+        // per-layer gradients left on the layers. That double update (with the second step's
+        // gradients no longer matching the post-step weights, and no clipping) made the loss
+        // diverge instead of decrease (#1854). DBNet's paper (Liao et al. 2020) trains the
+        // probability/threshold detection maps with ordinary SGD/Adam backprop, so the shared
+        // trainer is the paper-faithful path.
+        base.Train(input, expectedOutput);
+    }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectParameterGradients()
-    {
-        var gradients = new List<T>();
-
+        // Contract (NeuralNetworkBase): the vector holds the NEW parameter VALUES, not
+        // gradients — distribute it across the trainable layers, exactly as every other
+        // NeuralNetworkBase model does (e.g. AttentionNetwork). The previous body mis-read
+        // the argument as gradients and applied a hardcoded-LR SGD step, corrupting
+        // meta-optimizer / WithParameters round-trips (and, via the old Train override, the
+        // training step itself).
+        int startIndex = 0;
         foreach (var layer in Layers)
         {
-            var layerGradients = layer.GetParameterGradients();
-            gradients.AddRange(layerGradients);
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                startIndex += layerParameterCount;
+            }
         }
-
-        return new Vector<T>([.. gradients]);
     }
 
     #endregion

@@ -537,7 +537,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Check that adjacency matrix is set
         // NOTE: Sparse aggregation via edge indices is not yet implemented for MessagePassingLayer

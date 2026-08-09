@@ -22,6 +22,15 @@ public class Tacotron2Options : AcousticModelOptions
 
     public Tacotron2Options()
     {
+        // Paper training configuration (Shen et al., 2018, S3): Adam at 10^-3 exponentially decaying
+        // to 10^-5. Inherited from TtsModelOptions, so callers can still override it; this only pins
+        // Tacotron 2's own default to the published value instead of the generic TTS one.
+        LearningRate = 1e-3;
+
+        // Same section: "L2 regularization with weight 10^-6". The generic TTS default is 0.01,
+        // four orders of magnitude heavier than the paper's, so pin Tacotron 2's published value.
+        WeightDecay = 1e-6;
+
         EncoderDim = 512;
         DecoderDim = 80;
         HiddenDim = 512;

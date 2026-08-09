@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -19,7 +19,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public sealed class Stage3ShardedLinear<T> : LayerBase<T>
+public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly FsdpAllGatherParameter<T> _unshard;
@@ -70,7 +70,7 @@ public sealed class Stage3ShardedLinear<T> : LayerBase<T>
         for (int o = 0; o < _outputSize; o++) _bias[o] = NumOps.Zero;
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Materialize the full weight just-in-time (AllGather), use it, then let it be collected.
         var fullWeight = _unshard.Apply(_weightShard);                          // [outputSize, inputSize] (transient)

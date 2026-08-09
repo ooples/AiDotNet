@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// how large language models learn from diverse text.
 /// </para>
 /// <para>
-/// Reference: "TabDPT: Scaling Tabular Foundation Models" (2025)
+/// Reference: "TabDPT: Scaling Tabular Foundation Models on Real Data" (2024)
 /// </para>
 /// </remarks>
 /// <example>
@@ -53,9 +53,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("TabDPT: Scaling Tabular Foundation Models",
-    "https://arxiv.org/abs/2501.02487",
-    Year = 2025,
+// Citation corrected. arXiv 2501.02487 is "ACE++: Instruction-Based Image Creation and Editing",
+// unrelated. TabDPT is arXiv 2410.18164 (2024) and its full title ends "on Real Data".
+[ResearchPaper("TabDPT: Scaling Tabular Foundation Models on Real Data",
+    "https://arxiv.org/abs/2410.18164",
+    Year = 2024,
     Authors = "Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Hamidreza Kamkari, Alex Lacoste, Keyvan Golestan, Guangwei Yu, Maksims Volkovs, Anthony L. Caterini")]
 public class TabDPTNetwork<T> : NeuralNetworkBase<T>
 {
@@ -107,7 +109,16 @@ public class TabDPTNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new TabDPTOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Decay the step toward the end of training. Built bare, the rate stayed fixed, so once the
+        // model reached its floor the optimizer kept taking full-size steps and oscillated there:
+        // 50 iterations landed at 7.43e-05 while 200 landed at 1.83e-04, i.e. more training made it
+        // mildly worse rather than settling. A decaying rate lets it settle instead.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                MinLearningRate = 1e-6,
+            });
 
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
         {

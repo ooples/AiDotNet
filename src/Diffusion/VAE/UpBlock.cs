@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
-public class UpBlock<T> : LayerBase<T>
+public partial class UpBlock<T> : LayerBase<T>
 {
     /// <summary>
     /// Transposed convolution for upsampling.
@@ -236,7 +236,7 @@ public class UpBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [batch, inChannels, H, W].</param>
     /// <returns>Output tensor with shape [batch, outChannels, 2*H, 2*W] if hasUpsample, else [batch, outChannels, H, W].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         var x = input;

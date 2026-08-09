@@ -613,7 +613,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// contributes based on its relevance to the specific input.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-shape support: if the layer (or its sub-layers) wasn't
         // eagerly resolved at construction (caller passed [-1] or

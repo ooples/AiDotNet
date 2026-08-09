@@ -356,6 +356,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 projectionDim: _options.ProjectionDim,
                 numEncoderLayers: _options.NumAudioEncoderLayers,
                 numAttentionHeads: _options.NumAudioAttentionHeads,
+                feedForwardDim: _options.AudioEmbeddingDim * 4,
                 numClasses: ClassLabels.Count,
                 dropoutRate: _options.DropoutRate));
     }
@@ -374,13 +375,17 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
+    /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

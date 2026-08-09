@@ -376,7 +376,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor containing timesteps. Shape: [batch] or [batch, 1].</param>
     /// <returns>Time embedding tensor with shape [batch, outputDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         int batch = input.Shape[0];

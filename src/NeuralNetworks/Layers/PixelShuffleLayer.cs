@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "2")]
-public class PixelShuffleLayer<T> : LayerBase<T>
+public partial class PixelShuffleLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -260,7 +260,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// restores the original shape structure.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;

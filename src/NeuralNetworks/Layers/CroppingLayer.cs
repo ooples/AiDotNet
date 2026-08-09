@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 0, 1, 0, 0 }, new[] { 0, 1, 0, 0 }, new[] { 0, 0, 1, 0 }, new[] { 0, 0, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class CroppingLayer<T> : LayerBase<T>
+public partial class CroppingLayer<T> : LayerBase<T>
 {
 
     /// <summary>
@@ -405,7 +405,7 @@ public class CroppingLayer<T> : LayerBase<T>
     /// Think of it like cutting out the center of a photo and discarding the edges.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         // Support any rank >= 3: NHWC format where last 3 dims are [H, W, C]

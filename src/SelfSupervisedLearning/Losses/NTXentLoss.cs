@@ -35,11 +35,12 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class NTXentLoss<T> : IContrastiveLoss<T>
+public class NTXentLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private static IEngine Engine => AiDotNetEngine.Current;
+
+    // Engine and NumOps come from ContrastiveLossBase; redeclaring them here shadows the base
+    // members rather than adding anything.
 
     private readonly double _temperature;
     private readonly bool _normalize;
@@ -69,32 +70,47 @@ public class NTXentLoss<T> : IContrastiveLoss<T>
     /// <param name="z1">First view embeddings [batch_size, embedding_dim].</param>
     /// <param name="z2">Second view embeddings [batch_size, embedding_dim].</param>
     /// <returns>The computed loss value.</returns>
-    public T ComputeLoss(Tensor<T> z1, Tensor<T> z2)
+    /// <remarks>
+    /// Differentiable NT-Xent (Chen et al. 2020). The 2N x 2N similarity matrix is built with
+    /// IEngine ops; self-similarities are removed by adding a large negative constant on the
+    /// diagonal (masking by indexing would sever the tape), and the positive for anchor i is its
+    /// augmented partner at i +/- N.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> z1, Tensor<T> z2)
     {
+        // Shapes, not just ranks: the engine broadcasts, so a [8, 1] against a [8, 768] returns a
+        // finite loss computed against the wrong target instead of failing.
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            z1, z2, "NT-Xent", nameof(z1), nameof(z2));
+
         if (z1 is null) throw new ArgumentNullException(nameof(z1));
         if (z2 is null) throw new ArgumentNullException(nameof(z2));
 
-        var batchSize = z1.Shape[0];
-        var dim = z1.Shape[1];
+        int n = z1.Shape[0];
+        var a = _normalize ? ObjectiveOps.L2NormalizeRows(z1) : z1;
+        var b = _normalize ? ObjectiveOps.L2NormalizeRows(z2) : z2;
 
-        // Normalize embeddings if required
-        var z1Norm = _normalize ? L2Normalize(z1) : z1;
-        var z2Norm = _normalize ? L2Normalize(z2) : z2;
+        var combined = Engine.Concat(new[] { a, b }, 0);              // [2N, D]
+        var logits = ObjectiveOps.SimilarityMatrix(combined, combined, _temperature, normalize: false);
 
-        // Concatenate z1 and z2: [2*batch_size, dim]
-        var combined = Concatenate(z1Norm, z2Norm);
+        // Remove self-comparisons without indexing: -inf on the diagonal via a constant mask.
+        var negInf = ObjectiveOps.Identity<T>(2 * n);
+        logits = Engine.TensorAdd(
+            logits, Engine.TensorMultiplyScalar(negInf, NumOps.FromDouble(-1e9)));
 
-        // Compute similarity matrix: [2*batch_size, 2*batch_size]
-        var similarity = ComputeSimilarityMatrix(combined);
+        var logProbs = ObjectiveOps.LogSoftmax(logits, axis: 1);
 
-        // Apply temperature scaling
-        var tempScaled = ScaleByTemperature(similarity);
+        // Positive of anchor i is i+N (and i-N for the second half): a constant permutation mask.
+        var positive = new Tensor<T>(new[] { 2 * n, 2 * n });
+        for (int i = 0; i < n; i++)
+        {
+            positive[i, i + n] = NumOps.One;
+            positive[i + n, i] = NumOps.One;
+        }
 
-        // Create mask for positive pairs
-        // Positives: (i, i+batch_size) and (i+batch_size, i)
-        var loss = ComputeContrastiveLoss(tempScaled, batchSize);
-
-        return loss;
+        var picked = Engine.ReduceSum(Engine.TensorMultiply(logProbs, positive), null, keepDims: false);
+        return Engine.TensorNegate(
+            Engine.TensorDivideScalar(picked, NumOps.FromDouble(2 * n)));
     }
 
     /// <summary>
@@ -198,49 +214,6 @@ public class NTXentLoss<T> : IContrastiveLoss<T>
         return new Tensor<T>(result, similarity._shape);
     }
 
-    private T ComputeContrastiveLoss(Tensor<T> similarity, int batchSize)
-    {
-        var n = similarity.Shape[0]; // 2 * batchSize
-        T totalLoss = NumOps.Zero;
-        int validPairs = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            // Find positive index
-            int positiveIdx = i < batchSize ? i + batchSize : i - batchSize;
-
-            // Compute log-softmax for row i
-            T maxVal = NumOps.MinValue;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    var val = similarity[i, j];
-                    if (NumOps.GreaterThan(val, maxVal)) maxVal = val;
-                }
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(similarity[i, j], maxVal)));
-                }
-            }
-
-            var logSumExp = NumOps.Add(maxVal, NumOps.Log(sumExp));
-            var positiveScore = similarity[i, positiveIdx];
-
-            // Loss for this sample: -positive_score + log_sum_exp
-            var sampleLoss = NumOps.Subtract(logSumExp, positiveScore);
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-            validPairs++;
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(validPairs));
-    }
-
     private (T loss, Tensor<T> grad) ComputeContrastiveLossWithGrad(
         Tensor<T> similarity, int batchSize, Tensor<T> embeddings)
     {
@@ -302,50 +275,6 @@ public class NTXentLoss<T> : IContrastiveLoss<T>
         }
 
         return (NumOps.Divide(totalLoss, NumOps.FromDouble(n)), new Tensor<T>(grad, [n, dim]));
-    }
-
-    /// <summary>
-    /// The differentiable NT-Xent objective, built entirely from <c>IEngine</c> operations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// SEPARATE FROM <see cref="ComputeLoss(Tensor{T}, Tensor{T})"/> BECAUSE THAT ONE CANNOT TRAIN.
-    /// The public method walks the similarity matrix with host loops over tensor indexers, which
-    /// severs the gradient tape -- a correct loss VALUE carrying no history for an optimizer to
-    /// backpropagate.
-    /// </para>
-    /// <para>
-    /// Same objective as tensor algebra. Self-similarity is removed by ADDING a large negative
-    /// constant on the diagonal rather than by skipping indices: log-softmax then drives those terms
-    /// to zero, which is what the host loop's <c>i != j</c> guard achieved, and it keeps the whole
-    /// thing one reduction. The constant is finite (-1e9) rather than negative infinity, because
-    /// inf - inf is NaN if a row were ever fully masked.
-    /// </para>
-    /// </remarks>
-    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
-    {
-        ContrastiveTapeOps<T>.RequireMatchingRank2(
-            view1, view2, "NT-Xent", nameof(view1), nameof(view2));
-
-        int batchSize = view1.Shape[0];
-        int total = 2 * batchSize;
-
-        var z1 = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view1) : view1;
-        var z2 = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view2) : view2;
-
-        var combined = Engine.Concat(new[] { z1, z2 }, 0);                     // [2N, dim]
-        var similarity = Engine.TensorMatMul(combined, Engine.TensorPermute(combined, new[] { 1, 0 }));
-        var logits = Engine.TensorMultiplyScalar(similarity, NumOps.FromDouble(1.0 / _temperature));
-
-        var logProbabilities = Engine.TensorLogSoftmax(
-            Engine.TensorAdd(logits, ContrastiveTapeOps<T>.SelfSimilarityMask(total)), axis: 1);
-
-        // Each anchor's positive is its partner view: i <-> i + N.
-        var positiveLogProbability = Engine.ReduceSum(
-            Engine.TensorMultiply(logProbabilities, ContrastiveTapeOps<T>.PositivePairSelector(batchSize)),
-            new[] { 1 }, keepDims: false);
-
-        return Engine.TensorNegate(Engine.ReduceMean(positiveLogProbability, new[] { 0 }, keepDims: false));
     }
 
     /// <summary>Row-wise L2 normalization on the tape.</summary>

@@ -146,33 +146,52 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentOutOfRangeException(nameof(numGenerations));
             }
 
-            // For single-feature data, try deterministic linear regression first (fast and reliable)
-            if (inputs.GetLength(1) == 1)
+            // Schmidt and Lipson's symbolic search includes affine expressions. Seed that part of
+            // the search deterministically for any feature count, then retain whichever candidate
+            // actually fits the observations better. Previously this baseline existed only for a
+            // single feature, so ordinary multivariate linear laws were left entirely to a small
+            // random population and routinely converged to constants or one-feature expressions.
+            var linearExpression = TryBuildLinearExpressionFromData(inputs, outputs);
+            if (linearExpression != null)
             {
-                var linearExpression = TryBuildLinearExpressionFromData(inputs, outputs);
-                if (linearExpression != null)
+                double linearMse = ComputeMse(linearExpression, inputs, outputs);
+                double targetScale = 0.0;
+                for (int i = 0; i < outputs.Length; i++)
                 {
-                    // Verify the linear fit is good enough (MSE < 1e-6 for exact linear relationships)
-                    double linearMse = ComputeMse(linearExpression, inputs, outputs);
-                    if (linearMse < 1e-6)
-                    {
-                        return linearExpression;
-                    }
+                    double output = NumOps.ToDouble(outputs[i]);
+                    targetScale = Math.Max(targetScale, Math.Abs(output));
+                }
+
+                // An affine expression with only scale-relative round-off residual is already
+                // an exact member of the symbolic search space. Return it directly instead of
+                // spending 100 evolutionary generations rediscovering the same law. A genuinely
+                // nonlinear data set has a residual above this threshold and still takes the full
+                // symbolic-regression path below.
+                double exactFitTolerance = 1e-12 * Math.Max(1.0, targetScale * targetScale);
+                if (!double.IsNaN(linearMse) && !double.IsInfinity(linearMse) &&
+                    linearMse <= exactFitTolerance)
+                {
+                    return linearExpression;
                 }
             }
 
-            // Try symbolic regression for more complex relationships
             var regressionExpression = TryDiscoverWithSymbolicRegression(inputs, outputs, maxComplexity, numGenerations);
+            if (linearExpression != null && regressionExpression != null)
+            {
+                return ComputeMse(linearExpression, inputs, outputs) <=
+                       ComputeMse(regressionExpression, inputs, outputs)
+                    ? linearExpression
+                    : regressionExpression;
+            }
+
+            if (linearExpression != null)
+            {
+                return linearExpression;
+            }
+
             if (regressionExpression != null)
             {
                 return regressionExpression;
-            }
-
-            // Fall back to linear regression for any single-feature data that symbolic regression couldn't handle
-            var linearFallback = TryBuildLinearExpressionFromData(inputs, outputs);
-            if (linearFallback != null)
-            {
-                return linearFallback;
             }
 
             int variableCount = inputs.GetLength(1);
@@ -570,54 +589,174 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
         private SymbolicExpression<T>? TryBuildLinearExpressionFromData(T[,] inputs, T[] outputs)
         {
-            if (inputs.GetLength(1) != 1)
-            {
-                return null;
-            }
-
             int sampleCount = inputs.GetLength(0);
-            if (sampleCount == 0 || outputs.Length != sampleCount)
+            int featureCount = inputs.GetLength(1);
+            if (sampleCount == 0 || featureCount == 0 || outputs.Length != sampleCount)
             {
                 return null;
             }
 
-            double sumX = 0.0;
-            double sumY = 0.0;
-            double sumXX = 0.0;
-            double sumXY = 0.0;
+            // Solve the centered least-squares normal equations. Centering makes the intercept
+            // exact and keeps translated/scaled targets well-conditioned; a tiny scale-relative
+            // ridge handles collinear columns without privileging a feature by its index.
+            var featureMeans = new double[featureCount];
+            double outputMean = 0.0;
 
             for (int i = 0; i < sampleCount; i++)
             {
-                double x = NumOps.ToDouble(inputs[i, 0]);
-                double y = NumOps.ToDouble(outputs[i]);
-                sumX += x;
-                sumY += y;
-                sumXX += x * x;
-                sumXY += x * y;
+                outputMean += NumOps.ToDouble(outputs[i]);
+                for (int j = 0; j < featureCount; j++)
+                {
+                    featureMeans[j] += NumOps.ToDouble(inputs[i, j]);
+                }
             }
 
-            double denominator = (sampleCount * sumXX) - (sumX * sumX);
-            double slope;
-            double intercept;
-
-            if (Math.Abs(denominator) < 1e-12)
+            outputMean /= sampleCount;
+            for (int j = 0; j < featureCount; j++)
             {
-                slope = 0.0;
-                intercept = sumY / sampleCount;
-            }
-            else
-            {
-                slope = ((sampleCount * sumXY) - (sumX * sumY)) / denominator;
-                intercept = (sumY - (slope * sumX)) / sampleCount;
+                featureMeans[j] /= sampleCount;
             }
 
-            if (double.IsNaN(slope) || double.IsInfinity(slope) || double.IsNaN(intercept) || double.IsInfinity(intercept))
+            var gram = new double[featureCount, featureCount];
+            var rhs = new double[featureCount];
+
+            // ONE CONVERSION PER FEATURE PER SAMPLE, NOT f*(f+1)/2. The inner loop used to call
+            // NumOps.ToDouble(inputs[i, column]) for every (row, column) pair, so each sample paid for
+            // the upper triangle of conversions when f of them describe the whole row. NumOps.ToDouble
+            // is an interface dispatch, so this is real work rather than a constant factor on cheap
+            // arithmetic. The centred row is hoisted into a buffer that is reused across samples.
+            var centeredRow = new double[featureCount];
+            for (int i = 0; i < sampleCount; i++)
+            {
+                double centeredOutput = NumOps.ToDouble(outputs[i]) - outputMean;
+                for (int j = 0; j < featureCount; j++)
+                {
+                    centeredRow[j] = NumOps.ToDouble(inputs[i, j]) - featureMeans[j];
+                }
+
+                for (int row = 0; row < featureCount; row++)
+                {
+                    double value = centeredRow[row];
+                    rhs[row] += value * centeredOutput;
+                    for (int column = row; column < featureCount; column++)
+                    {
+                        gram[row, column] += value * centeredRow[column];
+                    }
+                }
+            }
+
+            double diagonalScale = 0.0;
+            for (int row = 0; row < featureCount; row++)
+            {
+                for (int column = row + 1; column < featureCount; column++)
+                {
+                    gram[column, row] = gram[row, column];
+                }
+
+                diagonalScale = Math.Max(diagonalScale, Math.Abs(gram[row, row]));
+            }
+
+            // RELATIVE TO THE GRAM MATRIX, NOT TO 1.0. Math.Max(1.0, diagonalScale) meant that for a
+            // well-scaled but small problem -- features in, say, the 1e-3 range, giving a diagonal around
+            // 1e-6 -- the ridge was a FIXED 1e-10 rather than 1e-16 of the diagonal, so the regularizer
+            // was four orders of magnitude larger relative to the data than intended and biased the fit.
+            // Scaling by the diagonal keeps the ratio constant at every problem scale; the fallback only
+            // covers an exactly-zero diagonal, where there is no scale to be relative to.
+            double ridge = diagonalScale > 0.0 ? diagonalScale * 1e-10 : 1e-10;
+            for (int i = 0; i < featureCount; i++)
+            {
+                gram[i, i] += ridge;
+            }
+
+            var solved = SolveNormalEquations(gram, rhs, featureCount);
+            if (solved is null)
             {
                 return null;
             }
 
-            var coefficients = new Vector<T>(new[] { NumOps.FromDouble(slope) });
+            double intercept = outputMean;
+            var coefficients = new Vector<T>(featureCount);
+            for (int i = 0; i < featureCount; i++)
+            {
+                if (double.IsNaN(solved[i]) || double.IsInfinity(solved[i]))
+                {
+                    return null;
+                }
+
+                coefficients[i] = NumOps.FromDouble(solved[i]);
+                intercept -= solved[i] * featureMeans[i];
+            }
+
+            if (double.IsNaN(intercept) || double.IsInfinity(intercept))
+            {
+                return null;
+            }
+
             return BuildLinearExpression(coefficients, NumOps.FromDouble(intercept), includeIntercept: true);
+        }
+
+        /// <summary>
+        /// Solves the ridge-regularized normal equations for the centred least-squares fit.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>THE FRAMEWORK'S SOLVER, NOT A LOCAL ONE.</b> This used to be sixty lines of Gaussian
+        /// elimination with partial pivoting written out by hand -- a second, unreviewed
+        /// implementation of something the framework already provides, tests, and can swap the
+        /// algorithm of. A bug fixed in <see cref="MatrixSolutionHelper"/> would never have reached
+        /// the copy, and a copy is where numerical bugs survive longest because nobody thinks to
+        /// look at it.
+        /// </para>
+        /// <para>
+        /// <b>Cholesky is the right decomposition here rather than a general-purpose one.</b> The
+        /// matrix is a Gram matrix -- X-transpose-X of the centred features -- so it is symmetric
+        /// and positive semi-definite by construction, and the scale-relative ridge added by the
+        /// caller makes it positive definite. Cholesky exploits that structure for roughly half the
+        /// work of LU, and it does not need the pivoting the hand-rolled version spent a third of
+        /// its lines on, because a positive-definite matrix has no zero pivot to search around.
+        /// </para>
+        /// <para>
+        /// <b>The catch preserves a control-flow outcome, it does not swallow a fault.</b> Exactly
+        /// collinear features can still defeat a ridge of 1e-10 of the diagonal, and the
+        /// decomposition reports that as <see cref="ArgumentException"/>. For this caller that is not
+        /// an error but the ordinary answer "this candidate expression is degenerate, reject it" --
+        /// which is precisely what the old <c>return null</c> on a tiny pivot meant. The candidate is
+        /// dropped and the search continues, so nothing is hidden from anyone; the alternative would
+        /// be tearing down an entire symbolic-regression run because one candidate out of thousands
+        /// happened to be rank-deficient.
+        /// </para>
+        /// </remarks>
+        private static double[]? SolveNormalEquations(double[,] gram, double[] rhs, int featureCount)
+        {
+            var a = new Matrix<double>(featureCount, featureCount);
+            var b = new Vector<double>(featureCount);
+            for (int row = 0; row < featureCount; row++)
+            {
+                b[row] = rhs[row];
+                for (int column = 0; column < featureCount; column++)
+                {
+                    a[row, column] = gram[row, column];
+                }
+            }
+
+            Vector<double> solution;
+            try
+            {
+                solution = MatrixSolutionHelper.SolveLinearSystem(a, b, MatrixDecompositionType.Cholesky);
+            }
+            catch (ArgumentException)
+            {
+                // Rank-deficient even after the ridge: the candidate is degenerate, not the run.
+                return null;
+            }
+
+            var solved = new double[featureCount];
+            for (int row = 0; row < featureCount; row++)
+            {
+                solved[row] = solution[row];
+            }
+
+            return solved;
         }
 
         private SymbolicExpression<T>? TryConvertModelToExpression(IFullModel<T, Matrix<T>, Vector<T>> model)
@@ -762,10 +901,98 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             new MeanSquaredErrorLoss<T>();
 
         /// <inheritdoc/>
-        public override Vector<T> GetParameters() => new Vector<T>(0);
+        public override Vector<T> GetParameters()
+        {
+            if (_discoveredEquation is null)
+            {
+                return new Vector<T>(0);
+            }
+
+            var constants = new List<SymbolicExpressionNode<T>>();
+            CollectConstantNodes(_discoveredEquation.Root, constants);
+            var parameters = new Vector<T>(constants.Count);
+            for (int i = 0; i < constants.Count; i++)
+            {
+                parameters[i] = constants[i].Constant;
+            }
+            return parameters;
+        }
 
         /// <inheritdoc/>
-        public override void SetParameters(Vector<T> parameters) { }
+        public override IEnumerable<int> GetActiveFeatureIndices()
+        {
+            if (_discoveredEquation is null)
+            {
+                return Array.Empty<int>();
+            }
+
+            var indices = new HashSet<int>();
+            CollectVariableIndices(_discoveredEquation.Root, indices);
+            return indices.OrderBy(index => index).ToArray();
+        }
+
+        private static void CollectVariableIndices(
+            SymbolicExpressionNode<T>? node,
+            HashSet<int> indices)
+        {
+            if (node is null)
+            {
+                return;
+            }
+
+            if (node.Type == SymbolicExpressionType.Variable)
+            {
+                indices.Add(node.VariableIndex);
+            }
+
+            CollectVariableIndices(node.Left, indices);
+            CollectVariableIndices(node.Right, indices);
+        }
+
+        /// <inheritdoc/>
+        public override void SetParameters(Vector<T> parameters)
+        {
+            if (_discoveredEquation is null)
+            {
+                if (parameters.Length == 0)
+                {
+                    return;
+                }
+                throw new InvalidOperationException("Cannot set symbolic constants before an equation is discovered.");
+            }
+
+            var constants = new List<SymbolicExpressionNode<T>>();
+            CollectConstantNodes(_discoveredEquation.Root, constants);
+            if (parameters.Length != constants.Count)
+            {
+                throw new ArgumentException(
+                    $"Expected {constants.Count} symbolic constants, got {parameters.Length}.",
+                    nameof(parameters));
+            }
+
+            for (int i = 0; i < constants.Count; i++)
+            {
+                constants[i].Constant = parameters[i];
+            }
+        }
+
+        private static void CollectConstantNodes(
+            SymbolicExpressionNode<T>? node,
+            List<SymbolicExpressionNode<T>> constants)
+        {
+            if (node is null)
+            {
+                return;
+            }
+
+            if (node.Type == SymbolicExpressionType.Constant)
+            {
+                constants.Add(node);
+            }
+
+            CollectConstantNodes(node.Left, constants);
+            CollectConstantNodes(node.Right, constants);
+        }
 
         /// <inheritdoc/>
         public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
@@ -773,8 +1000,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             var clone = new SymbolicPhysicsLearner<T>();
             if (_discoveredEquation is not null)
             {
-                // Re-discover would be expensive — just share the immutable expression tree
-                clone._discoveredEquation = _discoveredEquation;
+                clone._discoveredEquation = _discoveredEquation.Clone();
             }
             return clone;
         }
@@ -851,7 +1077,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         public SymbolicExpressionType Type { get; }
-        public T Constant { get; }
+        public T Constant { get; internal set; }
         public int VariableIndex { get; }
         public SymbolicUnaryOperator<T>? UnaryOperator { get; }
         public SymbolicBinaryOperator<T>? BinaryOperator { get; }

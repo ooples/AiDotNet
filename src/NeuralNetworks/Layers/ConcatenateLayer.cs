@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ConcatenateLayer<T> : LayerBase<T>
+public partial class ConcatenateLayer<T> : LayerBase<T>
 {
     private readonly int _axis;
     private Tensor<T>[]? _lastInputs;
@@ -497,7 +497,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// Instead, you should use the other Forward method that accepts multiple inputs (params Tensor&lt;T&gt;[] inputs).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         throw new NotSupportedException("ConcatenateLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
     }

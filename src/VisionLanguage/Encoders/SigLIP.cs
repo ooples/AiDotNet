@@ -161,7 +161,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         _options = options ?? new SigLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -286,7 +293,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         }
 
         // ViT patch embedding + dual-stream split (vision in Layers, text in TextEncoderLayers).
-        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        // Honor the configured ViT patch size (16 for the paper default).
+        // The previous ImageSize/16 derivation ignored this public option and
+        // forced the same 256-token attention grid for every image size.
+        int patchSize = _options.PatchSize;
+        if (patchSize <= 0 || patchSize > _options.ImageSize || _options.ImageSize % patchSize != 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(_options.PatchSize),
+                "PatchSize must be positive, no larger than ImageSize, and evenly divide ImageSize.");
         Layers.Add(
             new PatchEmbeddingLayer<T>(
                 patchSize: patchSize,
@@ -334,7 +348,7 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(PreprocessImage(input), expected);
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
         }
         finally
         {
@@ -443,13 +457,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new SigLIPOptions(_options);
         if (
             !_useNativeMode
             && _options.ImageEncoderModelPath is { } mp
             && !string.IsNullOrEmpty(mp)
         )
-            return new SigLIP<T>(Architecture, mp, _options);
-        return new SigLIP<T>(Architecture, _options);
+            return new SigLIP<T>(Architecture, mp, options);
+        return new SigLIP<T>(Architecture, options);
     }
 
     #endregion

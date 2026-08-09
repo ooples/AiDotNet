@@ -260,7 +260,11 @@ public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(PreprocessImage(input), expected);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned and never read, so training silently fell back to the framework default and
+            // any caller-supplied optimizer was discarded. Same dead-dependency shape already fixed
+            // on MegaTTS, LiteDVDNet and LLMTime; GLaMM in this same shard wires it correctly.
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
         }
         finally
         {

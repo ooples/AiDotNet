@@ -397,6 +397,53 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return predictionOutput[_options.ActionSize];
     }
 
+    /// <summary>
+    /// Supervised one-shot training from a (state, target) pair — the entry point the model-family
+    /// invariant harness and any non-RL caller use.
+    /// </summary>
+    /// <remarks>
+    /// Overrides the base Q-transition mapping. MuZero represents a discrete action as a ONE-HOT
+    /// vector of length <see cref="MuZeroOptions{T}.ActionSize"/> — Schrittwieser et al. 2020
+    /// concatenate that one-hot action with the latent state for the dynamics network — so the
+    /// stored action must be exactly <c>ActionSize</c> long. The base implementation builds a
+    /// one-hot sized to <c>target.Length</c>, which <see cref="StoreExperience"/> correctly rejects
+    /// whenever the caller's target isn't exactly ActionSize wide (the model-family harness sizes
+    /// targets from <c>Predict().Length</c> or the shared StateDim, neither of which equals a given
+    /// agent's action count). Decode the preferred action from the target's argmax, clamp it into
+    /// the valid action range, and store a correctly-sized terminal transition.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        // argmax over target selects the preferred action; its value serves as the reward.
+        int bestIndex = ArgMax(target);
+        T bestValue = target[bestIndex];
+
+        // Encode as a one-hot of length ActionSize (the paper's action representation). Clamp the
+        // decoded index so a target wider than the action space still yields a legal action.
+        int actionIndex = bestIndex < _options.ActionSize ? bestIndex : _options.ActionSize - 1;
+        var actionVec = new Vector<T>(_options.ActionSize);
+        actionVec[actionIndex] = NumOps.One;
+
+        // MuZero is replay-based: store one terminal transition (nextState = state, done = true)
+        // and apply a single update. No SelectAction priming is needed (unlike the SARSA-style
+        // base default), since Train() unrolls directly from the stored experience.
+        StoreExperience(state, actionVec, bestValue, state, done: true);
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
         // Validate transition shapes at this public ingestion boundary so a malformed experience

@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RealisVSR: Detail-Enhanced Diffusion for Real-World 4K Video Super-Resolution",
-    "https://arxiv.org/abs/2502.00459",
+    "https://arxiv.org/abs/2507.19138",
     Year = 2025,
     Authors = "Chao Ma, Shangchen Zhou, Chen Change Loy")]
 public class RealisVSR<T> : VideoSuperResolutionBase<T>
@@ -141,7 +141,7 @@ public class RealisVSR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

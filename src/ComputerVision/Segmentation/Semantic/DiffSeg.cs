@@ -58,7 +58,8 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Diffuse, Attend, and Segment: Unsupervised Zero-Shot Segmentation using Stable Diffusion", "https://arxiv.org/abs/2305.02015", Year = 2023, Authors = "Junjiao Tian, Lavisha Aggarwal, Andrea Colber, Zunzhi You, Eldhose Iype, Haiyang Sheng")]
+// Citation URL corrected: the arXiv id for this title is 2308.12469, not 2305.02015.
+[ResearchPaper("Diffuse, Attend, and Segment: Unsupervised Zero-Shot Segmentation using Stable Diffusion", "https://arxiv.org/abs/2308.12469", Year = 2023, Authors = "Junjiao Tian, Lavisha Aggarwal, Andrea Colber, Zunzhi You, Eldhose Iype, Haiyang Sheng")]
 public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly DiffSegOptions _options;
@@ -234,7 +235,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

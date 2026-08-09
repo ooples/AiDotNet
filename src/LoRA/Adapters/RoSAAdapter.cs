@@ -173,7 +173,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
             // returning 0 causes base constructor to allocate too-small buffer.
             long sparseCount = _sparseWeights != null
                 ? ((long)_sparseWeights.Rows * _sparseWeights.Columns)
-                : ((long)GetOutputShape()[0] * GetInputShape()[0]);
+                : ((long)GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0] * GetInputShape()[0]);
             return baseCount + loraCount + sparseCount;
         }
     }
@@ -233,7 +233,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize sparse weights
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _sparseWeights = new Matrix<T>(outputSize, inputSize);
 
         // Initialize with small random values (will be pruned)
@@ -420,7 +420,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// common patterns efficiently, while sparse handles outliers.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // 1. Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -432,7 +432,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         // Compute: sparse_output = input @ sparse_weights^T
         int batchSize = input.Shape[0];
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Convert input to matrix
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -675,7 +675,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();

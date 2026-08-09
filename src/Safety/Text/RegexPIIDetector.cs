@@ -39,7 +39,7 @@ namespace AiDotNet.Safety.Text;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("PRvL: LLMs for Contextual PII Redaction Outperform Rule-Based NER",
+[ResearchPaper("PRvL: Quantifying the Capabilities and Risks of Large Language Models for PII Redaction",
     "https://arxiv.org/abs/2508.05545",
     Year = 2025,
     Authors = "Various")]

@@ -211,7 +211,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="hiddenSize">Hidden state size (number of recurrent units).</param>
     /// <param name="activationFunction">Hidden-state activation (default tanh).</param>
-    public RecurrentLayer(int hiddenSize, IActivationFunction<T>? activationFunction = null)
+    public RecurrentLayer(
+        [LayerState] int hiddenSize,
+        IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activationFunction ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)
@@ -332,7 +334,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// The layer saves all inputs, hidden states, and outputs for later use during training.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy ctor path: resolve _inputSize and allocate weights on first call.
         EnsureInitializedFromInput(input);

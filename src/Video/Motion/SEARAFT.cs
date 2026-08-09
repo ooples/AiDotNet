@@ -163,14 +163,15 @@ public class SEARAFT<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field
-        var flow = new Tensor<T>([2, height, width]);
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
-        {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
-        }
-
-        return flow;
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field.
+        //
+        // This previously allocated a second tensor and copied into it element-by-element through
+        // Data.Span. That copy was a numeric no-op, but a raw buffer write is not a recorded
+        // operation, so it severed the autodiff tape at the very END of the forward pass — throwing
+        // away the gradient path for the whole network behind it. Returning the tensor directly is
+        // bit-identical and keeps the graph intact.
+        return rawFlow;
     }
 
     /// <inheritdoc/>

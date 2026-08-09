@@ -24,24 +24,51 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         }
 
         [Fact(Timeout = 120000)]
-        public async Task ResolveFromShape_WithNonDivisibleHeight_ThrowsArgumentException()
+        public async Task ResolveFromShape_WithNonDivisibleHeight_CropsToFloorPatchGrid()
         {
-            // Lazy ctor only takes patchSize + embeddingDim — image
-            // dimensions come at OnFirstForward / ResolveFromShape, so the
-            // divisibility check moves to that boundary.
+            await Task.Yield();
+            // Resolution-independent patchification (Flamingo/NFNet + Perceiver): a non-divisible
+            // image is NOT rejected — the partial-patch remainder rows are cropped (integer floor),
+            // matching a PyTorch Conv2d(stride=patch). height=33 with patchSize 8 -> floor(33/8)=4
+            // complete patch rows, width=32 -> 4 cols => 16 patches, and Forward crops the remainder.
             var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
-            // [channels, height=33 (not divisible by 8), width=32]
-            Assert.Throws<ArgumentException>(() =>
-                layer.ResolveFromShape(new[] { 3, 33, 32 }));
+            layer.ResolveFromShape(new[] { 3, 33, 32 }); // must not throw
+
+            var input = new Tensor<double>([1, 3, 33, 32]);
+            for (int i = 0; i < input.Length; i++) input[i] = 0.1;
+            var output = layer.Forward(input);
+
+            Assert.Equal(3, output.Rank);
+            Assert.Equal((33 / 8) * (32 / 8), output.Shape[1]); // 4*4 = 16
+            Assert.Equal(64, output.Shape[2]);
         }
 
         [Fact(Timeout = 120000)]
-        public async Task ResolveFromShape_WithNonDivisibleWidth_ThrowsArgumentException()
+        public async Task ResolveFromShape_WithNonDivisibleWidth_CropsToFloorPatchGrid()
         {
+            await Task.Yield();
             var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
-            // [channels, height=32, width=33 (not divisible by 8)]
+            layer.ResolveFromShape(new[] { 3, 32, 33 }); // width 33 not divisible by 8; must not throw
+
+            var input = new Tensor<double>([1, 3, 32, 33]);
+            for (int i = 0; i < input.Length; i++) input[i] = 0.1;
+            var output = layer.Forward(input);
+
+            Assert.Equal((32 / 8) * (33 / 8), output.Shape[1]); // 4*4 = 16
+            Assert.Equal(64, output.Shape[2]);
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ResolveFromShape_WithSubPatchInput_ThrowsArgumentException()
+        {
+            await Task.Yield();
+            // An image smaller than a single patch in either spatial dim has NO complete patch and
+            // IS rejected (floor(H/patch) < 1) — the one case the resolution-independent path still
+            // guards, per the reviewer's "reject tensors smaller than one full patch".
+            var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
+            // [channels=3, height=4, width=4] — 4 < patchSize 8 => zero patches.
             Assert.Throws<ArgumentException>(() =>
-                layer.ResolveFromShape(new[] { 3, 32, 33 }));
+                layer.ResolveFromShape(new[] { 3, 4, 4 }));
         }
 
         [Fact(Timeout = 120000)]

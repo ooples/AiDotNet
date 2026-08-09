@@ -732,7 +732,7 @@ finally
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var layerSizes = Layers.Select(layer => layer.GetOutputShape()[0]).ToList();
+        var layerSizes = Layers.Select(layer => layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]).ToList();
 
         return new ModelMetadata<T>
         {

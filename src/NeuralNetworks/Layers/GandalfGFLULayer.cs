@@ -5,6 +5,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Attributes;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -31,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GandalfGFLULayer<T> : LayerBase<T>
+public partial class GandalfGFLULayer<T> : LayerBase<T>
 {
     private readonly int _numStages;
     private int _numFeatures = -1;
@@ -46,7 +48,9 @@ public class GandalfGFLULayer<T> : LayerBase<T>
     /// <summary>Initializes a GFLU stack.</summary>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="numStages">Number of GFLU stages (GANDALF default 6).</param>
-    public GandalfGFLULayer(int numFeatures, int numStages = 6)
+    public GandalfGFLULayer(
+        [LayerState] int numFeatures,
+        [LayerState] int numStages = 6)
         : base(new[] { numFeatures }, new[] { numFeatures })
     {
         if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));
@@ -114,7 +118,7 @@ public class GandalfGFLULayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int features = input.Shape[input.Rank - 1];
         if (!_built || _numFeatures != features)

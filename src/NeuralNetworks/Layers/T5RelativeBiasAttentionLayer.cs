@@ -278,7 +278,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>
     /// All shape operations route through Engine ops so the tape records the
     /// graph for autodiff.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Accept [batch, seq, hidden] or [seq, hidden]. Flatten leading
         // dims to [batch, seq, hidden] for processing.

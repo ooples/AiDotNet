@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High)]
-public class LambdaLayer<T> : LayerBase<T>
+public partial class LambdaLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The user-provided function that defines the forward pass transformation.
@@ -275,7 +275,7 @@ public class LambdaLayer<T> : LayerBase<T>
     /// as it flows through the network.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         var output = _forwardFunction(input);

@@ -7,6 +7,7 @@ using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.NER.SpanBased;
@@ -100,10 +101,24 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         ValidateOptions();
         ApplyOptionsToBase();
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // Yu et al. 2020 (arXiv:2005.07150) Table 1 specifies Adam at 1e-3 for the biaffine span
+        // scorer, and the sibling span architectures follow it. Constructing AdamW here applied a
+        // decoupled weight decay of 0.01 -- AdamW's own default, since only the learning rate was
+        // supplied -- to every parameter on every step, which no span-NER paper asks for. With the
+        // biaffine tensor's large fan-in that decay drove the parameters to NaN in a single step
+        // (measured: L2 42.2154 -> NaN), which is what OptimizerStep_ParamL2_DoesNotExplode reports
+        // and its message predicted: "weight decay too aggressive".
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
+                // The reference decays the rate as training proceeds
+                // (juntaoy/biaffine-ner, experiments.conf: decay_rate = 0.999 applied every
+                // decay_frequency = 100 steps). The paper describes no schedule at all, so without
+                // this the rate stayed at its initial value for the whole run.
+                LearningRateScheduler = new StepLRScheduler(
+                    _options.LearningRate, _options.DecayFrequency, _options.DecayRate),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
             });
 
         InitializeLayers();
@@ -316,11 +331,80 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
             // and sequences are truncated to MaxSequenceLength before label alignment.
             var preprocessed = PreprocessTokens(input);
             int validatedSeqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
-            var alignedExpected = PreprocessLabels(expected, validatedSeqLen);
-            TrainWithTape(preprocessed, alignedExpected);
+            var alignedExpected = BuildTrainingTargets(expected, validatedSeqLen);
+            // Use the model's configured optimizer. Falling back to NeuralNetworkBase's
+            // default Adam step ignores SpanBasedNEROptions.LearningRate (5e-5 for
+            // SpERT) and is large enough to make the generated memorization test diverge.
+            TrainWithTape(preprocessed, alignedExpected, _optimizer);
         }
         finally { SetTrainingMode(false); }
     }
+
+    /// <summary>
+    /// Trains on span-level supervision: a category per candidate span, which is the annotation
+    /// form these architectures are actually defined over.
+    /// </summary>
+    /// <param name="tokenEmbeddings">Token representations, <c>[seqLen, hidden]</c> or <c>[batch, seqLen, hidden]</c>.</param>
+    /// <param name="spanTargets">
+    /// Category indices per span, <c>[seqLen * seqLen]</c> or <c>[batch, seqLen * seqLen]</c>,
+    /// indexed as <c>start * seqLen + end</c>. Use <c>0</c> for the non-entity class and <c>-1</c>
+    /// for a position that is not a candidate at all (<c>end &lt; start</c>, or longer than the
+    /// configured maximum span), which is ignored by the loss rather than taught as a negative.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Train"/> takes per-TOKEN labels, which is the right interface for a
+    /// sequence-labelling corpus but cannot express what a span model predicts: a token label
+    /// only ever describes a single-token entity, so the derived supervision reaches the diagonal
+    /// of the l x l grid and every multi-token span is taught as a non-entity. The standard span
+    /// corpora (CoNLL-2003, ACE, GENIA) ship entity spans, and the reference implementations of
+    /// these architectures read them directly.
+    /// </para>
+    /// <para>
+    /// The signal is an explicit method rather than something inferred from the target's shape.
+    /// Inference is not safe here: a span grid's trailing axis is <c>seqLen * seqLen</c>, which is
+    /// exactly the shape of this model's own output, so a caller passing an output-shaped tensor
+    /// for any other reason would be silently reinterpreted as span annotations.
+    /// </para>
+    /// </remarks>
+    public void TrainWithSpanTargets(Tensor<T> tokenEmbeddings, Tensor<T> spanTargets)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+
+        SetTrainingMode(true);
+        try
+        {
+            var preprocessed = PreprocessTokens(tokenEmbeddings);
+            int seqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
+
+            int trailing = spanTargets.Rank >= 1 ? spanTargets.Shape[spanTargets.Rank - 1] : 0;
+            if (trailing != seqLen * seqLen)
+            {
+                throw new ArgumentException(
+                    $"Span targets must carry one category per span: expected a trailing axis of " +
+                    $"{seqLen * seqLen} ({seqLen} x {seqLen}) for a sequence of {seqLen} tokens, got {trailing}.",
+                    nameof(spanTargets));
+            }
+
+            TrainWithTape(preprocessed, spanTargets, _optimizer);
+        }
+        finally { SetTrainingMode(false); }
+    }
+
+    /// <summary>
+    /// Shapes the supervision the model is trained against, given token-level labels.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to per-token labels aligned to the encoder's sequence length, which is what a
+    /// token-classification head consumes. Span-scoring heads that emit one score per candidate
+    /// span override this to build span-level supervision instead.
+    /// </remarks>
+    /// <param name="labels">The caller's token-level labels.</param>
+    /// <param name="seqLen">The encoder's validated sequence length.</param>
+    /// <returns>The target tensor to pair with the model's output.</returns>
+    protected virtual Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen)
+        => PreprocessLabels(labels, seqLen);
 
     /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)

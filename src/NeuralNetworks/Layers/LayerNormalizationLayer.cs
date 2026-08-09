@@ -147,6 +147,10 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    /// <remarks>Normalization is elementwise over the feature axis, so the output shape is the input shape.</remarks>
+    protected override bool IsShapePreserving => true;
+
     /// <summary>
     /// Indicates whether this layer supports GPU-resident execution.
     /// </summary>
@@ -256,7 +260,9 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
-    public LayerNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon)
+    public LayerNormalizationLayer(
+        int featureSize,
+        double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { featureSize }, new[] { featureSize })
     {
         if (featureSize <= 0)
@@ -317,7 +323,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// This is much faster than doing it manually for each sample.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
 

@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "Dragonfly: Multi-Resolution Zoom Supercharges Large Visual-Language Model",
+    "Dragonfly: Multi-Resolution Zoom-In Encoding Enhances Vision-Language Models",
     "https://arxiv.org/abs/2406.00977",
     Year = 2024,
     Authors = "Chen et al."
@@ -235,7 +235,7 @@ public class DragonflyMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

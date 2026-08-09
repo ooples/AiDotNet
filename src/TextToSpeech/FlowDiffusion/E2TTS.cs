@@ -35,7 +35,8 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "Embarrassingly Easy Text-to-Speech (E2 TTS)",
+    // Title corrected to the published form; the arXiv id was already right.
+    "E2 TTS: Embarrassingly Easy Fully Non-Autoregressive Zero-Shot TTS",
     "https://arxiv.org/abs/2406.18009",
     Year = 2024,
     Authors = "Eskimez et al."
@@ -83,7 +84,7 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         _options = options ?? new E2TTSOptions();
         ValidateOptions(_options);
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -150,7 +151,7 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
                 LayerHelper<T>.CreateDefaultCodecLMLayers(
                     _options.TextEncoderDim,
                     _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.MelChannels,
                     _options.NumEncoderLayers,
                     _options.NumLLMLayers,
                     _options.NumHeads,
@@ -194,7 +195,7 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -283,9 +284,18 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new E2TTS<T>(Architecture, mp, _options);
-        return new E2TTS<T>(Architecture, _options, _optimizer);
+            return new E2TTS<T>(Architecture, mp, new E2TTSOptions(_options));
+        return new E2TTS<T>(Architecture, new E2TTSOptions(_options));
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
 
     private static void ValidateOptions(E2TTSOptions opts)
     {

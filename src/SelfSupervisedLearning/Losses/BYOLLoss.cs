@@ -32,10 +32,8 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bootstrap Your Own Latent - A New Approach to Self-Supervised Learning", "https://arxiv.org/abs/2006.07733", Year = 2020, Authors = "Jean-Bastien Grill, Florian Strub, Florent Altché, Corentin Tallec, Pierre Richemond, Elena Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar, Bilal Piot, Koray Kavukcuoglu, Rémi Munos, Michal Valko")]
-public class BYOLLoss<T> : IContrastiveLoss<T>
+public class BYOLLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly bool _normalize;
     private readonly bool _symmetric;
@@ -57,7 +55,35 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
     /// <param name="onlinePrediction">Predictions from online network [batch_size, dim].</param>
     /// <param name="targetProjection">Projections from target network [batch_size, dim] (stop-gradient applied).</param>
     /// <returns>The computed loss value.</returns>
-    public T ComputeLoss(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
+    /// <remarks>
+    /// Differentiable: 2 - 2*cos(p, z) averaged over the batch, assembled from IEngine ops so the
+    /// result carries tape history. This previously summed host-side dot products into a bare
+    /// scalar, which could be reported but never backpropagated.
+    /// </remarks>
+    public override Tensor<T> ComputeLoss(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
+    {
+        // Shapes, not just ranks: the engine broadcasts, so a [8, 1] against a [8, 768] returns a
+        // finite loss computed against the wrong target instead of failing.
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            onlinePrediction, targetProjection, "BYOL", nameof(onlinePrediction), nameof(targetProjection));
+
+        if (onlinePrediction is null) throw new ArgumentNullException(nameof(onlinePrediction));
+        if (targetProjection is null) throw new ArgumentNullException(nameof(targetProjection));
+
+        var p2 = _normalize ? ObjectiveOps.L2NormalizeRows(onlinePrediction) : onlinePrediction;
+        var z2 = _normalize ? ObjectiveOps.L2NormalizeRows(targetProjection) : targetProjection;
+
+        // rowwise cosine similarity -> mean -> 2 - 2*mean
+        var prod = Engine.TensorMultiply(p2, z2);
+        var perRow = Engine.ReduceSum(prod, new[] { 1 }, keepDims: false);
+        var meanCos = Engine.TensorDivideScalar(
+            Engine.ReduceSum(perRow, null, keepDims: false),
+            NumOps.FromDouble(onlinePrediction.Shape[0]));
+        var twice = Engine.TensorMultiplyScalar(meanCos, NumOps.FromDouble(2.0));
+        return Engine.TensorNegate(Engine.TensorAddScalar(twice, NumOps.FromDouble(-2.0)));
+    }
+
+    private T ComputeLossScalarLegacy(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
     {
         if (onlinePrediction is null) throw new ArgumentNullException(nameof(onlinePrediction));
         if (targetProjection is null) throw new ArgumentNullException(nameof(targetProjection));
@@ -103,14 +129,19 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
     /// <param name="pred2">Predictions from view 2 going to view 1.</param>
     /// <param name="proj1">Target projections from view 1.</param>
     /// <returns>The symmetric loss.</returns>
-    public T ComputeSymmetricLoss(
+    /// <remarks>
+    /// Returns a tape-carrying tensor, like <see cref="ComputeLoss"/>. This is the form BYOL
+    /// actually trains on — both view orderings averaged — so it is the one that most needs to be
+    /// differentiable.
+    /// </remarks>
+    public Tensor<T> ComputeSymmetricLoss(
         Tensor<T> pred1, Tensor<T> proj2,
         Tensor<T> pred2, Tensor<T> proj1)
     {
         var loss1 = ComputeLoss(pred1, proj2);
         var loss2 = ComputeLoss(pred2, proj1);
 
-        return NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(loss1, loss2));
+        return Engine.TensorMultiplyScalar(Engine.TensorAdd(loss1, loss2), NumOps.FromDouble(0.5));
     }
 
     /// <summary>
@@ -237,40 +268,6 @@ public class BYOLLoss<T> : IContrastiveLoss<T>
         }
 
         return new Tensor<T>(result, [batchSize, dim]);
-    }
-
-    /// <summary>
-    /// The differentiable BYOL objective, built entirely from <c>IEngine</c> operations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// SEPARATE FROM <see cref="ComputeLoss(Tensor{T}, Tensor{T})"/> BECAUSE THAT ONE CANNOT TRAIN.
-    /// The public method loops over the batch on the host, copying rows into <c>Vector&lt;T&gt;</c> and
-    /// calling <c>DotProduct</c>, which severs the gradient tape -- the value is right, the history is
-    /// gone, and an optimizer reading it has nothing to backpropagate.
-    /// </para>
-    /// <para>
-    /// Same objective as one reduction: <c>2 - 2 * cos(p, z)</c> averaged over the batch. The
-    /// per-row dot product is an elementwise multiply summed along the feature axis, so the whole
-    /// batch is one <c>ReduceSum</c> rather than <c>batch</c> host iterations.
-    /// </para>
-    /// </remarks>
-    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
-    {
-        ContrastiveTapeOps<T>.RequireMatchingRank2(
-            view1, view2, "BYOL", nameof(view1), nameof(view2));
-
-        var p = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view1) : view1;
-        var z = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view2) : view2;
-
-        // cos(p_i, z_i) per row, then 2 - 2*cos averaged over the batch.
-        var perRowCosine = Engine.ReduceSum(
-            Engine.TensorMultiply(p, z), new[] { 1 }, keepDims: false);
-        var perRowLoss = Engine.ScalarMinusTensor(
-            NumOps.FromDouble(2.0),
-            Engine.TensorMultiplyScalar(perRowCosine, NumOps.FromDouble(2.0)));
-
-        return Engine.ReduceMean(perRowLoss, new[] { 0 }, keepDims: false);
     }
 
     /// <summary>Row-wise L2 normalization on the tape.</summary>

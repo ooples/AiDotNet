@@ -99,9 +99,9 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 150).</param>
+    /// <param name="numClasses">Number of segmentation classes (default: 133, matching the released panoptic configuration).</param>
     /// <param name="modelSize">Model size variant (default: Tiny).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
+    /// <param name="dropRate">Dropout rate (default: 0.0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -110,8 +110,8 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </remarks>
     public SEEM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 150,
-        SEEMModelSize modelSize = SEEMModelSize.Tiny, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null, int numClasses = 133,
+        SEEMModelSize modelSize = SEEMModelSize.Tiny, double dropRate = 0.0,
         SEEMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
@@ -121,8 +121,18 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
+        var config = GetModelConfig(modelSize);
+        _channelDims = _options.ChannelDimensions?.ToArray() ?? config.ChannelDims;
+        _depths = _options.StageDepths?.ToArray() ?? config.Depths;
+        _decoderDim = _options.DecoderDimension ?? config.DecoderDim;
+        ValidateTopology(options);
         InitializeLayers();
     }
 
@@ -131,7 +141,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 150).</param>
+    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
     /// <param name="modelSize">Model size for metadata (default: Tiny).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
@@ -143,7 +153,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
     public SEEM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 150, SEEMModelSize modelSize = SEEMModelSize.Tiny,
+        int numClasses = 133, SEEMModelSize modelSize = SEEMModelSize.Tiny,
         SEEMOptions? options = null)
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
@@ -155,9 +165,13 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        var config = GetModelConfig(modelSize);
+        _channelDims = _options.ChannelDimensions?.ToArray() ?? config.ChannelDims;
+        _depths = _options.StageDepths?.ToArray() ?? config.Depths;
+        _decoderDim = _options.DecoderDimension ?? config.DecoderDim;
+        ValidateTopology(options);
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load SEEM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -198,7 +212,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -210,10 +224,18 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     #region Private Methods
     private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(SEEMModelSize modelSize) => modelSize switch
     {
-        SEEMModelSize.Tiny => ([96, 192, 384, 768], [2, 2, 6, 2], 256),
-        SEEMModelSize.Large => ([192, 384, 768, 1536], [2, 2, 18, 2], 256),
-        _ => ([96, 192, 384, 768], [2, 2, 6, 2], 256)
+        SEEMModelSize.Tiny => ([96, 192, 384, 768], [2, 2, 6, 2], 512),
+        SEEMModelSize.Large => ([192, 384, 768, 1536], [2, 2, 18, 2], 512),
+        _ => ([96, 192, 384, 768], [2, 2, 6, 2], 512)
     };
+
+    private void ValidateTopology(SEEMOptions? options)
+    {
+        if (_channelDims.Length != 4 || _depths.Length != 4)
+            throw new ArgumentException("SEEM requires four channel dimensions and four stage depths.", nameof(options));
+        if (_channelDims.Any(d => d <= 0) || _depths.Any(d => d <= 0) || _decoderDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "SEEM dimensions and stage depths must be positive.");
+    }
 
     private Tensor<T> Forward(Tensor<T> input)
     {
@@ -373,9 +395,14 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SEEM<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new SEEM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new SEEMOptions(_options);
+        return _useNativeMode
+            ? new SEEM<T>(Architecture, optimizer: null, lossFunction: LossFunction,
+                numClasses: _numClasses, modelSize: _modelSize, dropRate: _dropRate, options: options)
+            : new SEEM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, options);
+    }
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

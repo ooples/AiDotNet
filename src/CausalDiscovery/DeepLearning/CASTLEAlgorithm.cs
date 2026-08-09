@@ -155,6 +155,51 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         T rho = NumOps.One;
         T hPrev = NumOps.FromDouble(double.PositiveInfinity);
 
+        // ---- Pre-allocate every per-step tensor ONCE (allocation-flat inner loop).
+        // The solve runs `steps` (>= 2000) full-batch iterations over d sub-networks. Allocating
+        // the forward/backward temporaries per iteration churned ~8 tensors of [n,h] per network
+        // per step — at n=400, h=64, d=4 that is ~7.4 MB/step, so ~14.7 GB across the solve. The
+        // generated tests run inside a TensorArena scope, which does not release rented buffers
+        // until the scope exits, so that churn accumulated and blew the 16 GB heap limit (the
+        // test host died with a fatal OOM inside AutoTensorCache.RentOrAllocate, aborting the
+        // whole shard). Hoisting the invariants (Xs^T and the target columns never change) and
+        // writing every op into a reused destination keeps the footprint flat at ~1.6 MB for the
+        // entire solve. Operand order is unchanged, so the math is identical. ----
+        var XsT = Engine.TensorTranspose(Xs);                     // [d,n] — loop-invariant
+        var targetCols = new Tensor<T>[d];                        // x_j columns — loop-invariant
+        for (int j = 0; j < d; j++)
+        {
+            targetCols[j] = new Tensor<T>(new[] { n, 1 });
+            for (int s = 0; s < n; s++) targetCols[j][s, 0] = Xs[s, j];
+        }
+
+        // Gradient accumulators: written by phase 1, adjusted by phase 2, consumed by phase 3,
+        // so they are per-network and live for the whole step (but allocated only once).
+        var gWh = new Tensor<T>[d];
+        var gWo = new Tensor<T>[d];
+        for (int j = 0; j < d; j++)
+        {
+            gWh[j] = new Tensor<T>(new[] { d, h });
+            gWo[j] = new Tensor<T>(new[] { h, 1 });
+        }
+
+        // Scratch reused across BOTH the network loop and the step loop: each value is consumed
+        // within the iteration that writes it.
+        var hPre = new Tensor<T>(new[] { n, h });
+        var H = new Tensor<T>(new[] { n, h });
+        var HT = new Tensor<T>(new[] { h, n });
+        var negH = new Tensor<T>(new[] { n, h });
+        var oneMinusH = new Tensor<T>(new[] { n, h });
+        var dPred = new Tensor<T>(new[] { n, h });
+        var dPredH = new Tensor<T>(new[] { n, h });
+        var dH = new Tensor<T>(new[] { n, h });
+        var pred = new Tensor<T>(new[] { n, 1 });
+        var residRaw = new Tensor<T>(new[] { n, 1 });
+        var resid = new Tensor<T>(new[] { n, 1 });
+        var WoT = new Tensor<T>(new[] { 1, h });
+        T negOne = NumOps.FromDouble(-1.0);
+        var axes2 = new[] { 1, 0 };
+
         for (int step = 0; step < steps; step++)
         {
             bool constrain = step >= warmupSteps;
@@ -162,25 +207,25 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
             // 1) Reconstruction forward/backward for every f_j (all O(n) work is
             //    vectorized via Engine matmuls). Gradients are accumulated and applied
             //    only after the cross-network acyclicity term is added below.
-            var gWh = new Tensor<T>[d];
-            var gWo = new Tensor<T>[d];
             for (int j = 0; j < d; j++)
             {
-                var hPre = Engine.TensorMatMul(Xs, Wh[j]);        // [n,h]
-                var H = Engine.Sigmoid(hPre);                     // [n,h]
-                var pred = Engine.TensorMatMul(H, Wo[j]);         // [n,1]
+                Engine.MatMulInto(hPre, Xs, Wh[j]);               // [n,h]
+                Engine.SigmoidInto(H, hPre);                      // [n,h]
+                Engine.MatMulInto(pred, H, Wo[j]);                // [n,1]
 
-                var targetCol = new Tensor<T>(new[] { n, 1 });
-                for (int s = 0; s < n; s++) targetCol[s, 0] = Xs[s, j];
                 // resid = (2/n)·(pred − x_j)
-                var resid = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, targetCol), gradScale); // [n,1]
+                Engine.TensorSubtractInto(residRaw, pred, targetCols[j]);
+                Engine.TensorMultiplyScalarInto(resid, residRaw, gradScale);                // [n,1]
 
-                gWo[j] = Engine.TensorMatMul(Engine.TensorTranspose(H), resid);             // [h,1]
-                var dPred = Engine.TensorMatMul(resid, Engine.TensorTranspose(Wo[j]));      // [n,h]
-                var oneMinusH = Engine.TensorAddScalar(
-                    Engine.TensorMultiplyScalar(H, NumOps.FromDouble(-1.0)), NumOps.One);
-                var dH = Engine.TensorMultiply(Engine.TensorMultiply(dPred, H), oneMinusH); // [n,h]
-                gWh[j] = Engine.TensorMatMul(Engine.TensorTranspose(Xs), dH);               // [d,h]
+                Engine.TransposeInto(HT, H, axes2);
+                Engine.MatMulInto(gWo[j], HT, resid);                                       // [h,1]
+                Engine.TransposeInto(WoT, Wo[j], axes2);
+                Engine.MatMulInto(dPred, resid, WoT);                                       // [n,h]
+                Engine.TensorMultiplyScalarInto(negH, H, negOne);
+                Engine.TensorAddScalarInto(oneMinusH, negH, NumOps.One);
+                Engine.TensorMultiplyInto(dPredH, dPred, H);
+                Engine.TensorMultiplyInto(dH, dPredH, oneMinusH);                           // [n,h]
+                Engine.MatMulInto(gWh[j], XsT, dH);                                         // [d,h]
             }
 
             // 2) Once past warmup, add the group-L1 sparsity and augmented-Lagrangian

@@ -246,7 +246,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int totalWeightParams = inputSize * outputSize;
 
         _sparsityRatio = sparsityRatio;
@@ -300,7 +300,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// - Sparse full-rank: The specialists (handle critical details precisely)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Cache input for computing sparse gradients in backward pass
         _cachedInput = input;
@@ -344,7 +344,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     {
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // If no sparse parameters, return zeros
         if (_sparseFullRankUpdates.Count == 0)
@@ -503,7 +503,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void UpdateImportanceScores(Tensor<T> outputGradient)
     {
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int inputSize = GetInputShape()[0];
 
         // Get LoRA parameter gradients to estimate per-parameter importance
@@ -577,7 +577,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void ReallocateSparseParameters()
     {
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int inputSize = GetInputShape()[0];
 
         // Create list of (importance, position) pairs
@@ -715,7 +715,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();

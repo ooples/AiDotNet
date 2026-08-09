@@ -643,7 +643,7 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _biases = new Tensor<T>(new[] { 1 });
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         var output = new Tensor<T>(new[] { _outputChannels });

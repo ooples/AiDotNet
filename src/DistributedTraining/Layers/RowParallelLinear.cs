@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -21,7 +21,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public sealed class RowParallelLinear<T> : LayerBase<T>
+public sealed partial class RowParallelLinear<T> : LayerBase<T>
 {
     private readonly ICommunicationBackend<T> _backend;
     private readonly ReduceFromTensorParallelRegion<T> _g;
@@ -77,7 +77,7 @@ public sealed class RowParallelLinear<T> : LayerBase<T>
         }
     }
 
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var weightT = Engine.TensorTranspose(_weightShard);                  // [localIn, outputSize]
         var partial = Engine.TensorMatMul(input, weightT);                   // [batch, outputSize] (partial)

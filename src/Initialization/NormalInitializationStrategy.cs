@@ -4,7 +4,7 @@
 /// Initializes weights from a normal distribution with a configurable mean and standard deviation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class NormalInitializationStrategy<T> : InitializationStrategyBase<T>
+public class NormalInitializationStrategy<T> : InitializationStrategyBase<T>
 {
     private readonly double _mean;
     private readonly double _standardDeviation;

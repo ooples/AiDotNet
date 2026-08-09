@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace AiDotNet.Serialization;
 
@@ -294,7 +294,13 @@ public readonly struct LayerStateBag
         // one now matches it.
         try
         {
-            return (TComponent)Activator.CreateInstance(type);
+            var created = Activator.CreateInstance(type)
+                ?? throw new InvalidOperationException(
+                    $"Activator returned null for '{type.FullName}'. A component type that cannot be "
+                    + "instantiated must fail here rather than hand back a null component that only "
+                    + "reports itself much later, as a null reference in unrelated code.");
+
+            return (TComponent)created;
         }
         catch (MissingMethodException ex)
         {

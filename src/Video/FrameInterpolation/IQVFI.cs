@@ -51,12 +51,35 @@ namespace AiDotNet.Video.FrameInterpolation;
 [ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("IQ-VFI: Image Quality-Aware Video Frame Interpolation",
-    "https://arxiv.org/abs/2408.11108",
+// CITATION CORRECTED. This model previously cited "IQ-VFI: Image Quality-Aware Video Frame
+// Interpolation" at arXiv:2408.11108, attributed to Xinyi Zhang, Fanghua Yu, Jie Huang and Feng Zhao.
+// Every part of that was wrong: arXiv:2408.11108 is "The densities in diffuse and translucent
+// molecular clouds", an ASTROPHYSICS paper on interstellar cloud densities by Neufeld et al. The "IQ"
+// in IQ-VFI is Implicit Quadratic, not Image Quality — and the model had been built to the misread
+// title, which is why its options carried NumQualityBlocks and QualityThreshold while the paper's
+// actual mechanism (acceleration-modulated quadratic motion) was absent entirely.
+[ResearchPaper("IQ-VFI: Implicit Quadratic Motion Estimation for Video Frame Interpolation",
+    "https://openaccess.thecvf.com/content/CVPR2024/papers/Hu_IQ-VFI_Implicit_Quadratic_Motion_Estimation_for_Video_Frame_Interpolation_CVPR_2024_paper.pdf",
     Year = 2024,
-    Authors = "Xinyi Zhang, Fanghua Yu, Jie Huang, Feng Zhao")]
+    Authors = "Mengshun Hu, Kui Jiang, Zhihang Zhong, Zheng Wang, Yinqiang Zheng")]
 public class IQVFI<T> : FrameInterpolationBase<T>
 {
+    /// <summary>
+    /// Gets the implicit quadratic motion model, which modulates linear intermediate flows into
+    /// quadratic ones using a latent acceleration prior.
+    /// </summary>
+    /// <remarks>
+    /// This is the mechanism the paper is named for and it was entirely missing before the citation was
+    /// corrected. See <see cref="ImplicitQuadraticMotion{T}"/>.
+    /// </remarks>
+    public ImplicitQuadraticMotion<T> QuadraticMotion { get; } = new();
+
+    /// <summary>
+    /// Gets the knowledge-distillation objective: pyramid reconstruction plus acceleration and motion
+    /// distillation from a privileged teacher, gated by the selective mask.
+    /// </summary>
+    public IQVFIDistillation<T> Distillation { get; } = new();
+
     #region Fields
 
     private readonly IQVFIOptions _options;
@@ -145,7 +168,7 @@ public class IQVFI<T> : FrameInterpolationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

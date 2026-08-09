@@ -23,7 +23,7 @@ internal static class ToolConstraintFactory
     public static (ITokenConstraint? Constraint, bool ToolMode) Build(
         List<ToolDefinition>? tools, JToken? toolChoice, ITokenizer tokenizer, int eosTokenId)
     {
-        ArgumentNullException.ThrowIfNull(tokenizer);
+        if (tokenizer is null) throw new ArgumentNullException(nameof(tokenizer));
         if (tools is null || tools.Count == 0)
         {
             return (null, false);

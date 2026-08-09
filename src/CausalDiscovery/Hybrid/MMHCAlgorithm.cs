@@ -56,11 +56,21 @@ public class MMHCAlgorithm<T> : HybridBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
+        // Standardize each column (zero mean, unit variance) so every downstream
+        // statistic — the MMPC association tests AND the hill-climbing BIC/ridge
+        // regression — operates on identically-scaled, well-conditioned data.
+        // This makes the discovered structure invariant to uniform per-feature
+        // scaling of the input: the Gaussian BIC score for a single edge is
+        // score-equivalent (i→j and j→i depend only on r^2), so edge ORIENTATION
+        // is otherwise decided by scale-dependent numerical residue from the
+        // ridge-regularized regression on unstandardized predictors.
+        var standardized = StandardizeColumns(data);
+
         // Phase 1: MMPC — find candidate parents/children for each variable
-        var skeleton = MMPCPhase(data);
+        var skeleton = MMPCPhase(standardized);
 
         // Phase 2: Hill Climbing within restricted space
-        return HillClimbPhase(data, skeleton);
+        return HillClimbPhase(standardized, skeleton);
     }
 
     /// <summary>
@@ -172,7 +182,18 @@ public class MMHCAlgorithm<T> : HybridBase<T>
         var parents = new List<int>[d];
         for (int i = 0; i < d; i++) parents[i] = [];
 
-        // Greedy hill climbing with add/remove operations
+        // Greedy hill climbing with add/remove operations.
+        // For a linear-Gaussian pair the BIC score is score-equivalent: adding
+        // i→j and j→i yield the same delta (both depend only on r^2). A strict
+        // ">" comparison would let a reverse edge override the earlier-evaluated
+        // orientation on sub-ulp numerical noise (from the ridge-regularized
+        // regression), and the sign of that noise is scale-sensitive — flipping
+        // every edge's direction when the data is uniformly rescaled. Requiring a
+        // genuine improvement beyond a relative+absolute margin resolves tied
+        // orientations deterministically (the earlier-evaluated / lower-index
+        // parent wins), making the discovered structure scale-invariant.
+        static double MinImprovement(double best) => Math.Abs(best) * 1e-6 + 1e-9;
+
         bool improved = true;
         int maxIter = _maxIterations;
         while (improved && maxIter-- > 0)
@@ -199,7 +220,7 @@ public class MMHCAlgorithm<T> : HybridBase<T>
                         double newBIC = ComputeBIC(data, j, newParents);
                         double delta = oldBIC - newBIC; // positive = improvement
 
-                        if (delta > bestDelta)
+                        if (delta > bestDelta + MinImprovement(bestDelta))
                         {
                             bestDelta = delta;
                             bestOp = 0;
@@ -215,7 +236,7 @@ public class MMHCAlgorithm<T> : HybridBase<T>
                         double newBIC = ComputeBIC(data, j, newParents);
                         double delta = oldBIC - newBIC;
 
-                        if (delta > bestDelta)
+                        if (delta > bestDelta + MinImprovement(bestDelta))
                         {
                             bestDelta = delta;
                             bestOp = 1;

@@ -156,7 +156,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <c>outputDim</c>: <c>[outputDim]</c> for rank-1 input, <c>[batchSize, outputDim]</c> for
     /// rank-2, and <c>[d0, ..., outputDim]</c> for higher rank.
     /// </returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // The split-logit and leaf-value steps are matmuls and require a rank-2 [batch, features]
         // input. Flatten a rank-1 ([features]) or higher-rank input to 2D so an unbatched single

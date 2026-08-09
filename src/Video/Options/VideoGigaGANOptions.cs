@@ -48,6 +48,8 @@ public class VideoGigaGANOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
         Variant = other.Variant;
         NumFeatures = other.NumFeatures;
         NumResBlocks = other.NumResBlocks;
@@ -56,6 +58,7 @@ public class VideoGigaGANOptions : NeuralNetworkOptions
         PerceptualWeight = other.PerceptualWeight;
         GANWeight = other.GANWeight;
         HFShuttleWeight = other.HFShuttleWeight;
+        FlowPyramidLevels = other.FlowPyramidLevels;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
@@ -81,13 +84,17 @@ public class VideoGigaGANOptions : NeuralNetworkOptions
     public int NumStyleLayers { get; set; } = 14;
 
     /// <summary>Gets or sets the weight for the perceptual (LPIPS) loss component.</summary>
-    public double PerceptualWeight { get; set; } = 1.0;
+    public double PerceptualWeight { get; set; } = 5.0;
 
     /// <summary>Gets or sets the weight for the GAN adversarial loss component.</summary>
-    public double GANWeight { get; set; } = 0.1;
+    public double GANWeight { get; set; } = 0.05;
 
     /// <summary>Gets or sets the weight for the high-frequency shuttle loss.</summary>
     public double HFShuttleWeight { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the number of coarse-to-fine SPyNet flow-pyramid levels.</summary>
+    /// <remarks>The paper uses a five-level pretrained flow estimator. Default is 5.</remarks>
+    public int FlowPyramidLevels { get; set; } = 5;
 
     #endregion
 
@@ -104,7 +111,7 @@ public class VideoGigaGANOptions : NeuralNetworkOptions
     #region Training
 
     /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
+    public double LearningRate { get; set; } = 5e-5;
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.0;

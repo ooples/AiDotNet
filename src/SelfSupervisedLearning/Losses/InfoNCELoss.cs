@@ -34,10 +34,8 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
-public class InfoNCELoss<T> : IContrastiveLoss<T>
+public class InfoNCELoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly double _temperature;
     private readonly bool _normalize;
@@ -430,34 +428,21 @@ public class InfoNCELoss<T> : IContrastiveLoss<T>
         return new Tensor<T>(result, [batchSize, dim]);
     }
     /// <summary>
-    /// The differentiable in-batch InfoNCE objective, built entirely from <c>IEngine</c> operations.
+    /// Differentiable in-batch InfoNCE: queries against keys, positives on the diagonal.
     /// </summary>
     /// <remarks>
-    /// SEPARATE FROM <see cref="ComputeLossInBatch"/> BECAUSE THAT ONE CANNOT TRAIN. It assembles
-    /// its result from host loops over tensor indexers, which severs the gradient tape: the value is
-    /// right, the history is gone, and an optimizer reading it has nothing to backpropagate.
+    /// One-directional, matching MoCo (He et al. 2020), which contrasts a query against its
+    /// positive key and the other keys as negatives. Built entirely from IEngine ops so it carries
+    /// tape history; the scalar <see cref="ComputeLossInBatch"/> above cannot be trained on.
     /// </remarks>
-    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
         ContrastiveTapeOps<T>.RequireMatchingRank2(
             view1, view2, "InfoNCE", nameof(view1), nameof(view2));
 
-        int batchSize = view1.Shape[0];
-
-        var queries = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view1) : view1;
-        var keys = _normalize ? ContrastiveTapeOps<T>.L2NormalizeRows(view2) : view2;
-
-        // Row i's positive is key i; every other key in the batch is its negative.
-        var logits = Engine.TensorMultiplyScalar(
-            Engine.TensorMatMul(queries, Engine.TensorPermute(keys, new[] { 1, 0 })),
-            NumOps.FromDouble(1.0 / _temperature));
-
-        var logProbabilities = Engine.TensorLogSoftmax(logits, axis: 1);
-        var positiveLogProbability = Engine.ReduceSum(
-            Engine.TensorMultiply(logProbabilities, ContrastiveTapeOps<T>.Identity(batchSize)),
-            new[] { 1 }, keepDims: false);
-
-        return Engine.TensorNegate(Engine.ReduceMean(positiveLogProbability, new[] { 0 }, keepDims: false));
+        var logits = ObjectiveOps.SimilarityMatrix(view1, view2, _temperature, _normalize);
+        var logProbs = ObjectiveOps.LogSoftmax(logits, axis: 1);
+        return Engine.TensorNegate(ObjectiveOps.MeanDiagonal(logProbs));
     }
 
     /// <summary>Row-wise L2 normalization on the tape.</summary>

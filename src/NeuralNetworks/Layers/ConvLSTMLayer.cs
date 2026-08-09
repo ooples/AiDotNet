@@ -559,7 +559,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     /// spatial-temporal patterns in your input data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;

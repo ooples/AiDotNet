@@ -191,6 +191,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             // Default both stacks from the paper-faithful LayerHelper factories.
             Layers.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
+                audioPatchSize: _options.AudioPatchSize,
                 audioHiddenDim: _options.AudioHiddenDim,
                 audioEncoderLayers: _options.AudioEncoderLayers,
                 audioEncoderHeads: _options.AudioEncoderHeads,
@@ -305,6 +306,14 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         foreach (var layer in Layers) hidden = layer.Forward(hidden);
         return L2Normalize(hidden);
     }
+
+    /// <summary>
+    /// Gets native audio-layer activations using the same log-mel front end as prediction.
+    /// </summary>
+    /// <param name="input">Raw audio tensor [samples] or [batch, samples].</param>
+    /// <returns>The activation produced by each named audio encoder layer.</returns>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        => base.GetNamedLayerActivations(PreprocessAudio(input));
 
     /// <summary>
     /// Encodes a tokenised text caption into a CLAP embedding vector.
@@ -641,13 +650,11 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var sumAxes = new[] { 0, 1 };
         var totalLog = Engine.ReduceSum(picked, sumAxes, keepDims: false);
 
-        // halfLoss = -0.5 * totalLog / batchSize, returned as a [1] tensor.
-        T totalScalar = totalLog.Length > 0 ? totalLog[0] : NumOps.Zero;
-        T halfLossT = NumOps.Multiply(
-            NumOps.Negate(NumOps.FromDouble(0.5 / batchSize)), totalScalar);
-        var result = new Tensor<T>(new[] { 1 });
-        result[0] = halfLossT;
-        return result;
+        // halfLoss = -0.5 * totalLog / batchSize. Keep the reduction result on the
+        // engine graph: reading totalLog[0] into T and wrapping it in a new Tensor
+        // disconnects the loss from every encoder parameter, yielding all-zero grads.
+        return Engine.TensorMultiplyScalar(
+            totalLog, NumOps.FromDouble(-0.5 / batchSize));
     }
 
     #endregion
@@ -816,8 +823,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
         _useNativeMode
-            ? new CLAPModel<T>(Architecture, _options)
-            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, _options);
+            ? new CLAPModel<T>(Architecture, new CLAPModelOptions(_options))
+            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, new CLAPModelOptions(_options));
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

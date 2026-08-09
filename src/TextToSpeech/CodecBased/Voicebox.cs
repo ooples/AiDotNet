@@ -57,7 +57,6 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
-    private int _encoderLayerEnd;
 
     public override ModelOptions GetOptions() => _options;
 
@@ -104,7 +103,7 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new VoiceboxOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -249,27 +248,23 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
+            // Voicebox is a continuous conditional-flow model, not a codec-token
+            // language model. The native Tensor API receives frame-major continuous
+            // conditioning features; the default stack projects those features into
+            // the paper's Transformer vector-field estimator and projects its output
+            // back to the 80-dimensional mel velocity field.
             Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
+                LayerHelper<T>.CreateDefaultFlowMatchingTTSLayers(
+                    encoderDim: _options.LLMDim,
+                    flowDim: _options.LLMDim,
+                    decoderDim: _options.MelChannels,
+                    numEncoderLayers: 0,
+                    numFlowLayers: _options.NumLLMLayers,
+                    numHeads: _options.NumHeads,
+                    dropoutRate: _options.DropoutRate,
+                    inputFeatures: _options.MelChannels
                 )
             );
-        ComputeEncoderDecoderBoundary();
-    }
-
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int total = Layers.Count;
-        _encoderLayerEnd =
-            total > 4 ? total / 3
-            : total > 0 ? 1
-            : 0;
     }
 
     /// <inheritdoc />
@@ -293,7 +288,11 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned and never read, so training silently used the framework default and any
+            // caller-supplied optimizer was discarded. Same dead-dependency shape already fixed on
+            // MegaTTS, LiteDVDNet, LLMTime and InstructBLIP.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -381,9 +380,21 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Voicebox<T>(Architecture, mp, _options);
-        return new Voicebox<T>(Architecture, _options);
+            return new Voicebox<T>(Architecture, mp, new VoiceboxOptions(_options));
+        return new Voicebox<T>(Architecture, new VoiceboxOptions(_options));
     }
+
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 0.2,
+            }
+        );
 
     private void ThrowIfDisposed()
     {

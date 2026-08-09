@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -24,7 +24,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Optionally causal (only looking at past frames) for streaming generation
 /// </para>
 /// </remarks>
-public class TemporalConvolution<T> : LayerBase<T>
+public partial class TemporalConvolution<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _kernelSize;
@@ -98,7 +98,7 @@ public class TemporalConvolution<T> : LayerBase<T>
     /// <summary>
     /// Applies temporal convolution across frames.
     /// </summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
         _lastInput = ShouldCacheForBackward ? input : null;

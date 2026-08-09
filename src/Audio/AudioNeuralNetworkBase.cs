@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio;
@@ -268,5 +269,79 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
             nMels: nMels,
             nFft: nFft,
             hopLength: hopLength);
+    }
+
+    /// <summary>
+    /// Trains one step with CIF's alignment supervision applied for the duration of the step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Any model whose stack contains a <see cref="CifAlignmentLayer{T}"/> must call this rather
+    /// than <c>TrainWithTape</c> directly. Dong &amp; Xu 2020 (arXiv:1905.11235) supervise CIF's
+    /// weight predictor through two mechanisms, both keyed to the label length S~: the scaling
+    /// strategy (S3.3), which multiplies every firing weight by S~ / sum(alpha) so the integrated
+    /// token count is teacher-forced to the target, and the quantity loss (S3.4),
+    /// |sum(alpha) - S~|.
+    /// </para>
+    /// <para>
+    /// The layer implements both and enables them by default, but gates them on
+    /// <c>TargetTokenCount</c>, which only the training caller can know. Before this existed no
+    /// model in the library set it, so on every CIF model both mechanisms were inert and the
+    /// weight predictor trained with nothing supervising how many tokens it should emit. With
+    /// sum(alpha) unconstrained the firing pattern changes discontinuously between steps, and
+    /// CIFEncoder went non-finite within a step or two of training.
+    /// </para>
+    /// <para>
+    /// The target is cleared again afterwards so inference runs on the raw alphas and decides its
+    /// own output length, exactly as the paper specifies. The scan is a no-op for models that
+    /// build no CIF stage -- the Paraformer family gates its CIF layer on
+    /// <c>UseCifAlignment</c> -- so this is safe to call unconditionally.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The training input.</param>
+    /// <param name="expected">The target tensor; its token axis supplies S~.</param>
+    /// <param name="optimizer">The model's configured optimizer.</param>
+    protected void TrainWithCifSupervision(
+        Tensor<T> input,
+        Tensor<T> expected,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        SetCifTargetTokenCount(expected);
+        try
+        {
+            TrainWithTape(input, expected, optimizer);
+        }
+        finally
+        {
+            SetCifTargetTokenCount(null);
+        }
+    }
+
+    /// <summary>
+    /// Points every CIF stage in this model at the current batch's target token count, or clears
+    /// it when <paramref name="expected"/> is null.
+    /// </summary>
+    /// <remarks>
+    /// Labels are [batch, tokens, vocab] or [tokens, vocab] unbatched, so the token axis is the
+    /// one before the vocabulary axis.
+    /// </remarks>
+    private void SetCifTargetTokenCount(Tensor<T>? expected)
+    {
+        int? tokenCount = null;
+        if (expected is not null)
+        {
+            int count = expected.Rank >= 2
+                ? expected.Shape[expected.Rank - 2]
+                : expected.Shape[0];
+            if (count > 0) tokenCount = count;
+        }
+
+        foreach (var layer in Layers)
+        {
+            if (layer is CifAlignmentLayer<T> cif)
+            {
+                cif.TargetTokenCount = tokenCount;
+            }
+        }
     }
 }

@@ -35,11 +35,12 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked Autoencoders Are Scalable Vision Learners", "https://arxiv.org/abs/2111.06377", Year = 2022, Authors = "Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick")]
-public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
+public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private static IEngine Engine => AiDotNetEngine.Current;
+
+    // Engine and NumOps come from ContrastiveLossBase; redeclaring them here shadows the base
+    // members rather than adding anything.
 
     private readonly bool _normalize;
     private readonly bool _perPatchNormalization;
@@ -316,81 +317,101 @@ public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
     /// The differentiable MAE reconstruction objective, built entirely from <c>IEngine</c>
     /// operations, over all positions.
     /// </summary>
+    /// <summary>
+    /// Differentiable reconstruction error, as the all-ones-mask case of
+    /// <see cref="ComputeLoss(Tensor{T}, Tensor{T}, Tensor{T})"/>.
+    /// </summary>
+    /// <param name="view1">Reconstructed patches, rank-3 <c>[batch, patches, patch_dim]</c>.</param>
+    /// <param name="view2">Original patches, same shape.</param>
     /// <remarks>
     /// <para>
-    /// SEPARATE FROM <see cref="ComputeLoss(Tensor{T}, Tensor{T}, Tensor{T})"/> BECAUSE THAT ONE
-    /// CANNOT TRAIN. It assembles its result from host loops over tensor indexers, which severs the
-    /// gradient tape -- a correct loss VALUE carrying no history for an optimizer to backpropagate.
+    /// THE CONFIGURED TRANSFORMS APPLY HERE TOO. This previously computed a plain elementwise MSE
+    /// while claiming to be the all-ones-mask case, so a user who constructed the loss with
+    /// <c>perPatchNormalization</c> or <c>normalize</c> and then trained through the two-view
+    /// interface silently got neither. Both are the constructor DEFAULTS and per-patch normalized
+    /// targets are the MAE paper's default, so the common configuration was the one being discarded.
     /// </para>
     /// <para>
-    /// The two-view interface carries no mask, so every position contributes: that is the all-ones
-    /// mask the previous delegation built explicitly, and with uniform weights masked mean-squared
-    /// error IS mean-squared error. Use the three-argument overload to score only the masked patches,
-    /// which is what MAE pre-training actually optimizes.
+    /// Order matches the masked overload exactly: normalize each ORIGINAL patch to zero mean and
+    /// unit standard deviation (same 1e-6 epsilon inside the square root), take the squared error
+    /// against the reconstruction, divide each patch by <c>patch_dim</c> when <c>normalize</c> is
+    /// set, then average over patches. Built from IEngine ops so it carries tape history; the masked
+    /// overload branches on mask values in host code and returns a scalar, which cannot.
+    /// </para>
+    /// <para>
+    /// Rank is VALIDATED rather than inferred. The masked overload requires rank-3, and this path
+    /// used to accept any shape and divide by <c>Length</c> -- so a rank-2 caller received a
+    /// differently normalized number instead of an error.
     /// </para>
     /// </remarks>
-    Tensor<T> IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    /// <exception cref="ArgumentException">Thrown when either view is not rank-3.</exception>
+    public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
         if (view1 is null) throw new ArgumentNullException(nameof(view1));
         if (view2 is null) throw new ArgumentNullException(nameof(view2));
 
-        // SHAPES, not just ranks. A rank-only check lets [8, 196, 1] through against [8, 196, 768],
-        // and the engine's implicit broadcasting then returns a finite loss computed against the
-        // wrong target, silently. Every sibling loss in this set compares the dimensions.
-        if (view1.Shape.Length != view2.Shape.Length)
+        if (view1.Shape.Length != 3 || view2.Shape.Length != 3)
         {
             throw new ArgumentException(
-                $"Reconstruction and target must have the same rank; got {view1.Shape.Length} and "
-                + $"{view2.Shape.Length}.", nameof(view2));
+                "MAE reconstruction loss operates on patch tensors of rank 3 [batch, patches, "
+                + $"patch_dim]; got rank {view1.Shape.Length} and {view2.Shape.Length}. The masked "
+                + "overload has the same contract.",
+                nameof(view1));
         }
 
-        for (int axis = 0; axis < view1.Shape.Length; axis++)
+        // THE TWO VIEWS MUST AGREE. Every divisor below is taken from view2 while the difference is
+        // taken against view1, so mismatched shapes either threw from deep inside the element-wise
+        // subtract or -- where broadcasting applied -- silently normalized by the wrong patch count.
+        for (int axis = 0; axis < 3; axis++)
         {
             if (view1.Shape[axis] != view2.Shape[axis])
             {
                 throw new ArgumentException(
-                    $"Reconstruction and target must have the same shape; they differ on axis "
-                    + $"{axis} ({view1.Shape[axis]} vs {view2.Shape[axis]}).", nameof(view2));
+                    "MAE reconstruction loss requires both views to have the same shape; got "
+                    + $"[{string.Join(", ", view1.Shape)}] and [{string.Join(", ", view2.Shape)}].",
+                    nameof(view2));
             }
         }
 
-        // PER-PATCH NORMALIZATION IS APPLIED HERE TOO, on the tape. It defaults to true, and the
-        // three-argument ComputeLoss normalizes each target patch before the squared error -- so
-        // skipping it here meant a model constructed with the defaults optimized plain MSE against
-        // raw pixels through this surface while the same object measured through the direct API
-        // reported normalized-target MSE. The two numbers disagreed and nothing said why.
-        //
-        // The last axis is the patch, matching NormalizePatch's per-patch scope on the direct path.
-        var target = _perPatchNormalization ? NormalizePatchesOnTape(view2) : view2;
+        int patchDim = view2.Shape[2];
+        int patchCount = view2.Shape[0] * view2.Shape[1];
+        int lastAxis = view2.Shape.Length - 1;
 
-        var difference = Engine.TensorSubtract(view1, target);
-        var allAxes = new int[view1.Shape.Length];
-        for (int axis = 0; axis < allAxes.Length; axis++) allAxes[axis] = axis;
+        // A ZERO DIVISOR PRODUCES NaN RATHER THAN THROWING for double and float, and that NaN then
+        // propagates through backpropagation and destroys every parameter in the model with nothing
+        // to show where it began. The masked overload already returns zero for this same degenerate
+        // input (no patch scored, so no loss), and these two paths must not diverge.
+        if (patchCount == 0 || (_perPatchNormalization && patchDim == 0))
+        {
+            // A fresh Tensor<T> is zero-filled, which is the value the masked overload returns for
+            // this input. Same idiom as SparseCategoricalCrossEntropyLoss.
+            return new Tensor<T>(new[] { 1 });
+        }
 
-        return Engine.ReduceMean(
-            Engine.TensorMultiply(difference, difference), allAxes, keepDims: false);
-    }
+        var target = view2;
+        if (_perPatchNormalization)
+        {
+            // Per-patch zero mean, unit standard deviation -- the same transform NormalizePatch
+            // applies element-wise in the masked path, expressed over the last axis so it stays
+            // differentiable.
+            var mean = Engine.TensorDivideScalar(
+                Engine.ReduceSum(target, new[] { lastAxis }, keepDims: true),
+                NumOps.FromDouble(patchDim));
+            var centered = Engine.TensorBroadcastSubtract(target, mean);
+            var variance = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { lastAxis }, keepDims: true),
+                NumOps.FromDouble(patchDim));
+            var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-6)));
+            target = Engine.TensorBroadcastDivide(centered, std);
+        }
 
-    /// <summary>
-    /// Centres and scales each patch to zero mean and unit variance along the last axis, on the tape.
-    /// </summary>
-    /// <remarks>
-    /// The tape-connected counterpart of <c>NormalizePatch</c>. He et al. 2022 normalize the TARGET
-    /// patch, not the reconstruction, which is why only the target passes through here: the
-    /// objective is to predict the normalized patch, and normalizing both sides would compare two
-    /// quantities that have each had their own mean and scale removed.
-    ///
-    /// The epsilon sits inside the square root so a constant patch scales by a finite value rather
-    /// than dividing by zero, and its derivative stays finite there too.
-    /// </remarks>
-    private static Tensor<T> NormalizePatchesOnTape(Tensor<T> patches)
-    {
-        var lastAxis = new[] { patches.Shape.Length - 1 };
-        var mean = Engine.ReduceMean(patches, lastAxis, keepDims: true);
-        var centred = Engine.TensorSubtract(patches, mean);
-        var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), lastAxis, keepDims: true);
-        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-6)));
+        var diff = Engine.TensorSubtract(view1, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var total = Engine.ReduceSum(squared, null, keepDims: false);
 
-        return Engine.TensorDivide(centred, scale);
+        // The masked overload divides each PATCH by patch_dim only when _normalize is set, then
+        // averages over the patches it scored. Folding both divisors into one keeps that exactly.
+        double divisor = _normalize ? (double)patchCount * patchDim : patchCount;
+        return Engine.TensorDivideScalar(total, NumOps.FromDouble(divisor));
     }
 }

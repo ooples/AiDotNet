@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.VAE;
+﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -37896,4 +37896,32 @@ public static class LayerHelper<T>
             numKvHeads, ropeTheta);
 
     #endregion
+
+    // RESTORED. This slice deleted both methods while QueryMeldNet still called them; the branch
+    // could not report it because LayerHelper<T> was an error type until the integration merge,
+    // and Roslyn suppresses member lookup on error types. Taken back from integration/1789.
+
+    /// <summary>
+    /// Creates the backbone encoder layers for QueryMeldNet.
+    /// </summary>
+    // QueryMeldNet uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
+
+    /// <summary>
+    /// Creates the query-meld decoder layers for QueryMeldNet.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+    }
 }

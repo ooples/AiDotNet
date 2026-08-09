@@ -26,7 +26,7 @@ namespace AiDotNet.Interfaces;
 /// <param name="Name">Human-readable name, used in diagnostics and in the harness's target generation.</param>
 /// <param name="Loss">How this output is scored against its target.</param>
 /// <param name="Weight">Multiplier applied to this term in the total, per the model's paper.</param>
-internal readonly record struct OutputSpec<T>(string Name, ILossFunction<T> Loss, double Weight)
+public readonly record struct OutputSpec<T>(string Name, ILossFunction<T> Loss, double Weight)
 {
     /// <summary>A term weighted 1.0 — the common case.</summary>
     public OutputSpec(string name, ILossFunction<T> loss) : this(name, loss, 1.0) { }
@@ -62,7 +62,7 @@ internal readonly record struct OutputSpec<T>(string Name, ILossFunction<T> Loss
 /// it needs.
 /// </para>
 /// </remarks>
-internal interface ICompositeLoss<T>
+public interface ICompositeLoss<T>
 {
     /// <summary>
     /// The objective's terms, in a stable order. One entry per supervised output.

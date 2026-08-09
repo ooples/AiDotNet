@@ -21,7 +21,7 @@
 /// decorator, so new adapters need no changes at the call site.
 /// </para>
 /// </remarks>
-internal interface IAttentionBlockDecorator<T> : ILayer<T>
+public interface IAttentionBlockDecorator<T> : ILayer<T>
 {
     /// <summary>
     /// Gets the wrapped block, which should be invoked using whatever dispatch the caller would have

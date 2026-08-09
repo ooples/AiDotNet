@@ -55,6 +55,23 @@ public class CMGANOptions : ModelOptions
     /// </summary>
     public int NumFreqBins { get; set; } = 201;
 
+    /// <summary>
+    /// Gets or sets the power-law compression exponent applied to the input spectrogram.
+    /// </summary>
+    /// <value>The exponent, defaulting to 0.3 (the paper value).</value>
+    /// <remarks>
+    /// <para>CMGAN compresses the magnitude spectrogram as <c>|X|^c</c> before the encoder and
+    /// applies the matching inverse <c>|.|^(1/c)</c> on reconstruction. Cao et al.,
+    /// INTERSPEECH 2022 (arXiv:2203.15149) use <c>c = 0.3</c>, which is the default here.
+    /// Set to <c>1.0</c> to disable compression entirely.</para>
+    /// <para><b>For Beginners:</b> Speech spectrograms have a huge dynamic range — loud parts
+    /// are thousands of times larger than quiet ones, so a network trained on raw magnitudes
+    /// mostly learns the loud parts and neglects quiet detail. Raising every value to a power
+    /// below 1 pulls the loud and quiet parts closer together so the model pays attention to
+    /// both, and the inverse is applied afterwards to restore the true levels.</para>
+    /// </remarks>
+    public double PowerLawCompressionExponent { get; set; } = 0.3;
+
     #endregion
 
     #region Generator Architecture
@@ -65,13 +82,22 @@ public class CMGANOptions : ModelOptions
     /// <remarks>
     /// <para>Conformer layers combine self-attention and convolution for both global and local
     /// pattern recognition in the time-frequency domain.</para>
+    /// <para>Paper default: the CMGAN generator uses FOUR two-stage conformer blocks
+    /// (Cao et al., INTERSPEECH 2022, arXiv:2203.15149). This previously defaulted to 2,
+    /// which is half the published depth.</para>
     /// </remarks>
-    public int NumConformerLayers { get; set; } = 2;
+    public int NumConformerLayers { get; set; } = 4;
 
     /// <summary>
     /// Gets or sets the Conformer hidden dimension.
     /// </summary>
-    public int ConformerDim { get; set; } = 256;
+    /// <remarks>
+    /// <para>Paper default: 64 channels (Cao et al., INTERSPEECH 2022, arXiv:2203.15149,
+    /// Sec. "Experimental setup"). This previously defaulted to 256 — FOUR TIMES the published
+    /// width — which made the model both unfaithful to the paper and needlessly expensive:
+    /// CMGAN was 54 s of training probes on the A-C shard largely because of this.</para>
+    /// </remarks>
+    public int ConformerDim { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the number of attention heads in Conformer layers.

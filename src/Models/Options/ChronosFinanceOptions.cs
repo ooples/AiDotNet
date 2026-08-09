@@ -94,6 +94,7 @@ public class ChronosFinanceOptions<T> : TimeSeriesRegressionOptions<T>
         GroupAttentionGroups = other.GroupAttentionGroups;
         UseMultivariate = other.UseMultivariate;
         UsePatchInput = other.UsePatchInput;
+        QuantizationBound = other.QuantizationBound;
     }
 
     /// <summary>
@@ -128,6 +129,23 @@ public class ChronosFinanceOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int NumTokens { get; set; } = 4096;
+
+    /// <summary>
+    /// Gets or sets the half-width of the uniform quantization domain, in mean-scaled units.
+    /// </summary>
+    /// <value>The quantization bound, defaulting to 15.0 (the paper value).</value>
+    /// <remarks>
+    /// <para>Chronos applies mean scaling — dividing by the mean absolute value of the
+    /// historical context — and then bins uniformly within <c>[-bound * s, +bound * s]</c>.
+    /// Ansari et al. 2024 (arXiv:2403.07815) use a bound of 15, which is the default here.</para>
+    /// <para><b>For Beginners:</b> This controls how far above and below the typical size of
+    /// your data the model is able to express a forecast. The scale <c>s</c> is the average
+    /// magnitude of your recent history, so a bound of 15 means the model can represent values
+    /// up to fifteen times that average in either direction. Raise it if your series has rare
+    /// but very large spikes; lower it to spend the available bins on a narrower band and get
+    /// finer resolution where the data actually lives.</para>
+    /// </remarks>
+    public double QuantizationBound { get; set; } = 15.0;
 
     /// <summary>
     /// Gets or sets the hidden dimension of the transformer.

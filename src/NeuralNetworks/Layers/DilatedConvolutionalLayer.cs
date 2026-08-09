@@ -566,7 +566,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// at the input, allowing the network to capture wider patterns.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;

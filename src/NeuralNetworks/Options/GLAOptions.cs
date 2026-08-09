@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
 

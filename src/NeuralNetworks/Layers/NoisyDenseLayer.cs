@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// trainable — the tape treats them as input data.
 /// </para>
 /// </remarks>
-public class NoisyDenseLayer<T> : LayerBase<T>
+public partial class NoisyDenseLayer<T> : LayerBase<T>
 {
     private readonly int _inputSize;
     private readonly int _outputSize;
@@ -205,7 +205,7 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Validate at the boundary — the ctor uses inputShape: [-1] so the
         // base class's Forward never gets a chance to catch a shape mismatch.

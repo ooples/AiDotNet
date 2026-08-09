@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
-public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
+public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly int _patchSize;
     private readonly int _embedDim;
@@ -138,6 +138,13 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
         _projection.ResolveFromShape(new[] { inChannels, inH, inW });
         _projection.SetTrainingMode(IsTrainingMode);
+        // Resolve the inner normalization before replaying a serialized flat
+        // parameter vector. Otherwise its ParameterCount is still zero, so
+        // SetParameters consumes only the projection weights and silently
+        // drops the trained gamma/beta values; the first Forward then creates
+        // fresh normalization parameters and a clone immediately diverges.
+        _norm.ResolveFromShape(new[] { _embedDim });
+        _norm.SetTrainingMode(IsTrainingMode);
 
         ResolveShapes(
             new[] { inChannels, inH, inW },
@@ -157,7 +164,7 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor of shape [batch, channels, height, width].</param>
     /// <returns>Output tensor of shape [batch, numPatches, embedDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
@@ -171,23 +178,11 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         int patchW = projected.Shape[3];
         int numPatches = patchH * patchW;
 
-        // Reshape to sequence: [batch, numPatches, embedDim]
-        var sequence = new Tensor<T>([batch, numPatches, _embedDim]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < patchH; h++)
-            {
-                for (int w = 0; w < patchW; w++)
-                {
-                    int seqIdx = h * patchW + w;
-                    for (int c = 0; c < _embedDim; c++)
-                    {
-                        sequence[b, seqIdx, c] = projected[b, c, h, w];
-                    }
-                }
-            }
-        }
+        // NCHW -> NHWC -> [batch, numPatches, embedDim]. Keep this conversion
+        // on Engine operations so the compiled training graph retains the edge
+        // from the normalized sequence back to the convolutional projection.
+        var channelsLast = Engine.TensorPermute(projected, [0, 2, 3, 1]);
+        var sequence = Engine.Reshape(channelsLast, [batch, numPatches, _embedDim]);
 
         // Apply layer normalization
         var normalized = _norm.Forward(sequence);

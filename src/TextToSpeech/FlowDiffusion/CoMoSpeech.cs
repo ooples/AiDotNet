@@ -81,7 +81,22 @@ public class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new CoMoSpeechOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // CoMoSpeech (Ye et al., 2023, arXiv:2305.06908 §4) trains its TTS teacher with
+        // Adam at a learning rate of 1e-4 -- already the TtsModelOptions default this reads. The
+        // 1e-3 AdamW figure in the paper belongs to the singing-voice path, not this one.
+        //
+        // Built with no options at all before this, so it silently ran as AdamW at its own
+        // 1e-3 default with beta2 = 0.999, epsilon = 1e-8 and a decoupled weight decay of
+        // 0.01 that no paper here specifies. Ten times the intended rate is enough to blow
+        // the first step into a region training cannot recover from.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.98,
+                Epsilon = 1e-9
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -177,7 +192,7 @@ public class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

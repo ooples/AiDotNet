@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
-public class PositionalEncodingLayer<T> : LayerBase<T>
+public partial class PositionalEncodingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The maximum sequence length that this layer can handle.
@@ -122,8 +122,10 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// position that the model can learn to recognize.
     /// </para>
     /// </remarks>
-    public PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)
-        : base([maxSequenceLength, embeddingSize], [maxSequenceLength, embeddingSize])
+    public PositionalEncodingLayer(
+        [LayerState] int maxSequenceLength,
+        [LayerState] int embeddingSize)
+        : base([-1, embeddingSize], [-1, embeddingSize])
     {
         this.maxSequenceLength = maxSequenceLength;
         this.embeddingSize = embeddingSize;
@@ -247,7 +249,20 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// which position in the sentence it occupies.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Positional encodings are ADDED to the input, so the output has exactly the input's shape.
+    ///
+    /// The declared shape used to be [maxSequenceLength, embeddingSize] -- the layer's CAPACITY,
+    /// not what it produces. maxSequenceLength sizes the encoding table and is an upper bound on
+    /// the sequence this layer can handle; a forward over 64 frames still emits 64. Declaring the
+    /// bound made every consumer that reads the declaration believe the sequence was
+    /// maxSequenceLength long, and chain resolution propagated that into the following attention
+    /// layer, which then reported an output of [1000, 256] while producing [64, 256].
+    /// </remarks>
+    protected override bool IsShapePreserving => true;
+
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Handle 1D input by treating it as [1, embed] (single position with embedding)
         bool was1D = input.Shape.Length == 1;

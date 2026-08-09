@@ -155,7 +155,15 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         _dropRate = dropRate;
         _useNativeMode = true;
         _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 6e-5,
+                WeightDecay = 0.05,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 5.0,
+            });
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
 
@@ -262,7 +270,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -511,7 +519,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new InternImage<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
+            ? new InternImage<T>(Architecture, null, LossFunction, _numClasses, _modelSize, _dropRate, _options)
             : new InternImage<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
     }
 

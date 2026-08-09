@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Validation;
@@ -410,9 +410,9 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     /// for ChronosBolt extracts the median slice ([_forecastHorizon]) and
     /// drops every other quantile. Training target from
     /// <see cref="Predict"/> is the full raw head output (e.g.
-    /// [1, horizon, numQuantiles] = [1, 8, 4096] at smoke-test scale) —
+    /// [horizon, numQuantiles] = [8, 3] at smoke-test scale) —
     /// the two disagree and the MSE loss throws
-    /// "Tensor shapes must match. Got [4] and [1, 8, 4096]". Routing
+    /// "Tensor shapes must match. Got [8] and [8, 3]". Routing
     /// through ForwardNative keeps the training forward shape aligned
     /// with the target.
     /// </remarks>
@@ -579,23 +579,12 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input._shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
-            T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-            for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); }
-        }
-        return result;
-    }
+        // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
+        // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
+        // output through result.Data.Span[...], which the autodiff tape cannot observe: the normalised
+        // tensor came back as a LEAF, so no gradient could flow through the normalisation. RevIN is a
+        // differentiable layer in the paper, not a preprocessing step.
+        => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _, out _);
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()

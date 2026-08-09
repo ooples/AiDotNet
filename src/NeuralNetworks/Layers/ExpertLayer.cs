@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
-public class ExpertLayer<T> : LayerBase<T>
+public partial class ExpertLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The sequence of layers that make up this expert.
@@ -212,7 +212,7 @@ public class ExpertLayer<T> : LayerBase<T>
     /// as the data flows through the expert.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Lazy-shape support: if construction-time inputShape contained
         // sentinel -1 dims, the chain-resolve in the ctor was skipped

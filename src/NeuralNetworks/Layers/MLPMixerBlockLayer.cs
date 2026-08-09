@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
-public class MLPMixerBlockLayer<T> : LayerBase<T>
+public partial class MLPMixerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _numPatches;
     private readonly int _hiddenDim;
@@ -122,7 +122,7 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Temporal mixing: norm → transpose → MLP across patches → transpose → residual.
         var normed1 = _norm1.Forward(input);

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 
@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
+public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 {
     private int _inputDim;
     private readonly int _outputDim;
@@ -76,7 +76,7 @@ public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor [batchSize, inputDim].</param>
     /// <returns>Gated output [batchSize, outputDim].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
         _inputCache = input;

@@ -87,8 +87,18 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
+    /// <remarks>
+    /// The zero-argument default builds a small, self-consistent continuous-control toy
+    /// agent: a 4-dimensional observation and a 4-dimensional continuous action. Four is the
+    /// canonical low-dimensional control state (e.g. CartPole's [cart position, cart velocity,
+    /// pole angle, pole angular velocity]) and keeps <see cref="ObservationSize"/> and
+    /// <see cref="DreamerOptions{T}.ActionSize"/> aligned so that a plain
+    /// <c>(state, target)</c> transition of that width is accepted by
+    /// <see cref="StoreExperience"/> without any environment-specific configuration.
+    /// Real tasks should pass a fully-specified <see cref="DreamerOptions{T}"/>.
+    /// </remarks>
     public DreamerAgent()
-        : this(new DreamerOptions<T> { ActionSize = 2 })
+        : this(new DreamerOptions<T> { ObservationSize = 4, ActionSize = 4 })
     {
     }
 
@@ -98,10 +108,25 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         Guard.NotNull(options);
         _options = options;
 
-        // FIX ISSUE 6: Use learning rate from options consistently
+        // Use the rate the BASE class already resolved, not the raw option. `options.LearningRate`
+        // is declared `T?`, but for a value-type T — float and double, i.e. every real use — that
+        // is not Nullable<T>, so an unconfigured option reads as default(T) == 0 and `is not null`
+        // is TRUE. This ctor therefore handed Adam InitialLearningRate = 0 whenever the caller did
+        // not set one, which is every default-constructed DreamerAgent.
+        //
+        // ReinforcementLearningAgentBase already solves this and says so at length: it treats
+        // default(T) as "not configured" and substitutes 0.001, precisely because "a zero learning
+        // rate ... is meaningless for Bellman updates (every Q-update collapses to Q <- Q + 0 = Q,
+        // which is the symptom that surfaced as the entire RL test family failing
+        // Training_ShouldChangeParameters)". The base runs first, so LearningRate is resolved by
+        // the time this body executes; re-deriving it here reintroduced the bug the base fixed.
+        //
+        // The zero was silent until an optimizer validated its rate at construction, at which point
+        // it became "Base learning rate must be positive" and took DreamerAgent's whole suite plus
+        // AllDefaultConstructableModels_ShouldConstructWithoutException with it. Silent was worse.
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            InitialLearningRate = _options.LearningRate is not null ? NumOps.ToDouble(_options.LearningRate) : 0.001,
+            InitialLearningRate = NumOps.ToDouble(LearningRate),
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8
@@ -407,9 +432,24 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
+            Name = "Dreamer",
+            Description = "Dreamer model-based RL agent: learns a latent world model (representation, " +
+                "dynamics, reward and continue heads) and an actor-critic trained in latent imagination " +
+                "(Hafner et al. 2020, 'Dream to Control').",
+            FeatureCount = _options.ObservationSize,
+            Complexity = ParameterCount,
         };
+
+        metadata.SetProperty("ObservationSize", _options.ObservationSize);
+        metadata.SetProperty("ActionSize", _options.ActionSize);
+        metadata.SetProperty("LatentSize", _options.LatentSize);
+        metadata.SetProperty("HiddenSize", _options.HiddenSize);
+        metadata.SetProperty("ImaginationHorizon", _options.ImaginationHorizon);
+        metadata.SetProperty("UpdateCount", _updateCount);
+
+        return metadata;
     }
 
     public override int FeatureCount => _options.ObservationSize;

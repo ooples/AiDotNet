@@ -116,7 +116,22 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new FTTransformerOptions<T>();
         _lossFunction = lossFunction;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // FT-Transformer (Gorishniy et al., 2021 — arXiv:2106.11959) is trained with
+        // AdamW at a LOW learning rate: the paper's default is lr=1e-4 with weight
+        // decay 1e-5 and NO learning-rate schedule. The generic default optimizer is
+        // plain Adam at lr=1e-3 — 10x the paper's rate — which lets training overshoot
+        // the minimum of the tiny tabular objective and drift back UP once it has
+        // converged (MoreData_ShouldNotDegrade: the 200-iteration loss came out higher
+        // than the 50-iteration loss). Matching the paper's AdamW@1e-4 (together with
+        // the PreNorm transformer blocks that are already the default and the model's
+        // MaxGradientNorm clipping) keeps the loss decreasing monotonically with more
+        // training. WeightDecay is threaded from the options so callers can still tune it.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                WeightDecay = _options.WeightDecay,
+            });
 
         if (_options.NumHeads <= 0)
         {

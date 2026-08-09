@@ -353,7 +353,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         if (pretrainedWeights.Rows != outputSize || pretrainedWeights.Columns != inputSize)
         {
@@ -430,7 +430,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// The adjustment is constrained to the most important pretrained patterns!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (!_initializedFromSVD)
         {

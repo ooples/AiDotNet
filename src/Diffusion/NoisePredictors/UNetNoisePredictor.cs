@@ -404,7 +404,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 {
                     ResBlock = CreateResBlock(inChannels, outChannels, spatialSize),
                     AttentionBlock = useAttention ? CreateAttentionBlock(outChannels, spatialSize) : null,
-                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null
+                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null,
+                    AttentionChannels = outChannels
                 });
                 inChannels = outChannels;
             }
@@ -434,7 +435,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         {
             ResBlock = CreateResBlock(channels, channels, bottleneckSpatial),
             AttentionBlock = CreateAttentionBlock(channels, bottleneckSpatial),
-            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(channels, bottleneckSpatial) : null
+            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(channels, bottleneckSpatial) : null,
+            AttentionChannels = channels
         });
         _middleBlocks.Add(new UNetBlock
         {
@@ -466,7 +468,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 {
                     ResBlock = CreateResBlock(inChannels + skipChannels, outChannels, spatialSize),
                     AttentionBlock = useAttention ? CreateAttentionBlock(outChannels, spatialSize) : null,
-                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null
+                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null,
+                    AttentionChannels = outChannels
                 });
                 inChannels = outChannels;
             }
@@ -586,6 +589,75 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         foreach (var layer in EnumerateAllLayers())
             layer?.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Replaces every self- and cross-attention block with the result of <paramref name="decorator"/>,
+    /// so an adapter (LoRA and friends) can be injected without this class knowing about it.
+    /// </summary>
+    /// <param name="decorator">
+    /// Receives each attention block and a flag that is <c>true</c> for cross-attention, and returns
+    /// the layer to use in its place. Returning the block unchanged is allowed and is a no-op.
+    /// </param>
+    /// <returns>The number of blocks replaced.</returns>
+    /// <remarks>
+    /// <para>
+    /// This exists so parameter-efficient fine-tuning methods that target attention — T-LoRA
+    /// (arXiv:2507.05964) is the first caller — do not have to modify
+    /// <see cref="AiDotNet.Diffusion.Attention.DiffusionAttention{T}"/>, <c>MultiHeadAttentionLayer</c>
+    /// or <c>FlashAttentionLayer</c>, all of which are shared by every other diffusion model in the
+    /// library. Putting one model's mechanism in those would place it on everyone's hot path.
+    /// </para>
+    /// <para>
+    /// Replacements land in the same block slots, so <c>EnumerateAllLayers</c> continues to see them
+    /// in the same order and the index-identical <c>GetParameters</c>/<c>SetParameters</c> contract
+    /// still holds — provided the decorator's own parameter vector concatenates the wrapped block's
+    /// parameters ahead of its own, which is the contract a decorator must honour.
+    /// </para>
+    /// <para>
+    /// Call this BEFORE any forward pass. It changes the network's shape-resolved graph, so a plan
+    /// compiled by <see cref="CompileForward"/> beforehand would replay the undecorated network.
+    /// </para>
+    /// </remarks>
+    public int DecorateAttentionBlocks(Func<ILayer<T>, int, bool, ILayer<T>> decorator)
+    {
+        if (decorator is null) throw new ArgumentNullException(nameof(decorator));
+
+        // The block lists are built LAZILY. Without this the encoder/middle/decoder lists are still
+        // empty when a model decorates from its own constructor, so nothing gets wrapped and the model
+        // ends up undecorated while a clone — built from a predictor whose layers were realized by an
+        // earlier forward pass — gets wrapped for real. That asymmetry is invisible until parameter
+        // chunks are exchanged between the two, where it surfaced as "chunk length 16448 does not match
+        // layer parameter length 24704" with the difference being exactly one adapter.
+        EnsureLayersInitialized();
+
+        int replaced = 0;
+        foreach (var block in _encoderBlocks.Concat(_middleBlocks).Concat(_decoderBlocks))
+        {
+            // AttentionChannels is the width recorded when the block was BUILT. It is handed to the
+            // decorator so an adapter never has to infer it from GetOutputShape(), which answers
+            // differently before and after lazy shape resolution and so would decorate a different
+            // set of blocks in a fresh predictor than in one cloned from a resolved one.
+            int channels = block.AttentionChannels;
+
+            if (block.AttentionBlock is not null)
+            {
+                block.AttentionBlock = decorator(block.AttentionBlock, channels, false)
+                    ?? throw new InvalidOperationException(
+                        "The attention-block decorator returned null; return the original block to skip it.");
+                replaced++;
+            }
+
+            if (block.CrossAttentionBlock is not null)
+            {
+                block.CrossAttentionBlock = decorator(block.CrossAttentionBlock, channels, true)
+                    ?? throw new InvalidOperationException(
+                        "The cross-attention-block decorator returned null; return the original block to skip it.");
+                replaced++;
+            }
+        }
+
+        return replaced;
     }
 
     /// <summary>
@@ -925,6 +997,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // - Query: spatial features from x (reshaped internally)
         // - Key/Value: text embeddings from conditioning
         // - Output: attended features with same shape as x
+
+        // A decorated block must be unwrapped FIRST, so the inner block still gets the conditioning
+        // through its own dispatch below. Without this a wrapper matches none of the type tests and
+        // falls through to the single-argument Forward, which drops the conditioning silently: the
+        // model keeps running, computing cross-attention with no text embedding at all. Recursive, so
+        // stacked decorators all get their turn.
+        if (crossAttn is IAttentionBlockDecorator<T> decorator)
+        {
+            return decorator.PostProcess(ApplyCrossAttention(decorator.Inner, x, conditioning));
+        }
 
         // DiffusionCrossAttention uses ForwardWithContext for conditioning
         if (crossAttn is DiffusionCrossAttention<T> diffusionCrossAttn)
@@ -1745,5 +1827,18 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         public ILayer<T>? CrossAttentionBlock { get; set; }
         public ILayer<T>? Downsample { get; set; }
         public ILayer<T>? Upsample { get; set; }
+
+        /// <summary>
+        /// The channel width the attention blocks in this block were BUILT with.
+        /// </summary>
+        /// <remarks>
+        /// Recorded at construction because it is the only place the value is known unconditionally.
+        /// Deriving it later from <c>GetOutputShape()</c> is unsound: a freshly built predictor has
+        /// lazily-unresolved shapes while one that has run a forward pass (or was cloned from one)
+        /// does not, so the same UNet answers differently depending on its history. An adapter that
+        /// sizes itself from that shape therefore decorates a different set of blocks in a fresh model
+        /// than in its clone, which shifts every subsequent parameter chunk.
+        /// </remarks>
+        public int AttentionChannels { get; set; }
     }
 }

@@ -806,17 +806,6 @@ public class EditingModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task CACTIModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new CACTIModel<double>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.True(model.ParameterCount > 0);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task ConsisLoRAModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ConsisLoRAModel<double>();

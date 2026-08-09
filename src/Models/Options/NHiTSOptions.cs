@@ -56,6 +56,7 @@ public class NHiTSOptions<T> : TimeSeriesRegressionOptions<T>
     /// Initializes a new instance by copying from another instance.
     /// </summary>
     public NHiTSOptions(NHiTSOptions<T> other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
