@@ -154,10 +154,25 @@ public class ModelShapeDiscoveryProbeTests
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
 
+        // Optional namespace filter, for MEASURING ONE FAMILY before declaring its law. Without it the
+        // candidate list is alphabetical across the whole assembly, so a family's own models are spread
+        // across every window and a budgeted run reads a sample of unrelated types. Declaring a family
+        // contract from that sample is exactly the mistake that put /32 on ten segmentation models that
+        // did not have it. Empty (the CI default) keeps the full alphabetical list.
+        string? nsFilter = Environment.GetEnvironmentVariable("ADNSHAPE_PROBE_NAMESPACE");
+        if (!string.IsNullOrWhiteSpace(nsFilter))
+        {
+            candidates = candidates
+                .Where(t => t.Namespace is not null
+                            && t.Namespace.Contains(nsFilter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         int budget = EnvInt("ADNSHAPE_PROBE_BUDGET", ModelBudget, 1);
         int offset = EnvInt("ADNSHAPE_PROBE_OFFSET", 0, 0);
         if (offset > 0) candidates = candidates.Skip(offset).ToList();
-        _out.WriteLine($"candidates={candidates.Count}  budget={budget}  offset={offset}");
+        _out.WriteLine($"candidates={candidates.Count}  budget={budget}  offset={offset}"
+            + (string.IsNullOrWhiteSpace(nsFilter) ? "" : $"  namespace~{nsFilter}"));
 
         int probed = 0, reproduced = 0, confirmed = 0, parameterised = 0, ambiguous = 0, unconfirmed = 0;
         int reachedByArchitectureCtor = 0;
