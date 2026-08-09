@@ -55,6 +55,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, Artem Babenko")]
 public class TabRRegression<T> : TabRBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The task head. Everything else is the shared backbone, which the base folds ahead of it in every parameter surface.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _regressionHead };
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
@@ -66,11 +71,6 @@ public class TabRRegression<T> : TabRBase<T>
     /// Gets the output dimension.
     /// </summary>
     public int OutputDimension => _outputDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the TabRRegression class.
