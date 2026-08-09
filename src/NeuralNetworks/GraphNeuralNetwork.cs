@@ -385,26 +385,63 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 InitialLearningRate = options.LearningRate,
                 // Kipf & Welling regularize only the first graph-convolution
                 // weight matrix, not later weights or any biases.
+                //
+                // The range is resolved from the CONSTRUCTED layers, not computed as
+                // CalculatedInputSize * HiddenSize. That product assumed two things a custom
+                // Architecture.Layers can break: that the first graph convolution is the first
+                // trainable block in the flat parameter vector (so its weights start at index 0),
+                // and that its shape matches the option-derived one. Either being false silently
+                // shrinks a different slice of parameters than the paper's rule names. It has to
+                // be lazy because the constructor calls this BEFORE InitializeLayers.
                 Regularization = new FirstLayerWeightsL2Regularization(
                     options.L2Regularization,
-                    model.Architecture.CalculatedInputSize * options.HiddenSize)
+                    () => ResolveFirstGraphConvWeightRange(model))
             });
+    }
+
+    /// <summary>
+    /// Locates the first graph-convolution weight matrix inside the flat parameter vector, as the
+    /// half-open range <c>[start, start + count)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>GraphConvolutionalLayer</c> lays its parameters out as weights then bias, and
+    /// <c>InputFeatures * OutputFeatures</c> is the weight block, so the bias is excluded by taking
+    /// only that prefix of the layer's own slice. An empty range means no graph convolution is
+    /// present -- possible with a fully custom layer list -- and regularizing nothing is the correct
+    /// reading of a rule that names a layer this network does not have.
+    /// </remarks>
+    private static (int Start, int Count) ResolveFirstGraphConvWeightRange(GraphNeuralNetwork<T> model)
+    {
+        int start = 0;
+        foreach (var layer in model.Layers)
+        {
+            if (layer is GraphConvolutionalLayer<T> graphConv)
+            {
+                return (start, checked(graphConv.InputFeatures * graphConv.OutputFeatures));
+            }
+
+            start = checked(start + (int)layer.ParameterCount);
+        }
+
+        return (0, 0);
     }
 
     private sealed class FirstLayerWeightsL2Regularization
         : AiDotNet.Regularization.RegularizationBase<T, Tensor<T>, Tensor<T>>
     {
-        private readonly int _weightCount;
+        private readonly Func<(int Start, int Count)> _resolveRange;
+        private bool _rangeResolved;
+        private int _start;
+        private int _weightCount;
 
-        public FirstLayerWeightsL2Regularization(double strength, int weightCount)
+        public FirstLayerWeightsL2Regularization(double strength, Func<(int Start, int Count)> resolveRange)
             : base(new RegularizationOptions
             {
                 Type = RegularizationType.L2,
                 Strength = strength
             })
         {
-            if (weightCount < 0)
-                throw new ArgumentOutOfRangeException(nameof(weightCount));
+            _resolveRange = resolveRange ?? throw new ArgumentNullException(nameof(resolveRange));
 
             // STRENGTH IS A SHRINKAGE FACTOR, so it has to land in [0, 1]. Regularize computes
             // 1 - strength: above 1 the shrinkage goes negative and every first-layer weight FLIPS
@@ -416,8 +453,32 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                     nameof(strength), strength,
                     "L2 shrinkage strength must be in [0, 1]; 1 - strength is applied as a multiplier.");
             }
+        }
 
-            _weightCount = weightCount;
+        /// <summary>
+        /// Resolves and caches the regularized parameter range on first use.
+        /// </summary>
+        /// <remarks>
+        /// Deferred because the network constructs its optimizer before its layers, so the range does
+        /// not exist yet at construction. Cached because the layer shapes are fixed once built, and
+        /// re-walking them on every gradient step would put a layer scan on the training path.
+        /// </remarks>
+        private (int Start, int Count) Range()
+        {
+            if (!_rangeResolved)
+            {
+                (_start, _weightCount) = _resolveRange();
+                if (_start < 0 || _weightCount < 0)
+                {
+                    throw new InvalidOperationException(
+                        $"The first-layer weight range resolved to start {_start}, count {_weightCount}; " +
+                        "both must be non-negative.");
+                }
+
+                _rangeResolved = true;
+            }
+
+            return (_start, _weightCount);
         }
 
         public override Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients)
@@ -427,16 +488,24 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
 
             var result = new Vector<T>(gradient.Length);
             var strength = NumOps.FromDouble(Options.Strength);
-            int regularizedCount = Math.Min(_weightCount, gradient.Length);
+            var (start, end) = ClampedRange(gradient.Length);
 
             for (int i = 0; i < gradient.Length; i++)
             {
-                result[i] = i < regularizedCount
+                result[i] = i >= start && i < end
                     ? NumOps.Add(gradient[i], NumOps.Multiply(strength, coefficients[i]))
                     : gradient[i];
             }
 
             return result;
+        }
+
+        /// <summary>The regularized half-open index range, clipped to a vector of <paramref name="length"/>.</summary>
+        private (int Start, int End) ClampedRange(int length)
+        {
+            var (start, count) = Range();
+            int clampedStart = Math.Min(start, length);
+            return (clampedStart, Math.Min(clampedStart + count, length));
         }
 
         public override Tensor<T> Regularize(Tensor<T> gradient, Tensor<T> coefficients)
@@ -449,10 +518,10 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         {
             var result = new Vector<T>(data.Length);
             var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
-            int regularizedCount = Math.Min(_weightCount, data.Length);
+            var (start, end) = ClampedRange(data.Length);
 
             for (int i = 0; i < data.Length; i++)
-                result[i] = i < regularizedCount ? NumOps.Multiply(data[i], shrinkage) : data[i];
+                result[i] = i >= start && i < end ? NumOps.Multiply(data[i], shrinkage) : data[i];
 
             return result;
         }
@@ -461,13 +530,14 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         {
             var result = new Matrix<T>(data.Rows, data.Columns);
             var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
+            var (start, end) = ClampedRange(data.Rows * data.Columns);
             int flatIndex = 0;
 
             for (int row = 0; row < data.Rows; row++)
             {
                 for (int column = 0; column < data.Columns; column++, flatIndex++)
                 {
-                    result[row, column] = flatIndex < _weightCount
+                    result[row, column] = flatIndex >= start && flatIndex < end
                         ? NumOps.Multiply(data[row, column], shrinkage)
                         : data[row, column];
                 }

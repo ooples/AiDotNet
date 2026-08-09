@@ -194,6 +194,19 @@ public sealed class LayerGraph<T>
             if (node.Inputs.Count == 0) incoming.Add(input);
             else foreach (int src in node.Inputs) incoming.Add(values[src]);
 
+            // A multi-input layer gets the incoming tensors THEMSELVES, not one combined tensor.
+            // AddLayer, MultiplyLayer and ConcatenateLayer define their own combination -- that is what
+            // they are -- and their single-input Forward throws by contract. Feeding them the combined
+            // tensor sent them down LayerBase.Forward -> ForwardTraced and every join over one of them
+            // died with "requires multiple inputs" at the first forward. The node's own EdgeTransform
+            // is skipped for these, since the layer supersedes it; for every other layer the transform
+            // still decides how the branches merge.
+            if (node.Layer is LayerBase<T> { RequiresMultipleInputs: true } multiInputLayer && incoming.Count > 1)
+            {
+                values[i] = multiInputLayer.Forward(incoming.ToArray());
+                continue;
+            }
+
             var fed = node.EdgeTransform is not null
                 ? node.EdgeTransform(incoming)
                 : incoming[0];
