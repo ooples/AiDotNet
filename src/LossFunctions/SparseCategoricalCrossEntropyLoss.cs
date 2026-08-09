@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.LossFunctions;
@@ -207,10 +207,9 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         }
 
         // loss = -mean(gathered log-probs)
-        // A SCALAR DIVISOR, NOT A RANK-1 [1] TENSOR. Dividing the rank-0 sum by a [1] tensor
-        // broadcast the result back up to [1], so this was the one loss in the file set returning a
-        // rank-1 root -- against the ComputeTapeLoss contract, which needs rank-0 to seed the
-        // backward pass. TensorDivideScalar keeps the reduction at rank 0.
+        //
+        // Divide by a scalar, not by a rank-1 [1] tensor: a [1] divisor broadcasts the result back up
+        // to rank 1, and ComputeTapeLoss must return rank 0 to seed the backward pass.
         var sum = Engine.ReduceSum(gatheredLogP, null, keepDims: false);
         return Engine.TensorNegate(
             Engine.TensorDivideScalar(sum, NumOps.FromDouble(batchSize)));

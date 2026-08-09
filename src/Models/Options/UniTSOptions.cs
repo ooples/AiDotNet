@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace AiDotNet.Models.Options;
 
@@ -75,7 +75,15 @@ public class UniTSOptions<T> : TimeSeriesRegressionOptions<T>
         NumHeads = other.NumHeads;
         // Cloned, not shared: a bare assignment leaves the clone and the original writing
         // through the SAME buffer, so mutating one silently reconfigures the other.
-        ConvKernelSizes = other.ConvKernelSizes is null ? null! : (int[])other.ConvKernelSizes.Clone();
+        // A null here would be stored as a non-nullable property holding null, so the failure
+        // surfaces much later as a null reference in model code with nothing pointing back at the
+        // clone that produced it. Reject it at the boundary instead.
+        if (other.ConvKernelSizes is null)
+        {
+            throw new ArgumentException(
+                $"{nameof(other.ConvKernelSizes)} must not be null.", nameof(other));
+        }
+        ConvKernelSizes = (int[])other.ConvKernelSizes.Clone();
         DropoutRate = other.DropoutRate;
         TaskType = other.TaskType;
         NumClasses = other.NumClasses;

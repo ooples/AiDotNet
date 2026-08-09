@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.LossFunctions;
@@ -46,14 +46,10 @@ public class CompositeLoss<T> : LossFunctionBase<T>
     /// <param name="terms">The loss terms and their absolute coefficients. Terms are <see cref="LossFunctionBase{T}"/> rather than <see cref="ILossFunction{T}"/> because the composite must forward <c>ComputeTapeLoss</c>, which the interface does not declare.</param>
     /// <exception cref="ArgumentException">If any individual loss is null.</exception>
     /// <remarks>
-    /// A NULL OR EMPTY <paramref name="terms"/> IS NOT AN ERROR: it falls back to SAM's published
-    /// mask objective, focal + dice in a 20:1 ratio. That is deliberate, so a parameterless
-    /// construction stays meaningful and consistent with the Segmentation category this class
-    /// declares -- but it means a caller who passes an empty array trains against a segmentation
-    /// objective rather than receiving an exception. The documentation previously promised
-    /// ArgumentNullException for null terms and ArgumentException for an empty array, and the
-    /// constructor throws neither; a caller reading it would have guarded against an exception that
-    /// never arrives.
+    /// A NULL OR EMPTY <paramref name="terms"/> IS NOT AN ERROR: it selects SAM's published mask
+    /// objective, focal + dice in a 20:1 ratio, so a parameterless construction stays meaningful and
+    /// consistent with the Segmentation category this class declares. A caller passing an empty array
+    /// therefore trains against that segmentation objective; no exception is thrown for it.
     /// </remarks>
     public CompositeLoss(params (LossFunctionBase<T> Loss, double Weight)[] terms)
     {

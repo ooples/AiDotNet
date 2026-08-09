@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.LossFunctions;
@@ -159,7 +159,21 @@ public sealed class ABINetMultiTaskLoss<T> : LossFunctionBase<T>
         var gradL = _characterLoss.CalculateDerivative(languageP, languageA);
         var gradF = _characterLoss.CalculateDerivative(fusionP, fusionA);
 
-        int block = gradV.Length;
+        // THE THREE BRANCH GRADIENTS HAVE TO BE FULL LENGTH, and _characterLoss is caller-supplied
+        // through the constructor, so that is not a closed set of implementations to reason about. A
+        // loss returning a reduced or per-sample gradient would make every write below land at the
+        // wrong offset and leave the tail of `gradient` at zero -- no exception, just a silently
+        // truncated gradient handed to the optimizer, which is the failure this method was rewritten
+        // to remove.
+        int block = predicted.Length / 3;
+        if (gradV.Length != block || gradL.Length != block || gradF.Length != block)
+        {
+            throw new InvalidOperationException(
+                $"ABINet's character loss returned gradients of length {gradV.Length}/{gradL.Length}/" +
+                $"{gradF.Length} for branches of length {block}. Each branch gradient must match its " +
+                "branch, or the reassembled gradient is misaligned.");
+        }
+
         var gradient = new Vector<T>(predicted.Length);
         var visionWeight = NumOps.FromDouble(_visionLossWeight);
         var languageWeight = NumOps.FromDouble(_languageLossWeight);

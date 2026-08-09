@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace AiDotNet.Models.Options;
 
@@ -80,7 +80,15 @@ public class MQCNNOptions<T> : TimeSeriesRegressionOptions<T>
         ForecastHorizon = other.ForecastHorizon;
         // Cloned, not shared: a bare assignment leaves the clone and the original writing
         // through the SAME buffer, so mutating one silently reconfigures the other.
-        Quantiles = other.Quantiles is null ? null! : (double[])other.Quantiles.Clone();
+        // A null here would be stored as a non-nullable property holding null, so the failure
+        // surfaces much later as a null reference in model code with nothing pointing back at the
+        // clone that produced it. Reject it at the boundary instead.
+        if (other.Quantiles is null)
+        {
+            throw new ArgumentException(
+                $"{nameof(other.Quantiles)} must not be null.", nameof(other));
+        }
+        Quantiles = (double[])other.Quantiles.Clone();
         EncoderChannels = other.EncoderChannels;
         DecoderChannels = other.DecoderChannels;
         KernelSize = other.KernelSize;

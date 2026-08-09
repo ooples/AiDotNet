@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.LinearAlgebra;
+﻿using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.LossFunctions;
 
@@ -126,7 +126,31 @@ public sealed class ParaformerObjective<T> : LossFunctionBase<T>
         // into its private backing field from loss code.
         var countShape = (int[])predictedCount.Shape.ToArray().Clone();
         var targetLength = suppliedTargetCount ?? new Tensor<T>(countShape);
-        if (suppliedTargetCount is null)
+        if (suppliedTargetCount is not null)
+        {
+            // A SUPPLIED COUNT IS NOT CHECKED BY ANYTHING ELSE. It goes straight into TensorSubtract
+            // below, where a [1] against a predicted [8], or an [8, 1] against an [8], BROADCASTS
+            // rather than fails -- and the MAE term then supervises the alpha head against the wrong
+            // per-instance counts while returning a finite, plausible loss. The fallback branch cannot
+            // reach this because it builds its tensor from countShape.
+            if (suppliedTargetCount.Shape.Length != predictedCount.Shape.Length)
+            {
+                throw new ArgumentException(
+                    $"Paraformer's supplied target token count has rank {suppliedTargetCount.Shape.Length}, "
+                    + $"but the predicted count has rank {predictedCount.Shape.Length}. They must match "
+                    + "exactly; a broadcastable shape would silently score against the wrong counts.");
+            }
+
+            for (int d = 0; d < countShape.Length; d++)
+            {
+                if (suppliedTargetCount.Shape[d] == countShape[d]) continue;
+
+                throw new ArgumentException(
+                    $"Paraformer's supplied target token count differs from the predicted count at "
+                    + $"dimension {d} ({suppliedTargetCount.Shape[d]} vs {countShape[d]}).");
+            }
+        }
+        else
         {
             int positions = target.Rank > 1 ? target.Shape[1] : target.Length;
             var lengthValue = NumOps.FromDouble(positions);
