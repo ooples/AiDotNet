@@ -11,6 +11,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
@@ -20,41 +21,23 @@ using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.StateSpace;
 
 /// <summary>
-/// TimeMachine (Time Series State Space Model) for multi-scale time series forecasting.
+/// TimeMachine's four-Mamba architecture for long-term time series forecasting.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// TimeMachine is a state space model specifically designed for time series forecasting
-/// that combines multiple SSM blocks at different temporal scales to capture both
-/// short-term and long-term patterns effectively.
+/// TimeMachine embeds the input length twice and uses two outer and two inner Mamba
+/// branches in complementary channel/embedding orientations.
 /// </para>
 /// <para><b>For Beginners:</b> TimeMachine is a modern architecture whose key insight is
-/// that "A Time Series is Worth 4 Mambas" - using multiple SSM blocks at different scales:
-///
-/// <b>The Core Idea:</b>
-/// Time series data contains patterns at multiple temporal scales:
-/// - High-frequency noise and short-term fluctuations
-/// - Daily, weekly, monthly patterns
-/// - Long-term trends
-///
-/// TimeMachine captures all these by processing the data at multiple scales simultaneously.
-///
-/// <b>How It Works:</b>
-/// 1. <b>Temporal Decomposition:</b> Separates the signal into multiple scales
-/// 2. <b>Multi-Scale SSM:</b> Each scale has its own Mamba-style SSM blocks
-/// 3. <b>Scale-wise Attention:</b> Learns which scales are most important
-/// 4. <b>Reconstruction:</b> Combines multi-scale outputs for final forecast
-///
-/// <b>Architecture:</b>
-/// - Input embedding with reversible instance normalization (RevIN)
-/// - 4 parallel SSM branches at different downsampling rates
-/// - Attention-based fusion of scale outputs
-/// - Output projection with de-normalization
+/// that "A Time Series is Worth 4 Mambas." After RevIN, E1 embeds the history length.
+/// Two outer Mambas process that representation in complementary orientations. E2 then
+/// creates a smaller representation for two inner Mambas. Residual projection P1 joins
+/// the inner path, its result is concatenated with the outer path, and P2 produces the forecast.
 ///
 /// <b>Key Benefits:</b>
 /// - Linear complexity O(n) from SSM backbone
-/// - Multi-scale captures patterns at all frequencies
+/// - Complementary channel/embedding scans capture cross-variate and temporal structure
 /// - RevIN handles non-stationarity
 /// - State-of-the-art results on long-term forecasting benchmarks
 /// </para>
@@ -89,18 +72,26 @@ public class TimeMachine<T> : ForecastingModelBase<T>
 
 
     #region Native Mode Fields
-    private DenseLayer<T>? _inputEmbedding;
-    private List<DenseLayer<T>>? _temporalDecompLayers;
-    private List<List<DenseLayer<T>>>? _scaleSSMLayers;
-    private List<LayerNormalizationLayer<T>>? _layerNorms;
-    private DenseLayer<T>? _scaleFusion;
+    private DenseLayer<T>? _firstEmbedding;
+    private DropoutLayer<T>? _firstDropout;
+    private MambaBlock<T>? _outerChannelMamba;
+    private MambaBlock<T>? _outerEmbeddingMamba;
+    private DenseLayer<T>? _secondEmbedding;
+    private DropoutLayer<T>? _secondDropout;
+    private MambaBlock<T>? _innerEmbeddingMamba;
+    private MambaBlock<T>? _innerChannelMamba;
+    private DenseLayer<T>? _residualProjection;
     private DenseLayer<T>? _outputProjection;
+    private bool _usesDefaultArchitecture;
     #endregion
 
     #region Shared Fields
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly TimeMachineOptions<T> _options;
+
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -115,6 +106,16 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private int _convKernelSize;
     private bool _useMultiScaleAttention;
     private bool _useReversibleNormalization;
+
+    /// <summary>
+    /// Variance floor for TimeMachine's reversible instance normalization.
+    /// </summary>
+    /// <remarks>
+    /// Kept at the 1e-8 the original hand-rolled implementation used, so the floor's magnitude is
+    /// unchanged. It is now applied as sqrt(var + eps) rather than sqrt(var) + eps -- the standard
+    /// RevIN form (Kim et al. 2022), which is better conditioned on a constant series.
+    /// </remarks>
+    private const double TimeMachineRevInEpsilon = 1e-8;
     private string _decompositionMethod;
     private int _numFeatures;
 
@@ -154,7 +155,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is how many past time steps TimeMachine looks at.
-    /// The multi-scale processing efficiently handles long contexts.
+    /// The linear-time Mamba branches efficiently handle long contexts.
     /// </para>
     /// </remarks>
     public int ContextLength => _contextLength;
@@ -180,22 +181,21 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <summary>
-    /// Gets the number of temporal scales used.
+    /// Gets the retained legacy branch-count setting.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> TimeMachine processes data at multiple scales
-    /// (4 by default, corresponding to "4 Mambas"). Each scale captures patterns
-    /// at a different temporal granularity.
+    /// <para><b>For Beginners:</b> The paper graph has exactly four Mambas arranged as
+    /// two outer and two inner branches. This value remains for configuration compatibility.
     /// </para>
     /// </remarks>
     public int NumScales => _numScales;
 
     /// <summary>
-    /// Gets whether multi-scale attention is used for fusion.
+    /// Gets the retained legacy multi-scale-attention setting.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> When true, the model learns to dynamically weight
-    /// different scales based on the input. This provides more flexibility.
+    /// <para><b>For Beginners:</b> The published graph uses addition and concatenation,
+    /// not attention; this value does not alter the paper-faithful default architecture.
     /// </para>
     /// </remarks>
     public bool UseMultiScaleAttention => _useMultiScaleAttention;
@@ -273,8 +273,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Use this constructor to create a TimeMachine model
-    /// that can be trained on your data. The model uses multi-scale SSM processing
-    /// to capture patterns at different temporal granularities.
+    /// that can be trained on your data. The model uses four Mamba branches in the
+    /// paper's outer/inner arrangement.
     /// </para>
     /// </remarks>
     public TimeMachine(
@@ -316,16 +316,13 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method sets up the neural network layers
-    /// that implement TimeMachine's multi-scale SSM architecture:
+    /// that implement TimeMachine's four-Mamba architecture:
     ///
     /// <b>Layer Structure:</b>
-    /// 1. Input embedding with reversible normalization
-    /// 2. For each scale (4 by default):
-    ///    - Temporal decomposition (downsampling)
-    ///    - Multiple SSM layers (Mamba-style)
-    ///    - Upsampling back to original length
-    /// 3. Multi-scale attention fusion
-    /// 4. Output projection to forecast horizon
+    /// 1. E1 and dropout
+    /// 2. Two outer Mamba branches
+    /// 3. E2, dropout, and two inner Mamba branches
+    /// 4. P1 residual, branch concatenation, and P2 output projection
     /// </para>
     /// </remarks>
     protected override void InitializeLayers()
@@ -348,7 +345,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
                 _expandFactor,
                 _convKernelSize,
                 _useMultiScaleAttention,
-                _numFeatures));
+                _numFeatures,
+                _options.DropoutRate));
 
             ExtractLayerReferences();
         }
@@ -360,40 +358,57 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> After creating all layers, we keep direct references
     /// to important ones for quick access during computation. This includes the input
-    /// embedding, temporal decomposition layers, SSM layers for each scale, and the
-    /// fusion and output layers.
+    /// two embeddings, four Mamba branches, and the two output projections.
     /// </para>
     /// </remarks>
     private void ExtractLayerReferences()
     {
-        _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
-        _layerNorms = Layers.OfType<LayerNormalizationLayer<T>>().ToList();
-        _outputProjection = Layers.OfType<DenseLayer<T>>().LastOrDefault();
-
-        // Organize SSM layers by scale
-        var allDense = Layers.OfType<DenseLayer<T>>().ToList();
-        _scaleSSMLayers = new List<List<DenseLayer<T>>>();
-        _temporalDecompLayers = new List<DenseLayer<T>>();
-
-        // Simple grouping - each scale has multiple dense layers
-        int layersPerScale = (allDense.Count - 2) / _numScales; // Exclude input/output
-        for (int s = 0; s < _numScales; s++)
+        // Ahamed et al. §3 / the official implementation use this exact graph:
+        // E1 -> two outer Mambas -> E2 -> two inner Mambas -> P1/residual -> concat -> P2.
+        // Keep the assertion structural so a flat Dense substitute cannot silently satisfy
+        // the model contract again.
+        if (Layers.Count != 10
+            || Layers[0] is not DenseLayer<T> firstEmbedding
+            || Layers[1] is not DropoutLayer<T> firstDropout
+            || Layers[2] is not MambaBlock<T> outerChannel
+            || Layers[3] is not MambaBlock<T> outerEmbedding
+            || Layers[4] is not DenseLayer<T> secondEmbedding
+            || Layers[5] is not DropoutLayer<T> secondDropout
+            || Layers[6] is not MambaBlock<T> innerEmbedding
+            || Layers[7] is not MambaBlock<T> innerChannel
+            || Layers[8] is not DenseLayer<T> residualProjection
+            || Layers[9] is not DenseLayer<T> outputProjection)
         {
-            int start = 1 + s * layersPerScale;
-            int count = Math.Min(layersPerScale, allDense.Count - start - 1);
-            if (count > 0)
-            {
-                var scaleLayers = allDense.Skip(start).Take(count).ToList();
-                _scaleSSMLayers.Add(scaleLayers);
-                // First layer of each scale is the temporal decomposition
-                if (scaleLayers.Count > 0)
-                {
-                    _temporalDecompLayers.Add(scaleLayers[0]);
-                }
-            }
+            throw new InvalidOperationException(
+                "The default TimeMachine architecture must contain E1, dropout, four Mamba blocks, " +
+                "E2, dropout, P1, and P2 in the paper-defined order.");
         }
 
-        _scaleFusion = allDense.Count > 2 ? allDense[allDense.Count - 2] : null;
+        int secondEmbeddingDimension = Math.Max(1, _modelDimension / 2);
+        if (firstEmbedding.GetOutputShape()[0] != _modelDimension
+            || secondEmbedding.GetOutputShape()[0] != secondEmbeddingDimension
+            || residualProjection.GetOutputShape()[0] != _modelDimension
+            || outputProjection.GetOutputShape()[0] != _forecastHorizon
+            || outerChannel.ModelDimension != _modelDimension
+            || outerEmbedding.ModelDimension != 1
+            || innerEmbedding.ModelDimension != 1
+            || innerChannel.ModelDimension != secondEmbeddingDimension)
+        {
+            throw new InvalidOperationException(
+                "The default TimeMachine layer dimensions do not match the paper's four-branch architecture.");
+        }
+
+        _firstEmbedding = firstEmbedding;
+        _firstDropout = firstDropout;
+        _outerChannelMamba = outerChannel;
+        _outerEmbeddingMamba = outerEmbedding;
+        _secondEmbedding = secondEmbedding;
+        _secondDropout = secondDropout;
+        _innerEmbeddingMamba = innerEmbedding;
+        _innerChannelMamba = innerChannel;
+        _residualProjection = residualProjection;
+        _outputProjection = outputProjection;
+        _usesDefaultArchitecture = true;
     }
 
     /// <summary>
@@ -402,8 +417,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <param name="layers">The list of custom layers to validate.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> When users provide custom layers, this method
-    /// ensures they form a valid TimeMachine architecture with proper multi-scale
-    /// processing capability.
+    /// ensures the supplied sequential architecture has enough layers to be useful.
     /// </para>
     /// </remarks>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
@@ -428,7 +442,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// input data through the TimeMachine model to generate forecasts.
     ///
     /// In ONNX mode, it uses the optimized pretrained model.
-    /// In native mode, it runs through our custom multi-scale layer implementation.
+    /// In native mode, it runs the four-Mamba graph or the user's custom layer stack.
     /// </para>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -443,10 +457,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <param name="target">Target tensor of shape [batch, forecast_horizon].</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method trains TimeMachine using standard
-    /// backpropagation. The multi-scale SSM layers learn to:
-    /// 1. Decompose the input into different temporal scales
-    /// 2. Process each scale with Mamba-style SSM blocks
-    /// 3. Fuse the multi-scale outputs for accurate forecasting
+    /// backpropagation. The outer and inner Mamba branches learn complementary
+    /// channel-axis and embedding-axis dynamics before their residual/concatenation head.
     ///
     /// Only available in native mode (not ONNX).
     /// </para>
@@ -525,7 +537,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TimeMachine<T>(Architecture, _options);
+        return new TimeMachine<T>(Architecture, new TimeMachineOptions<T>(_options), _numFeatures);
     }
 
     /// <summary>
@@ -588,8 +600,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <returns>Forecast tensor of shape [batch, forecast_horizon].</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This is the main forecasting interface.
-    /// Given historical data, TimeMachine processes it at multiple temporal scales
-    /// using SSM blocks and produces future predictions.
+    /// Given historical data, TimeMachine processes it through its four Mamba branches
+    /// and produces future predictions.
     /// </para>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
@@ -646,8 +658,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <returns>Forecast tensor containing all predicted steps.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Autoregressive forecasting predicts one step,
-    /// then uses that prediction as input for the next step. TimeMachine's multi-scale
-    /// structure helps maintain coherent predictions across multiple steps.
+    /// then uses that prediction as input for the next step. TimeMachine's residual
+    /// branch structure helps maintain coherent predictions across multiple steps.
     /// </para>
     /// </remarks>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
@@ -721,41 +733,28 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         if (!_useReversibleNormalization)
             return input;
 
-        // Compute mean and std along time dimension
-        int length = input.Data.Length;
-        T sum = NumOps.Zero;
-        for (int i = 0; i < length; i++)
+        // The TimeMachine reference applies RevIN independently to each [batch, channel]
+        // series over the time axis. For its native [B, L, M] layout, transpose to
+        // [B, M, L], collapse B*M to rows, and use the shared tape-aware normalization.
+        if (_usesDefaultArchitecture && input.Rank == 3)
         {
-            sum = NumOps.Add(sum, input.Data.Span[i]);
-        }
-        T mean = NumOps.Divide(sum, NumOps.FromDouble(length));
-
-        T variance = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            T diff = NumOps.Subtract(input.Data.Span[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(length));
-        T std = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)) + 1e-8);
-
-        // Store the instance mean/std so DenormalizeForecast can reverse the
-        // transform — the original code dropped these, so the forecast was never
-        // restored to the input scale and constant inputs of different levels
-        // collapsed to identical forecasts.
-        _revinMean = new Vector<T>(1) { [0] = mean };
-        _revinStd = new Vector<T>(1) { [0] = std };
-
-        // Normalize
-        var normalized = new Tensor<T>(input._shape);
-        for (int i = 0; i < length; i++)
-        {
-            normalized.Data.Span[i] = NumOps.Divide(
-                NumOps.Subtract(input.Data.Span[i], mean),
-                std);
+            int batch = input.Shape[0];
+            int context = input.Shape[1];
+            int features = input.Shape[2];
+            var channelMajor = Engine.TensorPermute(input, new[] { 0, 2, 1 });
+            var rows = Engine.Reshape(channelMajor, new[] { batch * features, context });
+            var normalizedRows = NormalizeInstanceOnTape(
+                rows, TimeMachineRevInEpsilon, out _revinMean, out _revinStd);
+            var normalizedChannelMajor = Engine.Reshape(
+                normalizedRows, new[] { batch, features, context });
+            return Engine.TensorPermute(normalizedChannelMajor, new[] { 0, 2, 1 });
         }
 
-        return normalized;
+        // Custom layer stacks retain the historical single-instance convention.
+        var oneRow = Engine.Reshape(input, new[] { 1, input.Length });
+        var normalized = NormalizeInstanceOnTape(
+            oneRow, TimeMachineRevInEpsilon, out _revinMean, out _revinStd);
+        return Engine.Reshape(normalized, (int[])input._shape.Clone());
     }
 
     /// <summary>
@@ -766,6 +765,31 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// </summary>
     private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
     {
+        if (_usesDefaultArchitecture && forecast.Rank == 3)
+        {
+            int batch = forecast.Shape[0];
+            int horizon = forecast.Shape[1];
+            int features = forecast.Shape[2];
+            int rows = batch * features;
+            if (_revinMean.Length != rows || _revinStd.Length != rows)
+                return forecast;
+
+            var channelMean = new Tensor<T>(new[] { rows, 1 });
+            var channelStd = new Tensor<T>(new[] { rows, 1 });
+            for (int row = 0; row < rows; row++)
+            {
+                channelMean.Data.Span[row] = _revinMean[row];
+                channelStd.Data.Span[row] = _revinStd[row];
+            }
+
+            var channelMajor = Engine.TensorPermute(forecast, new[] { 0, 2, 1 });
+            var flat = Engine.Reshape(channelMajor, new[] { rows, horizon });
+            var channelScaled = Engine.TensorBroadcastMultiply(flat, channelStd);
+            var channelShifted = Engine.TensorBroadcastAdd(channelScaled, channelMean);
+            var restoredChannelMajor = Engine.Reshape(channelShifted, new[] { batch, features, horizon });
+            return Engine.TensorPermute(restoredChannelMajor, new[] { 0, 2, 1 });
+        }
+
         if (_revinMean.Length != 1 || _revinStd.Length != 1)
             return forecast;
 
@@ -820,13 +844,22 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// the TimeMachine architecture:
     /// 1. Apply reversible normalization (if enabled)
     /// 2. Embed input to model dimension
-    /// 3. For each scale: decompose, process with SSM, upsample
-    /// 4. Fuse multi-scale outputs
-    /// 5. Project to forecast horizon
-    /// 6. Apply reverse normalization (if enabled)
+    /// 3. Run the outer and inner Mamba pairs with their residuals
+    /// 4. Concatenate the branch results and project to the forecast horizon
+    /// 5. Apply reverse normalization (if enabled)
     /// </para>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
+    {
+        return _usesDefaultArchitecture
+            ? ForwardDefaultArchitecture(input, null)
+            : ForwardCustomArchitecture(input);
+    }
+
+    /// <summary>
+    /// Runs a user-provided layer list as the sequential graph supplied by the user.
+    /// </summary>
+    private Tensor<T> ForwardCustomArchitecture(Tensor<T> input)
     {
         var current = FlattenInput(input);
 
@@ -875,6 +908,163 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Runs the four-Mamba graph from Ahamed et al. (2024) and the official implementation.
+    /// </summary>
+    private Tensor<T> ForwardDefaultArchitecture(
+        Tensor<T> input,
+        Dictionary<string, Tensor<T>>? activations)
+    {
+        if (_firstEmbedding is null || _firstDropout is null
+            || _outerChannelMamba is null || _outerEmbeddingMamba is null
+            || _secondEmbedding is null || _secondDropout is null
+            || _innerEmbeddingMamba is null || _innerChannelMamba is null
+            || _residualProjection is null || _outputProjection is null)
+        {
+            throw new InvalidOperationException("The default TimeMachine layers have not been initialized.");
+        }
+
+        var paperInput = PreparePaperInput(input, out var inputLayout);
+        int batch = paperInput.Shape[0];
+        int context = paperInput.Shape[1];
+        int features = paperInput.Shape[2];
+
+        if (_useReversibleNormalization)
+            paperInput = ApplyInstanceNormalization(paperInput);
+
+        // [B, L, M] -> [B*M, 1, L], matching ch_ind=1 in official TimeMachine.py.
+        var channelMajor = Engine.TensorPermute(paperInput, new[] { 0, 2, 1 });
+        var current = Engine.Reshape(channelMajor, new[] { batch * features, 1, context });
+
+        var firstEmbedding = _firstEmbedding.Forward(current);                  // E1: L -> n1
+        CaptureActivation(activations, 0, firstEmbedding);
+        var firstResidual = firstEmbedding;
+        current = _firstDropout.Forward(firstEmbedding);
+        CaptureActivation(activations, 1, current);
+
+        // Outer pair. Mamba 3 consumes [B*M, 1, n1]; Mamba 4 consumes its
+        // transposition [B*M, n1, 1]. Their outputs are restored and summed.
+        // AiDotNet's reusable MambaBlock wraps its mixer in an internal residual;
+        // mamba_ssm.Mamba in the TimeMachine reference is the bare mixer. Remove that
+        // wrapper residual here, then apply only the paper's explicit graph residuals.
+        var outerChannel = Engine.TensorSubtract(_outerChannelMamba.Forward(current), current);
+        CaptureActivation(activations, 2, outerChannel);
+        var outerEmbeddingInput = Engine.TensorPermute(current, new[] { 0, 2, 1 });
+        var outerEmbedding = Engine.TensorSubtract(
+            _outerEmbeddingMamba.Forward(outerEmbeddingInput), outerEmbeddingInput);
+        CaptureActivation(activations, 3, outerEmbedding);
+        outerEmbedding = Engine.TensorPermute(outerEmbedding, new[] { 0, 2, 1 });
+        var outerCombined = Engine.TensorAdd(outerChannel, outerEmbedding);
+
+        current = _secondEmbedding.Forward(current);                            // E2: n1 -> n2
+        CaptureActivation(activations, 4, current);
+        var secondResidual = current;
+        current = _secondDropout.Forward(current);
+        CaptureActivation(activations, 5, current);
+
+        // Inner pair, again using complementary channel/embedding orientations.
+        var innerEmbeddingInput = Engine.TensorPermute(current, new[] { 0, 2, 1 });
+        var innerEmbedding = Engine.TensorSubtract(
+            _innerEmbeddingMamba.Forward(innerEmbeddingInput), innerEmbeddingInput);
+        CaptureActivation(activations, 6, innerEmbedding);
+        innerEmbedding = Engine.TensorPermute(innerEmbedding, new[] { 0, 2, 1 });
+        var innerChannel = Engine.TensorSubtract(_innerChannelMamba.Forward(current), current);
+        CaptureActivation(activations, 7, innerChannel);
+        current = Engine.TensorAdd(Engine.TensorAdd(innerEmbedding, secondResidual), innerChannel);
+
+        current = _residualProjection.Forward(current);                         // P1: n2 -> n1
+        CaptureActivation(activations, 8, current);
+        current = Engine.TensorAdd(current, firstResidual);
+
+        // Concatenate the inner/residual path with the outer path, then P2 maps
+        // 2*n1 directly to the prediction horizon.
+        current = Engine.TensorConcatenate(new[] { current, outerCombined }, axis: 2);
+        current = _outputProjection.Forward(current);
+        CaptureActivation(activations, 9, current);
+
+        var forecastChannelMajor = Engine.Reshape(
+            current, new[] { batch, features, _forecastHorizon });
+        var forecast = Engine.TensorPermute(forecastChannelMajor, new[] { 0, 2, 1 });
+        if (_useReversibleNormalization)
+            forecast = DenormalizeForecast(forecast);
+
+        return RestorePaperOutputLayout(forecast, inputLayout);
+    }
+
+    private void CaptureActivation(
+        Dictionary<string, Tensor<T>>? activations,
+        int layerIndex,
+        Tensor<T> value)
+    {
+        if (activations is not null)
+            activations[$"Layer_{layerIndex}_{Layers[layerIndex].GetType().Name}"] = value.Clone();
+    }
+
+    private enum PaperInputLayout
+    {
+        Flat,
+        SequenceFeatures,
+        BatchSequence,
+        BatchSequenceFeatures
+    }
+
+    /// <summary>Converts supported public layouts to the paper's [B, L, M] layout.</summary>
+    private Tensor<T> PreparePaperInput(Tensor<T> input, out PaperInputLayout layout)
+    {
+        if (input.Rank == 1)
+        {
+            int expected = _contextLength * _numFeatures;
+            if (input.Length != expected)
+                throw new ArgumentException(
+                    $"TimeMachine expected {expected} input values ({_contextLength} steps x {_numFeatures} features), " +
+                    $"but received {input.Length}.", nameof(input));
+            layout = PaperInputLayout.Flat;
+            return Engine.Reshape(input, new[] { 1, _contextLength, _numFeatures });
+        }
+
+        if (input.Rank == 2)
+        {
+            if (input.Shape[0] == _contextLength && input.Shape[1] == _numFeatures)
+            {
+                layout = PaperInputLayout.SequenceFeatures;
+                return Engine.Reshape(input, new[] { 1, _contextLength, _numFeatures });
+            }
+
+            if (_numFeatures == 1 && input.Shape[1] == _contextLength)
+            {
+                layout = PaperInputLayout.BatchSequence;
+                return Engine.Reshape(input, new[] { input.Shape[0], _contextLength, 1 });
+            }
+        }
+
+        if (input.Rank == 3
+            && input.Shape[1] == _contextLength
+            && input.Shape[2] == _numFeatures)
+        {
+            layout = PaperInputLayout.BatchSequenceFeatures;
+            return input;
+        }
+
+        throw new ArgumentException(
+            $"TimeMachine expects [L*M], [L,M], [B,L] for univariate data, or [B,L,M] with " +
+            $"L={_contextLength} and M={_numFeatures}; received [{string.Join(", ", input.Shape)}].",
+            nameof(input));
+    }
+
+    /// <summary>Restores the rank convention used by the caller.</summary>
+    private Tensor<T> RestorePaperOutputLayout(Tensor<T> forecast, PaperInputLayout layout)
+    {
+        return layout switch
+        {
+            PaperInputLayout.Flat => Engine.Reshape(forecast, new[] { forecast.Length }),
+            PaperInputLayout.SequenceFeatures => Engine.Reshape(
+                forecast, new[] { _forecastHorizon, _numFeatures }),
+            PaperInputLayout.BatchSequence => Engine.Reshape(
+                forecast, new[] { forecast.Shape[0], _forecastHorizon }),
+            _ => forecast
+        };
+    }
+
+    /// <summary>
     /// Training-mode forward. Routes through <see cref="Forward"/> so training uses
     /// the same RevIN normalize/denormalize as inference (and keeps training mode
     /// active for dropout), instead of the base default that flips to inference.
@@ -898,6 +1088,12 @@ public class TimeMachine<T> : ForecastingModelBase<T>
 
         var activations = new Dictionary<string, Tensor<T>>();
 
+        if (_usesDefaultArchitecture)
+        {
+            ForwardDefaultArchitecture(input, activations);
+            return activations;
+        }
+
         var current = FlattenInput(input);
         if (_useReversibleNormalization)
             current = ApplyInstanceNormalization(current);
@@ -920,7 +1116,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <returns>Forecast tensor.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Native mode runs our custom TimeMachine implementation
-    /// which processes data at multiple temporal scales using Mamba-style SSM blocks.
+    /// which processes data through the paper's four Mamba branches.
     /// </para>
     /// </remarks>
     private Tensor<T> ForecastNative(Tensor<T> input)
@@ -983,9 +1179,8 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// <param name="input">Input tensor of shape [batch, context, features].</param>
     /// <returns>Flattened tensor of shape [batch, context * features].</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> TimeMachine processes the time series through
-    /// dense layers after initial multi-scale decomposition. We flatten the input
-    /// for compatibility with the layer structure.
+    /// <para><b>For Beginners:</b> User-provided layer stacks retain the historical
+    /// flat sequential input convention. The paper-faithful default path does not use this helper.
     /// </para>
     /// </remarks>
     private Tensor<T> FlattenInput(Tensor<T> input)
@@ -1067,21 +1262,30 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
-        int inputLength = input.Data.Length;
-        int predLength = Math.Min(prediction.Data.Length, inputLength);
+        // .Data demands a contiguous buffer, and neither argument is guaranteed to be
+        // one: AutoregressiveForecast feeds this the output of the previous step, which
+        // by then can be a sliced or transposed VIEW. Reading .Data on such a view throws
+        // "Cannot get contiguous Memory from a non-contiguous tensor view" -- the failure
+        // that ended TimeMachine quantile forecasting for both precisions. Materialise
+        // once, up front, rather than at each of the four .Data reads below.
+        var source = input.IsContiguous ? input : input.Contiguous();
+        var predicted = prediction.IsContiguous ? prediction : prediction.Contiguous();
 
-        var shifted = new Tensor<T>(input._shape);
+        int inputLength = source.Data.Length;
+        int predLength = Math.Min(predicted.Data.Length, inputLength);
+
+        var shifted = new Tensor<T>(source._shape);
 
         // Copy shifted values (skip first predLength values)
         for (int i = predLength; i < inputLength; i++)
         {
-            shifted.Data.Span[i - predLength] = input.Data.Span[i];
+            shifted.Data.Span[i - predLength] = source.Data.Span[i];
         }
 
         // Append prediction values at the end
         for (int i = 0; i < predLength; i++)
         {
-            shifted.Data.Span[inputLength - predLength + i] = prediction.Data.Span[i];
+            shifted.Data.Span[inputLength - predLength + i] = predicted.Data.Span[i];
         }
 
         return shifted;
@@ -1103,8 +1307,18 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { 0 });
 
-        int totalLength = 0;
+        // Same contiguity requirement as ShiftInputWindow above: these predictions come
+        // straight from the forecast loop and can be views, and .Data throws on a view.
+        // Materialise each ONCE here rather than at the three reads below, which would
+        // otherwise rebuild the same buffer per element.
+        var materialised = new List<Tensor<T>>(predictions.Count);
         foreach (var pred in predictions)
+        {
+            materialised.Add(pred.IsContiguous ? pred : pred.Contiguous());
+        }
+
+        int totalLength = 0;
+        foreach (var pred in materialised)
         {
             totalLength += pred.Data.Length;
         }
@@ -1112,7 +1326,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         var result = new Tensor<T>(new[] { totalLength });
         int offset = 0;
 
-        foreach (var pred in predictions)
+        foreach (var pred in materialised)
         {
             for (int i = 0; i < pred.Data.Length; i++)
             {
@@ -1122,47 +1336,6 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Applies temporal decomposition to separate different frequency components.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <param name="scale">Scale index (0 = finest, higher = coarser).</param>
-    /// <returns>Decomposed tensor for the specified scale.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Temporal decomposition separates the time series
-    /// into components at different scales:
-    /// - Scale 0: High-frequency variations (noise, short-term)
-    /// - Scale 1: Medium-high (daily patterns)
-    /// - Scale 2: Medium-low (weekly patterns)
-    /// - Scale 3: Low-frequency (long-term trends)
-    ///
-    /// This is done using a moving average or downsampling operation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyTemporalDecomposition(Tensor<T> input, int scale)
-    {
-        int factor = 1 << scale; // 2^scale downsampling
-        int outputLength = input.Data.Length / factor;
-
-        var decomposed = new Tensor<T>(new[] { outputLength });
-
-        for (int i = 0; i < outputLength; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < factor; j++)
-            {
-                int idx = i * factor + j;
-                if (idx < input.Data.Length)
-                {
-                    sum = NumOps.Add(sum, input.Data.Span[idx]);
-                }
-            }
-            decomposed.Data.Span[i] = NumOps.Divide(sum, NumOps.FromDouble(factor));
-        }
-
-        return decomposed;
     }
 
     #endregion

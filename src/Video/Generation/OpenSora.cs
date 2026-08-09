@@ -62,7 +62,7 @@ namespace AiDotNet.Video.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Sora: Democratizing Efficient Video Production for All",
-    "https://arxiv.org/abs/2412.00131",
+    "https://arxiv.org/abs/2412.20404",
     Year = 2024,
     Authors = "Zangwei Zheng, Xiangyu Peng, Tianji Yang, Chenhui Shen, Shenggui Li, Hongxin Liu, Yukun Zhou, Tianyi Li, Yang You")]
 public class OpenSora<T> : NeuralNetworkBase<T>

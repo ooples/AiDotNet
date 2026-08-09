@@ -221,7 +221,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -268,7 +268,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _lookbackWindow = options.LookbackWindow;
@@ -286,6 +286,17 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     }
 
     #endregion
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        NHiTSOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate
+            });
+    }
 
     #region Initialization
 
@@ -452,6 +463,9 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         var processedTarget = target.Rank == 1 ? PromoteToBatchedTensor(target) : target;
         base.Train(processedInput, processedTarget);
     }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <summary>
     /// Training-mode forward: replays the N-HiTS pipeline (pool →
@@ -661,21 +675,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new NHiTSOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            NumStacks = _numStacks,
-            NumBlocksPerStack = _numBlocksPerStack,
-            HiddenLayerSize = _hiddenSize,
-            NumHiddenLayers = _numHiddenLayers,
-            PoolingKernelSizes = _poolingKernelSizes,
-            PoolingModes = _poolingModes,
-            InterpolationModes = _interpolationModes,
-            DropoutRate = _dropout
-        };
-
-        return new NHiTSFinance<T>(Architecture, options);
+        return new NHiTSFinance<T>(Architecture, new NHiTSOptions<T>(_options));
     }
 
     /// <summary>

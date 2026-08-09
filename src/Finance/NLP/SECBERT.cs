@@ -53,7 +53,10 @@ namespace AiDotNet.Finance.NLP;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("SEC-BERT: A Pre-trained Language Model for the Securities Domain", "https://doi.org/10.1145/3533271.3561753", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
+// DOI corrected: 10.1145/3533271.3561753 is "Learning to simulate realistic limit order book
+// markets from data as a World Agent" (ICAIF'22) — an unrelated paper. SEC-BERT is introduced in
+// Loukas et al., "FiNER: Financial Numeric Entity Recognition for XBRL Tagging" (ACL 2022).
+[ResearchPaper("FiNER: Financial Numeric Entity Recognition for XBRL Tagging (introduces SEC-BERT)", "https://doi.org/10.18653/v1/2022.acl-long.303", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
 public class SECBERT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

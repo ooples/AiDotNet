@@ -202,7 +202,7 @@ public class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
     /// The magic of LoRA+ happens during training (backward pass), not inference.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward pass is identical to base LoRA implementation
         return base.Forward(input);

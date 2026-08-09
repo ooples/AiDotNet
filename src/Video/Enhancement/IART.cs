@@ -54,8 +54,8 @@ namespace AiDotNet.Video.Enhancement;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("IART: Implicit Resampling-based Alignment Transformer for Video Super-Resolution",
-    "https://arxiv.org/abs/2404.06573",
+[ResearchPaper("Enhancing Video Super-Resolution via Implicit Resampling-based Alignment",
+    "https://arxiv.org/abs/2305.00163",
     Year = 2024,
     Authors = "Kai Xu, Ziwei Yu, Xin Wang, Michael Bi Mi, Angela Yao")]
 public class IART<T> : VideoSuperResolutionBase<T>
@@ -91,7 +91,12 @@ public class IART<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new IARTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -146,13 +151,17 @@ public class IART<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
     }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     public override void UpdateParameters(Vector<T> parameters)
     {
@@ -222,7 +231,12 @@ public class IART<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new IART<T>(Architecture, _options);
+    {
+        var optionsCopy = new IARTOptions(_options);
+        if (!_useNativeMode && optionsCopy.ModelPath is { } path && !string.IsNullOrEmpty(path))
+            return new IART<T>(Architecture, path, optionsCopy);
+        return new IART<T>(Architecture, optionsCopy);
+    }
 
     #endregion
 

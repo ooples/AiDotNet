@@ -203,7 +203,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         // Create expert LoRA layers
         _experts = new LoRALayer<T>[numberOfExperts];
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
         for (int i = 0; i < numberOfExperts; i++)
         {
@@ -249,7 +249,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - All weights sum to 1.0 (thanks to softmax in gating network)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input.Clone();
 
@@ -517,7 +517,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

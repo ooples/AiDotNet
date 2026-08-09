@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DAM-VSR: Disentanglement of Appearance and Motion for Video Super-Resolution",
-    "https://arxiv.org/abs/2501.02540",
+    "https://arxiv.org/abs/2507.01012",
     Year = 2025,
     Authors = "Kaichen Chi, Xin Li, Zhi-Song Liu, Wan-Chi Siu")]
 public class DAMVSR<T> : VideoSuperResolutionBase<T>
@@ -145,7 +145,7 @@ public class DAMVSR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

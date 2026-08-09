@@ -426,7 +426,7 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(batchedInput, alignedTarget);
+            TrainWithTape(batchedInput, alignedTarget, _optimizer);
         }
         finally
         {

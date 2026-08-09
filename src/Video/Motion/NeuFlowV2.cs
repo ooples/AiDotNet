@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Motion;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices" (Zhang et al., 2024)</item>
+/// <item>Paper: "NeuFlow v2: Push High-Efficiency Optical Flow To the Limit" (Zhang et al., 2024)</item>
 /// </list></para>
 /// <para><b>For Beginners:</b> NeuFlow V2 is a fast, lightweight optical flow estimator designed for real-time applications. It achieves good accuracy with significantly reduced computation compared to transformer-based methods.</para>
 /// <para>
@@ -44,7 +44,8 @@ namespace AiDotNet.Video.Motion;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices",
+// Title corrected to the published form; the arXiv id was already right.
+[ResearchPaper("NeuFlow v2: Push High-Efficiency Optical Flow To the Limit",
     "https://arxiv.org/abs/2408.10161",
     Year = 2024,
     Authors = "Zhiyong Zhang, Anurag Ranjan, Huaizu Jiang")]
@@ -166,16 +167,21 @@ public class NeuFlowV2<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field
-        var flow = new Tensor<T>([2, height, width]);
-        if (rawFlow.Length < flow.Length)
-            throw new InvalidOperationException($"Raw flow output ({rawFlow.Length} elements) is smaller than expected flow field ({flow.Length} elements).");
-        for (int i = 0; i < flow.Length; i++)
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field. The
+        // element-by-element Data.Span copy this replaced was a numeric no-op that severed the
+        // autodiff tape at the end of the forward pass, discarding the gradient path for the whole
+        // network behind it. Returning the tensor directly is bit-identical; the guard is kept so a
+        // layer misconfiguration still fails loudly instead of silently yielding a wrong-shaped field.
+        int expectedLength = 2 * height * width;
+        if (rawFlow.Length < expectedLength)
         {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
+            throw new InvalidOperationException(
+                $"Raw flow output ({rawFlow.Length} elements) is smaller than the expected flow field " +
+                $"({expectedLength} elements for 2x{height}x{width}).");
         }
 
-        return flow;
+        return rawFlow;
     }
 
     /// <inheritdoc/>

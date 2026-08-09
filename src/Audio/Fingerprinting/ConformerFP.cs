@@ -230,7 +230,7 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

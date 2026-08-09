@@ -245,7 +245,7 @@ public class MPLUGDocOwl15<T> : VisionLanguageModelBase<T>, IDocumentUnderstandi
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 

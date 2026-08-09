@@ -147,7 +147,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Create activation adaptation LoRA layer
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         _activationAdaptation = new LoRALayer<T>(inputSize, outputSize, actualActivationRank, activationAlpha);
 
         // Update parameter vector to include activation adaptation
@@ -179,7 +179,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - Transform how it represents things (activation adaptation)
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -399,7 +399,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Both DenseLayer and FullyConnectedLayer store parameters as [weights..., biases...]
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

@@ -90,11 +90,24 @@ public class UFM<T> : OpticalFlowBase<T>
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 64,
         int numLayers = 8,
-        UFMOptions? options = null)
+        UFMOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new UFMOptions();
         Options = _options;
+
+        // DEFAULT training optimizer (overridable — pass your own `optimizer`, or configure one via
+        // the builder). Same treatment, for the same reason, as its RAFT sibling in this folder:
+        // dense-flow gradients overshoot at the framework default 1e-3 Adam. One extra step on
+        // identical data took the more-data invariant from a loss of 23.86 to 100.66 while the
+        // parameters had barely moved (0.0007 in L2 across 300k), which is divergence rather than a
+        // measurement artefact. 1e-4 is the standard small optical-flow fine-tune LR and what RAFT
+        // and the rest of this family already use. Gradient clipping is on
+        // (OpticalFlowBase maxGradNorm = 1.0) but is close to a no-op under Adam, so the learning
+        // rate is the effective lever.
+        SetBaseTrainOptimizer(optimizer ?? new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 }));
 
         _numFeatures = numFeatures;
         _numLayers = numLayers;
@@ -178,14 +191,12 @@ public class UFM<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field
-        var flow = new Tensor<T>([2, height, width]);
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
-        {
-            flow.Data.Span[i] = rawFlow.Data.Span[i];
-        }
-
-        return flow;
+        // The output convolution already emits exactly 2 channels at the input resolution
+        // (ConvolutionalLayer(2, kernel 3, stride 1, padding 1)), so rawFlow IS the flow field. The
+        // element-by-element Data.Span copy this replaced was a numeric no-op that severed the
+        // autodiff tape at the end of the forward pass, discarding the gradient path for the whole
+        // network behind it. Returning the tensor directly is bit-identical.
+        return rawFlow;
     }
 
     /// <inheritdoc/>

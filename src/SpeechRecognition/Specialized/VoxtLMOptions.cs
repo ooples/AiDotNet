@@ -31,6 +31,7 @@ public class VoxtLMOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
+        LearningRate = other.LearningRate;
         Language = other.Language;
     }
 
@@ -45,5 +46,6 @@ public class VoxtLMOptions : ModelOptions
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
+    public double LearningRate { get; set; } = 1e-4;
     public string Language { get; set; } = "en";
 }
