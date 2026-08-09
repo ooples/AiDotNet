@@ -37,8 +37,55 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
+// Both ranks come from OnFirstForward naming them itself - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and rejecting everything else.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From this layer's own arithmetic in <see cref="OnFirstForward"/>:
+    /// <c>outH = (h - _kernelSize + 2*_padding) / _stride + 1</c>, and the same for width - the
+    /// sliding-window formula at dilation 1, which this layer does not parameterize.
+    /// </para>
+    /// <para>
+    /// A separable convolution is two stages, but only ONE of them moves a spatial window. The
+    /// depthwise stage carries the <c>_kernelSize</c>/<c>_stride</c>/<c>_padding</c> geometry
+    /// (kernels shaped <c>[_inputDepth, 1, _kernelSize, _kernelSize]</c>); the pointwise stage is 1x1
+    /// (<c>[_outputDepth, _inputDepth, 1, 1]</c>) and only remixes channels. So the spatial axes take
+    /// the window once, not twice, and the channel count is whatever the pointwise stage was
+    /// configured to emit.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputDepth <= 0 || _kernelSize <= 0 || _stride <= 0 || _padding < 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputDepth));
+        OutputAxisContract Spatial(TensorAxis a)
+            => new(a, AxisRelation.Window(a, _kernelSize, _stride, _padding));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, Spatial(TensorAxis.Height), Spatial(TensorAxis.Width) },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, Spatial(TensorAxis.Height), Spatial(TensorAxis.Width),
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The filter kernels used for the depthwise convolution step.
     /// </summary>
@@ -400,28 +447,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _padding;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training through backpropagation.
-    /// </summary>
-    /// <value>
-    /// Always returns <c>true</c> for depthwise separable convolutional layers, as they contain trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be trained through backpropagation. Depthwise separable
-    /// convolutional layers have trainable parameters (kernel weights and biases), so they support training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// For depthwise separable convolutional layers:
-    /// - The value is always true
-    /// - This means the layer can adjust its filters and biases during training
-    /// - It will improve its pattern recognition as it processes more data
-    /// 
-    /// Some other layer types might not have trainable parameters and would return false here.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -1249,37 +1274,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all depthwise kernels, pointwise kernels, and biases.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts all trainable parameters from the layer and returns them as a single vector.
-    /// This includes all depthwise kernels, pointwise kernels, and biases, concatenated in that order.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
-    /// 
-    /// The parameters include:
-    /// - All depthwise filter values (first step filters)
-    /// - All pointwise filter values (second step filters)
-    /// - All bias values
-    /// 
-    /// These are combined into a single long list (vector), which can be used for:
-    /// - Saving the model
-    /// - Sharing parameters between layers
-    /// - Advanced optimization techniques
-    /// 
-    /// This provides access to all the "knowledge" the layer has learned.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(_depthwiseKernels.ToVector(), _pointwiseKernels.ToVector()),
-            _biases.ToVector());
-    }
-
-    /// <summary>
     /// Sets all trainable parameters of the layer from a single vector.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -1331,54 +1325,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         }
 
         return metadata;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if shape isn't resolved (placeholders with Length 0),
-        // infer inputDepth from the param vector. Param layout:
-        //   depthwise: inputDepth * kernelSize²
-        //   pointwise: outputDepth * inputDepth
-        //   biases: outputDepth
-        //   total = inputDepth * (kernelSize² + outputDepth) + outputDepth
-        if (!IsShapeResolved)
-        {
-            int kernelArea = _kernelSize * _kernelSize;
-            int divisor = kernelArea + _outputDepth;
-            int candidateInputDepth = (parameters.Length - _outputDepth) / divisor;
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * divisor + _outputDepth != parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for DepthwiseSeparableConvolutionalLayer from {parameters.Length} parameters " +
-                    $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
-            }
-            ResolveFromShape(new[] { candidateInputDepth, _kernelSize, _kernelSize });
-        }
-
-        int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int dwLen = _depthwiseKernels.Length;
-        int pwLen = _pointwiseKernels.Length;
-        int biasLen = _biases.Length;
-
-        var dwVec = parameters.Slice(0, dwLen);
-        var pwVec = parameters.Slice(dwLen, pwLen);
-        var biasVec = parameters.Slice(dwLen + pwLen, biasLen);
-
-        _depthwiseKernels = Tensor<T>.FromVector(dwVec, [_inputDepth, 1, _kernelSize, _kernelSize]);
-        _pointwiseKernels = Tensor<T>.FromVector(pwVec, [_outputDepth, _inputDepth, 1, 1]);
-        _biases = Tensor<T>.FromVector(biasVec, [_outputDepth]);
-
-        // Invalidate GPU cache after parameter update
-        Engine.InvalidatePersistentTensor(_depthwiseKernels);
-        Engine.InvalidatePersistentTensor(_pointwiseKernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

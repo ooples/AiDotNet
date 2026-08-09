@@ -59,7 +59,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 2")]
-public partial class RWKV7Block<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 {
     // Configuration
     private readonly int _modelDimension;
@@ -350,18 +357,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// (arXiv:2503.14456, Eq. 12 and Appendix C, Theorem 1 — quoted there as 0.5452...).
     /// </summary>
     private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
-
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var tensor in GetAllParameterTensors())
-                count += tensor.Length;
-            return count;
-        }
-    }
 
     /// <summary>
     /// Creates a new RWKV-7 block.
@@ -879,6 +874,14 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
         //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
         //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
+        // MERGE NOTE (master -> this branch): master adapted this call when Tensors 0.120.2
+        // replaced the old (r, k, v, a, b) surface with the paper-faithful generalised delta rule
+        // (rProj, kappa, kTilde, vProj, decayLogit, iclRate, numHeads). That adaptation passed Kall
+        // straight through as kappa and used kTilde = iclRate (*) Kall. This branch supersedes it:
+        // it forms kappa and kTilde from the LEARNED _kk / _ka parameters per Eq. 7 and applies the
+        // Global ICLR Multiplier to the transition term. Taking master's side here would have left
+        // _kk, _ka and _globalIclrMultiplier declared and trained but with no effect on the output.
+
         // Generalised delta rule inputs (arXiv:2503.14456, Eq. 17). The kernel takes kappa
         // PRE-normalisation and forms -kappaHat and (a (*) kappaHat) itself, matching the reference
         // kernel call RWKV7_CLAMPW_CUDA(r, w, kTilde, v, -kk, kk*a); it likewise derives
@@ -1460,19 +1463,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllParameterTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-        return parameters;
-    }
-
-    /// <inheritdoc />
     public override Vector<T> GetParameterGradients()
     {
         var allParams = GetAllParameterTensors();
@@ -1536,20 +1526,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _normBeta1Grad = null;
         _normGamma2Grad = null;
         _normBeta2Grad = null;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllParameterTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     /// <summary>

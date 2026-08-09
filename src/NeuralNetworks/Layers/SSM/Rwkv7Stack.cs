@@ -1,4 +1,8 @@
-﻿namespace AiDotNet.NeuralNetworks.Layers.SSM;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
+
+namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
 /// <summary>
 /// A stack of <see cref="RWKV7Block{T}"/> layers that threads the RWKV-7 value residual between them.
@@ -32,7 +36,14 @@
 /// thought, not just the one below it. A plain chain has nowhere to put that, so instead one object
 /// holds the whole run of layers and hands the first layer's answer along as it goes.</para>
 /// </remarks>
-public partial class Rwkv7Stack<T> : LayerBase<T>
+// Stacks RWKV7 blocks and threads vFirst through them; each block is shape-preserving, so the stack is
+// too. Same [Time, Features] convention as the rest of this folder.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class Rwkv7Stack<T> : LayerBase<T>, IShapeContract
 {
     private readonly List<RWKV7Block<T>> _blocks;
 
@@ -84,9 +95,6 @@ public partial class Rwkv7Stack<T> : LayerBase<T>
     public IReadOnlyList<RWKV7Block<T>> Blocks => _blocks;
 
     /// <inheritdoc />
-    public override long ParameterCount => _blocks.Sum(b => b.ParameterCount);
-
-    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />
@@ -114,29 +122,8 @@ public partial class Rwkv7Stack<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
-        => new Vector<T>(_blocks.SelectMany(b => b.GetParameters().ToArray()).ToArray());
-
-    /// <inheritdoc />
     public override Vector<T> GetParameterGradients()
         => new Vector<T>(_blocks.SelectMany(b => b.GetParameterGradients().ToArray()).ToArray());
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        int offset = 0;
-        foreach (var block in _blocks)
-        {
-            int count = (int)block.ParameterCount;
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++) slice[i] = parameters[offset + i];
-            block.SetParameters(slice);
-            offset += count;
-        }
-    }
 
     /// <inheritdoc />
     public override void ClearGradients()

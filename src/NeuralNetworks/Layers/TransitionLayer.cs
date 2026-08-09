@@ -49,7 +49,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "0.5")]
-public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// DenseNet transition: 1x1 conv compressing channels by compressionFactor, then 2x2 average pooling at
+// stride 2 halving each spatial axis. Roles come from the layer's own
+// [LayerProperty(TestInputShape = "4, 8, 8", ExpectedInputRank = 3)] - 4 channels over an 8x8 map, so
+// rank 3 is [Channels, Height, Width].
+//
+// The relation IS declarable even though it depends on a constructor argument, because OutputAxesFor
+// is an INSTANCE method and can read _compressionFactor - exactly as DenseLayer returns
+// Fixed(_outputSize). "Parameterised" means do not transcribe a CONSTANT from a probe; it never meant
+// the contract could not be written.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
     private readonly BatchNormalizationLayer<T> _bn;
 
@@ -89,15 +103,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// sentinel default (0).
     /// </summary>
     public int OutputChannels { get; private set; }
-
-    /// <summary>
-    /// Sum of trainable parameters across BN and the 1×1 projection.
-    /// <c>_conv</c> stays null until <see cref="OnFirstForward"/> resolves
-    /// the input channel count — return BN's count alone in that interim
-    /// state.
-    /// </summary>
-    public override long ParameterCount =>
-        _bn.ParameterCount + (_conv?.ParameterCount ?? 0L);
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -154,6 +159,59 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     }
 
     private readonly double _compressionFactor;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Written by hand rather than generated, because the channel relation depends on
+    /// <c>_compressionFactor</c> - a constructor argument. That is exactly what an INSTANCE contract is
+    /// for: <c>DenseLayer</c> returns <c>Fixed(_outputSize)</c> the same way. The generator skips any
+    /// type that declares this method, so a computed relation always wins over a derived one.
+    /// </para>
+    /// <para>
+    /// Spatial halving is <c>Scaled(1, 2)</c> because the pooling is fixed at 2x2 stride 2 by this
+    /// layer's own design (see the class summary), not by a caller-supplied value - so unlike the
+    /// channel ratio it is genuinely constant.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Only rank 3 [Channels, Height, Width] is declared - the rank this layer states in its own
+        // [LayerProperty(ExpectedInputRank = 3)]. Higher ranks collapse leading dims at runtime, which
+        // is a different relation and is not claimed here.
+        if (inputRank != 3) return null;
+
+        var (num, den) = AsRatio(_compressionFactor);
+        if (num <= 0 || den <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Scaled(TensorAxis.Channels, num, den)),
+            new OutputAxisContract(TensorAxis.Height, AxisRelation.Scaled(TensorAxis.Height, 1, 2)),
+            new OutputAxisContract(TensorAxis.Width, AxisRelation.Scaled(TensorAxis.Width, 1, 2)),
+        };
+    }
+
+    /// <summary>Converts the compression factor to the exact integer ratio the relation needs.</summary>
+    /// <remarks>
+    /// Bounded at 64 because a compression factor is a small human-chosen fraction (0.5, 0.25, 0.75).
+    /// Returning (0, 0) for anything that does not land on a clean ratio makes the contract DECLINE
+    /// rather than publish an approximation - a shape contract that is nearly right is worse than none,
+    /// since callers trust it exactly.
+    /// </remarks>
+    private static (int Num, int Den) AsRatio(double factor)
+    {
+        if (factor <= 0.0 || factor > 1.0 || double.IsNaN(factor)) return (0, 0);
+
+        for (int den = 1; den <= 64; den++)
+        {
+            double scaled = factor * den;
+            int num = (int)Math.Round(scaled);
+            if (num > 0 && Math.Abs(scaled - num) < 1e-9) return (num, den);
+        }
+
+        return (0, 0);
+    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -472,48 +530,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _bn.UpdateParameters(learningRate);
         _conv?.UpdateParameters(learningRate);
         // Pool has no parameters
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the layer. <c>_conv</c> contributes
-    /// nothing until <see cref="OnFirstForward"/> resolves the input channel
-    /// count and allocates the 1×1 projection.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        parameters.AddRange(_bn.GetParameters().ToArray());
-        if (_conv is not null)
-            parameters.AddRange(_conv.GetParameters().ToArray());
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from the given parameter vector.
-    /// </summary>
-    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: both _bn and _conv have unresolved shapes so
-        // GetParameters().Length on either returns 0 — we can't slice
-        // between them. Buffer the full vector and replay from
-        // OnFirstForward once shapes are resolved.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-        int count = _bn.GetParameters().Length;
-        _bn.SetParameters(parameters.SubVector(offset, count));
-        offset += count;
-
-        if (_conv is not null)
-        {
-            count = _conv.GetParameters().Length;
-            _conv.SetParameters(parameters.SubVector(offset, count));
-        }
     }
 
     internal override Dictionary<string, string> GetMetadata()

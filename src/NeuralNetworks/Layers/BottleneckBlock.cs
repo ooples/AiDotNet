@@ -49,8 +49,61 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 1")]
-public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// Exactly the two ranks this block's own guard admits - OnFirstForward: "requires rank-3 [C,H,W] or
+// rank-4 [B,C,H,W] input" - declared separately rather than as one BatchOptional layout, because a
+// derived contract keys on the declared axis count and would leave the unbatched rank unresolvable.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Taken from <c>OnFirstForward</c>'s own resolution, which is the single place this block decides
+    /// its output shape:
+    /// <c>ResolveShapes(new[] { _inChannels, inputHeight, inputWidth }, new[] { outChannels, outH, outW })</c>
+    /// with <c>outChannels = _baseChannels * Expansion</c> and <c>outH = (inputHeight - 1) / _stride + 1</c>.
+    /// </para>
+    /// <para>
+    /// The spatial expression IS the sliding window of the 3x3 / pad=1 middle convolution, so it is
+    /// declared as one - <c>floor((in + 2*1 - (3-1) - 1) / stride) + 1</c> is <c>(in - 1) / stride + 1</c>
+    /// exactly. The layer's own comment records why the shortcut spelling is a defect rather than a
+    /// simplification: plain <c>in / stride</c> is off by one for odd inputs, and the mismatch surfaces
+    /// as a broken residual add against the downsample branch's BatchNorm.
+    /// </para>
+    /// <para>
+    /// Channels are <c>Fixed</c> at <c>_baseChannels * Expansion</c> - the widening that gives this block
+    /// its name - and NOT <c>Same</c>: the shortcut is 1x1-convolved to that width whenever it differs,
+    /// which is the <c>_inChannels != outChannels</c> half of the <c>_hasDownsample</c> condition.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4) || _baseChannels <= 0 || _stride <= 0) return null;
+
+        var channels = new OutputAxisContract(
+            TensorAxis.Channels, AxisRelation.Fixed(_baseChannels * Expansion));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, kernel: 3, stride: _stride, padding: 1));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, kernel: 3, stride: _stride, padding: 1));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     /// <summary>
     /// The expansion factor for BottleneckBlock. Output channels = base channels * 4.
     /// </summary>
@@ -103,13 +156,6 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
     private Tensor<T>? _gpuBn2Out;
     private Tensor<T>? _gpuPreActivation;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount =>
-        _conv1.ParameterCount + _bn1.ParameterCount + _conv2.ParameterCount + _bn2.ParameterCount +
-        _conv3.ParameterCount + _bn3.ParameterCount +
-        (_downsampleConv?.ParameterCount ?? 0) + (_downsampleBn?.ParameterCount ?? 0);
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -445,27 +491,6 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
         _downsampleBn?.UpdateParameters(learningRate);
     }
 
-    /// <summary>
-    /// Gets all trainable parameters.
-    /// </summary>
-    /// <returns>A vector containing all parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        allParams.AddRange(_conv1.GetParameters().ToArray());
-        allParams.AddRange(_bn1.GetParameters().ToArray());
-        allParams.AddRange(_conv2.GetParameters().ToArray());
-        allParams.AddRange(_bn2.GetParameters().ToArray());
-        allParams.AddRange(_conv3.GetParameters().ToArray());
-        allParams.AddRange(_bn3.GetParameters().ToArray());
-        if (_downsampleConv is not null && _downsampleBn is not null)
-        {
-            allParams.AddRange(_downsampleConv.GetParameters().ToArray());
-            allParams.AddRange(_downsampleBn.GetParameters().ToArray());
-        }
-        return new Vector<T>([.. allParams]);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var grads = new List<T>();
@@ -490,21 +515,6 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
         _conv2.ClearGradients(); _bn2.ClearGradients();
         _conv3.ClearGradients(); _bn3.ClearGradients();
         _downsampleConv?.ClearGradients(); _downsampleBn?.ClearGradients();
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: every sub-layer's shape is unresolved so each
-        // ParameterCount returns 0 — slicing collapses. Buffer the
-        // whole vector; OnFirstForward replays it after sub-layer
-        // shapes (and any conditionally-allocated downsample) exist.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     private Vector<T>? _pendingParameters;

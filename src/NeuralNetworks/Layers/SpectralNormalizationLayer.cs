@@ -37,12 +37,55 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
 [LayerProperty(IsTrainable = true)]
-public partial class SpectralNormalizationLayer<T> : LayerBase<T>
+// A DECORATOR: this layer rescales the inner layer's WEIGHTS and then returns
+// `_innerLayer.Forward(input)` verbatim (ForwardTraced), so it has no shape law of its own - it has the
+// inner layer's. The constructor says the same thing, chaining
+// `base(innerLayer.GetInputShape(), innerLayer.GetOutputShape())`.
+//
+// The layouts below exist only to NAME the input axes, because ShapeInference.NameAxes reads them from
+// the TYPE and a relation the inner layer hands back refers to its sources by role. The ranks declared
+// are the ones spectral normalization is actually applied at: it normalizes GetParameters(), so the
+// layers worth wrapping are the weight-bearing ones - Dense/FullyConnected over [Batch, Features] and
+// [Batch, Time, Features], and 2-D convolutions over [Batch, Channels, Height, Width]. Rank 3 is named
+// the sequence way rather than the unbatched-conv way because only one naming per rank is permitted
+// (ADNSHAPE001); an unbatched [C,H,W] convolution therefore DECLINES here rather than resolving, since
+// its relations name Height and Width and this naming has neither. Declining is the honest outcome - a
+// wrong extent would not be.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The underlying layer whose weights will be normalized.
     /// </summary>
     private readonly ILayer<T> _innerLayer;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Delegated, not restated. <c>ForwardTraced</c> returns <c>_innerLayer.Forward(input)</c> - both on
+    /// the no-parameter early-out and on the normalized path - so whatever shape law the wrapped layer
+    /// has is this layer's shape law exactly. Dividing weights by their largest singular value changes
+    /// their VALUES, never their count or arrangement, so no axis moves.
+    /// </para>
+    /// <para>
+    /// Only expressible because <c>OutputAxesFor</c> is an INSTANCE method: the answer depends on which
+    /// layer this was constructed around. Wrap a convolution and the spatial axes come back windowed by
+    /// that convolution's stride; wrap something that declares no contract and this returns null, which
+    /// is the honest answer rather than a guess.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => (_innerLayer as IShapeContract)?.OutputAxesFor(inputRank);
 
     /// <summary>
     /// The left singular vector used for power iteration to compute the spectral norm.
@@ -84,10 +127,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private bool _normalizedWeightsApplied;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    public override long ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
     /// <summary>
@@ -459,22 +498,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _innerLayer.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets the parameters of the inner layer.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return _innerLayer.GetParameters();
-    }
-
-    /// <summary>
-    /// Sets the parameters of the inner layer.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _innerLayer.SetParameters(parameters);
     }
 
     /// <summary>

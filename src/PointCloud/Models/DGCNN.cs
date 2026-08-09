@@ -665,9 +665,48 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 /// - Later layers: Neighbors are semantically similar points
 /// - Graph structure adapts as features evolve
 /// </remarks>
-// INTERNAL, AS ON master -- see the note on SetAbstractionLayer. Referenced only by DGCNN itself.
-internal partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// Rank 2 [points, channels] - the shape the base constructor declares, `[0, inputChannels]` in and
+// `[0, outputChannels]` out, and the shape ForwardTraced threads end to end (its own comments track
+// it: [P*k, 2C] -> [P*k, outC] -> [P, outC]).
+//
+// The leading axis is Other for the same reason PointConvolutionLayer gives it that role: it counts
+// POINTS of an unordered set, so naming it Length or Time would claim a sequence position the data
+// does not have. It survives here despite the k-NN graph because the aggregation is a max over the
+// neighbour axis alone, which is exactly DGCNN's permutation invariance.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Leading axis is the point count; a point cloud is unordered, so it takes no sequence role.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the emitted width is configuration. The k neighbours are materialised and
+    /// then removed again inside a single forward: <c>ComputeEdgeFeatures</c> expands to
+    /// <c>[P*k, 2C]</c>, the shared MLP maps that to <c>[P*k, _outputChannels]</c>, and
+    /// <c>AggregateEdgeFeatures</c> reshapes to <c>[P, k, _outputChannels]</c> and reduces the
+    /// neighbour axis away with <c>Engine.ReduceMax(..., new[] { 1 }, keepDims: false)</c>. So <c>k</c>
+    /// appears nowhere in the result and needs no relation - a contract that carried it would describe
+    /// an intermediate, not the output.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(_outputChannels)</c> reads the field rather than a literal, and it is the right source
+    /// rather than the MLP's width by coincidence: <c>AggregateEdgeFeatures</c> reshapes against
+    /// <c>_outputChannels</c> directly, so that field is what the output is literally shaped by.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputChannels <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+        };
+    }
+
     private readonly int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _k; // Number of nearest neighbors
@@ -818,36 +857,7 @@ internal partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _bn.ClearGradients();
     }
 
-    public override Vector<T> GetParameters()
-    {
-        // Aggregate the sub-layers' parameters in [mlp | bn] order (matches the
-        // ParameterCount the base derives from the registered sub-layers).
-        var mp = _mlp.GetParameters();
-        var bp = _bn.GetParameters();
-        var all = new Vector<T>(mp.Length + bp.Length);
-        for (int i = 0; i < mp.Length; i++) all[i] = mp[i];
-        for (int i = 0; i < bp.Length; i++) all[mp.Length + i] = bp[i];
-        return all;
-    }
-
     public override void UpdateParameters(Vector<T> parameters) => SetParameters(parameters);
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException("Parameter vector length does not match layer parameter count.", nameof(parameters));
-        }
-
-        // Distribute to the sub-layers in [mlp | bn] order (matching GetParameters). This MUST
-        // override SetParameters: the Clone / DeepCopy / serialize round-trip sets weights through
-        // SetParameters, and the LayerBase default only stores the vector in the Parameters field
-        // without recursing into RegisterSubLayer'd children, so a clone would keep the sub-layers'
-        // fresh random init and diverge from the original (issue #1221 class).
-        int mlpCount = (int)_mlp.ParameterCount;
-        _mlp.SetParameters(parameters.SubVector(0, mlpCount));
-        _bn.SetParameters(parameters.SubVector(mlpCount, (int)_bn.ParameterCount));
-    }
 
     // ILayerSerializationExtras: the BatchNorm sub-layer's running mean / variance are
     // non-trainable state that GetParameters() deliberately excludes, so without round-tripping
@@ -858,18 +868,14 @@ internal partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _bn is ILayerSerializationExtras<T> ex ? ex.ExtraParameterCount : 0;
 
     Vector<T> ILayerSerializationExtras<T>.GetExtraParameters() =>
-        // DIRECT CAST, NOT A TYPE TEST. _bn is declared BatchNormalizationLayer<T>, which implements
-        // ILayerSerializationExtras<T> EXPLICITLY, so the interface is always present. The `is` test
-        // could only ever go false if that implementation were removed -- and then it silently
-        // returned an empty vector, so a layer would round-trip through serialization having lost its
-        // running mean/variance with nothing reporting it. A cast fails at compile time instead.
-        ((ILayerSerializationExtras<T>)_bn).GetExtraParameters();
+        _bn is ILayerSerializationExtras<T> ex ? ex.GetExtraParameters() : new Vector<T>(0);
 
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
     {
-        // See GetExtraParameters: the guard could only mask the interface being dropped, which would
-        // turn a restore into a silent no-op.
-        ((ILayerSerializationExtras<T>)_bn).SetExtraParameters(extraParameters);
+        if (_bn is ILayerSerializationExtras<T> ex)
+        {
+            ex.SetExtraParameters(extraParameters);
+        }
     }
 
     public override void ResetState()

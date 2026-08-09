@@ -25,9 +25,37 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4")]
-public partial class SequenceLastLayer<T> : LayerBase<T>
+// Rank 2 [Time, Features] per [LayerProperty(TestInputShape = "4, 4")]; the output is rank 1 because
+// the Time axis is consumed - only the last timestep survives.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _featureSize;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Takes the final timestep of a sequence, so the Time axis is dropped entirely and the feature
+    /// vector passes through at whatever width it arrived with.
+    /// </para>
+    /// <para>
+    /// This was <c>Fixed(_featureSize)</c>, justified as "this layer is constructed with the feature
+    /// width and will not accept another". <c>ForwardTraced</c> does not check: it reads
+    /// <c>features</c> from the input shape and slices that many values. Fed [6,7], a layer built with
+    /// <c>featureSize = 4</c> returns [7], not [4] - so the contract asserted a width the layer never
+    /// enforces. <c>Same(Features)</c> is correct whether or not that check is ever added, which
+    /// <c>Fixed</c> is not.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 2 [Time, Features] per [LayerProperty(TestInputShape = "4, 4")].
+        if (inputRank != 2) return null;
+
+        return new[] { new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)) };
+    }
     private int _lastSequenceLength;
     private int[]? _originalShape;
 
@@ -57,9 +85,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>
     {
         _featureSize = featureSize;
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <summary>
     /// Extracts the last timestep from the input sequence.
@@ -186,22 +211,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>
         {
             throw new ArgumentException($"SequenceLastLayer expects at least 1D input, got {rank}D.");
         }
-    }
-
-    /// <summary>
-    /// Returns an empty vector since this layer has no trainable parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Update parameters is a no-op since this layer has no trainable parameters.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update
     }
 
     /// <summary>

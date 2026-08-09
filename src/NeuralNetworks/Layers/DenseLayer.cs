@@ -79,6 +79,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
 public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
 {
 
@@ -440,22 +441,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// <c>LazyModuleMixin.has_uninitialized_params()</c>.
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
-
-    public override long ParameterCount
-    {
-        get
-        {
-            // For lazy initialization, compute from InputShape/OutputShape if not yet initialized
-            if (!_isInitialized)
-            {
-                return (InputShape[0] * OutputShape[0]) + OutputShape[0];
-            }
-            // Half-resident: _weights is a freed placeholder, _weightsHalf holds the real shape.
-            if (_weightsHalf is not null)
-                return (_weightsHalf.Shape[0] * _weightsHalf.Shape[1]) + _biases.Shape[0];
-            return (_weights.Shape[0] * _weights.Shape[1]) + _biases.Shape[0];
-        }
-    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -1515,6 +1500,17 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             }
         }
 
+        // Move the engine's persistent-tensor registration onto the new tensor, in place. Training
+        // itself already follows the resize — the generated GetTrainableParameters() reads the
+        // _weights FIELD — but _registeredTensors is a separate list, and leaving it on the dead
+        // tensor means a GPU engine keeps a persistent handle on weights no forward reads while the
+        // live ones are never marked persistent, disposal unregisters the wrong tensor, and the old
+        // matrix stays reachable for the layer's lifetime. Positional replace, not
+        // unregister+register: the latter appends, and SetTrainableParameters pairs by index against
+        // GetTrainableParameters()' (weights, biases) order, so reordering would hand a clone its
+        // biases as weights.
+        ReplaceTrainableParameter(_weights, resizedWeights, PersistentTensorRole.Weights);
+
         _weights = resizedWeights;
         _weightsGradient = null;
         UpdateInputShape([actualInputSize]);
@@ -1611,54 +1607,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts all trainable parameters (weights and biases) from the layer
-    /// and returns them as a single vector. This is useful for optimization algorithms that operate
-    /// on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method gathers all the learned values from the layer.
-    ///
-    /// The parameters include:
-    /// - All weight values (connections between inputs and outputs)
-    /// - All bias values (base values for each output)
-    ///
-    /// These are combined into a single long list (vector), which can be used for:
-    /// - Saving the model
-    /// - Sharing parameters between layers
-    /// - Advanced optimization techniques
-    ///
-    /// This provides access to all the "knowledge" the layer has learned.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Deferred-shape layers that haven't seen their first Forward
-        // (e.g., a conditioning branch only activated by text embeddings)
-        // have InputShape[0] == -1 and EnsureInitialized would overflow on
-        // TensorAllocator.Rent. Return an empty vector — Clone /
-        // SetParameters / ParameterCount semantically have nothing to copy
-        // and pick up the real values once the first Forward materialises
-        // them.
-        if (!IsShapeResolved) return new Vector<T>(0);
-
-        EnsureInitialized();
-        // fp16-resident (#1764): _weights is a transient shared upcast scratch (overwritten every forward,
-        // and shared across same-shape layers), not the authoritative store. Read the resident half master
-        // — GetWeights() upcasts it — so the round-trip returns THIS layer's weights rather than whatever
-        // last occupied the scratch. Otherwise clone/serialize silently copies wrong (or another layer's)
-        // values at foundation scale.
-        var weightsView = _weightsHalf is not null ? GetWeights() : _weights;
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(weightsView.Data),
-            Vector<T>.FromMemory(_biases.Data));
-    }
-
-    /// <summary>
     /// Gets the gradients of all trainable parameters in this layer.
     /// </summary>
     public override Vector<T> GetParameterGradients()
@@ -1672,91 +1620,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weightsGradient.Data),
             Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights and biases) of the layer from a single
-    /// vector. The vector must have the exact length required for all parameters of the layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
-    ///
-    /// When setting parameters:
-    /// - The vector must have exactly the right number of values
-    /// - The values are assigned to the weights and biases in a specific order
-    ///
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Copying parameters from another model
-    /// - Setting parameters that were optimized externally
-    ///
-    /// It's like replacing all the "knowledge" in the layer with new information.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters when the layer is still in lazy
-        // placeholder state (Clone / DeepCopy / Save+Load before first Forward).
-        // The parameter vector's length + the known outputSize uniquely determines
-        // inputSize for the (inputSize × outputSize + outputSize) layout, so we
-        // can resolve from the parameter vector alone — fixes #1221's "trained
-        // weights silently dropped on serialize/deserialize round-trip".
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            int outputSize = OutputShape[0];
-            if (outputSize <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on a deferred-shape DenseLayer before " +
-                    "outputSize is known.");
-            int candidateInput = (parameters.Length - outputSize) / outputSize;
-            if (candidateInput <= 0 || candidateInput * outputSize + outputSize != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputSize for DenseLayer from {parameters.Length} parameters " +
-                    $"and outputSize={outputSize}: not consistent with weights[{candidateInput},{outputSize}] + biases[{outputSize}].");
-            ResolveFromShape(new[] { candidateInput });
-        }
-
-        EnsureInitialized();
-
-        // fp16-resident path (#1764): when LowPrecisionResident engaged, _weightsHalf is the authoritative
-        // weight store and _weights is a transient, shared upcast scratch that every forward overwrites
-        // from _weightsHalf. Writing the incoming weights into _weights would therefore be silently
-        // discarded on the next forward (the clone/deserialize would keep whatever the resident master
-        // held — e.g. a clone's random probe-init — diverging from the source). Downcast the incoming
-        // weights straight into the resident half master instead. Biases stay full precision.
-        if (_weightsHalf is not null)
-        {
-            int wLenHalf = _weightsHalf.Length;
-            int expectedHalf = wLenHalf + _biases.Length;
-            if (parameters.Length != expectedHalf)
-            {
-                throw new ArgumentException($"Expected {expectedHalf} parameters, but got {parameters.Length}");
-            }
-            NumOps.ToHalfSpan(parameters.AsSpan().Slice(0, wLenHalf), _weightsHalf.AsWritableSpan());
-            parameters.AsSpan().Slice(wLenHalf, _biases.Length).CopyTo(_biases.Data.Span);
-            Engine.InvalidatePersistentTensor(_biases);
-            return;
-        }
-
-        int expected = _weights.Length + _biases.Length;
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
-        }
-
-        // Bulk copy via Span to preserve engine's persistent tensor references
-        parameters.AsSpan().Slice(0, _weights.Length).CopyTo(_weights.Data.Span);
-        parameters.AsSpan().Slice(_weights.Length, _biases.Length).CopyTo(_biases.Data.Span);
-
-        // Notify engine that data changed (for GPU re-upload)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     public override void Serialize(BinaryWriter writer)

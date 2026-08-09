@@ -1,4 +1,7 @@
 ﻿using AiDotNet.ActivationFunctions;
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -32,13 +35,58 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// during training teaches the CLS token to aggregate task-relevant
 /// information from the rest of the sequence.</para>
 /// </remarks>
-public partial class PrependCLSTokenLayer<T> : LayerBase<T>
+// Rank 3 only, and stated by the layer itself: ForwardTraced throws unless
+// input.Shape.Length == 3, with the message "expects rank-3 [batch, seq, embedDim]". Time and Features
+// match the roles SequenceTokenSliceLayer declares, which is the layer this one is documented to pair
+// with - the CLS token is written at position 0 here and read back from position 0 there.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _embedDim;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// One extra sequence position, nothing else. From <c>ForwardTraced</c>'s
+    /// <c>Engine.TensorConcatenate(new[] { clsTiled, input }, axis: 1)</c> where <c>clsTiled</c> is
+    /// <c>[batch, 1, embedDim]</c>: the sequence axis gains exactly one element and the other two axes
+    /// are untouched.
+    /// </para>
+    /// <para>
+    /// <c>seq + 1</c> looks like it falls outside the relation vocabulary - there is no "offset" form, and
+    /// the obvious <c>Window(kernel: 1, stride: 1, padding: p)</c> only ever yields <c>seq + 2p</c>, an
+    /// EVEN increment. It does not: with stride 1 the window formula reduces to
+    /// <c>seq + 2*padding - dilation*(kernel-1)</c>, so <c>padding: 1, kernel: 2</c> gives
+    /// <c>seq + 2 - 1 = seq + 1</c>. Spelling it that way keeps the contract exact rather than
+    /// approximating a one-token prepend as no change at all.
+    /// </para>
+    /// <para>
+    /// The feature axis is <c>Same</c>, not <c>Fixed(_embedDim)</c>. This layer does not SET the width -
+    /// it requires the input to already carry <c>_embedDim</c> (it throws otherwise) and returns that same
+    /// width, which is the distinction <c>Same</c> records and <c>Fixed</c> would lose.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.Window(TensorAxis.Time, kernel: 2, stride: 1, padding: 1, dilation: 1)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+        };
+    }
+
     // Trainable CLS token — shape [1, embedDim]. Held by reference so the
     // gradient tape can track parameter identity.
-    private readonly Tensor<T> _cls;
+    private  Tensor<T> _cls;
 
     /// <summary>Creates a CLS-token prepender for embedDim-wide inputs.</summary>
     /// <param name="embedDim">Embedding dimension (must match the input's last axis).</param>
@@ -60,9 +108,6 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>
         for (int i = 0; i < embedDim; i++)
             _cls[0, i] = NumOps.FromDouble(rng.NextGaussian() * initScale);
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _embedDim;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -103,22 +148,6 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>
         var clsRow = Engine.Reshape(_cls, new[] { 1, 1, _embedDim });
         var clsTiled = Engine.TensorTile(clsRow, new[] { batch, 1, 1 });
         return Engine.TensorConcatenate(new[] { clsTiled, input }, axis: 1);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var p = new Vector<T>(_embedDim);
-        for (int i = 0; i < _embedDim; i++) p[i] = _cls[0, i];
-        return p;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _embedDim)
-            throw new ArgumentException($"Expected {_embedDim} params, got {parameters.Length}.");
-        for (int i = 0; i < _embedDim; i++) _cls[0, i] = parameters[i];
     }
 
     /// <inheritdoc/>

@@ -63,7 +63,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, Cost = ComputeCost.High,
     TestInputShape = "4, 16", TestConstructorArgs = "16, 2, 2, 3")]
-public partial class ConformerBlockLayer<T> : LayerBase<T>
+// Roles are the block's own documented layout, quoted from the remarks above: "Input/output layout is
+// [..., time, dim] (time-major, matching the rest of the ASR stack)". Batch is optional because that
+// "..." is genuinely empty at the rank the block is tested at ([LayerProperty(TestInputShape = "4, 16")]
+// is [time, dim]) and genuinely one axis deep above it; ConvolutionModule folds every leading axis into
+// one ("for (int i = 0; i < rank - 2; i++) batch *= input.Shape[i];") so both run the same code.
+//
+// SHAPE-PRESERVING, and structurally so rather than by arithmetic coincidence: Equation 1 is four
+// pre-norm RESIDUAL adds against the running activation, and a residual add cannot resize its operand.
+// The convolution module is the only sub-module that changes layout at all, and it explicitly restores
+// the caller's shape on the way out ("Engine.Reshape(outTd, input.Shape.ToArray())") -- its 2*D channel
+// expansion is halved again by the GLU before that point, so even the interior width comes back to D.
+// The closing LayerNorm rescales values only.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
@@ -260,15 +277,6 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>
         return Engine.Reshape(outTd, input.Shape.ToArray());
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _ffn1Norm.ParameterCount + _ffn1Expand.ParameterCount + _ffn1Project.ParameterCount
-        + _attnNorm.ParameterCount + _attention.ParameterCount
-        + _convNorm.ParameterCount + _convPointwiseExpand.ParameterCount + _convDepthwise.ParameterCount
-        + _convInnerNorm.ParameterCount + _convPointwiseProject.ParameterCount
-        + _ffn2Norm.ParameterCount + _ffn2Expand.ParameterCount + _ffn2Project.ParameterCount
-        + _outputNorm.ParameterCount;
-
     private ILayer<T>[] OrderedSubLayers => new ILayer<T>[]
     {
         _ffn1Norm, _ffn1Expand, _ffn1Project,
@@ -276,31 +284,6 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>
         _convNorm, _convPointwiseExpand, _convDepthwise, _convInnerNorm, _convPointwiseProject,
         _ffn2Norm, _ffn2Expand, _ffn2Project, _outputNorm
     };
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parts = new List<T>((int)ParameterCount);
-        foreach (var layer in OrderedSubLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
-        }
-        return new Vector<T>(parts.ToArray());
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in OrderedSubLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

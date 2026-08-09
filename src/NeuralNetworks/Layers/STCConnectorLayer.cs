@@ -27,8 +27,114 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "4, 4, 8", TestConstructorArgs = "8, 2, 2")]
-public partial class STCConnectorLayer<T> : LayerBase<T>
+// The three accepted forms are ForwardTraced's own rank switch, and nothing else is accepted (rank 6+
+// and rank 2 throw "expects [T,L,C], [B,T,L,C], or [B,T,H,W,C] input"):
+//   rank 3  [T, Hp*Wp, C]     - unbatched tokens
+//   rank 4  [B, T, Hp*Wp, C]  - batched tokens
+//   rank 5  [B, T, Hp, Wp, C] - already-expanded grid
+// The video axis is Frames, which is what it literally is here and what TensorAxis.Frames is for
+// ("video frames, when frames are a separate axis from Time or Batch"). The token form's middle axis is
+// the patch grid ALREADY FLATTENED into one dimension, so it is Length - a sequence position with no
+// temporal meaning - rather than Height or Width, neither of which is separately addressable there.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Length, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input,
+    Note = "Token form; the Length axis is the flattened Hp*Wp patch grid.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input, Note = "Expanded grid form.")]
+// Output is the flattened visual-token sequence, [B, T'*H'*W', decoderDim], reshaped down to
+// [T'*H'*W', decoderDim] when the input had no explicit batch. Time, not Length: this is the sequence
+// the language decoder consumes, and [Batch, Time, Features] is what every transformer block in this
+// codebase declares as its input, so naming it anything else would break chain validation at the
+// connector's only real call site.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Derived from the last three statements of <c>ForwardTraced</c>: the sampler's result is read as
+    /// <c>outFrames = sampled.Shape[2]</c>, <c>outHeight = sampled.Shape[3]</c>,
+    /// <c>outWidth = sampled.Shape[4]</c>, those are flattened by
+    /// <c>Engine.Reshape(..., new[] { batch, outFrames * outHeight * outWidth, _decoderDim })</c>, and
+    /// the readout MLP is <see cref="DenseLayer{T}"/>s built at <c>_decoderDim</c>, which change only
+    /// the last axis. The RegStage blocks on either side are spatially neutral (1x1, depthwise 3x3 at
+    /// stride 1 padding 1, 1x1, plus a residual add that could not otherwise line up), so they do not
+    /// enter the contract either.
+    /// </para>
+    /// <para>
+    /// THE TOKEN AXIS IS A PRODUCT OF THREE SAMPLED EXTENTS. <c>_sampler</c> is
+    /// <c>new Conv3DLayer&lt;T&gt;(decoderDim, kernelSize, stride, padding, SiLU)</c> applied to
+    /// <c>[B, C, T, Hp, Wp]</c>, and <c>Conv3DLayer.CalculateOutputShape</c> sizes every one of those
+    /// three as <c>(in + 2*padding - kernel) / stride + 1</c> - the plain window formula. So each
+    /// factor is a <see cref="AxisRelation.Window"/> and the token count is their product, which is
+    /// what <see cref="AxisRelation.ProductOf"/> is for; <see cref="AxisRelation.Product"/> multiplies
+    /// RAW input axes and cannot express the downsampling that happens first.
+    /// </para>
+    /// <para>
+    /// WHY THE SPATIAL FACTORS ARE FIXED IN THE TOKEN FORMS. At ranks 3 and 4 the patch grid arrives
+    /// pre-flattened and <c>ValidateTokenShape</c> REQUIRES it to equal
+    /// <c>_patchesHeight * _patchesWidth</c>, so the pre-sampling spatial extents are the constructor's
+    /// values rather than anything read off the input. Their sampled sizes are therefore computed here
+    /// from <c>_patchesHeight</c>/<c>_patchesWidth</c> with the sampler's own formula - configuration,
+    /// not an observed literal. At rank 5 the same two extents ARE addressable axes (and are checked
+    /// equal to the same fields), so the honest form there is the window on the real axes.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_decoderDim <= 0 || _kernelSize <= 0 || _stride <= 0 || _padding < 0) return null;
+
+        // Conv3DLayer.CalculateOutputShape: (in + 2 * padding - kernelSize) / stride + 1.
+        int Sampled(int extent) => (extent + (2 * _padding) - _kernelSize) / _stride + 1;
+
+        // The frame axis is the only sampled extent that varies with the input in every accepted form.
+        var frames = AxisRelation.Window(
+            TensorAxis.Frames, kernel: _kernelSize, stride: _stride, padding: _padding);
+
+        AxisRelation tokenCount;
+        switch (inputRank)
+        {
+            case 3:
+            case 4:
+            {
+                int outHeight = Sampled(_patchesHeight);
+                int outWidth = Sampled(_patchesWidth);
+                // Matches Conv3DLayer's own guard, which throws when a sampled extent collapses.
+                if (outHeight <= 0 || outWidth <= 0) return null;
+                tokenCount = AxisRelation.ProductOf(
+                    frames, AxisRelation.Fixed(outHeight), AxisRelation.Fixed(outWidth));
+                break;
+            }
+
+            case 5:
+                tokenCount = AxisRelation.ProductOf(
+                    frames,
+                    AxisRelation.Window(
+                        TensorAxis.Height, kernel: _kernelSize, stride: _stride, padding: _padding),
+                    AxisRelation.Window(
+                        TensorAxis.Width, kernel: _kernelSize, stride: _stride, padding: _padding));
+                break;
+
+            default:
+                return null;
+        }
+
+        var tokens = new OutputAxisContract(TensorAxis.Time, tokenCount);
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_decoderDim));
+
+        // hadExplicitBatch is false only for the rank-3 form, which is reshaped back to two axes.
+        return inputRank == 3
+            ? new[] { tokens, features }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                tokens,
+                features,
+            };
+    }
+
     private readonly int _visionDim;
     private readonly int _decoderDim;
     private readonly int _patchesHeight;
@@ -265,35 +371,6 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
             layer.SetTrainingMode(isTraining);
     }
 
-    /// <inheritdoc/>
-    public override long ParameterCount => _parameterLayers.Sum(layer => layer.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => Concatenate(_parameterLayers, gradients: false);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Every convolution/dense sublayer is lazy. Reconstruct its concrete shapes before slicing
-        // a serialized trained vector into the newly-created connector.
-        if (_parameterLayers.Sum(layer => (long)layer.GetParameters().Length) != parameters.Length)
-            MaterializeSublayers();
-
-        int offset = 0;
-        foreach (var layer in _parameterLayers)
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            if (offset + count > parameters.Length)
-                throw new ArgumentException("STCConnectorLayer parameter vector is shorter than its reconstructed structure.", nameof(parameters));
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-
-        if (offset != parameters.Length)
-            throw new ArgumentException($"Expected {offset} STC parameters, got {parameters.Length}.", nameof(parameters));
-    }
-
     private void MaterializeSublayers()
     {
         bool wasTraining = IsTrainingMode;
@@ -379,8 +456,48 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
     /// It follows timm's default RegStage bottleneck ratio/group-width behavior: 1x1 projection,
     /// depthwise 3x3 spatial convolution, 1x1 projection, LayerNorm2d, SiLU, and a residual path.
     /// </summary>
-    private sealed class RegStageBlock : LayerBase<T>
+    // Rank 4 only, and batch is NOT optional: ForwardTraced opens with
+    // "if (input.Rank != 4 || input.Shape[1] != _inputChannels) throw", so [C,H,W] is rejected outright
+    // and axis 1 is unambiguously Channels.
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+        Direction = TensorLayoutDirection.Output)]
+    private sealed partial class RegStageBlock : LayerBase<T>, IShapeContract
     {
+        /// <inheritdoc />
+        /// <remarks>
+        /// <para>
+        /// A RegNet bottleneck is spatially neutral by construction, and this one is written that way:
+        /// <c>_conv1</c> and <c>_conv3</c> are <c>(outputChannels, 1, 1, 0)</c>, <c>_conv2</c> is
+        /// <c>(outputChannels, 3, 1, 1, groups: outputChannels)</c> - kernel 3, stride 1, padding 1,
+        /// which leaves H and W unchanged - and the block ends in
+        /// <c>Engine.TensorAdd(output, residual)</c>, which could not line up at all if any of them
+        /// resized the spatial axes. So Height and Width are <see cref="AxisRelation.Same"/> rather
+        /// than windows.
+        /// </para>
+        /// <para>
+        /// Channels is the only axis that moves: every convolution on both the main and the shortcut
+        /// path is built with <c>outputChannels</c> filters, so the block emits <c>_outputChannels</c>
+        /// whatever it was fed - which is exactly why the shortcut carries its own 1x1 projection when
+        /// <c>inputChannels != outputChannels</c>. The interleaved
+        /// <see cref="LayerNormalizationLayer{T}"/>s and <see cref="ActivationLayer{T}"/>s preserve
+        /// shape and do not enter the contract.
+        /// </para>
+        /// </remarks>
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        {
+            if (inputRank != 4 || _outputChannels <= 0) return null;
+
+            return new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+                new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+                new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+            };
+        }
+
         private readonly int _inputChannels;
         private readonly int _outputChannels;
         private readonly ConvolutionalLayer<T> _conv1;
@@ -477,26 +594,6 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
             base.SetTrainingMode(isTraining);
             foreach (var layer in _allLayers)
                 layer.SetTrainingMode(isTraining);
-        }
-
-        public override long ParameterCount => _parameterLayers.Sum(layer => layer.ParameterCount);
-
-        public override Vector<T> GetParameters() => Concatenate(_parameterLayers, gradients: false);
-
-        public override void SetParameters(Vector<T> parameters)
-        {
-            int expected = _parameterLayers.Sum(layer => layer.GetParameters().Length);
-            if (parameters.Length != expected)
-                throw new ArgumentException($"Expected {expected} RegStage parameters, got {parameters.Length}.", nameof(parameters));
-
-            int offset = 0;
-            foreach (var layer in _parameterLayers)
-            {
-                int count = layer.GetParameters().Length;
-                if (count == 0) continue;
-                layer.SetParameters(parameters.Slice(offset, count));
-                offset += count;
-            }
         }
 
         public override Vector<T> GetParameterGradients() => Concatenate(_parameterLayers, gradients: true);

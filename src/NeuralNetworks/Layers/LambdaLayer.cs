@@ -37,7 +37,22 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High)]
-public partial class LambdaLayer<T> : LayerBase<T>
+// POSITIONAL roles, for the same reason as ReshapeLayer: this layer runs a caller-supplied function,
+// so its axes have no intrinsic meanings, and every output relation below is Fixed - read from the
+// outputShape the CONSTRUCTOR was given - so no relation reads an input axis and the names cannot
+// influence a resolved size.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The user-provided function that defines the forward pass transformation.
@@ -59,6 +74,59 @@ public partial class LambdaLayer<T> : LayerBase<T>
     /// combines features in a special way, or applies a custom mathematical formula.
     /// </para>
     /// </remarks>
+    /// <summary>Positional roles, matching the layouts declared on the class.</summary>
+    private static readonly TensorAxis[] LambdaRoles =
+    {
+        TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    };
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// An earlier pass skipped this layer because its output is "literally
+    /// <c>_forwardFunction(input)</c> - an arbitrary user-supplied delegate", with no shape code to
+    /// derive from. That is true of the delegate and false of the LAYER: every constructor takes an
+    /// explicit <c>outputShape</c> and passes it to the base, so the layer has DECLARED its output
+    /// shape all along. The contract simply restates that declaration.
+    /// </para>
+    /// <para>
+    /// A delegate that returns something other than its declared shape is a caller error the layer
+    /// already cannot defend against - it would break <c>GetOutputShape()</c>, chain validation and
+    /// every downstream size just as surely without a contract as with one.
+    /// </para>
+    /// <para>
+    /// Both conventions are served: an input whose rank matches the declared output length resolves
+    /// axis-for-axis, and one rank higher takes a leading <see cref="AxisRelation.Same"/> batch axis.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var declared = GetOutputShape();
+        if (declared is null || declared.Length == 0) return null;
+
+        bool batched = inputRank == declared.Length + 1;
+        if (!batched && inputRank != declared.Length) return null;
+
+        int rank = declared.Length + (batched ? 1 : 0);
+        if (rank > LambdaRoles.Length) return null;
+
+        var axes = new List<OutputAxisContract>(rank);
+        int offset = 0;
+        if (batched)
+        {
+            axes.Add(new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)));
+            offset = 1;
+        }
+
+        for (int i = 0; i < declared.Length; i++)
+        {
+            if (declared[i] <= 0) return null;
+            axes.Add(new OutputAxisContract(LambdaRoles[i + offset], AxisRelation.Fixed(declared[i])));
+        }
+
+        return axes;
+    }
+
     private readonly Func<Tensor<T>, Tensor<T>> _forwardFunction;
 
     /// <summary>
@@ -286,57 +354,6 @@ public partial class LambdaLayer<T> : LayerBase<T>
         return output;
     }
 
-
-    /// <summary>
-    /// Update parameters is a no-op for the lambda layer since it typically doesn't have trainable parameters.
-    /// </summary>
-    /// <param name="learningRate">The learning rate (unused in this layer).</param>
-    /// <remarks>
-    /// <para>
-    /// This method is implemented as required by the LayerBase interface but typically does nothing for the LambdaLayer
-    /// since most custom transformations don't have trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method exists but typically does nothing for Lambda layers.
-    /// 
-    /// Since Lambda layers:
-    /// - Usually don't have their own weights or biases
-    /// - Rely on the custom functions you provide
-    /// 
-    /// This method is included only because all layers must have this method,
-    /// but it doesn't usually do anything for Lambda layers. If your custom functions
-    /// have parameters that need updating, you would need to handle that separately.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Lambda layers typically don't have trainable parameters
-    }
-
-    /// <summary>
-    /// Returns an empty vector since the lambda layer typically has no trainable parameters.
-    /// </summary>
-    /// <returns>An empty vector.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an empty vector since the LambdaLayer typically has no trainable parameters.
-    /// It is implemented as required by the LayerBase interface.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns an empty list because there are typically no parameters.
-    /// 
-    /// Since Lambda layers:
-    /// - Usually don't have their own weights or biases
-    /// - Rely on the custom functions you provide
-    /// 
-    /// This method returns an empty vector to indicate there are no parameters.
-    /// If your custom functions have parameters, you would need to handle saving
-    /// and loading them separately.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // LambdaLayer typically has no trainable parameters
-        return Vector<T>.Empty();
-    }
 
     /// <summary>
     /// Resets the internal state of the layer.
