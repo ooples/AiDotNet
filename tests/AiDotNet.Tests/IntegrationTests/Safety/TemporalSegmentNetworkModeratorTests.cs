@@ -33,6 +33,50 @@ public class TemporalSegmentNetworkModeratorTests
     /// asserting that findings ARE produced were asserting against an empty collection. Both shades
     /// are inside the predicate, so the skin fraction stays 1.0 and clears the 0.8 NSFW bar.
     /// </remarks>
+    /// <summary>
+    /// Harmful frames whose skin COVERAGE ramps across the video, so the five segment scores differ
+    /// and the consensus functions have something to disagree about.
+    /// </summary>
+    /// <remarks>
+    /// SEPARATE FROM <see cref="HarmfulFrames"/>, WHICH IS UNIFORM ON PURPOSE. Max, Average and
+    /// WeightedAverage are mathematically identical on equal inputs, so a video that is uniformly
+    /// skin makes every mode agree and cannot distinguish them - that is not a shared code path, it
+    /// is the functions agreeing because the scores agree. Coverage ramps 0.6 -> 1.0, which puts the
+    /// five segment centres near .64/.76/.80/.88/.96: Max 0.96, WeightedAverage ~0.86, Average ~0.81,
+    /// all three still clearing the 0.8 NSFW bar so every mode reports, and all three distinct.
+    /// </remarks>
+    private static List<Tensor<double>> GradedHarmfulFrames(int count)
+    {
+        var frames = Frames(count);
+        for (int f = 0; f < frames.Count; f++)
+        {
+            var t = frames[f];
+            double coverage = count > 1 ? 0.6 + 0.4 * f / (count - 1) : 1.0;
+            int skinPixels = (int)Math.Round(coverage * 64);
+
+            for (int pixel = 0; pixel < 64; pixel++)
+            {
+                int y = pixel / 8, x = pixel % 8;
+                int r = (0 * 8 + y) * 8 + x;
+                int g = (1 * 8 + y) * 8 + x;
+                int b = (2 * 8 + y) * 8 + x;
+                if (b >= t.Length) continue;
+
+                if (pixel < skinPixels)
+                {
+                    t[r] = 0.85; t[g] = 0.65; t[b] = 0.55;
+                }
+                else
+                {
+                    // Explicitly NOT skin: green above red fails the r > g requirement.
+                    t[r] = 0.20; t[g] = 0.60; t[b] = 0.30;
+                }
+            }
+        }
+
+        return frames;
+    }
+
     private static List<Tensor<double>> HarmfulFrames(int count)
     {
         var frames = Frames(count);
@@ -152,7 +196,7 @@ public class TemporalSegmentNetworkModeratorTests
     [Fact]
     public void EveryConsensusFunction_IsAccepted_AndDeterministic()
     {
-        var frames = HarmfulFrames(60);
+        var frames = GradedHarmfulFrames(60);
         var perMode = new Dictionary<SegmentalConsensus, IReadOnlyList<SafetyFinding>>();
 
         foreach (SegmentalConsensus consensus in (SegmentalConsensus[])Enum.GetValues(typeof(SegmentalConsensus)))
