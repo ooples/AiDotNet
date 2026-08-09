@@ -104,7 +104,16 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
     {
         _options = options ?? new VisualBERTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // VisualBERT fine-tuning uses a maximum learning rate of 2e-5 (Li et al.,
+        // 2019, Appendix A). Honor the public options instead of AdamW's generic
+        // 1e-2 default; the previous hard-coded 2e-4 rate overshot after the model
+        // had already reached a good minimum.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
@@ -205,27 +214,15 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
         }
     }
 
-    private static Tensor<T> MeanPoolOverTokens(Tensor<T> input)
+    private Tensor<T> MeanPoolOverTokens(Tensor<T> input)
     {
-        int rank = input.Shape.Length;
-        if (rank != 2)
+        if (input.Shape.Length != 2)
             return input;
-        int n = input.Shape[0];
-        int d = input.Shape[1];
-        var output = new Tensor<T>([d]);
-        T invN = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(1.0 / n);
-        for (int i = 0; i < d; i++)
-        {
-            T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
-            for (int j = 0; j < n; j++)
-                sum = AiDotNet
-                    .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                    .Add(sum, input[j, i]);
-            output[i] = AiDotNet
-                .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
-                .Multiply(sum, invN);
-        }
-        return output;
+        // Tape-aware mean over the token axis (axis 0): [n, d] -> [d]. The previous scalar nested loop
+        // built the pooled tensor element-by-element, which SEVERS the gradient tape — so during training
+        // no gradient flowed back through the pool into the transformer body; only the task head learned,
+        // and LossStrictlyDecreases / MoreData failed. Engine.ReduceMean keeps the op on the tape.
+        return Engine.ReduceMean(input, [0], keepDims: false);
     }
 
     private Tensor<T> RunStream(Tensor<T> input)
@@ -271,7 +268,9 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        // Pass the model's paper-configured optimizer. The two-argument overload
+        // uses the base optimizer and would ignore VisualBERTOptions.
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
@@ -343,8 +342,8 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VisualBERT<T>(Architecture, mp, _options);
-        return new VisualBERT<T>(Architecture, _options);
+            return new VisualBERT<T>(Architecture, mp, new VisualBERTOptions(_options));
+        return new VisualBERT<T>(Architecture, new VisualBERTOptions(_options));
     }
 
     private void ThrowIfDisposed()

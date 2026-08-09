@@ -98,7 +98,24 @@ public class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
     {
         _options = options ?? new ViLTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // Official ViLT pre-training uses AdamW at 1e-4 with a
+                // 2,500-step warmup over 25,000 steps and 0.01 weight decay.
+                // The old parameterless AdamW silently trained at 1e-3.
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: _options.LearningRate,
+                    warmupSteps: _options.WarmupSteps,
+                    totalSteps: _options.TotalTrainingSteps,
+                    warmupInitLr: _options.WarmupInitialLearningRate,
+                    decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear,
+                    endLr: 0.0),
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
@@ -221,8 +238,14 @@ public class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
