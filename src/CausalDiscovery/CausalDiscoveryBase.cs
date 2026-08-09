@@ -123,6 +123,65 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     }
 
     /// <summary>
+    /// The standard deviation below which a column counts as constant and carries no information.
+    /// </summary>
+    /// <remarks>
+    /// Dividing by a standard deviation this small would amplify floating-point noise into a
+    /// unit-variance column, and every downstream correlation would then read that noise as signal.
+    /// </remarks>
+    protected const double ConstantColumnStdDevTolerance = 1e-12;
+
+    /// <summary>
+    /// Returns a copy of <paramref name="data"/> with every column standardized to zero mean and
+    /// unit variance, so a downstream covariance is the scale-invariant correlation matrix.
+    /// </summary>
+    /// <param name="data">Data matrix [n x d].</param>
+    /// <returns>A new [n x d] matrix; <paramref name="data"/> is not modified.</returns>
+    /// <remarks>
+    /// <para>
+    /// A column whose standard deviation falls below <see cref="ConstantColumnStdDevTolerance"/> is
+    /// written as zeros rather than divided through: it holds no information, and rescaling its
+    /// residual noise to unit variance would manufacture correlations that are not in the data.
+    /// </para>
+    /// <para>
+    /// Population standard deviation (divide by n, not n-1), because the result feeds covariance
+    /// estimates that use the same convention.
+    /// </para>
+    /// </remarks>
+    protected Matrix<T> StandardizeColumns(Matrix<T> data)
+    {
+        int n = data.Rows;
+        int d = data.Columns;
+        var result = new Matrix<T>(n, d);
+
+        for (int j = 0; j < d; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
+            mean /= n;
+
+            double variance = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double deviation = NumOps.ToDouble(data[i, j]) - mean;
+                variance += deviation * deviation;
+            }
+
+            double standardDeviation = Math.Sqrt(variance / n);
+            if (standardDeviation < ConstantColumnStdDevTolerance)
+            {
+                for (int i = 0; i < n; i++) result[i, j] = NumOps.Zero;
+                continue;
+            }
+
+            for (int i = 0; i < n; i++)
+                result[i, j] = NumOps.FromDouble((NumOps.ToDouble(data[i, j]) - mean) / standardDeviation);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Computes the sample covariance matrix from data.
     /// </summary>
     /// <param name="data">Data matrix [n x d].</param>

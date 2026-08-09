@@ -89,10 +89,17 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Attentive Weights Generation for Few Shot Learning via Information Maximization",
-    "https://arxiv.org/abs/2003.03313",
+// Citation replaced entirely — it named the WRONG PAPER, not just a wrong URL. The recorded title
+// "Attentive Weights Generation for Few Shot Learning via Information Maximization" (AWGIM) is a real
+// but different paper, and the recorded arXiv id 2003.03313 is "Categories of orthogonality spaces",
+// unrelated to either. This class implements ConstellationNet — cell feature clustering with a dense
+// part representation, whose relationships are then modeled by attention — which is what its name says
+// and what the code does. ConstellationNet has no arXiv preprint, so the ICLR 2021 OpenReview record is
+// the canonical reference.
+[ResearchPaper("Attentional Constellation Nets for Few-Shot Learning",
+    "https://openreview.net/forum?id=vujTf_I8Kmc",
     Year = 2021,
-    Authors = "Yikai Wang, Chengming Xu, Chen Liu, et al.")]
+    Authors = "Weijian Xu, Yifan Xu, Huaijin Wang, Zhuowen Tu")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
 public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>

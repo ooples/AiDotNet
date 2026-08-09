@@ -845,21 +845,21 @@ internal class DuelingNetwork<T>
         foreach (var layer in _sharedLayers)
         {
             writer.Write(layer.GetInputShape()[0]);
-            writer.Write(layer.GetOutputShape()[0]);
+            writer.Write(layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
         }
 
         // Write layer sizes for value layers
         foreach (var layer in _valueLayers)
         {
             writer.Write(layer.GetInputShape()[0]);
-            writer.Write(layer.GetOutputShape()[0]);
+            writer.Write(layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
         }
 
         // Write layer sizes for advantage layers
         foreach (var layer in _advantageLayers)
         {
             writer.Write(layer.GetInputShape()[0]);
-            writer.Write(layer.GetOutputShape()[0]);
+            writer.Write(layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]);
         }
 
         // Serialize parameters

@@ -27,6 +27,7 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private Matrix<T>? _trainingData;
+    private T[,]? _trainingDistanceMatrix;
     private Vector<T>? _chainingDistances;
 
     /// <summary>
@@ -66,8 +67,12 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
 
         _trainingData = X;
 
-        // Precompute chaining distances for training data
-        _chainingDistances = ComputeChainingDistances(X);
+        // COF needs both query-to-training distances and distances among the training
+        // neighbors themselves. Cache the square training matrix once so scoring a new,
+        // differently-sized query set never indexes the rectangular query matrix as if
+        // both of its axes referred to training samples.
+        _trainingDistanceMatrix = ComputeDistanceMatrix(X, X);
+        _chainingDistances = ComputeChainingDistances(_trainingDistanceMatrix);
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -77,6 +82,20 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// IN-SAMPLE SCORING REQUIRES THE SAME INSTANCE, not an equal one. The training path is selected
+    /// by <see cref="object.ReferenceEquals(object, object)"/> against the matrix passed to Fit, so
+    /// that each training point can exclude ITSELF from its own neighbourhood.
+    /// </para>
+    /// <para>
+    /// Pass a value-identical copy and it takes the query path instead: every point keeps itself as a
+    /// zero-distance neighbour, the chain cost collapses toward zero, and scores come out far lower
+    /// than the in-sample call produced. The contamination threshold chosen during Fit was calibrated
+    /// with self-exclusion, so the two are not comparable and <c>Predict</c> can label a training
+    /// point differently than Fit did.
+    /// </para>
+    /// </remarks>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
@@ -87,14 +106,28 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        // Both fitted fields are resolved ONCE, before either branch. The two arms previously
+        // repeated the same _trainingDistanceMatrix null guard, and reached the training data
+        // through a null-forgiving operator that would have surfaced as a NullReferenceException
+        // from inside ComputeDistanceMatrix rather than as a "not fitted" message.
+        var trainingDistanceMatrix = _trainingDistanceMatrix
+            ?? throw new InvalidOperationException(
+                $"{nameof(COFDetector<T>)} is not fitted: the training distance matrix is missing.");
+        var trainingData = _trainingData
+            ?? throw new InvalidOperationException(
+                $"{nameof(COFDetector<T>)} is not fitted: the training data is missing.");
+
         var scores = new Vector<T>(X.Rows);
-        var distanceMatrix = ComputeDistanceMatrix(X, _trainingData!);
+        bool scoringTrainingData = ReferenceEquals(X, _trainingData);
+        var distanceMatrix = scoringTrainingData
+            ? trainingDistanceMatrix
+            : ComputeDistanceMatrix(X, trainingData);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var neighbors = GetKNearestNeighbors(distanceMatrix, i, _k);
+            var neighbors = GetKNearestNeighbors(distanceMatrix, i, _k, scoringTrainingData);
 
-            T acDist = ComputeAverageChainDist(distanceMatrix, i, neighbors);
+            T acDist = ComputeAverageChainDist(distanceMatrix, trainingDistanceMatrix, i, neighbors);
 
             T avgNeighborAcDist = NumOps.Zero;
             var chainingDist = _chainingDistances ?? throw new InvalidOperationException("_chainingDistances has not been initialized.");
@@ -114,50 +147,76 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
         return scores;
     }
 
-    private Vector<T> ComputeChainingDistances(Matrix<T> X)
+    private Vector<T> ComputeChainingDistances(T[,] distanceMatrix)
     {
-        var chainDist = new Vector<T>(X.Rows);
-        var distanceMatrix = ComputeDistanceMatrix(X, X);
+        int sampleCount = distanceMatrix.GetLength(0);
+        var chainDist = new Vector<T>(sampleCount);
 
-        for (int i = 0; i < X.Rows; i++)
+        for (int i = 0; i < sampleCount; i++)
         {
-            var neighbors = GetKNearestNeighbors(distanceMatrix, i, _k);
-            chainDist[i] = ComputeAverageChainDist(distanceMatrix, i, neighbors);
+            var neighbors = GetKNearestNeighbors(distanceMatrix, i, _k, excludeSameIndex: true);
+            chainDist[i] = ComputeAverageChainDist(distanceMatrix, distanceMatrix, i, neighbors);
         }
 
         return chainDist;
     }
 
-    private T ComputeAverageChainDist(T[,] distanceMatrix, int pointIdx, List<int> neighbors)
+    private T ComputeAverageChainDist(
+        T[,] queryToTrainingDistances,
+        T[,] trainingDistances,
+        int queryIndex,
+        List<int> neighbors)
     {
         if (neighbors.Count == 0) return NumOps.Zero;
 
-        var visited = new HashSet<int> { pointIdx };
+        var visitedNeighbors = new List<int>(neighbors.Count);
+        // Preserve nearest-neighbour order for deterministic tie-breaking.
+        var remainingNeighbors = new List<int>(neighbors);
         T totalChainDist = NumOps.Zero;
 
-        var orderedNeighbors = neighbors
-            .OrderBy(n => NumOps.ToDouble(distanceMatrix[pointIdx, n]))
-            .ToList();
-
-        for (int i = 0; i < orderedNeighbors.Count; i++)
+        // Build the minimum-cost chaining set from the query point. At each step COF
+        // selects the remaining neighbour with the shortest edge to *any* point
+        // already in the chain; sorting once by distance to the query is not
+        // equivalent and overstates the cost for curved or corridor-shaped clusters.
+        for (int i = 0; i < neighbors.Count; i++)
         {
-            int current = orderedNeighbors[i];
-
-            T minDist = NumOps.MaxValue;
-            foreach (int v in visited)
+            int current = -1;
+            T minDist = NumOps.Zero;
+            bool found = false;
+            foreach (int candidate in remainingNeighbors)
             {
-                if (NumOps.LessThan(distanceMatrix[current, v], minDist))
+                // The query-to-neighbour edge comes from the rectangular matrix.
+                // Neighbour-to-neighbour edges come from the cached square matrix.
+                T candidateDistance = queryToTrainingDistances[queryIndex, candidate];
+                foreach (int visited in visitedNeighbors)
                 {
-                    minDist = distanceMatrix[current, v];
+                    if (NumOps.LessThan(trainingDistances[candidate, visited], candidateDistance))
+                    {
+                        candidateDistance = trainingDistances[candidate, visited];
+                    }
+                }
+
+                if (!found || NumOps.LessThan(candidateDistance, minDist))
+                {
+                    current = candidate;
+                    minDist = candidateDistance;
+                    found = true;
                 }
             }
 
+            if (!found)
+            {
+                break;
+            }
+
             // Weight: 2 * (k - i) / (k * (k + 1))
+            int neighborCount = neighbors.Count;
             T weight = NumOps.Divide(
-                NumOps.FromDouble(2.0 * (_k - i)),
-                NumOps.FromDouble((double)_k * (_k + 1)));
+                NumOps.FromDouble(2.0 * (neighborCount - i)),
+                NumOps.FromDouble((double)neighborCount * (neighborCount + 1)));
             totalChainDist = NumOps.Add(totalChainDist, NumOps.Multiply(weight, minDist));
-            visited.Add(current);
+            visitedNeighbors.Add(current);
+            remainingNeighbors.Remove(current);
         }
 
         return totalChainDist;
@@ -184,10 +243,10 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
-    private List<int> GetKNearestNeighbors(T[,] distanceMatrix, int pointIdx, int k)
+    private List<int> GetKNearestNeighbors(T[,] distanceMatrix, int pointIdx, int k, bool excludeSameIndex)
     {
         return Enumerable.Range(0, distanceMatrix.GetLength(1))
-            .Where(i => i != pointIdx || NumOps.GreaterThan(distanceMatrix[pointIdx, i], NumOps.Zero))
+            .Where(i => !excludeSameIndex || i != pointIdx)
             .OrderBy(i => NumOps.ToDouble(distanceMatrix[pointIdx, i]))
             .Take(k)
             .ToList();

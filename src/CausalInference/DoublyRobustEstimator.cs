@@ -438,11 +438,12 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     {
         var predictions = new Vector<T>(x.Rows);
         int p = x.Columns;
+        int availableFeatures = Math.Max(0, coefficients.Length - 1);
 
         for (int i = 0; i < x.Rows; i++)
         {
-            double pred = NumOps.ToDouble(coefficients[0]); // intercept
-            for (int j = 0; j < p; j++)
+            double pred = coefficients.Length > 0 ? NumOps.ToDouble(coefficients[0]) : 0.0; // intercept
+            for (int j = 0; j < p && j < availableFeatures; j++)
             {
                 pred += NumOps.ToDouble(coefficients[j + 1]) * NumOps.ToDouble(x[i, j]);
             }
@@ -771,25 +772,36 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length == 0) return;
+        // GetParameters emits exactly three equal-length segments, so a valid vector is a non-zero
+        // multiple of three. The previous `(Length + 2) / 3` rounded UP, so a vector of any other
+        // length produced three segments longer than the data available to fill them: the trailing
+        // coefficients stayed at zero, IsFitted was set anyway, and the estimator then answered
+        // predictions from a silently truncated model. Reject it at the boundary instead.
+        if (parameters.Length == 0 || parameters.Length % 3 != 0)
+        {
+            throw new ArgumentException(
+                $"Expected a non-empty parameter vector whose length is a multiple of 3 "
+                + $"(propensity, treated-outcome and control-outcome coefficients are equal length); "
+                + $"got {parameters.Length}.",
+                nameof(parameters));
+        }
 
-        // Assume equal split for simplicity
-        int propLength = (parameters.Length + 2) / 3;
-        int outLength = propLength;
+        int segmentLength = parameters.Length / 3;
 
-        _propensityCoefficients = new Vector<T>(propLength);
-        _outcomeCoefficients1 = new Vector<T>(outLength);
-        _outcomeCoefficients0 = new Vector<T>(outLength);
+        _propensityCoefficients = new Vector<T>(segmentLength);
+        _outcomeCoefficients1 = new Vector<T>(segmentLength);
+        _outcomeCoefficients0 = new Vector<T>(segmentLength);
 
         int idx = 0;
-        for (int i = 0; i < propLength && idx < parameters.Length; i++)
+        for (int i = 0; i < segmentLength; i++)
             _propensityCoefficients[i] = parameters[idx++];
-        for (int i = 0; i < outLength && idx < parameters.Length; i++)
+        for (int i = 0; i < segmentLength; i++)
             _outcomeCoefficients1[i] = parameters[idx++];
-        for (int i = 0; i < outLength && idx < parameters.Length; i++)
+        for (int i = 0; i < segmentLength; i++)
             _outcomeCoefficients0[i] = parameters[idx++];
 
-        NumFeatures = propLength - 1;
+        NumFeatures = segmentLength - 1;
+        IsFitted = true;
     }
 
     /// <summary>
@@ -800,6 +812,25 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         var newModel = new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
         newModel.SetParameters(parameters);
         return newModel;
+    }
+
+    /// <summary>
+    /// Creates a fitted copy, including the learned propensity and outcome coefficients.
+    /// CausalModelBase's metadata round-trip does not carry these estimator state vectors.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        var copy = new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
+        // Keep estimator state as independent vectors without forcing a generic
+        // parameter flatten/round-trip. (Unlike a neural model these vectors are
+        // small, but direct cloning is both clearer and preserves fitted state.)
+        copy._propensityCoefficients = _propensityCoefficients?.Clone();
+        copy._outcomeCoefficients1 = _outcomeCoefficients1?.Clone();
+        copy._outcomeCoefficients0 = _outcomeCoefficients0?.Clone();
+        copy.FeatureNames = FeatureNames is null ? null : (string[])FeatureNames.Clone();
+        copy.NumFeatures = NumFeatures;
+        copy.IsFitted = IsFitted;
+        return copy;
     }
 
     /// <summary>

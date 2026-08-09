@@ -198,13 +198,19 @@ public class LinearAnomalyDetectionTests
     [Fact(Timeout = 120000)]
     public async Task KernelPCA_OutlierGetsHighestScore()
     {
+        // HELD OUT, not in-sample. KPCA's novelty score is Hoffmann's feature-space reconstruction
+        // error, and an in-sample fitted point is reconstructed with near-zero residual whenever its
+        // own direction is retained by the decomposition -- so fitting on data that CONTAINS the
+        // extreme row and then asserting that row scores highest expects the documented failure mode
+        // to behave as the success path. The detector is fitted on the inliers alone and scored on a
+        // matrix whose last row is a genuinely new, extreme point.
         var detector = new KernelPCADetector<double>();
-        // Novelty-detection protocol (Hoffmann 2007): fit on the anomaly-free inliers,
-        // then score a set that includes the held-out outlier as an unseen point.
         detector.Fit(CreateCleanTrainingData());
-        var data = CreateTestData();
-        var scores = detector.ScoreAnomalies(data);
-        Assert.Equal(data.Rows, scores.Length);
+
+        var scored = CreateTestData();
+        var scores = detector.ScoreAnomalies(scored);
+
+        Assert.Equal(scored.Rows, scores.Length);
         AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 

@@ -129,7 +129,9 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
                 cumulativeH += hazardIncrement;
 
                 // Variance increment: d(t)/n(t)^2
-                cumulativeVar += (double)eventsAtTime / (atRisk * atRisk);
+                // atRisk * atRisk is squared in int and overflows for a large cohort,
+                // so the variance term flips sign rather than shrinking.
+                cumulativeVar += (double)eventsAtTime / ((double)atRisk * atRisk);
             }
 
             _cumulativeHazard[t] = NumOps.FromDouble(cumulativeH);
@@ -283,7 +285,34 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         return new NelsonAalenEstimator<T>();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Clones the fitted estimator, carrying over the non-parametric fitted state.
+    /// </summary>
+    /// <remarks>
+    /// The base <see cref="SurvivalModelBase{T}.DeepCopy"/> transfers only NumFeatures / IsFitted
+    /// plus the <see cref="GetParameters"/>/<see cref="SetParameters"/> vector (the cumulative
+    /// hazard values). It never invokes this model's overridden <see cref="Serialize"/>, so the
+    /// event-time grid, variance estimates, and baseline survival curve would be lost — leaving a
+    /// clone whose <see cref="Predict"/> (via median survival time) sees a null event-time grid and
+    /// returns zeros, diverging from the original (Clone_ShouldProduceSamePredictions). Nelson-Aalen
+    /// is non-parametric: its "model" is the step function defined by the event times and the
+    /// cumulative hazard accumulated at each. Carry all fitted state onto the clone as INDEPENDENT
+    /// vectors. The previous version shared the references, arguing that Fit reassigns rather than
+    /// mutates -- but EventTimes, BaselineSurvival, CumulativeHazard and Variance are all public and
+    /// mutable, so any caller writing through one of them on either estimator changed both.
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        var copy = base.DeepCopy();
+        if (copy is NelsonAalenEstimator<T> na)
+        {
+            na.TrainedEventTimes = TrainedEventTimes?.Clone();
+            na._cumulativeHazard = _cumulativeHazard?.Clone();
+            na._variance = _variance?.Clone();
+            na.BaselineSurvivalFunction = BaselineSurvivalFunction?.Clone();
+        }
+        return copy;
+    }
 
     /// <inheritdoc />
     public override byte[] Serialize()
