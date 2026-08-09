@@ -42,6 +42,58 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TabTransformerOptions<T> : RiskModelOptions<T>
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public TabTransformerOptions() { }
+
+    /// <summary>Initializes a new instance by copying every property from another instance.</summary>
+    /// <param name="other">The instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// EVERY property is carried, including the inherited <c>ModelOptions.Seed</c> -- which is
+    /// declared on a base class rather than in this file, so a constructor written from the local
+    /// declarations alone would silently drop it and the clone would lose its configured seed.
+    /// </para>
+    /// <para>
+    /// Collection properties are CLONED, not assigned: a bare assignment leaves the clone and
+    /// the original writing through the same buffer, so mutating one silently reconfigures the
+    /// other. A null source stays null rather than becoming an empty collection.
+    /// </para>
+    /// </remarks>
+    public TabTransformerOptions(TabTransformerOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+
+        // BEFORE CategoricalCardinalities: that property's setter validates the two against each
+        // other, so assigning the cardinalities first rejects a perfectly valid source.
+        NumCategoricalFeatures = other.NumCategoricalFeatures;
+
+        EmbeddingDimension = other.EmbeddingDimension;
+        HiddenDimension = other.HiddenDimension;
+        NumHeads = other.NumHeads;
+        NumLayers = other.NumLayers;
+        DropoutRate = other.DropoutRate;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        UseLayerNorm = other.UseLayerNorm;
+        UseColumnEmbedding = other.UseColumnEmbedding;
+        EmbeddingInitScale = other.EmbeddingInitScale;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+
+        // An empty array rather than a suppressed null. MLPHiddenDimensions is declared
+        // non-nullable, so a null source already violates its own contract; propagating that with a
+        // null-forgiving operator carries the violation into the clone and defers the failure to
+        // whichever layer-builder dereferences it next.
+        MLPHiddenDimensions = other.MLPHiddenDimensions is null
+            ? []
+            : (int[])other.MLPHiddenDimensions.Clone();
+        CategoricalCardinalities = other.CategoricalCardinalities is null
+            ? null
+            : (int[])other.CategoricalCardinalities.Clone();
+    }
+
     /// <summary>
     /// Gets or sets the cardinalities of categorical features.
     /// </summary>
@@ -184,6 +236,24 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// </summary>
     /// <value>The initialization scale, defaulting to 0.01.</value>
     public double EmbeddingInitScale { get; set; } = 0.01;
+
+    /// <summary>
+    /// Gets or sets the AdamW learning rate used when no optimizer is supplied.
+    /// </summary>
+    /// <remarks>
+    /// The TabTransformer paper tunes a constant AdamW learning rate between
+    /// 1e-6 and 1e-3. The default 1e-4 is a stable midpoint for training from scratch.
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the decoupled AdamW weight-decay coefficient used when no optimizer is supplied.
+    /// </summary>
+    /// <remarks>
+    /// The paper tunes weight decay between 1e-6 and 1e-1. A conservative 1e-5 default
+    /// regularizes the transformer without dominating small regression objectives.
+    /// </remarks>
+    public double WeightDecay { get; set; } = 1e-5;
 
     // Backing field for NumCategoricalFeatures
     private int? _numCategoricalFeatures;

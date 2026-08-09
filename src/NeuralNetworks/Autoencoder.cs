@@ -961,7 +961,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 { "EncodedSize", EncodedSize },
                 { "LayerCount", Layers.Count },
                 { "IsSymmetric", true },
-                { "LayerSizes", Layers.Select(l => l.GetOutputShape()[0]).ToArray() }
+                // Metadata reports geometry, it does not demand it -- the same contract as
+                // CapsuleNetwork/DeepBeliefNetwork/DeepBoltzmannMachine. A lazily-shaped layer reports
+                // IsShapeResolved == false until its first forward pass, and RequireConcrete is the
+                // rejection path for exactly that state, so introspecting a freshly built autoencoder
+                // threw. An unresolved axis now comes back as LayerShape.Dynamic (-1).
+                { "LayerSizes", Layers.Select(l => l.GetOutputLayerShape()[0]).ToArray() }
             }
         };
     }

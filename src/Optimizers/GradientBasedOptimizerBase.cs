@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Caching;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Data.Sampling;
@@ -419,6 +419,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientBasedOptimizerOptions<T, TInput, TOutput> options) :
         base(model, options)
     {
+        // Publish this optimizer to the network it was built for, so a model that configures an optimizer in its
+        // constructor actually trains with it. Without this the field stays private to the derived model and the
+        // tape trainer silently uses the base Adam default instead — see
+        // NeuralNetworkBase.AdoptConfiguredOptimizer for the scale of that defect. Adoption never overwrites an
+        // optimizer the model already chose. (#1789)
+        if (model is NeuralNetworkBase<T> configuredNetwork
+            && this is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> tapeOptimizer)
+        {
+            configuredNetwork.AdoptConfiguredOptimizer(tapeOptimizer);
+        }
+
         GradientOptions = options;
         _currentMomentum = GradientOptions.InitialMomentum;
         _previousGradient = Vector<T>.Empty();
@@ -491,6 +502,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> newModel)
     {
         base.OnModelChanged(oldModel, newModel);
+
+        // ADOPTION RUNS HERE TOO, not only in the constructors. SetModel is the documented "set
+        // later" path and routes through this method, so an optimizer configured at construction and
+        // attached to its network afterwards used to be silently replaced by the model's own default
+        // -- the configured object still existed, it just never ran. Adoption never overwrites an
+        // optimizer the model already chose, so running it twice is harmless.
+        if (newModel is NeuralNetworkBase<T> configuredNetwork
+            && this is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> tapeOptimizer)
+        {
+            configuredNetwork.AdoptConfiguredOptimizer(tapeOptimizer);
+        }
 
         if (GradientOptions.LossFunctionExplicitlySet)
         {
@@ -624,6 +646,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     protected void NotifyEpochStart(int currentEpoch)
     {
+        // Crossing into epoch N means epoch N-1 just ended. Raising the epoch-end event here is
+        // what gives EVERY optimizer an epoch cadence, rather than the one that happened to call
+        // OnEpochEnd itself.
+        //
+        // All 28 gradient optimizers call NotifyEpochStart at the top of their epoch loop, but
+        // only AdamOptimizer called OnEpochEnd at the bottom of its own. So for the other 27, a
+        // user-configured StepPerEpoch or WarmupThenEpoch schedule never advanced: the learning
+        // rate stayed at its initial value for the entire run no matter what schedule was
+        // attached. That is a configured-but-inert mechanism, and silent -- the schedule is
+        // accepted, stored, and simply never consulted.
+        //
+        // Ticking on entry rather than on exit means the final epoch raises no end event. Nothing
+        // observes it: a schedule only affects steps that come after it, and there are none.
+        if (currentEpoch > 0)
+        {
+            OnEpochEnd();
+        }
+
         GradientOptions.DataSampler?.OnEpochStart(currentEpoch);
     }
 

@@ -323,7 +323,9 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is useful when you want to treat each attention score separately.
     /// </para>
     /// </remarks>
-    public AttentionLayer(int attentionSize, IActivationFunction<T>? activation = null,
+    public AttentionLayer(
+        [LayerState] int attentionSize,
+        IActivationFunction<T>? activation = null,
         IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new SoftmaxActivation<T>())
     {
@@ -480,7 +482,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This process allows the layer to focus on different parts of the input as needed.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input != null) EnsureInitializedFromInput(input);
         // Validate input tensor

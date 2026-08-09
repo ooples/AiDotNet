@@ -809,8 +809,12 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         LossFunction = new ParaformerObjective<T>(
             new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(),
             () => Layers.OfType<CifAlignmentLayer<T>>().FirstOrDefault()?.LastPredictedTokenCount,
-            _options.CeWeight,
-            _options.MaeWeight);
+            // NAMED, because ParaformerObjective's third parameter is the optional targetTokenCount
+            // Func -- passing the weights positionally put CeWeight there and would not compile once
+            // both slices of #1789 are in one assembly. The target count is genuinely absent here:
+            // SeACo supervises the predicted count against the label length inside the objective.
+            ceWeight: _options.CeWeight,
+            maeWeight: _options.MaeWeight);
     }
 
     /// <summary>

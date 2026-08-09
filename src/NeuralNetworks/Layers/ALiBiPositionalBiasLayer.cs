@@ -200,7 +200,7 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// <param name="input">Attention scores tensor of shape [batch, numHeads, queryLen, keyLen]
     /// or [numHeads, queryLen, keyLen].</param>
     /// <returns>Biased attention scores with the same shape.</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int rank = input.Shape.Length;
         int numHeads, queryLen, keyLen;

@@ -504,7 +504,13 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },
-                { "OutputDimension", Layers[Layers.Count - 1].GetOutputShape()[0] },
+                // METADATA DOES NOT THROW. RequireConcrete here turned a diagnostic read into a hard
+                // failure in the network's normal pre-forward state: this model's ActivationLayer is
+                // built with new[] { -1 } and resolves only in OnFirstForward, so a freshly constructed
+                // CapsuleNetwork could not report its own metadata. The indexer reports
+                // LayerShape.Dynamic (-1) for an axis that is not known yet, which is the honest answer
+                // and is what a caller inspecting a half-built model is asking for.
+                { "OutputDimension", Layers[Layers.Count - 1].GetOutputLayerShape()[0] },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },

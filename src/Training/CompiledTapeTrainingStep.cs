@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Compilation;
@@ -162,10 +163,20 @@ public static class CompiledTapeTrainingStep<T>
     // fused compiled path off, so "(unspecified gate)" is no longer a black box.
     private static readonly bool s_fusedDebug =
         System.Environment.GetEnvironmentVariable("AIDOTNET_FUSED_DEBUG") == "1";
-    private static void Fd(string why)
+    // One gate and one sink for every fused diagnostic, so there is a single place to swap in a real
+    // logging abstraction later. The tag is a parameter rather than baked in because the two kinds of
+    // event -- a gate turning the path off, and the path actually running -- have to stay separable in
+    // a log.
+    private static void FdTagged(string tag, string message)
     {
-        if (s_fusedDebug) System.Console.Error.WriteLine($"[FUSED-MISS] {why}");
+        if (s_fusedDebug) System.Console.Error.WriteLine($"[{tag}] {message}");
     }
+
+    /// <summary>Reports the gate that turned the fused compiled path off.</summary>
+    private static void Fd(string why) => FdTagged("FUSED-MISS", why);
+
+    /// <summary>Reports a fused step that actually ran.</summary>
+    private static void FdStep(string what) => FdTagged("FUSED-STEP", what);
 
     // Reflection-cached lookup of ICompiledTrainingPlan<T>.SetMaxGradNorm(double).
     // Populated lazily on first call per process and reused on every subsequent
@@ -340,6 +351,24 @@ public static class CompiledTapeTrainingStep<T>
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Invalidates the thread-local compiled training state only when it belongs
+    /// to the supplied layer set. Used during model disposal so releasing an
+    /// older model cannot erase a different live model's fused optimizer plan.
+    /// </summary>
+    internal static void InvalidateIfOwnedBy<TLayer>(IReadOnlyList<TLayer> layers) where TLayer : class
+    {
+        var cached = _cachedLayerSetIdentities;
+        if (cached is null || cached.Length != layers.Count) return;
+
+        for (int i = 0; i < cached.Length; i++)
+        {
+            if (!ReferenceEquals(cached[i], layers[i])) return;
+        }
+
+        Invalidate();
     }
 
     /// <summary>
@@ -775,6 +804,7 @@ public static class CompiledTapeTrainingStep<T>
             // returns false — reconfiguring would reset m/v.
             var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
 
+            bool isFirstStepForConfiguredPlan = _configuredPlan is null;
             if (_configuredPlan is null)
             {
                 // #1745: request bf16 moment storage BEFORE ConfigureOptimizer so the
@@ -847,8 +877,26 @@ public static class CompiledTapeTrainingStep<T>
                 return false;
             }
 
+            // The trace captured stochastic layer tensors by reference. A static replay
+            // would otherwise reuse the first dropout mask or Bayesian posterior sample
+            // forever and optimize a different objective than eager training. Keep the
+            // first traced draw for step one, then refresh captured tensors in place before
+            // later replays. The fused plan and optimizer moments remain intact.
+            if (!isFirstStepForConfiguredPlan)
+                RefreshCompiledStochasticState(layers);
+
             // Execute forward + backward + fused parameter update in one replay.
             var lossOutput = plan.Step();
+            // The gate is repeated here, not left to FdStep, only to keep the ToDouble/ToString
+            // formatting off the hot path when diagnostics are off.
+            if (s_fusedDebug)
+            {
+                string reportedLoss = lossOutput.Length > 0
+                    ? MathHelper.GetNumericOperations<T>().ToDouble(lossOutput[0]).ToString("G17")
+                    : "<empty>";
+                FdStep($"model-parameters={parameters.Length} loss-length={lossOutput.Length} " +
+                       $"loss={reportedLoss} optimizer={optimizerType}");
+            }
             lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
             // Signal successful fused engagement so tests/diagnostics can
             // assert the compiled path actually ran — distinguishing it from
@@ -892,6 +940,30 @@ public static class CompiledTapeTrainingStep<T>
             _configuredOptimizerConfig = null;
             return false;
         }
+    }
+
+    private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)
+    {
+        var visited = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
+        for (int i = 0; i < layers.Count; i++)
+            RefreshCompiledStochasticStateRecursive(layers[i], visited);
+    }
+
+    private static void RefreshCompiledStochasticStateRecursive(
+        ILayer<T> layer,
+        HashSet<ILayer<T>> visited)
+    {
+        if (!visited.Add(layer))
+            return;
+
+        if (layer is NeuralNetworks.Layers.DropoutLayer<T> dropout)
+            dropout.RefreshCompiledTrainingMask();
+        if (layer is UncertaintyQuantification.Layers.BayesianDenseLayer<T> bayesianDense)
+            bayesianDense.RefreshCompiledTrainingSample();
+
+        var subLayers = layer.GetSubLayers();
+        for (int i = 0; i < subLayers.Count; i++)
+            RefreshCompiledStochasticStateRecursive(subLayers[i], visited);
     }
 
 

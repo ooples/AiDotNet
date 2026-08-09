@@ -50,6 +50,23 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// <param name="predicted">The predicted tensor from the forward pass.</param>
     /// <param name="target">The target tensor.</param>
     /// <returns>A scalar tensor containing the loss value.</returns>
+    /// <returns>
+    /// A <b>rank-0</b> scalar tensor (shape <c>[]</c>), not a rank-1 <c>[1]</c>.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// THE SCALAR SHAPE IS PART OF THE CONTRACT. Gradient seeding takes this tensor as the tape
+    /// root; a rank-1 <c>[1]</c> leaves the tape without a scalar to seed the backward from, so the
+    /// step silently produces no gradients. Mixing the two also makes composition throw
+    /// "Tensor shapes must match. Got [1] and []" when a composite adds two terms that disagree.
+    /// </para>
+    /// <para>
+    /// In practice this means finishing with a full reduction that does NOT keep dimensions --
+    /// <c>Engine.ReduceMean(x, allAxes, keepDims: false)</c> -- or with an operation that preserves
+    /// the rank-0 result of one. Do not reshape to <c>[1]</c> to make two terms addable; reduce
+    /// both to rank 0 instead.
+    /// </para>
+    /// </remarks>
     public abstract Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target);
 
     /// <summary>

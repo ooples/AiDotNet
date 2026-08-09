@@ -50,6 +50,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
     private readonly int _numLayers;
     private readonly int _numHeads;
     private readonly int _maxSeqLength;
+    private readonly double _learningRate;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -76,7 +77,8 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         int numHeads = 8,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        FinchOptions? options = null)
+        FinchOptions? options = null,
+        double learningRate = 0.001)
         : base(architecture,
             // Raw-logit LM head → cross-entropy-with-logits (fused log-softmax + NLL), not the
             // TextGeneration default CategoricalCrossEntropy (which log()s un-normalized logits and
@@ -90,6 +92,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         _numLayers = numLayers;
         _numHeads = numHeads;
         _maxSeqLength = maxSeqLength;
+        _learningRate = learningRate;
         InitializeLayers();
     }
 
@@ -137,10 +140,36 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
                 nameof(gradients));
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
+        // THE VECTOR IS POST-UPDATE PARAMETER VALUES, NOT RAW GRADIENTS. Every sibling recurrent
+        // model -- GLA, GatedDeltaNet, Griffin, Hawk -- distributes it straight to the layers and
+        // says why: "The canonical optimizer supplies post-update parameter values. Applying a
+        // second hard-coded SGD step here both bypassed the configured optimizer and materialized
+        // two full-model vectors." Finch was the last model still applying that second step, with a
+        // learning rate and a clip bound of its own that no caller could reach.
+        //
+        // The overflow guard the inline step carried is not lost: it moves to the optimizer, where
+        // FinchOptions.EnableGradientClipping / MaxGradientNorm configure it -- so it now applies to
+        // the real gradients before the step rather than to already-stepped values after it.
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            if (count <= 0)
+            {
+                continue;
+            }
+
+            layer.UpdateParameters(gradients.Slice(offset, count));
+            offset += count;
+        }
+
+        if (offset != gradients.Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter distribution consumed {offset} of {gradients.Length} values; the layer "
+                + "parameter counts no longer sum to ParameterCount, so part of the vector would be "
+                + "silently discarded.");
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -183,7 +212,7 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new FinchLanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options);
+            _maxSeqLength, LossFunction, _options, _learningRate);
     }
 
     #endregion

@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Models.Options;
@@ -40,6 +40,9 @@ public class DiffusionModelOptions<T> : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
         Seed = other.Seed;
         LearningRate = other.LearningRate;
         OptimizerFactory = other.OptimizerFactory;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -163,7 +163,6 @@ public class CVaRPortfolioObjective<T>
         if (boundaryWeight > 0.0 && boundaryIndex >= 0) sum += boundaryWeight * sorted[boundaryIndex];
 
         return sum / tailSize;
-        return sum / tailCount;
     }
 
     /// <summary>

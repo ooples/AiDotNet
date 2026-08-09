@@ -41,8 +41,10 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
     private readonly GriffinOptions _options;
     private readonly int _vocabSize;
     private readonly int _modelDimension;
+    private readonly int _recurrenceDimension;
     private readonly int _numLayers;
     private readonly int _maxSeqLength;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -64,20 +66,25 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
     public GriffinLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512,
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
         ILossFunction<T>? lossFunction = null,
-        GriffinOptions? options = null)
+        GriffinOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GriffinOptions();
         Options = _options;
         _vocabSize = vocabSize;
         _modelDimension = modelDimension;
+        _recurrenceDimension = _options.RecurrenceDimension;
         _numLayers = numLayers;
         _maxSeqLength = maxSeqLength;
+        if (_recurrenceDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RecurrenceDimension must be positive.");
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -94,13 +101,43 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateGriffinLayers(
-                _vocabSize, _modelDimension, _numLayers, _maxSeqLength));
+                _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
+                _recurrenceDimension));
         }
     }
 
     #endregion
 
     #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Griffin's RG-LRU carries a data-dependent hidden state through a timestep
+    /// recurrence. That stateful loop cannot be captured once and safely replayed
+    /// by the static fused-training plan; use the eager tape so every step records
+    /// the current recurrence and AdamW receives the true finite gradients.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
+    /// Uses the constructor-selected optimizer. Griffin's paper trains with
+    /// AdamW; callers can supply any gradient optimizer through the constructor.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -116,19 +153,49 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        if (gradients.Length != ParameterCount)
+        if (parameters.Length != ParameterCount)
         {
             throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}",
+                nameof(parameters));
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-        SetParameters(currentParams);
+        // The optimizer supplies post-update parameter values. Treating this vector as raw
+        // gradients applied a second hard-coded SGD step and materialized full-model copies,
+        // causing the generated memorization trajectory to explode.
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+
+            // Skip the parameterless layers -- activation, dropout, reshape. Handing them an empty
+            // slice is not merely wasted work: it is a real call into UpdateParameters on a layer
+            // that has nothing to update, and Autoencoder and the other implementations touched by
+            // this change already guard it. Keeping the guard uniform means the loop reads the same
+            // way everywhere it appears.
+            if (count <= 0)
+            {
+                continue;
+            }
+
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
+
+        // THE ENTRY GUARD CHECKS THE TOTAL; THIS CHECKS THAT THE TOTAL WAS ACTUALLY CONSUMED. The
+        // loop trusts that sum(layer.ParameterCount) == ParameterCount. If that ever diverges -- a
+        // subclass contributing to ParameterCount, or a future extra-trainable-tensor hook -- the
+        // tail of the vector is dropped in silence: training appears to work while some weights are
+        // never written, which is far harder to find than a loud failure here.
+        if (offset != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter distribution consumed {offset} of {parameters.Length} values; the layer "
+                + "parameter counts no longer sum to ParameterCount, so part of the vector would be "
+                + "silently discarded.");
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -140,6 +207,7 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
                 { "Architecture", "Griffin" },
                 { "VocabSize", _vocabSize },
                 { "ModelDimension", _modelDimension },
+                { "RecurrenceDimension", _recurrenceDimension },
                 { "NumLayers", _numLayers },
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
@@ -154,6 +222,10 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         writer.Write(_modelDimension);
         writer.Write(_numLayers);
         writer.Write(_maxSeqLength);
+        // RecurrenceDimension is configurable and sizes the whole RG-LRU stack, but it was not
+        // in the payload -- so a checkpoint saved with a non-default width reloaded at the
+        // default and mismatched its own weights.
+        writer.Write(_recurrenceDimension);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -162,13 +234,27 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
+
+        // VALIDATED, NOT APPLIED. The layer stack was already built from the options this
+        // instance was constructed with, so a differing saved width cannot be adopted here --
+        // the weights about to be loaded would not fit. Reporting the mismatch names the cause;
+        // staying silent would load a checkpoint into a wrong-width model, which fails later as
+        // an opaque parameter-count error or, worse, does not fail at all.
+        int savedRecurrenceDimension = reader.ReadInt32();
+        if (savedRecurrenceDimension != _recurrenceDimension)
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint was saved with RecurrenceDimension {savedRecurrenceDimension} but this "
+                + $"instance was built with {_recurrenceDimension}. Set RecurrenceDimension on the "
+                + "options before loading this checkpoint.");
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new GriffinLanguageModel<T>(
             Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, _options);
+            LossFunction, new GriffinOptions(_options), optimizer: null);
     }
 
     #endregion

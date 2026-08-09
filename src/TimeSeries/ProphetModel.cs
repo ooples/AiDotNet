@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -339,6 +339,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
                 for (int hc = 0; hc < holidayCount; hc++)
                 {
                     bool onHoliday = rowDate.HasValue
+                        && _prophetOptions.Holidays is not null
                         && rowDate.Value == _prophetOptions.Holidays[hc].Date;
                     design[i, col] = onHoliday ? NumOps.One : NumOps.Zero;
                     ridge[col] = holidayRidge;

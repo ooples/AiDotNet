@@ -23,11 +23,15 @@ public class TimeMAEOptions<T> : TimeSeriesRegressionOptions<T>
     public TimeMAEOptions(TimeMAEOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength; ForecastHorizon = other.ForecastHorizon;
         PatchLength = other.PatchLength; HiddenDimension = other.HiddenDimension;
         NumEncoderLayers = other.NumEncoderLayers; NumDecoderLayers = other.NumDecoderLayers;
         NumHeads = other.NumHeads; MaskRatio = other.MaskRatio;
-        DropoutRate = other.DropoutRate;
+        DropoutRate = other.DropoutRate; LearningRate = other.LearningRate;
     }
 
     public int ContextLength { get; set; } = 512;
@@ -39,4 +43,8 @@ public class TimeMAEOptions<T> : TimeSeriesRegressionOptions<T>
     public int NumHeads { get; set; } = 8;
     public double MaskRatio { get; set; } = 0.75;
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the Adam learning rate used for native training.</summary>
+    /// <value>Defaults to 0.0001.</value>
+    public double LearningRate { get; set; } = 1e-4;
 }

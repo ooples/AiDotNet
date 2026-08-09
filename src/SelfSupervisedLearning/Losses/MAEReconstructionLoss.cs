@@ -39,6 +39,9 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
 {
 
 
+    // Engine and NumOps come from ContrastiveLossBase; redeclaring them here shadows the base
+    // members rather than adding anything.
+
     private readonly bool _normalize;
     private readonly bool _perPatchNormalization;
 
@@ -311,8 +314,8 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
     }
 
     /// <summary>
-    /// IContrastiveLoss implementation — computes reconstruction loss with all-ones mask
-    /// (all patches contribute equally).
+    /// The differentiable MAE reconstruction objective, built entirely from <c>IEngine</c>
+    /// operations, over all positions.
     /// </summary>
     /// <summary>
     /// Differentiable reconstruction error, as the all-ones-mask case of

@@ -1,4 +1,4 @@
-namespace AiDotNet.Enums;
+﻿namespace AiDotNet.Enums;
 
 /// <summary>
 /// Which likelihood MbPA's output head models, i.e. what <c>log p(v | h, theta_x)</c> means.
@@ -28,11 +28,13 @@ public enum MbPAOutputDistribution
     /// Softmax over classes with a cross-entropy log-likelihood. Both of the paper's task families —
     /// image classification and language modelling — are this case.
     /// </summary>
-    Categorical,
+    /// <remarks>Explicit ordinal: this value is serialized, so it must not move if a member is ever inserted above it.</remarks>
+    Categorical = 0,
 
     /// <summary>
     /// A unit-variance Gaussian, whose negative log-likelihood is one-half squared error up to a
     /// constant. Use this for regression targets.
     /// </summary>
-    Gaussian
+    /// <remarks>Explicit ordinal, for the reason given on <see cref="Categorical"/>.</remarks>
+    Gaussian = 1,
 }

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
@@ -292,10 +292,7 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease,
-            // MaxFeatureCount overrides MaxFeatures in CalculateMaxFeatures, so omitting it here
-            // silently demoted an explicit feature count back to the MaxFeatures enum on every copy.
-            MaxFeatureCount = Options.MaxFeatureCount
+            MinImpurityDecrease = Options.MinImpurityDecrease
         });
     }
 
@@ -315,8 +312,7 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease,
-            MaxFeatureCount = Options.MaxFeatureCount
+            MinImpurityDecrease = Options.MinImpurityDecrease
         });
 
         clone.NumFeatures = NumFeatures;

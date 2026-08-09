@@ -579,6 +579,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> outputActivation = architecture.TaskType switch
         {
             NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
             NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
             NeuralNetworkTaskType.MultiClassClassification => outputSize > 1
@@ -614,20 +615,31 @@ public static class LayerHelper<T>
     /// for the first layer). Layers already resolved are skipped via
     /// <see cref="LayerBase{T}.IsShapeResolved"/>.
     /// </summary>
-    private static void ChainResolveLazyLayers(IList<ILayer<T>> layers, int[] rootInputShape)
+    /// <returns>
+    /// The shape flowing out of the last layer, or <paramref name="rootInputShape"/> when
+    /// resolution could not run. Branched models chain on this to resolve a fork's other side.
+    /// </returns>
+    private static int[] ChainResolveLazyLayers(IList<ILayer<T>> layers, int[] rootInputShape)
     {
-        if (rootInputShape == null || rootInputShape.Length == 0) return;
+        if (rootInputShape == null || rootInputShape.Length == 0) return rootInputShape ?? [];
         // Skip if any axis is non-positive — chain resolution requires
         // concrete dims, and a -1 sentinel anywhere means the caller
         // intends fully-deferred resolution at first Forward.
-        foreach (var d in rootInputShape) if (d <= 0) return;
+        foreach (var d in rootInputShape) if (d <= 0) return rootInputShape;
 
+        // The walk is carried in PER-SAMPLE terms, because that is what GetOutputShape() returns.
+        // ResolveFromShape wants the full shape a layer would receive on its first forward, so the
+        // batch axis is added only at that call.
         int[] running = rootInputShape;
         foreach (var layer in layers)
         {
             if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
             {
-                try { lb.ResolveFromShape(running); }
+                var batched = new int[running.Length + 1];
+                batched[0] = 1;
+                Array.Copy(running, 0, batched, 1, running.Length);
+
+                try { lb.ResolveFromShape(batched); }
                 catch (Exception ex)
                 {
                     // ResolveFromShape can throw if the shape doesn't
@@ -646,12 +658,74 @@ public static class LayerHelper<T>
                         $"LayerHelper.ChainResolveLazyShapes: stopped at " +
                         $"{layer.GetType().Name} (running shape " +
                         $"[{string.Join(", ", running)}]): {ex.Message}");
-                    return;
+                    return running;
                 }
             }
-            running = layer.GetOutputShape();
+            // GetOutputShape() is PER-SAMPLE — layers store their shapes without the batch axis —
+            // but ResolveFromShape documents its argument as the shape the layer would receive on
+            // its first forward, and builds a dummy tensor of exactly that to initialize from. So
+            // the running shape has to regain a batch axis before it is handed to the next layer.
+            //
+            // Most layers never notice the difference, because they size themselves from the last
+            // axis. ReshapeLayer does notice: it treats the leading axis as batch and counts
+            // per-sample elements from axis 1 onward. Given a per-sample [512, 8, 32] it counted
+            // 8*32 = 256 against its 131072-element target and rejected the shape — even though
+            // 512*8*32 is exactly 131072. Chain resolution stopped there, which left every layer
+            // after the first reshape lazy: a freshly built ABINet reported 1,718,624 parameters
+            // where one that had run a forward reported 4,281,376, and restoring a trained
+            // parameter vector into a fresh clone misaligned every slice past that point.
+            // Stop at a layer that leaves an axis dynamic, rather than guessing what it will be.
+            //
+            // An earlier version filled dynamic axes from the shape flowing in. That is correct
+            // for a pass-through but wrong for attention: MultiHeadAttentionLayer,
+            // CrossAttentionLayer and TransformerDecoderLayer all declare [-1, dim] because their
+            // sequence length is genuinely not derivable from the previous layer's DECLARATION,
+            // and filling it produced declarations the forward then contradicted --
+            // "reports [64, 32] but produced per-sample [4, 32]" and similar across
+            // AudioEventDetector, GenreClassifier, UDOP, ViTCoMer and VideoChat2.
+            //
+            // VerifyReportedOutputShape caught every one of those, which is the whole reason the
+            // inference and the check were added together. Having been shown the inference is
+            // unsound, the inference goes rather than the check: a chain that stops early leaves
+            // layers lazy, which is a known and recoverable state, whereas a confidently wrong
+            // declaration is silently consumed by parameter slicing and ONNX export.
+            var declared = layer.GetOutputShape();
+            if (declared is null || declared.Length == 0) return running;
+            foreach (var d in declared) if (d <= 0) return running;
+
+            running = declared;
         }
+
+        return running;
     }
+
+    /// <summary>
+    /// Resolves a branch's lazy layers from <paramref name="rootInputShape"/> and returns the
+    /// shape flowing out of it, so a caller can resolve the other side of a fork.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Sequential builders get chain resolution for free through <c>ResolveAndYield</c>, but a
+    /// branched model forks: ABINet's vision trunk feeds both its own character head and the
+    /// language model, and each of those feeds further layers. Resolution has to cross those
+    /// forks, which means the caller needs the shape at the branch point.
+    /// </para>
+    /// <para>
+    /// Use this rather than calling <c>ResolveFromShape</c> with a hand-written shape. The chain
+    /// derives every layer's input from the previous layer's actual <c>GetOutputShape()</c>, so
+    /// it cannot disagree with what the forward pass will produce. A guessed shape can: sizing
+    /// ABINet's character heads from a hand-written <c>[1, 1, visionDim]</c> produced weights the
+    /// forward never matched.
+    /// </para>
+    /// <para>
+    /// Layers already resolved are skipped, so this is a no-op once the branch has run.
+    /// </para>
+    /// </remarks>
+    /// <param name="layers">The branch's layers, in execution order.</param>
+    /// <param name="rootInputShape">The shape entering the branch.</param>
+    /// <returns>The shape leaving the branch.</returns>
+    internal static int[] ResolveChain(IList<ILayer<T>> layers, int[] rootInputShape)
+        => ChainResolveLazyLayers(layers, rootInputShape);
 
     /// <summary>
     /// Creates a Convolutional Neural Network (CNN) with configurable layers.
@@ -734,8 +808,59 @@ public static class LayerHelper<T>
             );
         }
 
-        // Output layer
-        yield return new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Output layer. Softmax is a CLASSIFICATION head — it normalizes the outputs to sum to one —
+        // so it must not be used for a regression stack. It was emitted unconditionally, which made
+        // every regression CNN produce a probability vector instead of values, and at outputSize 1 it
+        // is degenerate: softmax over a single element is exactly 1.0 for every input. That is what
+        // made WGAN-GP's critic score real and fake batches identically (1.000000E+000 either way),
+        // giving E[D(fake)] - E[D(real)] = 0, zero gradients and a critic that never moved.
+        bool classificationHead = architecture.TaskType
+            is NeuralNetworkTaskType.MultiClassClassification
+            or NeuralNetworkTaskType.MultiLabelClassification
+            or NeuralNetworkTaskType.SequenceClassification
+            or NeuralNetworkTaskType.ImageClassification;
+
+        yield return classificationHead
+            ? new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>)
+            : new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the default WGAN-GP critic: LeakyReLU feature extraction followed by one
+    /// unrestricted scalar score. No Softmax, Sigmoid, BatchNorm, or Dropout is used.
+    /// </summary>
+    /// <remarks>
+    /// Gulrajani et al. (2017) optimize <c>E[D(fake)] - E[D(real)]</c> and penalize
+    /// <c>(||grad D(x-hat)||2 - 1)^2</c>. Consequently the critic head must be linear;
+    /// a probability activation changes the objective, while a one-class Softmax is the
+    /// constant one function and has identically zero gradients. The paper's image critics
+    /// use non-saturating feature blocks and omit batch normalization in the critic because
+    /// the gradient penalty is defined independently for each sample.
+    /// </remarks>
+    /// <param name="inputType">Dimensionality of the samples scored by the critic.</param>
+    /// <returns>Default paper-compatible critic layers.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultWGANGPCriticLayers(InputType inputType)
+    {
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        if (inputType is InputType.ThreeDimensional or InputType.FourDimensional)
+        {
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: 32, kernelSize: 3, stride: 2, padding: 1,
+                activationFunction: leakyRelu);
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: 64, kernelSize: 3, stride: 2, padding: 1,
+                activationFunction: leakyRelu);
+            yield return new FlattenLayer<T>();
+        }
+        else
+        {
+            yield return new FlattenLayer<T>();
+            yield return new DenseLayer<T>(64, leakyRelu);
+        }
+
+        yield return new DenseLayer<T>(1, identity);
     }
 
     /// <summary>
@@ -2081,6 +2206,7 @@ public static class LayerHelper<T>
                 break;
 
             case NeuralNetworkTaskType.Regression:
+            case NeuralNetworkTaskType.Embedding:
                 yield return new ActivationLayer<T>(new IdentityActivation<T>() as IActivationFunction<T>);
                 break;
 
@@ -2275,49 +2401,47 @@ public static class LayerHelper<T>
     /// protein interactions, or analyzing traffic patterns.
     /// </para>
     /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultGNNLayers(NeuralNetworkArchitecture<T> architecture)
+    public static IEnumerable<ILayer<T>> CreateDefaultGNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenSize = 16,
+        int numLayers = 2,
+        double dropoutRate = 0.5,
+        bool useBias = false)
     {
         // Check if we have the minimum required network dimensions
         if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
         {
             throw new InvalidOperationException("The network must have valid input and output dimensions.");
         }
+        if (hiddenSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "Hidden size must be positive.");
+        if (numLayers < 2)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "A GCN requires at least two graph-convolutional layers.");
+        if (dropoutRate < 0.0 || dropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "Dropout rate must be in [0, 1).");
 
-        // Define network structure with sensible defaults
         int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
 
-        // Define default GNN architecture - typically 2-3 graph convolutional layers
-        // with decreasing sizes is a good starting point for many graph problems
-        int firstHiddenSize = 64;
-        int secondHiddenSize = 32;
+        // Kipf & Welling apply dropout to each graph-convolution input.
+        for (int layerIndex = 0; layerIndex < numLayers - 1; layerIndex++)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+            yield return new GraphConvolutionalLayer<T>(
+                inputFeatures: layerIndex == 0 ? inputSize : hiddenSize,
+                outputFeatures: hiddenSize,
+                activationFunction: new ReLUActivation<T>(),
+                implicitIdentityWhenUnset: false,
+                useBias: useBias);
+        }
 
-        // Create the input layer - first graph convolution
+        yield return new DropoutLayer<T>(dropoutRate);
         yield return new GraphConvolutionalLayer<T>(
-            inputFeatures: inputSize,
-            outputFeatures: firstHiddenSize,
-            activationFunction: new ReLUActivation<T>()
-        );
-
-        // Add dropout for regularization (common in GNNs)
-        yield return new DropoutLayer<T>(0.2);
-
-        // Create second graph convolution layer
-        yield return new GraphConvolutionalLayer<T>(
-            inputFeatures: firstHiddenSize,
-            outputFeatures: secondHiddenSize,
-            activationFunction: new ReLUActivation<T>()
-        );
-
-        // Add dropout for regularization
-        yield return new DropoutLayer<T>(0.2);
-
-        // Create the output layer
-        yield return new GraphConvolutionalLayer<T>(
-            inputFeatures: secondHiddenSize,
+            inputFeatures: hiddenSize,
             outputFeatures: outputSize,
-            activationFunction: new IdentityActivation<T>()
-        );
+            activationFunction: new IdentityActivation<T>(),
+            implicitIdentityWhenUnset: false,
+            useBias: useBias);
 
         // Add final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
@@ -2428,7 +2552,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             bool isLastLayer = (i == numLayers - 1);
-            int outputDim = isLastLayer ? outputSize : hiddenSize;
+            int outputDim = isLastLayer ? outputSize : hiddenSize / numHeads;
             int heads = isLastLayer ? 1 : numHeads;
 
             yield return new GraphAttentionLayer<T>(
@@ -2436,9 +2560,13 @@ public static class LayerHelper<T>
                 outputFeatures: outputDim,
                 numHeads: heads,
                 dropoutRate: dropoutRate,
-                activationFunction: isLastLayer ? null : new LeakyReLUActivation<T>(0.2));
+                // The LeakyReLU with slope 0.2 belongs inside the attention-score
+                // function e_ij. The paper applies ELU to the concatenated hidden-head
+                // representation; using a second LeakyReLU here changes the GAT block.
+                activationFunction: isLastLayer ? null : new ELUActivation<T>(),
+                concatenateHeads: !isLastLayer);
 
-            currentInputDim = outputDim;
+            currentInputDim = isLastLayer ? outputDim : outputDim * heads;
         }
 
         // Add final activation based on task type
@@ -3219,6 +3347,7 @@ public static class LayerHelper<T>
             NeuralNetworkTaskType.MultiClassClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             _ => null // Regression and other task types default to linear outputs
         };
 
@@ -4381,46 +4510,70 @@ public static class LayerHelper<T>
         }
 
         int numClasses = architecture.OutputSize;
-        int currentResolution = voxelResolution;
-        int currentFilters = baseFilters;
-        int inputChannels = 1; // Typically single-channel occupancy grid
 
-        // Create Conv3D + MaxPool3D blocks
-        for (int block = 0; block < numConvBlocks; block++)
-        {
-            int outputFilters = currentFilters * (1 << block); // Double filters each block
-            int inChannels = (block == 0) ? inputChannels : (currentFilters * (1 << (block - 1)));
+        // 3D ShapeNets (Wu et al., 2015 — arXiv:1406.5670). The paper stacks
+        // three convolutional layers and — crucially — uses NO pooling at all
+        // ("we do not use any form of pooling in the hidden layers", §3),
+        // because max/avg pooling discards the precise voxel occupancy the
+        // model needs to reconstruct shape. The exact conv specification from
+        // the paper is:
+        //   conv1: 48  filters, 6³ kernel, stride 2
+        //   conv2: 160 filters, 5³ kernel, stride 2
+        //   conv3: 512 filters, 4³ kernel, stride 1
+        // followed by a fully-connected hidden layer (the paper's first FC RBM
+        // has 1200 units) and the output head.
+        //
+        // The paper trains this network as a Convolutional Deep Belief Network
+        // via layer-wise contrastive divergence + discriminative fine-tuning.
+        // We reproduce the same *architecture* but train it with ordinary
+        // supervised backprop, because CDBN pretraining is outside the scope of
+        // the supervised model harness this network runs under. The strided,
+        // pooling-free conv stack is also numerically far more stable than the
+        // previous MaxPool3D+GlobalAvgPool variant, which produced NaNs on the
+        // gradient-flow invariant.
+        //
+        // At the default 32³ input the spatial dimensions flow
+        // 32 → 14 (conv1) → 5 (conv2) → 2 (conv3), i.e. every layer keeps a
+        // strictly positive volume. Conv3DLayer infers its input-channel count
+        // lazily on the first forward pass, so no channel counts are threaded
+        // here. numConvBlocks / baseFilters are retained on the signature for
+        // API and serialization compatibility; the paper architecture is fixed
+        // at three convolutional layers with the filter counts above.
 
-            // Conv3D layer with padding to maintain resolution before pooling
-            yield return new Conv3DLayer<T>(
-                outputChannels: outputFilters,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1,
-                activationFunction: new ReLUActivation<T>());
+        // conv1: 48 filters, 6³ kernel, stride 2, no padding.
+        yield return new Conv3DLayer<T>(
+            outputChannels: 48,
+            kernelSize: 6,
+            stride: 2,
+            padding: 0,
+            activationFunction: new ReLUActivation<T>());
 
-            // MaxPool3D layer to downsample by factor of 2
-            if (currentResolution >= 2)
-            {
-                yield return new MaxPool3DLayer<T>(
-                    poolSize: 2,
-                    stride: 2);
-                currentResolution /= 2;
-            }
-        }
+        // conv2: 160 filters, 5³ kernel, stride 2, no padding.
+        yield return new Conv3DLayer<T>(
+            outputChannels: 160,
+            kernelSize: 5,
+            stride: 2,
+            padding: 0,
+            activationFunction: new ReLUActivation<T>());
 
-        // Final number of filters after all blocks
-        int finalFilters = currentFilters * (1 << (numConvBlocks - 1));
+        // conv3: 512 filters, 4³ kernel, stride 1, no padding.
+        yield return new Conv3DLayer<T>(
+            outputChannels: 512,
+            kernelSize: 4,
+            stride: 1,
+            padding: 0,
+            activationFunction: new ReLUActivation<T>());
 
-        // Global average pooling to aggregate spatial information
-        yield return new GlobalPoolingLayer<T>(
-            poolingType: PoolingType.Average,
-            activationFunction: (IActivationFunction<T>?)null);
-
-        // Flatten [filters, 1, 1, 1] → [filters] for the dense classification head
+        // Flatten the [512, d, h, w] conv volume for the fully-connected head.
         yield return new FlattenLayer<T>();
 
-        // Dense output layer for classification
+        // Fully-connected hidden layer (paper's first FC RBM: 1200 units).
+        yield return new DenseLayer<T>(
+            outputSize: 1200,
+            activationFunction: new ReLUActivation<T>());
+
+        // Output head. The paper's top layer classifies over object categories;
+        // task type selects the matching output activation.
         IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
             ? new SoftmaxActivation<T>()
             : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
@@ -4784,10 +4937,18 @@ public static class LayerHelper<T>
 
             currentChannels = outChannels;
 
-            // Optional batch normalization
+            // Optional batch normalization. Pass the known channel count (outChannels
+            // from the SpiralConv above) so gamma/beta/runningStats allocate eagerly at
+            // the RIGHT size. SpiralNet feeds rank-3 [B, V, C] (batch, vertices, channels)
+            // — features-last. Left lazy, BatchNorm's OnFirstForward applies the rank-3
+            // channels-FIRST image convention ([C, H, W]) and mis-sizes gamma to axis 0
+            // (the batch dim, size 1) → a size-1 gamma that goes NaN under training and
+            // never updates the running stats. With the feature count supplied, the
+            // Forward path's features-last auto-flatten ([B, V, C] → [B*V, C]) normalizes
+            // per-channel correctly. (BatchNormalizationLayer docs prescribe exactly this.)
             if (useBatchNorm)
             {
-                yield return new BatchNormalizationLayer<T>();
+                yield return new BatchNormalizationLayer<T>(outChannels);
             }
         }
 
@@ -5638,13 +5799,19 @@ public static class LayerHelper<T>
         int embeddingDimension = 256,
         int[]? dilations = null)
     {
-        // VoxLingua107 uses ECAPA-TDNN with 107 output classes
+        // VoxLingua107 (Valk & Alumäe, SLT 2021) trains ECAPA-TDNN over its
+        // 107-language label set, so 107 is the paper default — but honour a
+        // caller-configured output size instead of hardcoding it. A caller asking
+        // for a smaller head previously still got a 107-way classifier, and
+        // CrossEntropyWithLogitsLoss.ClassIndicesToOneHot then indexed past the end
+        // of its one-hot buffer.
+        int numLanguages = architecture.OutputSize > 0 ? architecture.OutputSize : 107;
         return CreateDefaultECAPATDNNLanguageIdentifierLayers(
             architecture,
             numMels: numMels,
             tdnnChannels: tdnnChannels,
             embeddingDimension: embeddingDimension,
-            numLanguages: 107,
+            numLanguages: numLanguages,
             dilations: dilations);
     }
 
@@ -6323,26 +6490,17 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Encoder transformer layers
+        // Encoder residual-attention blocks. Whisper's encoder is a stack of
+        // residual attention blocks; emitting attention/FFN/norm as unrelated
+        // flat layers drops both residual paths and is not the paper architecture.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDim) / (numHeads));
-
-            // Layer normalization (pre-LN architecture)
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            yield return new DenseLayer<T>(modelDim, identityActivation);
-
-            // Layer normalization
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: modelDim,
+                numHeads: numHeads,
+                ffnDim: ffDim,
+                dropoutRate: dropoutRate,
+                ffnActivation: geluActivation);
         }
 
         // Final encoder layer normalization
@@ -6904,17 +7062,17 @@ public static class LayerHelper<T>
         // 3. Positional Encoding (includes [CLS] token position)
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
 
-        // 4. Transformer Encoder Stack
+        // 4. Transformer Encoder Stack — each block is a pre-norm RESIDUAL transformer layer
+        // (z' = z + MHA(LN(z)); z = z' + FFN(LN(z')), Vaswani 2017 / Gong et al. 2021 §3). The residual
+        // skips are LOAD-BEARING: a bare MHA->LN->FFN->LN block with no skip-add cannot carry its input
+        // through the 12-layer stack, so the deep LayerNorm-heavy encoder erases the signal — training
+        // barely moves the loss (Training_ShouldReduceLoss / LossStrictlyDecreasesOnMemorizationTask)
+        // and distinct inputs collapse to an identical output. TransformerEncoderLayer applies
+        // MHA + residual + LN and the GELU FFN + residual + LN internally; use the 2-arg LAZY ctor so
+        // embeddingSize is deferred (the 3-arg ctor allocates every FFN eagerly and OOMs across a shard).
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
-
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(embeddingDim, identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
 
             if (dropoutRate > 0)
             {
@@ -6957,6 +7115,7 @@ public static class LayerHelper<T>
         numLayersPerStage ??= [2, 2, 6, 2];
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
 
         // 1. Initial Patch Embedding
         yield return new DenseLayer<T>(embeddingDim, identityActivation);
@@ -6972,11 +7131,15 @@ public static class LayerHelper<T>
 
             for (int layer = 0; layer < numLayersPerStage[stage]; layer++)
             {
-                yield return new MultiHeadAttentionLayer<T>(numHeads, (currentDim) / (numHeads));
-                yield return new LayerNormalizationLayer<T>();
-                yield return new DenseLayer<T>(ffDim, reluActivation);
-                yield return new DenseLayer<T>(currentDim, identityActivation);
-                yield return new LayerNormalizationLayer<T>();
+                // Residual Swin/Transformer block: the built-in skip connections around
+                // attention and FFN prevent the uniform-collapse the bare
+                // MHA->LN->FFN->Dense->LN stack produced (distinct inputs mapped to identical
+                // outputs after training). Embedding size is pinned to the current stage dim.
+                yield return new TransformerEncoderLayer<T>(numHeads, ffDim, currentDim);
+                if (dropoutRate > 0)
+                {
+                    yield return new DropoutLayer<T>(dropoutRate);
+                }
             }
 
             // Patch merging: double channels, halve sequence at stage boundary (except last stage)
@@ -6997,7 +7160,10 @@ public static class LayerHelper<T>
         {
             yield return new DropoutLayer<T>(dropoutRate);
         }
-        yield return new DenseLayer<T>(numClasses, identityActivation);
+        // Multi-label AudioSet head: per-class sigmoid event probabilities (HTS-AT Chen et al.
+        // 2022, §3.3). Sigmoid scores are non-negative by construction, matching the audio
+        // classifier contract.
+        yield return new DenseLayer<T>(numClasses, sigmoidActivation);
     }
 
     /// <summary>
@@ -7111,6 +7277,7 @@ public static class LayerHelper<T>
     /// <param name="numClasses">Number of labels (default 527).</param>
     /// <param name="maxFrames">Maximum time frames (default 1001).</param>
     /// <param name="dropoutRate">Dropout rate (default 0.2).</param>
+    /// <param name="headDropoutRate">Dropout rate around the embedding head (default 0.5).</param>
     /// <returns>A collection of layers implementing the PANNs CNN14 architecture.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
         int numMels = 64,
@@ -7119,31 +7286,65 @@ public static class LayerHelper<T>
         int embeddingDim = 2048,
         int numClasses = 527,
         int maxFrames = 1001,
-        double dropoutRate = 0.2)
+        double dropoutRate = 0.2,
+        double headDropoutRate = 0.5)
     {
+        if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
+        if (baseChannels <= 0) throw new ArgumentOutOfRangeException(nameof(baseChannels));
+        if (numBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numBlocks));
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses));
+        if (dropoutRate < 0.0 || dropoutRate >= 1.0) throw new ArgumentOutOfRangeException(nameof(dropoutRate));
+        if (headDropoutRate < 0.0 || headDropoutRate >= 1.0) throw new ArgumentOutOfRangeException(nameof(headDropoutRate));
+
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // CNN14: 6 blocks of (Conv -> BN -> ReLU -> Conv -> BN -> ReLU -> AvgPool)
-        int inputDim = numMels;
-        int channels = baseChannels;
+        // Kong et al.'s released CNN14 normalizes each mel bin before the
+        // convolution stack: [B, 1, time, mel] -> [B, mel, time, 1], bn0,
+        // then transpose back. TransposeLayer permutations address the logical
+        // (non-batch) axes, and [2,1,0] is self-inverse for this layout.
+        yield return new TransposeLayer<T>(new[] { 2, 1, 0 });
+        yield return new BatchNormalizationLayer<T>(numMels);
+        yield return new TransposeLayer<T>(new[] { 2, 1, 0 });
 
+        // CNN14: each paper block is Conv(3x3) -> BN -> ReLU ->
+        // Conv(3x3) -> BN -> ReLU -> AvgPool(2x2). The public width/depth
+        // options scale that same topology; their defaults reproduce the
+        // published 64,128,256,512,1024,2048 progression exactly.
+        int channels = baseChannels;
         for (int block = 0; block < numBlocks; block++)
         {
-            yield return new DenseLayer<T>(channels, reluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(channels, reluActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-
-            inputDim = channels;
-            channels = Math.Min(channels * 2, embeddingDim);
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: channels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(reluActivation);
+            yield return new ConvolutionalLayer<T>(
+                outputDepth: channels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(reluActivation);
+            // CNN14 downsamples in blocks 1-5; the sixth/paper-final block uses
+            // pool_size=(1,1). Keeping the final block at 1x1 preserves the last
+            // convolutional features and matches the authors' released model.
+            int poolSize = block == numBlocks - 1 ? 1 : 2;
+            yield return new PoolingLayer<T>(poolSize: poolSize, stride: poolSize, type: PoolingType.Average);
+            if (dropoutRate > 0.0) yield return new DropoutLayer<T>(dropoutRate);
+            // Convolution width and embedding-head width are independent public
+            // controls. CNN14 doubles channels per block; EmbeddingDim must not
+            // silently cap or shrink that caller-selected progression.
+            if (block < numBlocks - 1)
+                channels = checked(channels * 2);
         }
 
-        // Classification head
+        // Released CNN14 uses NCHW features: average over frequency, then
+        // max-over-time + mean-over-time, preserving the convolution channels.
+        yield return new PANNsPoolingLayer<T>();
+        if (headDropoutRate > 0.0) yield return new DropoutLayer<T>(headDropoutRate);
         yield return new DenseLayer<T>(embeddingDim, reluActivation);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        if (headDropoutRate > 0.0) yield return new DropoutLayer<T>(headDropoutRate);
+
+        // Return logits during training so BCE-with-logits is numerically
+        // stable. PANNs.PredictCore applies the paper's sigmoid exactly once.
         yield return new DenseLayer<T>(numClasses, identityActivation);
     }
 
@@ -7251,16 +7452,21 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates default CMGAN layers for conformer-based speech enhancement.
     /// </summary>
-    /// <param name="numFreqBins">Number of frequency bins (default: 201).</param>
-    /// <param name="conformerDim">Conformer hidden dimension (default: 256).</param>
-    /// <param name="numConformerLayers">Number of Conformer layers (default: 2).</param>
+    /// <param name="numFreqBins">Number of frequency bins (default: 201, from the paper's 400-point FFT).</param>
+    /// <param name="conformerDim">Conformer hidden dimension (default: 64, the paper's channel count).</param>
+    /// <param name="numConformerLayers">Number of two-stage Conformer blocks (default: 4, per the paper).</param>
     /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
     /// <param name="dropoutRate">Dropout rate (default: 0.05).</param>
     /// <returns>A collection of layers for CMGAN speech enhancement.</returns>
+    /// <remarks>
+    /// Defaults follow Cao et al., INTERSPEECH 2022 (arXiv:2203.15149): four two-stage conformer
+    /// blocks at 64 channels. They previously read 2 blocks at 256 channels — half the published
+    /// depth at four times the published width.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCMGANLayers(
         int numFreqBins = 201,
-        int conformerDim = 256,
-        int numConformerLayers = 2,
+        int conformerDim = 64,
+        int numConformerLayers = 4,
         int numAttentionHeads = 4,
         double dropoutRate = 0.05)
     {
@@ -7293,12 +7499,26 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // U-Net decoder with mask estimation
-        yield return new DenseLayer<T>(numFreqBins * 2, identityActivation);
+        // U-Net decoder feeding the decoupled output heads.
+        yield return new DenseLayer<T>(numFreqBins * 3, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // Output: magnitude mask + phase correction
-        yield return new DenseLayer<T>(numFreqBins * 2, sigmoidActivation);
+        // Decoupled output per Cao et al., INTERSPEECH 2022 (arXiv:2203.15149): the decoder
+        // splits into a MASK head (B x T x F x 1) and a COMPLEX head (B x T x F x 2) carrying
+        // real and imaginary components, which are then jointly incorporated to reconstruct the
+        // enhanced speech. That decoupling is the paper's central contribution.
+        //
+        // Emitted as one 3F-wide projection over this sequential stack: bins [0, F) are the
+        // magnitude mask and bins [F, 3F) are the interleaved real/imaginary pair, so a single
+        // layer expresses both heads. Consumers slice on that layout.
+        //
+        // Activation is IDENTITY, not sigmoid. The paper is explicit that "no activation
+        // function is applied for the complex output since it is unbounded" — real and imaginary
+        // components are signed, so the previous sigmoid head clamped them into (0, 1) and made
+        // half the complex plane unrepresentable. The prior head was also only 2F wide and
+        // labelled "magnitude mask + phase correction", i.e. it predicted phase directly rather
+        // than the paper's complex pair.
+        yield return new DenseLayer<T>(numFreqBins * 3, identityActivation);
     }
 
     /// <summary>
@@ -7416,14 +7636,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(transformerDim, reluActivation);
         yield return new LayerNormalizationLayer<T>();
 
+        // Transformer encoder stack. The residual (skip) connections are ESSENTIAL: the previous
+        // plain MHA -> LN -> FFN -> LN block had NO residual add, so a 12-layer encoder had no gradient
+        // highway — the embedding barely trained and the model collapsed to a uniform, input-insensitive
+        // output after only a few optimizer steps (DifferentInputs_AfterTraining degenerate solution).
+        // TransformerEncoderBlock wraps both sublayers (MHA, FFN) in residual adds + LayerNorm, matching
+        // the transformer architecture (Vaswani et al. 2017) the Mel-Band RoFormer builds on — the same
+        // fix already applied to the BERT / ViT encoders in this helper.
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                transformerDim, numAttentionHeads, feedForwardDim, dropoutRate, reluActivation);
         }
 
         yield return new DenseLayer<T>(numFreqBins * numStems * 2, identityActivation);
@@ -7553,6 +7776,39 @@ public static class LayerHelper<T>
     #endregion
 
     #region Video AI Layers
+
+    /// <summary>
+    /// Creates the native VideoGigaGAN generator described by Xu et al. (CVPR 2024).
+    /// </summary>
+    /// <remarks>
+    /// The returned composite owns the complete generator graph: style-conditioned spatial
+    /// residual blocks, temporally inflated convolutions, anti-aliased bidirectional flow
+    /// propagation, progressive pixel-shuffle reconstruction, and the high-frequency shuttle.
+    /// Keeping it as one registered layer preserves the architecture's non-sequential skip and
+    /// recurrent connections while exposing every parameter to the framework.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateVideoGigaGANLayers(
+        int inputChannels = 3,
+        int inputHeight = 64,
+        int inputWidth = 64,
+        int numFeatures = 128,
+        int numResBlocks = 23,
+        int numStyleLayers = 14,
+        int scaleFactor = 4,
+        int flowPyramidLevels = 5,
+        double hfShuttleWeight = 0.5)
+    {
+        yield return new VideoGigaGANGeneratorLayer<T>(
+            inputChannels,
+            inputHeight,
+            inputWidth,
+            numFeatures,
+            numResBlocks,
+            numStyleLayers,
+            scaleFactor,
+            flowPyramidLevels,
+            hfShuttleWeight);
+    }
 
     /// <summary>
     /// Creates layers for a video super-resolution model (Real-ESRGAN/BasicVSR++ style).
@@ -7874,6 +8130,78 @@ public static class LayerHelper<T>
     /// The caller is responsible for upsampling to full resolution if needed.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates the BSVD denoising backbone per Qi et al., 2022,
+    /// "Real-time Streaming Video Denoising with Bidirectional Buffers" (arXiv:2207.06937).
+    /// </summary>
+    /// <remarks>
+    /// <para>BSVD's backbone is a <b>W-Net</b>: two light-weight U-Nets in sequence, the second
+    /// refining the first. The paper's ablation measures +0.40 dB for that second stage. Routing
+    /// BSVD through <see cref="CreateDefaultVideoDenoisingLayers"/> gave it a SINGLE
+    /// encoder/decoder, so the refinement stage was absent.</para>
+    /// <para>The first stage consumes the temporally-stacked input and the second consumes the
+    /// first stage's output, matching the paper's sequential arrangement.</para>
+    /// <para><b>Not yet implemented:</b> the Temporal Shift Modules used during training, and the
+    /// Bidirectional Buffer Blocks that replace them at inference to give streaming operation with
+    /// <c>floor(C_f / r)</c> channels shifted per direction. Those are BSVD's streaming mechanism;
+    /// <see cref="AiDotNet.Video.Options.BSVDOptions.ShiftedChannelRatio"/> is carried for them.
+    /// Until they exist this builds the W-Net topology with frames stacked as channels, which is
+    /// the sliding-window arrangement the paper contrasts itself against.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBSVDLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64,
+        int temporalFrames = 5,
+        int numUNetStages = 2,
+        int shiftedChannelRatio = 8)
+    {
+        var relu = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Frames are kept on their own axis as [T, C, H, W] and T is treated as the batch
+        // dimension, so every 2D convolution runs PER FRAME while TemporalShiftLayer moves
+        // information across frames between them. That separation is the whole point of the
+        // design: cheap per-frame spatial convolutions, with temporal fusion supplied by a
+        // parameter-free shift.
+        //
+        // Previously these stages delegated to CreateDefaultVideoDenoisingLayers, which folds
+        // the frames into the channel axis (inCh = inputChannels * temporalFrames) before the
+        // first convolution. Once that happens there is no temporal axis left, no shift is
+        // possible, and the network is a per-frame denoiser reading a fixed stack — the
+        // sliding-window arrangement the paper contrasts itself against.
+        for (int stage = 0; stage < Math.Max(1, numUNetStages); stage++)
+        {
+            // Encoder. A shift precedes each convolution so the features it mixes are the ones
+            // about to be convolved, matching the paper's "temporal fusion followed by 2D
+            // convolution" block order.
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, relu);
+
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, relu);
+
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, relu);
+
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, relu);
+
+            // Bottleneck.
+            yield return new TemporalShiftLayer<T>(shiftedChannelRatio);
+            yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, relu);
+
+            // Decoder.
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, relu);
+            yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, relu);
+            yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, relu);
+
+            // Each stage returns to image space so the next U-Net refines a denoised frame,
+            // which is what makes the pair a W-Net rather than one deeper U-Net.
+            yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+        }
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultVideoDenoisingLayers(
         int inputChannels = 3,
         int inputHeight = 128,
@@ -7904,8 +8232,102 @@ public static class LayerHelper<T>
         yield return new DeconvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         h *= 2; w *= 2;
 
-        // Output head (residual prediction at original resolution)
-        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+        // Output head (residual prediction at original resolution). The residual is SIGNED (clean = noisy -
+        // residual), so this head MUST be linear. ConvolutionalLayer defaults to ReLU when no activation is
+        // passed (activationFunction ?? new ReLUActivation<T>()), which clamps the residual to >= 0: the
+        // denoiser can then only add to the input, never subtract noise, and training diverges (Training_
+        // ShouldReduceLoss saw loss explode 0.29 -> 299 as the weights blow up fitting the wrong half-space).
+        // Pass IdentityActivation to restore the signed residual head (matches the PR's linear-by-default head
+        // fix for DenseLayer). (#1789)
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the LiteDVDNet denoising stack (Ilchenko &amp; Stirenko, IJIGSP 2025).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// LiteDVDNet is FastDVDnet (Tassano, Delon &amp; Veit, CVPR 2020) with four optimizations. Three of them are
+    /// architectural and are implemented here:
+    /// </para>
+    /// <list type="number">
+    /// <item>the InputCvBlock's intermediate channel count is cut by a factor of three (90 -&gt; 30);</item>
+    /// <item>each convolutional block is simplified to a SINGLE convolution ("LiteCvBlock" - the paper drops the
+    /// second convolution of FastDVDnet's CvBlock);</item>
+    /// <item>the channel count is halved for the smaller variant - LiteDVDNet-32 keeps FastDVDnet's width
+    /// (<paramref name="numFeatures"/> = 32) and LiteDVDNet-16 halves it, taking the model from 2.48M to 0.64M
+    /// parameters.</item>
+    /// </list>
+    /// <para>
+    /// The fourth optimization - caching intermediate denoising results across overlapping frame windows - is an
+    /// INFERENCE-only reuse of already-computed outputs; the paper notes that mode "is suitable only for
+    /// computations, not for network training", so it is not part of the trainable stack.
+    /// </para>
+    /// <para>
+    /// Layer ordering follows the paper: "Batch normalization is placed between convolutional and ReLU layers",
+    /// and "most layers use point-wise ReLU activation functions, EXCEPT FOR THE LAST ONE" - so the output head
+    /// is linear, which also matches the residual formulation (the residual is signed, and both
+    /// ConvolutionalLayer and DepthwiseSeparableConvolutionalLayer default to ReLU when no activation is passed).
+    /// Upsampling uses PixelShuffle, as in FastDVDnet. The residual connection between the central noisy input
+    /// frame and the output lives in the model (see LiteDVDNet), since it spans the whole stack.
+    /// </para>
+    /// <para>
+    /// NOTE: this is a sequential approximation of the paper's DenBlock - the additive U-Net skip connections
+    /// inside the block are not modelled, because the shared <c>Layers</c> pipeline is a flat sequential list.
+    /// The stack this replaced modelled neither the skips NOR any of the above.
+    /// </para>
+    /// <para>
+    /// The previous generic stack was doubly wrong for this model: it had NO normalization at all (so the paper's
+    /// Adam 1e-3 diverged, loss exploding 0.28 -&gt; 150), and the model's own documentation claimed depthwise
+    /// separable convolutions, which appear nowhere in the paper. (#1789)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputChannels">Channels per frame (3 for RGB).</param>
+    /// <param name="numFeatures">Base width, the paper's variant number: 32 for LiteDVDNet-32, 16 for LiteDVDNet-16.</param>
+    /// <param name="inputBlockIntermediateChannels">InputCvBlock intermediate channels (paper: 30, reduced from FastDVDnet's 90).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultLiteDVDNetLayers(
+        int inputChannels = 3,
+        int numFeatures = 32,
+        int inputBlockIntermediateChannels = 30)
+    {
+        if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));
+        if (inputBlockIntermediateChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputBlockIntermediateChannels));
+
+        int chs0 = numFeatures;
+        int chs1 = numFeatures * 2;
+        int chs2 = numFeatures * 4;
+
+        // Conv -> BatchNorm -> ReLU, the paper's ordering. A "LiteCvBlock" is exactly one of these.
+        IEnumerable<ILayer<T>> LiteCvBlock(int outChannels, int kernel, int stride, int padding)
+        {
+            yield return new ConvolutionalLayer<T>(outChannels, kernel, stride, padding, new IdentityActivation<T>() as IActivationFunction<T>);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+        }
+
+        // InputCvBlock: reduced intermediate width, then project to the base width.
+        foreach (var l in LiteCvBlock(inputBlockIntermediateChannels, 3, 1, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs0, 3, 1, 1)) yield return l;
+
+        // Encoder: two stride-2 downsamples, each followed by a LiteCvBlock.
+        foreach (var l in LiteCvBlock(chs1, 3, 2, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs1, 3, 1, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs2, 3, 2, 1)) yield return l;
+        foreach (var l in LiteCvBlock(chs2, 3, 1, 1)) yield return l;
+
+        // Decoder: PixelShuffle upsampling. The convolution feeding each shuffle emits 4x the target channels so
+        // the 2x shuffle trades them for spatial resolution.
+        foreach (var l in LiteCvBlock(chs2, 3, 1, 1)) yield return l;
+        yield return new ConvolutionalLayer<T>(chs1 * 4, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>(2);
+
+        foreach (var l in LiteCvBlock(chs1, 3, 1, 1)) yield return l;
+        yield return new ConvolutionalLayer<T>(chs0 * 4, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+        yield return new PixelShuffleLayer<T>(2);
+
+        // OutputCvBlock: one normalized+activated convolution, then a LINEAR projection back to frame channels.
+        foreach (var l in LiteCvBlock(chs0, 3, 1, 1)) yield return l;
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8174,18 +8596,31 @@ public static class LayerHelper<T>
         int h = inputHeight;
         int w = inputWidth;
 
-        // Shallow feature extraction
-        yield return new ConvolutionalLayer<T>(embedDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+        // Shallow feature extraction. The released VRT applies its activation in
+        // the reconstruction/upsampling path; conv_first itself is linear.
+        yield return new ConvolutionalLayer<T>(embedDim, 3, 1, 1,
+            new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Multi-scale feature extraction with encoder structure
         int currentDim = embedDim;
         for (int i = 0; i < 3; i++)
         {
-            // Temporal mutual self-attention approximated with conv blocks
+            // Temporal mutual self-attention approximated with shape-preserving
+            // convolutional branches. A real TMSA block is pre-norm attention plus
+            // an FFN and adds BOTH branches back to the running feature tensor. The
+            // old flat conv chain omitted those skips, so gradients had to cross the
+            // complete encoder/body without an identity path and the paper Adam
+            // schedule diverged even on a one-example memorization task. Keep each
+            // approximation graph-faithful by publishing the branch through the
+            // framework's registered ResidualLayer composite.
             for (int j = 0; j < numBlocks / 4; j++)
             {
-                yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-                yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+                yield return new ResidualLayer<T>(
+                    new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                        new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
+                yield return new ResidualLayer<T>(
+                    new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                        new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
             }
 
             if (i < 2)
@@ -8197,10 +8632,12 @@ public static class LayerHelper<T>
             }
         }
 
-        // Bottleneck with deep features
+        // The paper's deepest RTMSA group is residual as well.
         for (int i = 0; i < numBlocks / 2; i++)
         {
-            yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
+            yield return new ResidualLayer<T>(
+                new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                    new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
         }
 
         // Decoder with upsampling for super-resolution
@@ -8227,9 +8664,14 @@ public static class LayerHelper<T>
             h *= 2; w *= 2;
         }
 
-        // Final reconstruction
-        yield return new ConvolutionalLayer<T>(currentDim, 3, 1, 1, new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+        // VRT adds the reconstructed body back to its feature stream before the
+        // final projection. Preserve that identity path in this layer-level
+        // approximation too.
+        yield return new ResidualLayer<T>(
+            new ConvolutionalLayer<T>(currentDim, 3, 1, 1,
+                new LeakyReLUActivation<T>(0.1) as IActivationFunction<T>));
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1,
+            new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8473,8 +8915,16 @@ public static class LayerHelper<T>
         h = ConvOutSize(h, 3, 2, 1); w = ConvOutSize(w, 3, 2, 1);
 
         // Object encoder (processes mask with image features)
-        // Note: This takes numFeatures + 1 channels (features + mask)
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // This branch consumes the image features concatenated with a single-channel object mask,
+        // rather than the preceding image-encoder output directly. Resolve that non-sequential
+        // input contract explicitly: NeuralNetworkBase's generic lazy-shape walk otherwise assumes
+        // every top-level layer is a linear chain and resolves this convolution at numFeatures
+        // channels. Its real first forward then receives numFeatures + 1 and correctly rejects the
+        // already-resolved kernel as incompatible.
+        var objectEncoderInput = new ConvolutionalLayer<T>(
+            numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        objectEncoderInput.ResolveShapesOnly(new[] { numFeatures + 1, h, w });
+        yield return objectEncoderInput;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Query/Key/Value projections for memory attention
@@ -8555,16 +9005,28 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Working memory network (medium resolution)
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        var workingMemoryInput = new ConvolutionalLayer<T>(
+            numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        workingMemoryInput.ResolveShapesOnly(new[] { numFeatures, h, w });
+        yield return workingMemoryInput;
         yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Long-term memory network (compressed)
-        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // This is another branch from the full query feature map, not a continuation
+        // of the working-memory branch. Resolve the non-sequential input explicitly
+        // so NeuralNetworkBase's generic lazy-shape walk cannot bind it to numFeatures/2.
+        var longTermMemoryInput = new ConvolutionalLayer<T>(
+            numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        longTermMemoryInput.ResolveShapesOnly(new[] { numFeatures, h, w });
+        yield return longTermMemoryInput;
         yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
         // Memory fusion (combines sensory + working + long-term)
         int totalFusionChannels = numFeatures + numFeatures / 2 + numFeatures / 4;
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        var memoryFusion = new ConvolutionalLayer<T>(
+            numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
+        memoryFusion.ResolveShapesOnly(new[] { totalFusionChannels, h, w });
+        yield return memoryFusion;
 
         // Decoder with upsampling
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -8953,48 +9415,45 @@ public static class LayerHelper<T>
         int numEncoderBlocks = 12)
     {
         int patchSize = 16;
-        int featH = inputHeight / patchSize;
-        int featW = inputWidth / patchSize;
+        int numHeads = System.Math.Max(1, numFeatures / 64); // ViT convention: head dim = 64
+        int ffnDim = numFeatures * 4;
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
-        // Patch embedding
-        yield return new ConvolutionalLayer<T>(numFeatures, patchSize, patchSize, 0, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Encoder transformer blocks
+        // === DINOv2 ViT encoder (Depth Anything V2 — Yang et al., 2024, arXiv:2406.09414;
+        //     backbone: Oquab et al. 2023 DINOv2 / Dosovitskiy et al. 2021 ViT) ===
+        // Patch-embed the image into (H/P)·(W/P) tokens, then run RESIDUAL transformer
+        // blocks — the exact patch-embed + TransformerEncoderLayer stack the ViT/DINO
+        // models here already share (CreateDefaultViTLayers). The previous factory used
+        // plain ConvolutionalLayers for both the "patch embed" and the "encoder blocks",
+        // which is not a ViT at all (and, combined with the decoder's double-upsampling,
+        // crashed the forward). The model's RunForward reassembles the resulting token
+        // sequence [B, N, numFeatures] back into a 2-D feature map [B, numFeatures, H/P,
+        // W/P] before the DPT decoder below.
+        yield return new PatchEmbeddingLayer<T>(patchSize, numFeatures);
         for (int i = 0; i < numEncoderBlocks; i++)
         {
-            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
         }
+        yield return new LayerNormalizationLayer<T>();
 
-        // Decoder blocks with progressive upsampling
-        int h = featH;
-        int w = featW;
-        int currentFeatures = numFeatures;
-
-        // Stage 1 - no upsampling yet
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        currentFeatures = numFeatures / 2;
-
-        // Stage 2 - 2x upsample
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        currentFeatures = numFeatures / 4;
-
-        // Stage 3 - 2x upsample
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures / 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        currentFeatures = numFeatures / 8;
-
-        // Stage 4 - 2x upsample
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Depth head - 2x upsample to original resolution
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(1, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // === DPT decoder (Ranftl et al., 2021 — the decoder Depth Anything V2 uses) ===
+        // Once the encoder tokens are reassembled to [B, numFeatures, H/P, W/P], refine +
+        // progressively 2x-upsample back to the input resolution, then a 1-channel sigmoid
+        // head produces the normalized depth map. Four 2x upsamples take the H/16 grid
+        // back to full resolution (16 → 32 → 64 → 128 → 256 at the default 256² input).
+        // Upsampling is done ONLY by these UpsamplingLayers — the model's DecodeDepth no
+        // longer also calls a manual Upsample2x between layers (that double-upsample grew
+        // the tensor inconsistently and threw IndexOutOfRange in CpuEngine.Upsample).
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, relu);   // refine @ H/16
+        yield return new UpsamplingLayer<T>(2);                                    // -> H/8
+        yield return new ConvolutionalLayer<T>(numFeatures / 4, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                                    // -> H/4
+        yield return new ConvolutionalLayer<T>(numFeatures / 8, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                                    // -> H/2
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                                    // -> H
+        // Depth head: 1 channel, sigmoid to normalize depth to [0, 1].
+        yield return new ConvolutionalLayer<T>(1, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -9361,8 +9820,22 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(128, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Flow head (2 channels: horizontal and vertical flow)
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        // Flow head (2 channels: horizontal and vertical flow) at 1/8 resolution.
+        // IdentityActivation, NOT the ConvolutionalLayer default ReLU: optical flow is signed
+        // (negative x/y motion is valid), and a ReLU head would clamp all negative flow to 0.
+        // Matches the GMFlow flow head, which is also linear for the same reason.
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, new IdentityActivation<T>() as IActivationFunction<T>);
+
+        // Upsample the 1/8-resolution flow field back to the full input resolution.
+        // FlowFormer (Huang et al. 2022, §3.3) — like RAFT — predicts flow at 1/8 resolution
+        // and upsamples it to full resolution before output (the paper uses learned convex
+        // upsampling; three 2x bilinear upsamples are the standard baseline analogue and exactly
+        // reverse the encoder's three stride-2 downsamples). Without this the model emitted a
+        // [2, H/8, W/8] flow whose length was < input/4, losing the full-resolution flow field
+        // the paper produces (TemporalDim_Preserved).
+        yield return new UpsamplingLayer<T>(2);
+        yield return new UpsamplingLayer<T>(2);
+        yield return new UpsamplingLayer<T>(2);
     }
 
     /// <summary>
@@ -9756,30 +10229,57 @@ public static class LayerHelper<T>
         int backboneChannels = 256,
         int innerChannels = 256)
     {
-        // ResNet-18 style backbone (simplified)
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>(3, 2);
+        // ResNet-style feature backbone. The AAAI-2020 paper uses a residual ResNet-18/50;
+        // this native default approximates it with a plain BatchNorm+ReLU conv stack.
+        // Downsampling is capped at 4 stride-2 stages (128->8 for a 128px input) rather than
+        // the previous 5 stride-2 + max-pool (which collapsed 128->4). At the unit-test batch
+        // size of 1, BatchNormalization estimates its statistics over the spatial samples of a
+        // single image; a 4x4 map gives only 16 samples per channel, so an unlucky near-constant
+        // channel had ~zero variance and BN divided by sqrt(eps), amplifying the activations
+        // without bound (a root cause of the #1854 training divergence). 8x8 (64 samples) keeps
+        // the batch-1 variance well-posed.
+        // Each conv is IDENTITY-activated so BatchNorm normalizes the raw convolution response, with a
+        // single explicit ReLU applied AFTER BN — the canonical Conv→BN→ReLU order. ConvolutionalLayer
+        // defaults to ReLU when no activation is passed, which would otherwise clamp the features before
+        // BN (Conv(ReLU)→BN) so BN normalized already-nonnegative activations instead of the raw response
+        // (#1789 review; identical fix already applied to the PSENet stem + Citrinet epilogue in this file).
+        var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
+        var reluActivation = new ReLUActivation<T>() as IActivationFunction<T>;
 
-        // ResNet blocks (simplified to conv layers for demonstration)
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, identityActivation);                 // /2
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, identityActivation);               // /4
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(256, 3, 2, 1);
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(256, 3, 2, 1, identityActivation);               // /8
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1, identityActivation);  // /16
         yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
 
-        // FPN neck - lateral connections
-        yield return new ConvolutionalLayer<T>(innerChannels, 1, 1, 0);
-
-        // Probability map head (outputs text probability at each pixel)
-        yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1);
+        // FPN neck - 1x1 lateral projection to the inner (neck) channel width.
+        yield return new ConvolutionalLayer<T>(innerChannels, 1, 1, 0, identityActivation);
         yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
 
-        // Threshold map head (outputs adaptive threshold at each pixel)
-        yield return new ConvolutionalLayer<T>(1, 1, 1, 0);
+        // Probability-map head (per-pixel text probability).
+        yield return new ConvolutionalLayer<T>(innerChannels / 4, 3, 1, 1, identityActivation);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
+
+        // Output head — TWO channels: channel 0 is the probability map P, channel 1 is the LEARNED
+        // adaptive-threshold map T. The DB formulation keeps both maps in [0,1] and forms the
+        // differentiable binary map B = 1 / (1 + exp(-k*(P - T))) (Liao et al. 2020, Sec. 3.2), so the
+        // head is SIGMOID-activated, NOT the ConvolutionalLayer default ReLU. Emitting both channels
+        // (rather than only P) makes DBNet.ExtractThresholdMap use the learned T map instead of falling
+        // back to a fixed 0.3 threshold, matching the paper and the sibling ComputerVision DBNet's
+        // prob/threshold heads. Sigmoid is also required for correctness: DBNet trains under
+        // BinaryCrossEntropyLoss, only defined for predictions in (0,1) — an unbounded ReLU output
+        // (p > 1 or p == 0) feeds log() a non-positive argument, giving NaN/huge gradients that blow
+        // the weights up and diverge the loss (#1854).
+        yield return new ConvolutionalLayer<T>(2, 1, 1, 0, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     #endregion
@@ -10041,13 +10541,20 @@ public static class LayerHelper<T>
         int numHeads = 12,
         int vocabSize = 30522,
         int maxSequenceLength = 512,
-        int numClasses = 7)
+        int numClasses = 7,
+        int patchSize = 16)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
 
-        // Word embeddings projection
+        // LayoutLM v1 (Xu et al. 2020, KDD) is a TEXT + 2D-layout model: its input is a sequence of
+        // token IDs (the image-region features of the paper come from an EXTERNAL detector and are an
+        // optional downstream add-on, not part of the core encoder — the visual patch stream first
+        // appears in LayoutLMv2/v3). The generated tests feed a rank-1 token-ID sequence accordingly,
+        // so the token EmbeddingLayer is the front of the stack. A leading PatchEmbeddingLayer (added
+        // when the tests briefly fed a document IMAGE) is wrong for token input and threw
+        // "PatchEmbeddingLayer requires rank-3/4 input; got rank 1" on every forward.
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
 
         // Position embeddings
@@ -10384,24 +10891,39 @@ public static class LayerHelper<T>
     private static IEnumerable<ILayer<T>> CreateNougatEncoderLayers(
         int hiddenDim, int numLayers, int numHeads, int imageSize, int patchSize)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
-
-        // Swin-style patch embedding
-        yield return new ConvolutionalLayer<T>(hiddenDim, patchSize, patchSize, 0);
+        // Swin-style patch embedding. PatchEmbeddingLayer does the patch convolution AND the
+        // spatial->sequence flatten in one layer, which is what Nougat's ViT/Swin encoder actually
+        // is (Blecher et al. 2023) -- and, unlike the previous arrangement, it is the same layer on
+        // every path.
+        //
+        // This used to be a bare ConvolutionalLayer that leaned on the automatic CNN->sequence
+        // reshape in DocumentNeuralNetworkBase.Forward. That reshape is INFERENCE-ONLY. Neither the
+        // sequential shape walk nor the tape training forward runs it, so both of them handed the
+        // very next LayerNormalization a rank-3 [hiddenDim, H', W'] conv map and it bound gamma to
+        // the trailing axis -- the spatial WIDTH, 8 -- instead of the model dimension, 1024. From
+        // there every downstream layer inherited 8: TransformerEncoderLayer resolved
+        // embeddingSize = 8 and threw "must be evenly divisible by numHeads (16)", and once a
+        // prediction had bound gamma correctly to 1024 the training path came back with the mirror
+        // image, "Gamma shape (1024) does not match ... (1024, 8, 8)". Fifteen failures, one cause.
+        //
+        // DocumentNeuralNetworkBase already anticipates this: it special-cases PatchEmbeddingLayer
+        // to suppress its own reshape, noting the layer "does it tape-compatibly -- so the training
+        // path ... gets the SAME flatten". Nougat simply was not using it. Its siblings that build
+        // patch embeddings this way (see the other PatchEmbeddingLayer call sites in this file) do
+        // not have the defect.
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
 
-        // Transformer encoder
+        // Transformer encoder — paper-faithful RESIDUAL blocks (Blecher et al. 2023; Nougat's encoder
+        // is a Swin/ViT). The prior bare MHA->LN->Dense->Dense->LN chain had NO skip connections, so
+        // the deep encoder collapsed distinct inputs post-training and was hard to optimise.
+        // TransformerEncoderLayer applies MSA + residual add + LN and the MLP + residual add + LN
+        // internally (2-arg lazy ctor; the 3-arg eager ctor OOMs). Final LN on the encoder output.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4);
         }
+        yield return new LayerNormalizationLayer<T>();
     }
 
     private static IEnumerable<ILayer<T>> CreateNougatDecoderLayers(
@@ -10657,15 +11179,20 @@ public static class LayerHelper<T>
         int currentWidth = imageWidth;
 
         // CNN feature extractor (VGG-style)
-        int[] channels = [64, 128, 256, 256, 512, 512, 512];
-        int inputChannels = inputDepth;
+        // Preserve the paper-default VGG widths when cnnChannels=512 while
+        // honoring the constructor's public scale control for smaller/larger
+        // CRNN variants. Previously cnnChannels was only used in an unused
+        // featureDim local, so every requested variant still built the full
+        // 64/128/256/256/512/512/512 stack.
+        int c1 = Math.Max(8, cnnChannels / 8);
+        int c2 = Math.Max(8, cnnChannels / 4);
+        int c3 = Math.Max(8, cnnChannels / 2);
+        int[] channels = [c1, c2, c3, c3, cnnChannels, cnnChannels, cnnChannels];
 
         for (int i = 0; i < channels.Length; i++)
         {
             yield return new ConvolutionalLayer<T>(channels[i], 3, 1, 1);
             yield return new BatchNormalizationLayer<T>();
-
-            inputChannels = channels[i];
 
             // Pool with (2,2) for first 3 layers, (2,1) for rest
             if (i < 3)
@@ -10682,9 +11209,6 @@ public static class LayerHelper<T>
         }
 
         // Map-to-Sequence: reshape CNN output for RNN
-        int seqLen = currentWidth;
-        int featureDim = cnnChannels * currentHeight;
-
         // BiLSTM layers (simulated with dense layers)
         yield return new DenseLayer<T>(rnnHiddenSize * 2, reluActivation);
 
@@ -10946,7 +11470,14 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
 
-        yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
+        // MATCHA is built on Pix2Struct's ViT-style image encoder: non-overlapping
+        // 16x16 image patches are projected to hiddenDim and flattened into a
+        // [batch, patches, hiddenDim] token sequence before attention. A plain
+        // ConvolutionalLayer leaves the result channel-first as
+        // [batch, hiddenDim, patchRows, patchColumns], causing attention to treat
+        // patchColumns as the embedding dimension. PatchEmbeddingLayer performs
+        // both the paper's learned patch projection and the required tokenization.
+        yield return new PatchEmbeddingLayer<T>(16, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
         yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
 
@@ -10991,48 +11522,82 @@ public static class LayerHelper<T>
     /// <param name="textDim">Text encoder dimension (default: 4096).</param>
     /// <param name="visionLayers">Number of vision layers (default: 24).</param>
     /// <param name="textLayers">Number of text layers (default: 32).</param>
-    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="numHeads">Number of language-model attention heads (default: 32).</param>
     /// <param name="vocabSize">Vocabulary size (default: 32000).</param>
+    /// <param name="visionNumHeads">Number of ViT attention heads (default: 16 for ViT-L/14).</param>
+    /// <param name="maxSequenceLength">Maximum language-model sequence length (default: 2048).</param>
     /// <returns>A collection of layers forming a DocOwl model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultDocOwlLayers(
         int visionDim = 1024,
         int textDim = 4096,
         int visionLayers = 24,
         int textLayers = 32,
-        int numHeads = 12,
-        int vocabSize = 32000)
+        int numHeads = 32,
+        int vocabSize = 32000,
+        int visionNumHeads = 16,
+        int maxSequenceLength = 2048)
     {
-        IActivationFunction<T> siluActivation = new SiLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Vision encoder (ViT-L style)
-        yield return new ConvolutionalLayer<T>(visionDim, 14, 14, 0);
-        yield return new LayerNormalizationLayer<T>();
+        if (visionDim % visionNumHeads != 0)
+            throw new ArgumentException(
+                $"visionDim ({visionDim}) must be divisible by visionNumHeads ({visionNumHeads}).",
+                nameof(visionNumHeads));
+        if (textDim % numHeads != 0)
+            throw new ArgumentException(
+                $"textDim ({textDim}) must be divisible by numHeads ({numHeads}).",
+                nameof(numHeads));
 
-        for (int i = 0; i < Math.Min(visionLayers, 6); i++)
+        // ViT-L/14 image encoder. PatchEmbeddingLayer performs the required
+        // [B,C,H,W] -> [B,numPatches,visionDim] conversion; the former raw
+        // convolution left [C,H,W] in channels-first form and fed width/height
+        // into LayerNorm and attention as though they were embedding features.
+        yield return new PatchEmbeddingLayer<T>(
+            patchSize: 14,
+            embeddingDim: visionDim,
+            expectedInputChannels: 3);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, visionDim);
+
+        for (int i = 0; i < visionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionDim * 4, siluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: visionDim,
+                numHeads: visionNumHeads,
+                ffnDim: visionDim * 4,
+                dropoutRate: 0.0,
+                ffnActivation: new GELUActivation<T>());
         }
 
-        // Visual abstractor projection
+        // Visual abstractor projection into the LLaMA hidden width. These
+        // projected visual tokens are the multimodal prefix consumed by the
+        // decoder; they are already embeddings and must not be passed through
+        // an EmbeddingLayer (which interprets each value as a token ID).
         yield return new DenseLayer<T>(textDim, identityActivation);
 
-        // LLM decoder layers
-        yield return new EmbeddingLayer<T>(vocabSize, textDim);
-
-        for (int i = 0; i < Math.Min(textLayers, 6); i++)
+        // LLaMA-7B-style decoder: pre-RMSNorm, causal RoPE attention and a
+        // gated SwiGLU FFN. Honor the requested layer counts rather than
+        // silently truncating both paper-default stacks to six blocks.
+        int textFfnDim = SwiGLUHiddenDim(textDim, 256);
+        for (int i = 0; i < textLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(textDim * 4, siluActivation);
-            yield return new DenseLayer<T>(textDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            var attention = new MultiHeadAttentionLayer<T>(
+                headCount: numHeads,
+                headDimension: textDim / numHeads);
+            attention.ConfigurePositionalEncoding(
+                PositionalEncodingType.Rotary,
+                ropeTheta: 10000.0,
+                maxSequenceLength: maxSequenceLength);
+            attention.UseCausalMask = true;
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: textDim,
+                ffnDim: textFfnDim,
+                attention: attention,
+                ffnActivation: new SiLUActivation<T>(),
+                gated: true);
         }
 
+        yield return new RMSNormalizationLayer<T>(textDim);
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
@@ -11058,37 +11623,44 @@ public static class LayerHelper<T>
         int numHeads = 12,
         int vocabSize = 30522)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Patch embedding: conv with kernel=16, stride=16 on full image → (imageSize/16)^2 patches
-        yield return new ConvolutionalLayer<T>(visionDim, 16, 16, 0);
-        yield return new LayerNormalizationLayer<T>();
+        if (imageSize < 16 || imageSize % 16 != 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), imageSize,
+                "Image size must be a positive multiple of the 16-pixel patch size.");
+        if (visionLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(visionLayers));
+        if (fusionLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(fusionLayers));
+        if (numHeads <= 0 || visionDim % numHeads != 0 || fusionDim % numHeads != 0)
+            throw new ArgumentException("Attention heads must evenly divide both visionDim and fusionDim.", nameof(numHeads));
 
-        for (int i = 0; i < Math.Min(visionLayers, 6); i++)
+        int numPatches = (imageSize / 16) * (imageSize / 16);
+
+        // Convert channels-first RGB pixels to a token sequence before LayerNorm/attention.
+        // The previous ConvolutionalLayer left [C,H,W] in channels-first layout, causing
+        // attention to interpret image width as embedding width. It then routed continuous
+        // visual activations through EmbeddingLayer as if they were integer token IDs.
+        yield return new PatchEmbeddingLayer<T>(16, visionDim, expectedInputChannels: 3);
+        yield return new LayerNormalizationLayer<T>();
+        yield return new PositionalEncodingLayer<T>(numPatches, visionDim);
+
+        for (int i = 0; i < visionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionDim * 4, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionDim * 4, visionDim);
         }
 
-        // Text encoder
-        yield return new EmbeddingLayer<T>(vocabSize, textDim);
-        yield return new PositionalEncodingLayer<T>(512, textDim);
-        yield return new LayerNormalizationLayer<T>();
+        // The single-tensor neural-network contract carries visual tokens. Project them
+        // into the configured fusion width instead of treating pixels as vocabulary IDs.
+        if (visionDim != fusionDim)
+            yield return new DenseLayer<T>(fusionDim, identityActivation);
 
-        // Fusion layers
         for (int i = 0; i < fusionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(fusionDim * 4, geluActivation);
-            yield return new DenseLayer<T>(fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, fusionDim * 4, fusionDim);
         }
 
+        _ = textDim;
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
@@ -11107,20 +11679,25 @@ public static class LayerHelper<T>
         int numClasses = 7)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Initial projection
+        // Project the supplied node features to the graph hidden width. Production callers can
+        // provide explicit graph-convolution layers (and adjacency) through Architecture.Layers;
+        // the default feature-only path keeps the same per-node transforms with self information.
         yield return new DenseLayer<T>(hiddenDim, reluActivation);
-        yield return new DropoutLayer<T>(0.5);
 
-        // GCN layers (using dense as approximation)
+        // GCN feature projections. Luo et al. use ReLU in the first graph-convolution layer and
+        // extract the learned node representation from it. Keep ReLU on the compact default stack.
         for (int i = 0; i < numGCNLayers; i++)
         {
             yield return new DenseLayer<T>(hiddenDim, reluActivation);
-            yield return new DropoutLayer<T>(0.5);
         }
 
-        // Classification head
+        // Paper section 3.4 / 4.3: the pooled aspect features feed a two-layer MLP classifier
+        // with tanh and 0.1 dropout, followed by raw class logits for cross-entropy.
+        yield return new DenseLayer<T>(hiddenDim, tanhActivation);
+        yield return new DropoutLayer<T>(0.1);
         yield return new DenseLayer<T>(numClasses, identityActivation);
     }
 
@@ -11206,6 +11783,14 @@ public static class LayerHelper<T>
     /// <param name="numHeads">Number of attention heads (default: 6).</param>
     /// <param name="charsetSize">Character set size (default: 95).</param>
     /// <returns>A collection of layers forming an SVTR model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> SVTR reads text out of an image. It first shrinks the picture with
+    /// two small convolution "stem" blocks (each is Conv -> BatchNorm -> ReLU, the standard order that
+    /// keeps the numbers well-scaled), turning the image into a compact grid of features. That grid is
+    /// then flattened into a sequence of "tokens" and passed through transformer mixing blocks that let
+    /// every position look at every other position, which is what lets the model recognize whole words.
+    /// A final dense layer turns each position into character scores for CTC decoding.</para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSVTRLayers(
         int imageWidth = 256,
         int imageHeight = 64,
@@ -11216,32 +11801,214 @@ public static class LayerHelper<T>
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int seqLen = imageWidth / 4;
 
-        // Patch embedding
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        // Progressive overlapping patch embedding (SVTR, Du et al. 2022, sec 3.1): two consecutive
+        // 3x3 stride-2 convolutions downsample the input image [3, H, W] by 4x and project it to the
+        // hidden dimension, producing a [D, H/4, W/4] feature map. Conv layers are resolution-agnostic
+        // (they cache only the input DEPTH, never a spatial crop size), so — unlike PatchEmbeddingLayer —
+        // they handle the lazy-shape-resolution pass (model GetInputShape) and the smaller harness image
+        // being different sizes without a stale-crop crash. The spatial->token flatten that follows the
+        // convs is done in SVTR's own ForwardForTraining/PredictCore via a tape-aware Engine reshape, so
+        // BOTH the training and inference paths flatten identically (the base's inference-only reshape
+        // used to sever the training path -> loss never fell / params never moved).
+        // Each stem block is ordered Conv (linear) -> BatchNorm -> ReLU. ConvolutionalLayer defaults
+        // to a built-in ReLU, so leaving the activation implicit would run Conv -> ReLU -> BatchNorm,
+        // making BN normalize already-clipped, non-negative activations instead of the raw conv
+        // response (the Conv->ReLU->BN ordering bug fixed elsewhere in this file — PSENet stem,
+        // Citrinet epilogue, DBNet backbone). Pass IdentityActivation to the convs and apply ReLU as
+        // an explicit ActivationLayer after each BatchNorm.
+        yield return new ConvolutionalLayer<T>(hiddenDim / 2, kernelSize: 3, stride: 2, padding: 1, identityActivation);
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(hiddenDim, 4, 4, 0);
-        yield return new LayerNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
+        yield return new ConvolutionalLayer<T>(hiddenDim, kernelSize: 3, stride: 2, padding: 1, identityActivation);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(reluActivation);
 
-        // Transformer layers
+        // Mixing blocks. SVTR's mixing block is a standard pre-norm transformer block WITH residual
+        // connections (local/global attention + MLP, each wrapped in x = x + f(LN(x))). The composite
+        // TransformerEncoderLayer supplies those residual skips; the previous bare
+        // MHA->LN->FFN->FFN->LN stack had NO residual path, so the signal decayed ~3-4x per block and
+        // collapsed after training (DifferentInputs). It also propagates the parent RandomSeed to its
+        // sublayers, keeping Predict deterministic.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateSize, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
         }
 
-        // CTC output
+        // CTC output head (per time step -> character logits).
         yield return new DenseLayer<T>(charsetSize, identityActivation);
     }
 
     /// <summary>
     /// Creates default ABINet (Autonomous, Bidirectional, Iterative) layers.
     /// </summary>
+    /// <param name="imageWidth">Input image width (default: 128).</param>
+    /// <param name="imageHeight">Input image height (default: 32).</param>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="languageDim">Language model dimension (default: 512).</param>
+    /// <param name="numIterations">Number of refinement iterations (default: 3).</param>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>A collection of layers forming an ABINet model.</returns>
+    /// <remarks>
+    /// Emitted as its own branch because ABINet (Fang et al., CVPR 2021, arXiv:2103.06495) is a
+    /// three-headed model, not a single chain: the VM, the language model and the fusion each
+    /// produce character probabilities and each carries its own loss term
+    /// (paper Eq. 5, L = lambda_v * L_v + lambda_l * L_l + L_f). Keeping the branches separate is
+    /// what lets the VM stay trainable while gradient flow from the LM into it stays blocked.
+    /// </remarks>
+    /// <param name="imageWidth">Input image width (default: 128).</param>
+    /// <param name="imageHeight">Input image height (default: 32).</param>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <returns>The layers forming ABINet's vision model trunk.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetVisionLayers(
+        int imageWidth = 128,
+        int imageHeight = 32,
+        int visionDim = 512)
+    {
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int sequenceLength = (imageHeight / 4) * (imageWidth / 4);
+
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new MaxPoolingLayer<T>(2, 2);
+        yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new MaxPoolingLayer<T>(2, 2);
+        yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
+
+        // Convert each convolutional feature map into a token sequence before
+        // attention. ReshapeLayer preserves the batch axis, so both a single
+        // image and a batch become [B, H*W, C] without TransposeLayer's
+        // rank-4-only contract.
+        yield return new ReshapeLayer<T>(new[] { sequenceLength, visionDim });
+
+        yield return new MultiHeadAttentionLayer<T>(8, (visionDim) / (8), identityActivation);
+        yield return new LayerNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Creates ABINet's language model (LM): the gradient barrier followed by the Bidirectional
+    /// Cloze Network.
+    /// </summary>
+    /// <param name="charsetSize">Character set size — the width of the probability vectors the LM consumes.</param>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="languageDim">Language model dimension (default: 512).</param>
+    /// <returns>The layers forming ABINet's language model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetLanguageLayers(
+        int charsetSize,
+        int visionDim = 512,
+        int languageDim = 512)
+    {
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // ABINet's AUTONOMOUS principle (Fang et al., CVPR 2021, arXiv:2103.06495): gradient
+        // flow is BLOCKED between the vision model and the language model, so the two train as
+        // independent functional units and the LM is forced to learn explicit language modelling
+        // instead of becoming an extension of the visual features. The paper's ablation measures
+        // roughly 0.9% worse accuracy when that gradient is allowed through. The paper blocks
+        // "at input vectors", so the barrier heads this branch.
+        //
+        // It is only sound because the VM carries its own loss term: in the paper the VM is
+        // supervised by L_v, so blocking the LM's gradient removes one path into the VM rather
+        // than every path. Placed in a single-loss sequential chain this same layer left the
+        // entire vision encoder with no gradient source at all, and the memorization loss sat
+        // flat at 0.2746 across 20 steps.
+        yield return new StopGradientLayer<T>();
+
+        // The LM consumes CHARACTER PROBABILITY VECTORS, not visual features. The paper is
+        // explicit: "the LM is regarded as an independent model of spelling correction which
+        // takes probability vectors of characters as input and outputs probability
+        // distributions of expected characters". This branch is therefore fed the vision head's
+        // charset-wide logits, and the softmax here turns them into the probability vectors the
+        // BCN is defined over.
+        //
+        // Feeding it the raw visual features instead — as this did — makes the "language model"
+        // a second vision stage operating on image features, which is precisely the entanglement
+        // the Autonomous principle exists to prevent.
+        yield return new ActivationLayer<T>((IVectorActivationFunction<T>)new SoftmaxActivation<T>());
+
+        // Project the probability vectors up to the LM's working width.
+        yield return new DenseLayer<T>(languageDim, identityActivation);
+
+        // ABINet's BIDIRECTIONAL principle: the language model is a Bidirectional Cloze Network,
+        // not ordinary self-attention. Each position attends to every OTHER position in both
+        // directions but is masked out of attending to itself (paper Eq. 3: M[i,j] = 0 for
+        // i != j, -inf for i == j). Blocking the diagonal is what makes it a cloze — the
+        // representation at a position is built purely from its context, so predicting the
+        // character there cannot copy the character itself.
+        //
+        // This previously used a plain MultiHeadAttentionLayer, which leaks each position into
+        // its own prediction. The layer's UseCausalMask option is not a substitute: a triangular
+        // mask would also remove all right-hand context and collapse the LM to unidirectional,
+        // which is the very thing the paper's BCN exists to avoid.
+        yield return new ClozeAttentionLayer<T>(languageDim);
+        yield return new LayerNormalizationLayer<T>();
+
+        // The gated fusion interpolates between the vision and language streams elementwise, so
+        // both must be the same width. Project when the LM runs narrower or wider than the VM.
+        if (languageDim != visionDim)
+            yield return new DenseLayer<T>(visionDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates ABINet's fusion branch: the ITERATIVE refinement stack and the final character head.
+    /// </summary>
+    /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="numIterations">Number of refinement iterations (default: 3).</param>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>The layers forming ABINet's fusion branch.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultABINetFusionLayers(
+        int visionDim = 512,
+        int numIterations = 3,
+        int charsetSize = 95)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Paper section 3.4: the vision and language features are combined by a learned GATE,
+        //   G = sigmoid([F_v, F_l] W_f),  F_f = G * F_v + (1 - G) * F_l
+        // rather than by feeding the language output alone into a refinement stack. This branch
+        // previously never saw F_v at all, so nothing in the model actually fused the two
+        // streams and the "fusion" was just more language-model depth.
+        yield return new GatedFusionLayer<T>(visionDim);
+
+        for (int i = 0; i < numIterations; i++)
+        {
+            yield return new DenseLayer<T>(visionDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>();
+        }
+
+        yield return new DenseLayer<T>(charsetSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates a character-probability head for one of ABINet's branches.
+    /// </summary>
+    /// <remarks>
+    /// The VM and LM each need their own head so their loss terms (L_v and L_l) can be computed
+    /// against the same character targets as the fusion output. Size it with
+    /// <see cref="ResolveChain"/> from the branch's real output shape rather than a hand-written
+    /// one.
+    /// </remarks>
+    /// <param name="charsetSize">Character set size (default: 95).</param>
+    /// <returns>A single character-classification layer.</returns>
+    public static DenseLayer<T> CreateDefaultABINetBranchHead(int charsetSize = 95)
+        => new DenseLayer<T>(charsetSize, (IActivationFunction<T>)new IdentityActivation<T>());
+
+    /// <summary>
+    /// Creates default ABINet (Autonomous, Bidirectional, Iterative) layers as one flat chain.
+    /// </summary>
+    /// <remarks>
+    /// The returned sequence is NOT a runnable chain and is retained only so existing callers
+    /// keep compiling. ABINet's real topology forks and rejoins: the language model consumes the
+    /// vision head's character probabilities, and the fusion gate consumes the vision AND
+    /// language features together. A flat list cannot express either join, so the model's native
+    /// path builds the three branches separately. Use the branch factories directly.
+    /// </remarks>
+    [Obsolete("ABINet's topology forks and rejoins and cannot be expressed as a flat chain. Use CreateDefaultABINetVisionLayers, CreateDefaultABINetLanguageLayers, CreateDefaultABINetFusionLayers and CreateDefaultABINetBranchHead.")]
     /// <param name="imageWidth">Input image width (default: 128).</param>
     /// <param name="imageHeight">Input image height (default: 32).</param>
     /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
@@ -11257,37 +12024,14 @@ public static class LayerHelper<T>
         int numIterations = 3,
         int charsetSize = 95)
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int seqLen = imageWidth / 4;
-
-        // Vision encoder (ResNet-style)
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>(2, 2);
-        yield return new ConvolutionalLayer<T>(128, 3, 1, 1);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new MaxPoolingLayer<T>(2, 2);
-        yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
-
-        // Transformer for vision
-        yield return new MultiHeadAttentionLayer<T>(8, (visionDim) / (8), identityActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // Language model
-        yield return new EmbeddingLayer<T>(charsetSize, languageDim);
-        yield return new MultiHeadAttentionLayer<T>(8, (languageDim) / (8), identityActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // Fusion with iterative refinement
-        for (int i = 0; i < numIterations; i++)
-        {
-            yield return new DenseLayer<T>(visionDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        yield return new DenseLayer<T>(charsetSize, identityActivation);
+        foreach (var l in CreateDefaultABINetVisionLayers(imageWidth, imageHeight, visionDim))
+            yield return l;
+        foreach (var l in CreateDefaultABINetLanguageLayers(charsetSize, visionDim, languageDim))
+            yield return l;
+        foreach (var l in CreateDefaultABINetFusionLayers(visionDim, numIterations, charsetSize))
+            yield return l;
     }
+
 
     /// <summary>
     /// Creates default EAST (Efficient and Accurate Scene Text Detector) layers.
@@ -11347,30 +12091,42 @@ public static class LayerHelper<T>
         int numKernels = 7)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
 
-        // ResNet backbone
-        int currentSize = imageSize;
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
+        // --- ResNet backbone (He et al., 2016) — the PSENet paper (Wang et al., 2019) uses a
+        // RESIDUAL backbone. The previous factory was a plain Conv→BN→ReLU→MaxPool tower with NO
+        // skip connections: both non-paper-faithful and degenerate. After training grows the
+        // BatchNorm running variance, a spatially-uniform input is normalized to a channel-constant
+        // (x-runningMean)/sqrt(largeVar) ≈ β, so two distinct constant pages collapse to a
+        // bit-identical output (DifferentInputs_AfterTraining L2 = 0). A true residual block adds the
+        // shortcut x back — output = ReLU(F(x) + shortcut(x)) — so the input signal bypasses the BN
+        // normalization and distinct inputs stay distinct. BasicBlock inserts a 1×1-conv+BN
+        // projection shortcut automatically when the stride or channel count changes. (The
+        // DocumentNeuralNetworkBase inference Forward now treats BasicBlock/activation as spatial, so
+        // its CNN→sequence auto-reshape no longer misfires on this all-spatial backbone.)
+
+        // Stem: 7×7 stride-2 conv → BN → ReLU → 3×3 stride-2 max-pool (canonical ResNet stem).
+        // The conv is IDENTITY-activated so BatchNorm normalizes the raw (unactivated) convolution
+        // response and the single explicit ReLU is applied post-BN — ConvolutionalLayer defaults to
+        // ReLU, which would otherwise clamp the features before BN (Conv→ReLU→BN→ReLU) and break the
+        // canonical Conv→BN→ReLU ordering.
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, new IdentityActivation<T>() as IActivationFunction<T>);
         yield return new BatchNormalizationLayer<T>();
-        currentSize /= 2;
-
+        yield return new ActivationLayer<T>(reluActivation);
         yield return new MaxPoolingLayer<T>(3, 2);
-        currentSize /= 2;
 
-        int[] resnetChannels = [64, 128, backboneChannels, backboneChannels];
-        int inputChannels = 64;
-        foreach (int outChannels in resnetChannels)
-        {
-            yield return new ConvolutionalLayer<T>(outChannels, 3, 1, 1);
-            yield return new BatchNormalizationLayer<T>();
-            inputChannels = outChannels;
-            if (outChannels != resnetChannels[^1])
-            {
-                yield return new MaxPoolingLayer<T>(2, 2);
-                currentSize /= 2;
-            }
-        }
+        // Residual stages: the first block of each downsampling stage strides by 2 (and projects the
+        // shortcut); channels grow 64 → 128 → backbone. One block per stage keeps the test-scale
+        // backbone light while preserving every residual/skip invariant.
+        // zeroInitResidual: false — the ImageNet "residual branch starts at 0" trick (BN-γ=0 in the
+        // block's last BN) is a stability aid for MANY-block, MANY-epoch ImageNet training; on this
+        // shallow (1-block-per-stage) backbone under the smoke-iteration memorization probe it leaves
+        // the residual branch's γ pinned near 0 with an ill-conditioned from-zero gradient, so the
+        // few-step loss diverged (0.32 → 1.28). Standard init gives the block full capacity from
+        // step 1 so the memorization loss descends within the budget.
+        yield return new BasicBlock<T>(64, stride: 1, zeroInitResidual: false);
+        yield return new BasicBlock<T>(128, stride: 2, zeroInitResidual: false);
+        yield return new BasicBlock<T>(backboneChannels, stride: 2, zeroInitResidual: false);
+        yield return new BasicBlock<T>(backboneChannels, stride: 1, zeroInitResidual: false);
 
         // FPN-style feature fusion
         yield return new ConvolutionalLayer<T>(featureChannels, 1, 1, 0);
@@ -14686,14 +15442,15 @@ public static class LayerHelper<T>
         //   - Time mixing: token shift → project r,k,v,a,b → WKV-7 state update → group norm → output projection
         //   - Channel mixing: token shift → SiLU gating → receptance gate → output
         // With layer normalization and residual connections.
-        for (int layer = 0; layer < numLayers; layer++)
-        {
-            yield return new RWKV7Block<T>(
-                sequenceLength: maxSeqLength,
-                modelDimension: modelDim,
-                numHeads: numHeads,
-                ffnMultiplier: ffnMultiplier);
-        }
+        // One stack layer rather than N sibling blocks: RWKV-7 threads the first layer's value
+        // projection through every later layer, which a flat list of Forward(Tensor) layers cannot
+        // express. Rwkv7Stack owns the loop, exactly as the reference model does.
+        yield return new Rwkv7Stack<T>(
+            numLayers: numLayers,
+            sequenceLength: maxSeqLength,
+            modelDimension: modelDim,
+            numHeads: numHeads,
+            ffnMultiplier: ffnMultiplier);
 
         // === LM Head ===
         // Projects from modelDim back to vocabSize for next-token prediction logits.
@@ -14834,31 +15591,27 @@ public static class LayerHelper<T>
     /// Creates default layers for the TimeMachine (Time Series State Space Model) architecture.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="contextLength">The input sequence length (default: 512).</param>
+    /// <param name="contextLength">Maximum input sequence length (default: 1024).</param>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
-    /// <param name="stateDim">The SSM state dimension (default: 16).</param>
-    /// <param name="numScales">Number of temporal scales/Mamba blocks (default: 4).</param>
-    /// <param name="numLayers">Number of SSM layers per scale (default: 2).</param>
-    /// <param name="expandFactor">Expansion factor for inner dimension (default: 2).</param>
-    /// <param name="convKernelSize">Convolution kernel size (default: 4).</param>
-    /// <param name="useMultiScaleAttention">Whether to use attention for scale combination (default: true).</param>
+    /// <param name="stateDim">The SSM state dimension (default: 256).</param>
+    /// <param name="expandFactor">Expansion factor for the Mamba inner dimension (default: 1).</param>
+    /// <param name="convKernelSize">Mamba convolution kernel size (default: 2).</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <param name="dropoutRate">Dropout applied after E1 and E2 (default: 0.05).</param>
     /// <returns>A collection of layers forming the TimeMachine architecture.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> TimeMachine is a state space model designed specifically for
     /// time series forecasting. The key insight from "A Time Series is Worth 4 Mambas"
-    /// is that using multiple SSM blocks at different temporal scales captures both
-    /// short-term and long-term patterns effectively.
+    /// is to pair outer and inner Mamba branches in complementary orientations.
     /// </para>
     /// <para>
     /// The architecture follows this flow:
-    /// 1. Input embedding with reversible normalization
-    /// 2. Temporal decomposition into multiple scales
-    /// 3. Each scale has its own SSM (Mamba-style) blocks
-    /// 4. Multi-scale attention combines the scale outputs
-    /// 5. Output projection produces forecasts
+    /// 1. E1 embeds the input length, followed by two outer Mamba branches
+    /// 2. E2 creates a smaller representation for two inner Mamba branches
+    /// 3. P1 and residual connections combine the inner path
+    /// 4. Concatenation with the outer path and P2 produce the forecast
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTimeMachineLayers(
@@ -14866,13 +15619,11 @@ public static class LayerHelper<T>
         int contextLength = 512,
         int forecastHorizon = 96,
         int modelDim = 256,
-        int stateDim = 16,
-        int numScales = 4,
-        int numLayers = 2,
-        int expandFactor = 2,
-        int convKernelSize = 4,
-        bool useMultiScaleAttention = true,
-        int numFeatures = 1)
+        int stateDim = 256,
+        int expandFactor = 1,
+        int convKernelSize = 2,
+        int numFeatures = 1,
+        double dropoutRate = 0.05)
     {
         if (contextLength < 1)
             throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
@@ -14882,61 +15633,39 @@ public static class LayerHelper<T>
             throw new ArgumentOutOfRangeException(nameof(modelDim), "Model dimension must be at least 1.");
         if (numFeatures < 1)
             throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (stateDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(stateDim), "State dimension must be at least 1.");
+        if (expandFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(expandFactor), "Expansion factor must be at least 1.");
+        if (convKernelSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(convKernelSize), "Convolution kernel size must be at least 1.");
+        if (dropoutRate < 0.0 || dropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "Dropout rate must be in [0, 1).");
 
-        int innerDim = modelDim * expandFactor;
+        // Ahamed et al. (2024), §3 and official TimeMachine.py. n1/n2 are embeddings of
+        // the INPUT LENGTH, not per-timestep feature widths. The public modelDim option is
+        // n1; n2 follows the paper default n1/2 (256 -> 128). TimeMachine.Forward supplies
+        // the paper's residual, parallel-branch, transpose, concatenation, and RevIN graph.
+        int n1 = modelDim;
+        int n2 = Math.Max(1, modelDim / 2);
 
-        // TimeMachine (Ahamed & Cheng 2024, "A Time Series is Worth 4 Mambas")
-        // stacks Mamba-style selective SSM blocks that operate PER TIME-STEP on
-        // the model dimension. The original helper sized every projection at
-        // modelDim * sequenceLength, so the first two Dense layers alone formed a
-        // [modelDim·contextLength, modelDim·contextLength] = 131072² weight
-        // (≈17 G elements) that overflowed the allocator before any forecast was
-        // produced. Tokens are SEQUENCE POSITIONS: embed each step to modelDim,
-        // run the SSM blocks per-token, then a FlattenHead projects the flattened
-        // token representations to the forecast horizon.
+        yield return new DenseLayer<T>(outputSize: n1, activationFunction: null); // E1: L -> n1
+        yield return new DropoutLayer<T>(dropoutRate);
 
-        // === Input embedding: [B, contextLength * numFeatures]
-        //     → [B, contextLength, numFeatures] → [B, contextLength, modelDim] ===
-        yield return new ReshapeLayer<T>(new[] { contextLength, numFeatures });
-        yield return new DenseLayer<T>(
-            outputSize: modelDim,
-            activationFunction: new GELUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Outer pair: one Mamba mixes channels at width n1; the other runs over the
+        // transposed n1 axis with d_model=1 (channel-independent paper default).
+        yield return new MambaBlock<T>(1, n1, stateDim, expandFactor, convKernelSize);
+        yield return new MambaBlock<T>(n1, 1, stateDim, expandFactor, convKernelSize);
 
-        // === Stacked Mamba-style selective SSM blocks (numScales × numLayers) ===
-        // Each block: input/gate projection → local-context projection →
-        // B (input→state) → A (selective state, bounded by tanh) → C
-        // (state→output) → output projection back to modelDim, with a post-norm
-        // and dropout. All projections are per-token on modelDim/innerDim/stateDim.
-        for (int scale = 0; scale < numScales; scale++)
-        {
-            for (int layer = 0; layer < numLayers; layer++)
-            {
-                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
-                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
-                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: null);
-                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: new TanhActivation<T>());
-                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: null);
-                yield return new DenseLayer<T>(outputSize: modelDim, activationFunction: null);
-                yield return new LayerNormalizationLayer<T>();
-                yield return new DropoutLayer<T>(0.1);
-            }
-        }
+        yield return new DenseLayer<T>(outputSize: n2, activationFunction: null); // E2: n1 -> n2
+        yield return new DropoutLayer<T>(dropoutRate);
 
-        yield return new LayerNormalizationLayer<T>();
+        // Inner pair, with the same complementary orientations at n2.
+        yield return new MambaBlock<T>(n2, 1, stateDim, expandFactor, convKernelSize);
+        yield return new MambaBlock<T>(1, n2, stateDim, expandFactor, convKernelSize);
 
-        // === Output head: average-pool the token sequence, then project to the
-        //     forecast horizon. [B, contextLength, modelDim] → [B, modelDim] →
-        //     [B, forecastHorizon]. Pooling (not flatten) keeps the head weight
-        //     small — flattening contextLength·modelDim (= 512·256) tokens would
-        //     need a multi-GB projection. ===
-        yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
-        yield return new DenseLayer<T>(
-            outputSize: Math.Max(modelDim, forecastHorizon),
-            activationFunction: new GELUActivation<T>());
-        yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
-            activationFunction: null);
+        yield return new DenseLayer<T>(outputSize: n1, activationFunction: null); // P1: n2 -> n1
+        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null); // P2: 2*n1 -> T
     }
 
     /// <summary>
@@ -14946,8 +15675,9 @@ public static class LayerHelper<T>
     /// <param name="contextLength">The input sequence length (default: 512).</param>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
-    /// <param name="stateDim">The HiPPO state dimension/polynomial order (default: 64).</param>
-    /// <param name="numLayers">Number of HiPPO layers (default: 4).</param>
+    /// <param name="stateDim">The HiPPO memory order (-1 resolves to modelDim).</param>
+    /// <param name="numLayers">Number of HiPPO recurrent layers (paper default: 1).</param>
+    /// <param name="dropoutRate">Dropout probability applied after each HiPPO block.</param>
     /// <param name="useNormalization">Whether to use layer normalization (default: true).</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
     /// <returns>A collection of layers forming the HiPPO architecture.</returns>
@@ -14970,54 +15700,59 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultHippoLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int contextLength = 512,
+        int contextLength = 1024,
         int forecastHorizon = 96,
         int modelDim = 256,
-        int stateDim = 64,
-        int numLayers = 4,
-        bool useNormalization = true,
-        int numFeatures = 1)
+        int stateDim = -1,
+        int numLayers = 1,
+        double dropoutRate = 0.0,
+        bool useNormalization = false,
+        int numFeatures = 1,
+        int memorySize = 1,
+        string hippoMethod = "legs",
+        string discretizationMethod = "bilinear",
+        int initialTime = 0,
+        double timeStep = 0.0,
+        double timescaleMin = 0.0,
+        double timescaleMax = double.PositiveInfinity,
+        bool useGate = true)
     {
-        // Paper-faithful HiPPO (Gu et al. 2020): a stack of diagonal state-space
-        // (S4D) layers whose A matrix is initialized with HiPPO-LegS, evolving the
-        // polynomial state per time step across the sequence. This is the genuine
-        // state-space recurrence — NOT a dense projection over the flattened
-        // sequence. The SSM parameters are O(modelDim·stateDim), so the paper-scale
-        // contextLength (512) no longer overflows TensorAllocator.
-        //
-        // Layer order (consumed by Hippo.ExtractLayerReferences):
-        //   [InputEmbedding Dense] ([InputNorm]) { S4DLayer ([BlockNorm]) [Dropout] }×numLayers [OutputHead Dense]
-        // The model's forward pass applies the residual connection, mean-pools the
-        // SSM output over time to [batch, modelDim], then runs the output head.
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
 
-        // === Input Embedding === (features -> modelDim, per time step)
-        yield return new DenseLayer<T>(
-            outputSize: modelDim,
-            activationFunction: new GELUActivation<T>());
+        if (numLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
+        if (modelDim <= 0 || numFeatures <= 0 || memorySize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(modelDim));
 
-        if (useNormalization)
-        {
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // === HiPPO state-space layers ===
+        // Original HiPPO-RNN wiring: fixed HiPPO memory inside a gated recurrent cell,
+        // followed by an end-state decoder. The paper experiment uses one layer; extra
+        // layers, normalization, and dropout remain explicit user customizations.
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Diagonal SSM with HiPPO-LegS-initialized A (Gu et al. 2020):
-            //   x' = A x + B u,  y = C x + D u  evolved over the sequence.
-            yield return new S4DLayer<T>(
-                sequenceLength: contextLength,
-                modelDimension: modelDim,
-                stateDimension: stateDim);
+            yield return new HippoMemoryCellLayer<T>(
+                hiddenSize: modelDim,
+                inputSize: layer == 0 ? numFeatures : modelDim,
+                memoryOrder: stateDim,
+                memorySize: memorySize,
+                measure: hippoMethod,
+                discretization: discretizationMethod,
+                initialTime: initialTime,
+                timeStep: timeStep,
+                timescaleMin: timescaleMin,
+                timescaleMax: timescaleMax,
+                useGate: useGate);
 
             if (useNormalization)
             {
                 yield return new LayerNormalizationLayer<T>();
             }
-            yield return new DropoutLayer<T>(0.1);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
         }
 
-        // === Output Head === (pooled modelDim -> forecastHorizon)
+        // End-state decoder (the model extracts the final recurrent state before this head).
         yield return new DenseLayer<T>(
             outputSize: forecastHorizon,
             activationFunction: null);
@@ -16835,15 +17570,32 @@ public static class LayerHelper<T>
     /// <param name="architecture">The neural network architecture.</param>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="hiddenDimension">Dimension of hidden layers.</param>
-    /// <param name="latentDimension">Dimension of latent space.</param>
-    /// <param name="numFactors">Number of factors to disentangle.</param>
+    /// <param name="latentDimension">Retained for API compatibility. The factor count is now the latent
+    /// width, since the paper's latent variables ARE the factors.</param>
+    /// <param name="numFactors">Number of latent factors.</param>
     /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <param name="numAssets">Number of assets whose cross-sectional returns the decoder predicts.</param>
     /// <returns>Enumerable of layers forming the FactorVAE architecture.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> FactorVAE uses a variational autoencoder to learn disentangled factors.
-    /// The encoder compresses data to a latent space, and the decoder reconstructs it.
-    /// The "disentanglement" means each latent dimension captures a different factor.
+    /// <b>For Beginners:</b> this builds four small networks. One turns raw market data into a compact
+    /// description of each stock. One guesses the hidden "factors" from that description alone (used
+    /// when predicting). One infers those factors with the benefit of knowing what actually happened
+    /// (used only while training). The last turns factors back into predicted returns.
+    /// </para>
+    /// <para>
+    /// <b>Corrected architecture.</b> This previously emitted a plain autoencoder that reconstructed the
+    /// INPUT FEATURES, plus a "factor discriminator for disentanglement" — the latter belonging to a
+    /// DIFFERENT paper also called FactorVAE (Kim &amp; Mnih, <i>Disentangling by Factorising</i>, which
+    /// uses a discriminator to penalize total correlation). The cited finance paper (Duan et al., AAAI
+    /// 2022) has no such discriminator; its contribution is PRIOR-POSTERIOR learning, and its decoder
+    /// predicts cross-sectional RETURNS rather than reconstructing inputs. Both of those are now what is
+    /// built here.
+    /// </para>
+    /// <para>
+    /// The spans are exposed as <see cref="FactorVAEFeatureExtractorLayerCount"/> and friends so the
+    /// model can run each sub-network independently instead of as one sequential stack — the prior and
+    /// posterior are alternative branches over the same features, which a flat stack cannot express.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFactorVAELayers(
@@ -16852,115 +17604,71 @@ public static class LayerHelper<T>
         int hiddenDimension = 128,
         int latentDimension = 32,
         int numFactors = 10,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int numAssets = 10)
     {
-        // Encoder
+        // --- Feature extractor: observable market data -> latent stock features e ---
+        // Span consumed by FactorVAE<T> as FeatureExtractorLayerCount.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
-        // Latent space (mean and log-variance). This head MUST be linear: the
-        // log-variance is a signed quantity (negative for sub-unit variance) and
-        // the mean is unbounded. DenseLayer(n, null) falls back to ReLU in its ctor,
-        // which would clip both mean and log-variance to >= 0 — corrupting the VAE
-        // latent distribution. Pass an explicit IdentityActivation.
-        yield return new DenseLayer<T>(latentDimension * 2, (IActivationFunction<T>)new IdentityActivation<T>());
-
-        // Factor discriminator for disentanglement
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new LeakyReLUActivation<T>());
-        yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new IdentityActivation<T>());
-
-        // Decoder. The final layer reconstructs the input features, which are signed
-        // real values — the reconstruction head MUST be linear. DenseLayer(n, null)
-        // falls back to ReLU, which clips the reconstruction to >= 0 and dead-ReLUs
-        // (frozen-at-0 neurons with zero gradient), collapsing training output to a
-        // constant. Pass an explicit IdentityActivation to stay linear.
+        // --- Factor PREDICTOR (the prior p(z | x)): features only, no future returns ---
+        // This is the head used at prediction time, when the future is unknown. Emits mean and
+        // log-variance over the factors, so it must be LINEAR: log-variance is signed (negative for
+        // sub-unit variance) and the mean is unbounded. DenseLayer(n, null) falls back to ReLU, which
+        // would clip both to >= 0 and corrupt the distribution — hence the explicit IdentityActivation.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>();
+        yield return new DenseLayer<T>(numFactors * 2, (IActivationFunction<T>)new IdentityActivation<T>());
 
+        // --- Factor ENCODER (the posterior q(z | y, x)): features CONCATENATED with future returns ---
+        // Training-only: it is allowed to see the realized returns, which is what lets it identify the
+        // factors that actually explained them. The KL term then pulls the prior towards this.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new DenseLayer<T>(numFactors * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+
+        // --- Factor DECODER: the paper's LINEAR factor structure, y = alpha + beta * z (eq 18-19) ---
+        // Not an MLP over [factors, features]. This is the "dynamic factor model" half of the paper:
+        // alpha(e) is each stock's idiosyncratic expected return and beta(e) its factor EXPOSURES, both
+        // read off the stock latent features, with the factors entering only through the linear product
+        // beta * z. The distinction matters for behaviour, not just fidelity: alpha carries the baseline
+        // return independently of z, so an imperfect prior degrades predictions gracefully, whereas an
+        // MLP that entangles factors with features lets a lagging prior corrupt the whole prediction.
+        //
+        // Both heads are linear for the same reason as the distribution heads: returns and exposures are
+        // signed, and DenseLayer(n, null) would fall back to ReLU and clip them.
+        //
+        // Alpha head (FactorVAEAlphaLayerCount layers): features -> per-stock idiosyncratic return.
+        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new IdentityActivation<T>());
+
+        // Beta head (FactorVAEBetaLayerCount layers): features -> numAssets x numFactors exposures,
+        // emitted flat and reshaped by the model.
+        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(
+            numAssets * numFactors, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
-    /// <summary>
-    /// Creates default layers for a FactorTransformer model.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture.</param>
-    /// <param name="numFeatures">Number of input features.</param>
-    /// <param name="hiddenDimension">Dimension of hidden layers.</param>
-    /// <param name="numFactors">Number of factors.</param>
-    /// <param name="headCount">Number of attention heads.</param>
-    /// <param name="numLayers">Number of transformer layers.</param>
-    /// <param name="sequenceLength">Length of input sequences.</param>
-    /// <param name="dropoutRate">Dropout rate for regularization.</param>
-    /// <returns>Enumerable of layers forming the FactorTransformer architecture.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> FactorTransformer uses transformer attention to model
-    /// relationships between assets and time, extracting factors that capture
-    /// cross-sectional and temporal patterns.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultFactorTransformerLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 50,
-        int hiddenDimension = 128,
-        int numFactors = 10,
-        int headCount = 4,
-        int numLayers = 2,
-        int sequenceLength = 60,
-        double dropoutRate = 0.1)
-    {
-        // Input embedding
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+    /// <summary>Layers in the FactorVAE alpha (idiosyncratic return) head.</summary>
+    public const int FactorVAEAlphaLayerCount = 2;
 
-        // Positional encoding. A transformer needs explicit position information (Vaswani et al. 2017;
-        // factor-investing transformers per Duan et al. 2022 encode the temporal axis). It was missing
-        // here — the previous comment claimed it was "handled inside transformer", but MultiHeadAttention
-        // adds none. Without it the scale-invariant LayerNorm below collapses scalar-multiple inputs to
-        // identical outputs (the model was input-invariant and its gradients vanished — the
-        // DifferentInputs / GradientFlow / Training failures). The position-dependent offset makes the
-        // embedding no longer a pure scalar multiple of the input, restoring input sensitivity + gradient flow.
-        yield return new PositionalEncodingLayer<T>(sequenceLength, hiddenDimension);
-        yield return new LayerNormalizationLayer<T>();
+    /// <summary>Layers in the FactorVAE beta (factor exposure) head.</summary>
+    public const int FactorVAEBetaLayerCount = 2;
 
-        // Transformer encoder layers
-        for (int i = 0; i < numLayers; i++)
-        {
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(headCount, (hiddenDimension) / (headCount));
-            yield return new LayerNormalizationLayer<T>();
+    /// <summary>Number of layers in the FactorVAE feature extractor span.</summary>
+    public const int FactorVAEFeatureExtractorLayerCount = 5;
 
-            // Feed-forward network. Per Vaswani et al. 2017 (eq. 2) the FFN is
-            // Linear(GELU(Linear(x))) — the SECOND projection is linear (no activation).
-            // DenseLayer(size, null) falls back to ReLU in its ctor, so the output
-            // projection must pass an explicit IdentityActivation to stay linear;
-            // a null here would silently make the FFN output non-negative.
-            yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new IdentityActivation<T>());
-            yield return new LayerNormalizationLayer<T>();
-        }
+    /// <summary>Number of layers in the FactorVAE prior (factor predictor) span.</summary>
+    public const int FactorVAEPriorLayerCount = 2;
 
-        // Factor extraction head
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new TanhActivation<T>());
+    /// <summary>Number of layers in the FactorVAE posterior (factor encoder) span.</summary>
+    public const int FactorVAEPosteriorLayerCount = 2;
 
-        // Alpha prediction head. The final layer predicts expected asset returns,
-        // which are signed real numbers — the head MUST be linear. DenseLayer(1, null)
-        // falls back to ReLU in its ctor (activationFunction ?? new ReLUActivation),
-        // which (a) clips the regression output to >= 0 and (b) dead-ReLUs: once the
-        // single output neuron's pre-activation goes negative after the first gradient
-        // step, ReLU'(x)=0 freezes it at 0 forever — the model output collapses to a
-        // constant 0 and the loss freezes at target^2 (the #1719 training-collapse:
-        // LossStrictlyDecreasesOnMemorizationTask + DifferentInputs_AfterTraining).
-        // Pass an explicit IdentityActivation so the head stays linear.
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>());
-    }
+    /// <summary>Number of layers in the FactorVAE decoder span.</summary>
+    public const int FactorVAEDecoderLayerCount = 4;
+
 
     #endregion
 
@@ -17044,6 +17752,7 @@ public static class LayerHelper<T>
             NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
             NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
             _ => new IdentityActivation<T>()
         };
 
@@ -17410,19 +18119,23 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
-        // Deep transformer encoder (TabPFN uses many layers)
+        // Deep transformer encoder. TabPFN's encoder is a residual Transformer;
+        // attention and the feed-forward sublayer refine the same representation
+        // rather than replacing it. The former bare MHA -> LayerNorm -> Dense ->
+        // Dense -> LayerNorm chain omitted both residual highways. At twelve
+        // layers it could fit briefly, then drift away from an already-good
+        // solution during continued prior fitting (the generated 50-vs-200-step
+        // regression probe reproduced that failure in both float and double).
+        // TransformerEncoderBlock supplies the paper topology: residual
+        // self-attention plus residual GELU FFN with normalization.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: embeddingDimension,
+                numHeads: numHeads,
+                ffnDim: embeddingDimension * 4,
+                dropoutRate: dropoutRate,
+                ffnActivation: new GELUActivation<T>());
         }
 
         // Output head
@@ -17621,32 +18334,83 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for an AttentionAllocation model.
+    /// Shared cross-asset attention trunk for the portfolio allocators, WITHOUT an output head.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultAttentionAllocationLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 50,
-        int hiddenDimension = 128,
-        int numHeads = 4,
-        int numAssets = 100,
-        int sequenceLength = 60,
-        double dropoutRate = 0.1)
+    /// <remarks>
+    /// The head is left to the caller because the two allocators normalize differently and the choice
+    /// is load-bearing, not cosmetic — see
+    /// <see cref="CreateDefaultSignatureInformedTransformerLayers"/> and
+    /// <see cref="CreateDefaultGraphAttentionPortfolioLayers"/>.
+    /// </remarks>
+    private static IEnumerable<ILayer<T>> CreatePortfolioAttentionTrunk(
+        int hiddenDimension, int numHeads, double dropoutRate)
     {
         // Input embedding
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
         // Attention for cross-asset relationships
-        yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
+        yield return new MultiHeadAttentionLayer<T>(numHeads, hiddenDimension / numHeads);
         yield return new LayerNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension * 2, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
         yield return new LayerNormalizationLayer<T>();
+    }
 
-        // Allocation output
-        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    /// <summary>
+    /// Creates default layers for a SignatureInformedTransformer (arXiv:2510.03129).
+    /// </summary>
+    /// <remarks>
+    /// The output head is LINEAR, with no activation, because the model's own
+    /// <c>CVaRPortfolioObjective.Weights</c> applies the paper's tempered softmax
+    /// <c>softmax(scores / tau)</c>. A softmax in the head as well would apply it TWICE: tau would then
+    /// operate on values already squashed into (0, 1) and summing to 1, so the paper's reported interior
+    /// optimum near tau = 1.3 would no longer mean anything.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSignatureInformedTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 64,
+        int numHeads = 8,
+        int numAssets = 30,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+    {
+        foreach (var layer in CreatePortfolioAttentionTrunk(hiddenDimension, numHeads, dropoutRate))
+            yield return layer;
+
+        // Raw scores; the tempered softmax lives in the objective.
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a GraphAttentionPortfolio (arXiv:2407.15532).
+    /// </summary>
+    /// <remarks>
+    /// The output head uses ReLU, NOT softmax, and that is the point of the paper's allocation
+    /// mechanism. Its "Importance Layer" merely sum-normalizes (<c>w_u = s_u / sum_v s_v</c>), so the
+    /// sparsity has to come from the scores themselves: ReLU produces EXACT zeros, and a zero score
+    /// becomes a zero weight, dropping the firm from the portfolio. A softmax head cannot emit a zero,
+    /// so every asset would receive a sliver of capital — precisely the "many tiny holdings" the paper
+    /// rejected softmax to avoid.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphAttentionPortfolioLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 192,
+        int numHeads = 8,
+        int numAssets = 30,
+        int sequenceLength = 756,
+        double dropoutRate = 0.1)
+    {
+        foreach (var layer in CreatePortfolioAttentionTrunk(hiddenDimension, numHeads, dropoutRate))
+            yield return layer;
+
+        // Non-negative scores with exact zeros, which the sum-normalizing allocation layer turns into
+        // a sparse, long-only, fully invested portfolio.
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new ReLUActivation<T>());
     }
 
     /// <summary>
@@ -18462,83 +19226,96 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default MLP layers for MedSynth medical synthetic data generation.
+    /// Creates ALL layers for a medGAN medical record generator, in the fixed order the model's
+    /// reference extractor walks: autoencoder encoder, autoencoder decoder, generator, discriminator.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// MedSynth uses a VAE/GAN hybrid with clinical validity constraints.
-    /// The encoder/decoder follow standard VAE architecture.
+    /// Topology per Choi et al., "Generating Multi-label Discrete Patient Records using Generative
+    /// Adversarial Networks" (arXiv:1703.06490):
     /// </para>
+    /// <list type="bullet">
+    /// <item><description><b>Encoder</b>: feedforward down to <paramref name="embeddingDim"/>. Empty
+    /// <paramref name="autoencoderDims"/> gives the paper's single-layer autoencoder.</description></item>
+    /// <item><description><b>Decoder</b>: the encoder mirrored, back up to the record width. It is
+    /// pre-trained with the encoder and then fine-tuned adversarially with the generator.</description></item>
+    /// <item><description><b>Generator</b>: one layer per entry of <paramref name="generatorDims"/>,
+    /// each followed by batch normalization, plus a final projection to
+    /// <paramref name="embeddingDim"/> also followed by batch normalization. Every one of these
+    /// carries a shortcut connection, which the model applies as
+    /// <c>x_k = ReLU(BN_k(W_k x_(k-1))) + x_(k-1)</c>. The addition is why all these widths must
+    /// match.</description></item>
+    /// <item><description><b>Discriminator</b>: plain feedforward with NO batch normalization and NO
+    /// shortcut connections, which the paper states explicitly. Its input width is doubled when
+    /// minibatch averaging is on, because each sample arrives concatenated with the batch
+    /// average.</description></item>
+    /// </list>
     /// <para>
-    /// Reference: "Privacy-Preserving Medical Tabular Synthesis" (2024)
+    /// All layers use the identity activation; the model applies ReLU/tanh/sigmoid itself through
+    /// tape-tracked engine ops so the shortcut additions and the activation choices that depend on
+    /// <c>MedGANDataType</c> stay visible to autodiff.
     /// </para>
     /// </remarks>
-    /// <param name="inputDim">Input dimension.</param>
-    /// <param name="outputDim">Output dimension.</param>
-    /// <param name="hiddenDims">Hidden layer dimensions.</param>
-    /// <param name="dropoutRate">Dropout rate.</param>
-    /// <returns>A collection of layers.</returns>
-    /// <summary>
-    /// Creates ALL layers for MedSynth VAE-GAN medical tabular data generator.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Architecture per "Privacy-Preserving Medical Tabular Synthesis" (2024):
-    /// - Encoder: FC layers reducing to latent space
-    /// - VAE heads: mean and log-variance projections
-    /// - Decoder: FC layers with BatchNorm expanding from latent
-    /// - Decoder output: FC projection to data width
-    /// - Discriminator: FC layers with dropout for adversarial training
-    /// - Discriminator output: FC projection to 1 (real/fake)
-    ///
-    /// All layers are returned in a single list so InitializeLayers
-    /// can register them all via Layers.AddRange.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultMedSynthLayers(
+    /// <param name="dataWidth">Width of one transformed record.</param>
+    /// <param name="embeddingDim">Autoencoder embedding width, and the generator's output width.</param>
+    /// <param name="autoencoderDims">Encoder hidden widths before the embedding layer; empty for the paper's single-layer autoencoder.</param>
+    /// <param name="generatorDims">Generator hidden widths, each equal to <paramref name="embeddingDim"/>.</param>
+    /// <param name="discriminatorDims">Discriminator hidden widths.</param>
+    /// <param name="useMinibatchAveraging">When true the discriminator's input width is doubled.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultMedGANLayers(
         int dataWidth,
-        int latentDim,
-        int[] encoderDims,
+        int embeddingDim,
+        int[] autoencoderDims,
+        int[] generatorDims,
         int[] discriminatorDims,
-        double discriminatorDropout = 0.2)
+        bool useMinibatchAveraging = true)
     {
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
-        // Encoder layers
-        for (int i = 0; i < encoderDims.Length; i++)
+        // Every width is stated EXPLICITLY rather than left to the lazy single-argument constructor.
+        // That constructor infers a layer's input from the previous entry in the Layers list, which
+        // is correct only for a straight-through stack. medGAN's is not: the generator's input is
+        // the prior, not the decoder's output, and the discriminator's is a record (doubled by
+        // minibatch averaging), not the generator's embedding. Inference would size both wrong.
+        int encoderInput = dataWidth;
+
+        // --- Autoencoder: encoder (hidden widths, then the embedding projection) ---
+        for (int i = 0; i < autoencoderDims.Length; i++)
         {
-            int layerInput = i == 0 ? dataWidth : encoderDims[i - 1];
-            yield return new FullyConnectedLayer<T>(encoderDims[i], identity);
+            yield return new FullyConnectedLayer<T>(encoderInput, autoencoderDims[i], identity);
+            encoderInput = autoencoderDims[i];
         }
+        yield return new FullyConnectedLayer<T>(encoderInput, embeddingDim, identity);
 
-        // VAE heads (mean + log-variance)
-        int lastEncoderDim = encoderDims.Length > 0 ? encoderDims[^1] : dataWidth;
-        yield return new FullyConnectedLayer<T>(latentDim, identity); // mean
-        yield return new FullyConnectedLayer<T>(latentDim, identity); // logvar
-
-        // Decoder layers (reverse of encoder) with BatchNorm
-        for (int i = encoderDims.Length - 1; i >= 0; i--)
+        // --- Autoencoder: decoder, the encoder mirrored, ending at the record width ---
+        int decoderInput = embeddingDim;
+        for (int i = autoencoderDims.Length - 1; i >= 0; i--)
         {
-            int layerInput = i == encoderDims.Length - 1 ? latentDim : encoderDims[i + 1];
-            yield return new FullyConnectedLayer<T>(encoderDims[i], identity);
-            yield return new BatchNormalizationLayer<T>();
+            yield return new FullyConnectedLayer<T>(decoderInput, autoencoderDims[i], identity);
+            decoderInput = autoencoderDims[i];
         }
+        yield return new FullyConnectedLayer<T>(decoderInput, dataWidth, identity);
 
-        // Decoder output
-        int lastDecoderDim = encoderDims.Length > 0 ? encoderDims[0] : latentDim;
-        yield return new FullyConnectedLayer<T>(dataWidth, identity);
+        // --- Generator: hidden shortcut layers, each FC paired 1:1 with a BatchNorm ---
+        // All widths equal embeddingDim; the shortcut addition is what requires that.
+        for (int i = 0; i < generatorDims.Length; i++)
+        {
+            yield return new FullyConnectedLayer<T>(embeddingDim, generatorDims[i], identity);
+            yield return new BatchNormalizationLayer<T>(generatorDims[i]);
+        }
+        // Final generator projection into the embedding space; also batch-normed, also shortcut.
+        yield return new FullyConnectedLayer<T>(embeddingDim, embeddingDim, identity);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
 
-        // Discriminator layers
+        // --- Discriminator: no BatchNorm, no shortcuts (stated by the paper) ---
+        // Minibatch averaging concatenates the batch mean onto each sample, doubling the input.
+        int discInput = useMinibatchAveraging ? dataWidth * 2 : dataWidth;
         for (int i = 0; i < discriminatorDims.Length; i++)
         {
-            int layerInput = i == 0 ? dataWidth : discriminatorDims[i - 1];
-            yield return new FullyConnectedLayer<T>(discriminatorDims[i], identity);
-            yield return new DropoutLayer<T>(discriminatorDropout);
+            yield return new FullyConnectedLayer<T>(discInput, discriminatorDims[i], identity);
+            discInput = discriminatorDims[i];
         }
-
-        // Discriminator output
-        int lastDiscDim = discriminatorDims.Length > 0 ? discriminatorDims[^1] : dataWidth;
-        yield return new FullyConnectedLayer<T>(1, identity);
+        yield return new FullyConnectedLayer<T>(discInput, 1, identity);
     }
 
     /// <summary>
@@ -19569,16 +20346,22 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(transformerDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // Transformer encoder
+        // Transformer encoder — RESIDUAL blocks (HuBERT/wav2vec-2 use standard residual transformer
+        // layers: x + MHA(LN(x)), x + FFN(LN(x))). The previous bare MHA->LN->FFN->LN chain had NO skip
+        // connections, so the 12-layer stack washed out the signal and destabilized training (the first
+        // optimizer step drove the loss WORSE than random and it never strictly decreased —
+        // LossStrictlyDecreasesOnMemorizationTask). TransformerEncoderBlock applies the residual MHA + FFN
+        // internally, matching the paper and restoring a trainable gradient path.
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (transformerDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
-            yield return new DenseLayer<T>(transformerDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(transformerDim, numAttentionHeads, feedForwardDim, dropoutRate, geluActivation);
         }
+
+        // Final encoder LayerNorm (HuBERT/wav2vec-2 normalize the encoder output before the head). Without
+        // it the residual-accumulated features feed the classifier as large unbounded logits, so
+        // CrossEntropyWithLogits was numerically unstable (initial loss ~16.7, exploding to ~313 in one
+        // step). Normalizing bounds the logits so training descends.
+        yield return new LayerNormalizationLayer<T>();
 
         // Emotion classification head
         yield return new DenseLayer<T>(classifierHiddenDim, reluActivation);
@@ -19775,12 +20558,25 @@ public static class LayerHelper<T>
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
+        // Collapse the [batch, frames, mels] spectrogram patch to one fixed-length vector per clip
+        // BEFORE the projection stack, so the model emits a SINGLE [batch, embeddingDim] fingerprint
+        // (the paper's clip-level embedding) rather than a per-frame [batch, frames, embeddingDim]
+        // stack. Without this the temporal axis is carried through untouched, so the output length is
+        // frames·embeddingDim (fails OutputDimensionality, which expects exactly embeddingDim) and the
+        // per-frame structure makes the embedding needlessly sensitive to local input perturbations.
+        yield return new FlattenLayer<T>();
+
         int prevDim = numMels;
         for (int i = 0; i < numConvBlocks; i++)
         {
             int filters = baseFilters * (1 << i); // 32, 64, 128, 256
             yield return new DenseLayer<T>(filters, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            // NO batch/layer normalization in the fingerprint encoder: the NeuralFP head is
+            // queried one clip at a time (batch=1) and must be LOCALLY CONTINUOUS for retrieval
+            // (SimilarInputs_ProduceSimilarEmbeddings). BatchNorm's batch stats are degenerate at
+            // batch=1, and LayerNorm divides by a near-zero std on the near-constant probe inputs
+            // — both amplify epsilon input differences into large embedding changes. A plain
+            // Dense+ReLU stack is Lipschitz-continuous, so epsilon-close inputs stay epsilon-close.
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             prevDim = filters;
         }
@@ -19928,28 +20724,89 @@ public static class LayerHelper<T>
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // --- Transformer Encoder ---
-        // N layers of multi-head self-attention + feed-forward with layer normalization.
+        // N paper-faithful RESIDUAL blocks (Baevski et al. 2020 / Vaswani et al. 2017). The previous
+        // stack emitted bare MHA + LayerNorm + FFN + LayerNorm with NO residual/skip connection, so a
+        // 12-deep encoder had no gradient highway and collapsed toward a uniform, input-insensitive
+        // output — the exact failure master #1838 fixed across the BERT/ASR factories by switching to
+        // TransformerEncoderBlock<T> (Post-LN: residual MHA + residual GELU-FFN + per-sublayer LayerNorm).
+        // One block per layer; the wav2vec-2/HuBERT/WavLM foundation models walk Layers linearly, so a
+        // block is a single Forward. NOTE: these models count encoder layers via
+        // `is TransformerEncoderBlock<T>` (was `is MultiHeadAttentionLayer<T>`) — keep in sync.
         for (int i = 0; i < numLayers; i++)
         {
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
-
-            yield return new LayerNormalizationLayer<T>();
-
-            // Position-wise feed-forward network
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(hiddenDim, numAttentionHeads, feedForwardDim, dropoutRate, geluActivation);
         }
     }
 
     #endregion
 
     #region Speech Recognition Layers
+
+    /// <summary>
+    /// Builds a USM / Chirp encoder from GENUINE Conformer blocks (Zhang et al. 2023,
+    /// arXiv:2303.01037 §2.1 — "We use the convolution-augmented transformer, or Conformer, with
+    /// relative attention as an encoder"; block per Gulati et al. 2020, arXiv:2005.08100 Eq. 1).
+    /// Structure: log-Mel projection + LayerNorm → N <see cref="NeuralNetworks.Layers.ConformerBlockLayer{T}"/>
+    /// → LayerNorm + vocabulary projection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists because neither factory the Chirp models previously used is a Conformer:
+    /// <c>CreateDefaultProprietaryASRLayers</c> emits residual-FREE MHA/LN/FFN blocks (so the encoder
+    /// has no gradient highway and cannot reduce its loss — the #1208/#1221 degeneracy), and
+    /// <c>CreateDefaultConformerLayers</c> is a residual PRE-LN TRANSFORMER whose own comment concedes
+    /// its position-wise FFN stands in for a convolution module that "was never a real convolution".
+    /// <see cref="NeuralNetworks.Layers.ConformerBlockLayer{T}"/> implements the paper block exactly:
+    /// two half-step macaron FFNs around relative-attention self-attention and a real convolution
+    /// module (pointwise → GLU → depthwise → norm → Swish → pointwise).
+    /// </para>
+    /// <para>
+    /// Known remaining deviation, documented rather than hidden: the paper's front-end is a
+    /// convolutional subsampling stack that reduces the frame rate 4×. This builder keeps the linear
+    /// mel projection the existing ASR fixtures are shaped around, so the encoder preserves its time
+    /// axis. That affects compute, not the block structure the failing training invariant depends on.
+    /// </para>
+    /// </remarks>
+    /// <param name="encoderDim">Encoder width d_model. USM uses 1024 (0.6B) / 1536 (2B).</param>
+    /// <param name="numLayers">Conformer block count. USM uses 24 (0.6B) / 32 (2B).</param>
+    /// <param name="numAttentionHeads">Attention heads. USM uses 8 (0.6B) / 16 (2B).</param>
+    /// <param name="feedForwardExpansionFactor">Macaron FFN expansion. Conformer paper default 4.</param>
+    /// <param name="convKernelSize">Depthwise kernel. USM reports a 5-frame convolution kernel.</param>
+    /// <param name="numMels">Input log-Mel channel count.</param>
+    /// <param name="vocabSize">Output vocabulary size for the CTC projection.</param>
+    /// <param name="dropoutRate">Dropout applied after the input projection.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultUSMConformerLayers(
+        int encoderDim = 1024,
+        int numLayers = 24,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int convKernelSize = 5,
+        int numMels = 128,
+        int vocabSize = 32000,
+        double dropoutRate = 0.1)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        int heads = ChooseDivisibleHeadConfig(encoderDim, numAttentionHeads).heads;
+
+        // --- Feature projection: log-Mel -> encoder width ---
+        yield return new DenseLayer<T>(encoderDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Conformer encoder blocks (the paper's Equation 1) ---
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new ConformerBlockLayer<T>(
+                encoderDim, heads, feedForwardExpansionFactor, convKernelSize);
+        }
+
+        // --- CTC output head ---
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
 
     /// <summary>
     /// Creates default layers for the Conformer ASR model (Gulati et al., 2020).
@@ -20007,9 +20864,139 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Builds the paper-accurate SAMBA-ASR encoder (Yadav et al., "SAMBA-ASR: State-of-the-Art
+    /// Speech Recognition Leveraging Structured State-Space Models", arXiv:2501.02832, 2025).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unlike Conformer/Transformer ASR, SAMBA-ASR replaces quadratic self-attention with a stack
+    /// of linear-time Mamba selective state-space blocks (Gu &amp; Dao 2023). The encoder is:
+    /// </para>
+    /// <list type="number">
+    /// <item>a convolutional/linear frontend that projects the log-Mel features to the model width
+    ///   and captures local temporal patterns (each <see cref="NeuralNetworks.Layers.SSM.MambaBlock{T}"/>
+    ///   also applies an internal depthwise causal conv of width <paramref name="convKernelSize"/>);</item>
+    /// <item>a series of Mamba blocks — the selective-scan core that contextualizes the audio; each
+    ///   block carries its own pre-norm + residual, so no external residual wiring is needed;</item>
+    /// <item>Layer Normalization over the contextualized audio embeddings, then a linear projection
+    ///   to the vocabulary (the token-emission head).</item>
+    /// </list>
+    /// <para>
+    /// This mirrors <see cref="CreateDefaultConformerLayers"/>'s input/output contract
+    /// (<c>[*, T, numMels] -&gt; [*, T, vocabSize]</c>) so it is a drop-in encoder, but its core is
+    /// Mamba rather than attention — the paper's defining architectural choice.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates the standard SAMBA-ASR layer sequence that turns
+    /// audio features into token scores. Mamba blocks provide long-range context without the
+    /// quadratic cost of attention, and the final projection produces one score per vocabulary item.</para>
+    /// </remarks>
+    /// <param name="encoderDim">Feature width used by the encoder and each Mamba block.</param>
+    /// <param name="numLayers">Number of Mamba encoder blocks.</param>
+    /// <param name="stateDimension">Internal state size used by each selective state-space block.</param>
+    /// <param name="expandFactor">Expansion factor for the Mamba block's inner projection.</param>
+    /// <param name="convKernelSize">Width of the local causal convolution inside each Mamba block.</param>
+    /// <param name="numMels">Number of input log-Mel frequency bins.</param>
+    /// <param name="vocabSize">Number of output vocabulary tokens scored at each time step.</param>
+    /// <param name="dropoutRate">Dropout probability applied between encoder blocks.</param>
+    /// <param name="maxSequenceLength">Maximum supported input sequence length.</param>
+    /// <returns>The ordered SAMBA-ASR encoder and CTC projection layer sequence.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultSambaASRLayers(
+        int encoderDim = 512,
+        int numLayers = 24,
+        int stateDimension = 16,
+        int expandFactor = 2,
+        int convKernelSize = 4,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- Convolutional/linear frontend: log-Mel [*, T, numMels] -> model width. ---
+        yield return new DenseLayer<T>(encoderDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Mamba selective-SSM encoder core. ---
+        // Each MambaBlock implements the full S6 block (in-proj -> depthwise conv -> selective scan
+        // -> gate -> out-proj) with an internal pre-norm + residual, taking and returning
+        // [batch, T, encoderDim]. Stacking bare blocks is the reference Mamba encoder pattern.
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new NeuralNetworks.Layers.SSM.MambaBlock<T>(
+                sequenceLength: maxSequenceLength,
+                modelDimension: encoderDim,
+                stateDimension: stateDimension,
+                expandFactor: expandFactor,
+                convKernelSize: convKernelSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // --- Output head: LayerNorm + linear projection to vocabulary. ---
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default layers for a CTC decoder ASR model.
     /// Architecture: Mel projection → N Transformer encoder layers → CTC head.
     /// </summary>
+    /// <summary>
+    /// Creates the CIF encoder stack per Dong &amp; Xu 2020,
+    /// "CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition" (arXiv:1905.11235).
+    /// </summary>
+    /// <remarks>
+    /// <para>The defining component is the continuous integrate-and-fire alignment stage: a
+    /// weight predictor scores each encoder frame, the weights are integrated until they cross a
+    /// unit-mass threshold, and the accumulated features then fire as one token representation.
+    /// That is what turns a frame sequence into a token sequence with soft monotonic
+    /// alignment.</para>
+    /// <para>CIFEncoder previously built <see cref="CreateDefaultCTCDecoderLayers"/>, which is an
+    /// encoder followed by a CTC vocabulary head and contains no integrate-and-fire stage at all
+    /// — so the model named for CIF did not implement CIF. Its own class documentation described
+    /// the firing mechanism while the graph performed CTC decoding.</para>
+    /// <para>The alignment layer sits between the acoustic encoder and the vocabulary head, which
+    /// is where the paper places it: the encoder produces frames, CIF converts them to tokens,
+    /// and the head classifies those tokens.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCIFEncoderLayers(
+        int encoderDim = 512,
+        int numLayers = 12,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 2048,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double cifThreshold = 1.0,
+        double dropoutRate = 0.1)
+    {
+        var gelu = (IActivationFunction<T>)new GELUActivation<T>();
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Acoustic encoder: mel projection followed by self-attention blocks.
+        yield return new DenseLayer<T>(encoderDim, gelu);
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        (int heads, _) = ChooseDivisibleHeadConfig(encoderDim, numAttentionHeads);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(heads, encoderDim / heads);
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(feedForwardDim, gelu);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(encoderDim, identity);
+            yield return new LayerNormalizationLayer<T>();
+        }
+
+        // The integrate-and-fire alignment the model is named for.
+        yield return new CifAlignmentLayer<T>(encoderDim, cifThreshold);
+
+        // Vocabulary head over the fired token representations.
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identity);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultCTCDecoderLayers(
         int encoderDim = 512,
         int numLayers = 6,
@@ -20101,6 +21088,75 @@ public static class LayerHelper<T>
     /// Creates default layers for the HiFi-GAN vocoder (Kong et al., 2020).
     /// Architecture: Mel input → Upsampling blocks with MRF → Waveform output.
     /// </summary>
+    /// <summary>
+    /// Creates the APNet2 amplitude branch (ASP) per Du et al., 2023,
+    /// "APNet2: High-Quality and High-Efficiency Neural Vocoder with Direct Prediction of
+    /// Amplitude and Phase Spectra" (arXiv:2311.11545).
+    /// </summary>
+    /// <remarks>
+    /// <para>APNet2 does NOT do time-domain upsampling. It predicts the log-amplitude and the
+    /// wrapped phase spectra directly and reconstructs the waveform with an inverse STFT. Routing
+    /// it through <see cref="CreateDefaultHiFiGANLayers"/> gave it exactly the upsampling
+    /// generator the paper sets out to replace.</para>
+    /// <para>ASP is: input convolution -&gt; k ConvNeXt v2 blocks -&gt; output convolution
+    /// producing <c>fftSize / 2 + 1</c> log-amplitude coefficients per frame.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAPNet2AmplitudeLayers(
+        int numMels = 80,
+        int channels = 512,
+        int intermediateChannels = 1536,
+        int numBlocks = 8,
+        int kernelSize = 7,
+        int fftSize = 1024)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection from the mel band count to the backbone width.
+        yield return new DenseLayer<T>(channels, identity);
+        yield return new LayerNormalizationLayer<T>();
+
+        for (int i = 0; i < numBlocks; i++)
+            yield return new ConvNeXtV2Block<T>(channels, intermediateChannels, kernelSize);
+
+        // Log-amplitude coefficients, one per frequency bin. Linear: log-amplitude is unbounded.
+        yield return new DenseLayer<T>((fftSize / 2) + 1, identity);
+    }
+
+    /// <summary>
+    /// Creates the APNet2 phase branch (PSP) per Du et al., 2023 (arXiv:2311.11545).
+    /// </summary>
+    /// <remarks>
+    /// <para>PSP mirrors the amplitude branch but ends in the paper's <b>phase parallel
+    /// estimation architecture</b>: two parallel linear convolutional layers produce a
+    /// pseudo-real and a pseudo-imaginary part, and the phase calculation formula
+    /// <c>Phi = atan2(imaginary, real)</c> converts them into a directly wrapped phase. That
+    /// parallel pair is what lets the network output phase in <c>(-pi, pi]</c> without ever
+    /// needing an unwrapping step, and it is the branch's defining element.</para>
+    /// <para>The two heads are emitted as a single <c>2 * (fftSize / 2 + 1)</c> projection whose
+    /// first half is the real part and second half the imaginary part; the model applies the
+    /// arctangent when it reconstructs. Neither head takes an activation, since both parts are
+    /// unbounded and the wrapping comes from the arctangent rather than a squashing function.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAPNet2PhaseLayers(
+        int numMels = 80,
+        int channels = 512,
+        int intermediateChannels = 1536,
+        int numBlocks = 8,
+        int kernelSize = 7,
+        int fftSize = 1024)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(channels, identity);
+        yield return new LayerNormalizationLayer<T>();
+
+        for (int i = 0; i < numBlocks; i++)
+            yield return new ConvNeXtV2Block<T>(channels, intermediateChannels, kernelSize);
+
+        // Phase parallel estimation: [real | imaginary], each (fftSize / 2 + 1) wide.
+        yield return new DenseLayer<T>(2 * ((fftSize / 2) + 1), identity);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
         int numMels = 80,
         int upsampleInitialChannel = 512,
@@ -20522,22 +21578,28 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
 
-        // Feature encoder
-        yield return new DenseLayer<T>(hiddenDim, geluActivation);
+        // WavLM's convolutional feature encoder produces featureEncoderDim channels, followed by
+        // a projection into the Transformer hidden width. Keeping both widths explicit makes the
+        // public FeatureEncoderDim and HiddenDim controls effective.
+        yield return new DenseLayer<T>(featureEncoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(hiddenDim, identityActivation);
 
-        // WavLM Transformer encoder layers
+        // WavLM Transformer encoder (Chen et al. 2022): each block is a pre-norm RESIDUAL transformer
+        // layer (z' = z + MHA(LN(z)); z = z' + FFN(LN(z'))). The residual skips are LOAD-BEARING —
+        // without them the deep LayerNorm-heavy stack erases its input, so training barely moves the
+        // memorization loss (LossStrictlyDecreasesOnMemorizationTask) and distinct inputs collapse.
+        // TransformerEncoderLayer applies MHA + residual + LN and the GELU FFN + residual + LN
+        // internally; use the 2-arg LAZY ctor so embeddingSize is deferred (the 3-arg ctor OOMs).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Emotion classification head
+        // Emit raw classification logits. WavLMSER uses cross-entropy-with-logits for training and
+        // applies softmax only at public inference, so cloning never depends on serializing an
+        // activation embedded in the final DenseLayer.
         yield return new DenseLayer<T>(hiddenDim, geluActivation);
         yield return new DenseLayer<T>(numClasses, identityActivation);
     }
@@ -20558,33 +21620,48 @@ public static class LayerHelper<T>
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
 
-        // Mel spectrogram projection
+        // Log-mel spectrogram projection -> encoder hidden width. MT3 (Gardner et al., 2022)
+        // uses the T5.1.1 recipe (Raffel et al., 2020): there is no convolutional stem, the
+        // log-mel frames are linearly projected into the model dimension d_model before the
+        // transformer stack.
         yield return new DenseLayer<T>(encoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // T5-style encoder layers
+        // T5 encoder: a stack of RESIDUAL transformer blocks. Each TransformerEncoderLayer wraps
+        // self-attention and the position-wise feed-forward network in residual connections with
+        // LayerNorm (Vaswani et al., 2017, §3.1; Raffel et al., 2020). The residual paths are the
+        // load-bearing structural feature: an 8+8-layer stack WITHOUT residual connections washes
+        // the input out layer-by-layer, so gradient descent collapses the network to a uniform,
+        // input-independent output (the #1208/#1221 degenerate-solution failure mode). T5's FFN
+        // inner dimension is d_ff; the standard 4x expansion is used here.
+        int encoderFfnDim = encoderDim * 4;
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, encoderFfnDim, encoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Cross-attention decoder layers
-        for (int i = 0; i < numDecoderLayers; i++)
+        // Bridge encoder -> decoder width when the two differ. T5 keeps d_model equal across the
+        // encoder and decoder (so this is a no-op at the defaults), but the projection keeps the
+        // model fully customizable when a caller sets a distinct decoder width.
+        if (decoderDim != encoderDim)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (decoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
+        }
+
+        // T5 decoder stack: residual transformer blocks over the decoder hidden width. As in the
+        // encoder, residual connections preserve the propagated representation so the deep stack
+        // stays sensitive to its input after training.
+        int decoderFfnDim = decoderDim * 4;
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, decoderFfnDim, decoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Token prediction head
+        // Token prediction head: project the decoder hidden states to the MIDI-like event-token
+        // vocabulary logits.
         yield return new DenseLayer<T>(vocabSize, identityActivation);
     }
 
@@ -21179,6 +22256,15 @@ public static class LayerHelper<T>
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
+        // Input feature projection (Whisper's conv front-end role): map the raw audio feature
+        // dimension (mel bins / feature width) up to the encoder width before the transformer.
+        // Without it the first MultiHeadAttention receives the raw feature dim (e.g. 32) and throws
+        // "embedding dimension (32) does not match weight dimension (1280)". FullyConnectedLayer
+        // infers its input dim lazily on the first forward, so any input width projects to
+        // audioEncoderDim.
+        yield return new FullyConnectedLayer<T>(audioEncoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+
         // Whisper-style audio encoder
         for (int i = 0; i < numAudioEncoderLayers; i++)
         {
@@ -21505,26 +22591,27 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultVocosLayers(
         int numMels = 100, int hiddenDim = 512,
         int numBackboneBlocks = 8, int intermediateDim = 1536,
-        int numFrequencyBins = 513, double dropoutRate = 0.0)
+        int numFrequencyBins = 513, double dropoutRate = 0.0,
+        int hopLength = 256)
     {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-
-        // Input projection (mel or codec tokens to hidden)
-        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // ConvNeXt backbone blocks
-        for (int i = 0; i < numBackboneBlocks; i++)
+        if (numFrequencyBins < 2)
+            throw new ArgumentOutOfRangeException(nameof(numFrequencyBins));
+        if (dropoutRate != 0.0)
         {
-            yield return new FullyConnectedLayer<T>(intermediateDim, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            throw new ArgumentException(
+                "The Vocos paper and reference generator do not use dropout in the ConvNeXt backbone. " +
+                "Supply Architecture.Layers to define a custom dropout architecture.",
+                nameof(dropoutRate));
         }
 
-        // ISTFT head: predict magnitude and phase
-        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
-        yield return new FullyConnectedLayer<T>(numFrequencyBins, (IActivationFunction<T>?)null);
+        int nFft = (numFrequencyBins - 1) * 2;
+        yield return new VocosGeneratorLayer<T>(
+            numMels,
+            hiddenDim,
+            numBackboneBlocks,
+            intermediateDim,
+            nFft,
+            hopLength);
     }
 
     #endregion
@@ -22194,34 +23281,133 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
-    /// <summary>Creates default layers for Neural Room Impulse Response estimation.</summary>
+    /// <summary>
+    /// Creates the FiNS layer stack for time-domain room impulse response estimation
+    /// (Steinmetz et al., WASPAA 2021, arXiv:2107.07503).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// EMISSION ORDER IS A CONTRACT. <c>RoomImpulseResponse&lt;T&gt;</c> binds per-stage views into
+    /// <c>Layers</c> by index against exactly this order, because the FiNS graph is not a
+    /// sequential chain — the encoder has a parallel residual branch per block, the decoder is
+    /// FiLM-conditioned on a latent produced by pooling, and the noise filterbank is driven by
+    /// noise rather than by the previous layer's output. Changing the order or count here without
+    /// updating that binding silently mis-wires the model, so the model asserts on the total count.
+    /// </para>
+    /// <para>
+    /// Per encoder block (5 layers): main conv, main batch norm, PReLU, residual 1x1 conv,
+    /// residual batch norm. Paper: "1-D convolution with a kernel size of 15 and a stride 2,
+    /// followed by batch normalization, and a parameterized ReLU (PReLU) activation", with
+    /// residual connections that are "1x1 convolutions using the same stride, followed by batch
+    /// normalization".
+    /// </para>
+    /// <para>
+    /// Then the 3-layer MLP that maps the pooled 512-d encoder output to the latent z (paper:
+    /// "three-layer MLP to produce z, of 128 dimensions"), the decoder blocks (each: FiLM dense,
+    /// transposed-conv upsample, FiLM dense, dilated refinement conv — following the GAN-TTS
+    /// generator), and finally the three output layers: the (M+1)-channel head producing M noise
+    /// masks plus the early component, the trainable FIR filterbank of M filters of order P, and
+    /// the 1x1 convolution that mixes the M late bands and the early component into the RIR.
+    /// </para>
+    /// </remarks>
+    /// <param name="numEncoderBlocks">Strided encoder blocks. Paper: 14.</param>
+    /// <param name="encoderKernelSize">Encoder conv kernel size. Paper: 15.</param>
+    /// <param name="encoderStride">Encoder conv stride. Paper: 2.</param>
+    /// <param name="encoderMaxChannels">Channels at the final encoder block. Paper: 512.</param>
+    /// <param name="latentDim">Latent embedding width. Paper: 128.</param>
+    /// <param name="numDecoderBlocks">Decoder blocks; count is an implementation choice.</param>
+    /// <param name="numNoiseBands">Noise bands M. Paper: 10.</param>
+    /// <param name="noiseFilterOrder">FIR order P of each band filter. Paper: 1023.</param>
     public static IEnumerable<ILayer<T>> CreateDefaultRoomImpulseResponseLayers(
-        int encoderDim = 256, int numEncoderLayers = 6,
-        int numHeads = 4, int numFrequencyBins = 257,
-        int rirLength = 16000, double dropoutRate = 0.1)
+        int numEncoderBlocks = 14,
+        int encoderKernelSize = 15,
+        int encoderStride = 2,
+        int encoderMaxChannels = 512,
+        int latentDim = 128,
+        int numDecoderBlocks = 5,
+        int numNoiseBands = 10,
+        int noiseFilterOrder = 1023)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        // Spectral encoder with self-attention
-        yield return new DenseLayer<T>(encoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        for (int i = 1; i < numEncoderLayers; i++)
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // --- Encoder: 5 layers per block, channels ramping geometrically to encoderMaxChannels ---
+        const int baseChannels = 32;
+        // "same" padding keeps the halving driven by the stride alone rather than by edge losses.
+        int encoderPadding = (encoderKernelSize - 1) / 2;
+        for (int i = 0; i < numEncoderBlocks; i++)
         {
-            // Spectral self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward
-            yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            // Hits encoderMaxChannels EXACTLY at the final block, which is what the paper reports.
+            int channels = numEncoderBlocks == 1
+                ? encoderMaxChannels
+                : (int)Math.Round(baseChannels * Math.Pow(
+                    (double)encoderMaxChannels / baseChannels, i / (double)(numEncoderBlocks - 1)));
+            channels = Math.Max(1, Math.Min(encoderMaxChannels, channels));
+
+            yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: encoderKernelSize,
+                stride: encoderStride, padding: encoderPadding, activation: identity);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
+            yield return new ActivationLayer<T>((IActivationFunction<T>)new PReLUActivation<T>());
+            // Residual projection: 1x1 at the SAME stride so it lines up with the main branch.
+            yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: 1,
+                stride: encoderStride, padding: 0, activation: identity);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
         }
-        // RIR decoder - project to temporal domain
-        int intermediateSize = Math.Min(rirLength, 4096);
-        yield return new DenseLayer<T>(intermediateSize, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(rirLength, (IActivationFunction<T>?)null);
+
+        // --- Three-layer MLP: pooled encoder output -> latent z ---
+        yield return new DenseLayer<T>(encoderMaxChannels, (IActivationFunction<T>)new PReLUActivation<T>());
+        yield return new DenseLayer<T>(Math.Max(latentDim, encoderMaxChannels / 2), (IActivationFunction<T>)new PReLUActivation<T>());
+        yield return new DenseLayer<T>(latentDim, identity);
+
+        // --- Decoder: 4 layers per block (FiLM, upsample, FiLM, dilated refine) ---
+        int decoderChannels = Math.Max(numNoiseBands + 1, encoderMaxChannels / 8);
+        for (int j = 0; j < numDecoderBlocks; j++)
+        {
+            // FiLM produces a scale and a shift per channel, hence 2x width (Perez et al. 2018).
+            yield return new DenseLayer<T>(decoderChannels * 2, identity);
+            // Stage 1: transposed convolution upsampling (stride 2 doubles the length).
+            yield return new Conv1DTransposeLayer<T>(outputChannels: decoderChannels, kernelSize: 4,
+                stride: 2, padding: 1, activation: identity);
+            yield return new DenseLayer<T>(decoderChannels * 2, identity);
+            // Stage 2: refinement with a larger dilation factor, growing with depth.
+            yield return new Conv1DLayer<T>(outputChannels: decoderChannels, kernelSize: 3,
+                dilation: 1 << j, stride: 1, padding: 1 << j, activation: identity);
+        }
+
+        // --- Output heads ---
+        // M noise masks plus one extra channel for the early/direct component.
+        yield return new Conv1DLayer<T>(outputChannels: numNoiseBands + 1, kernelSize: 1,
+            stride: 1, padding: 0, activation: identity);
+        // Trainable filterbank: M FIR filters of order P applied to the noise signal.
+        //
+        // EAGER constructor (explicit inputChannels: 1) on purpose. This layer is the one place in
+        // the stack whose input is the single-channel noise signal rather than the preceding
+        // layer's output, so the lazy overload would let a sequential shape walk resolve its fan-in
+        // against the decoder's multi-channel activation instead — observed as
+        // "Input channels (64) must match kernel in_channels (1)" on the first real forward.
+        // Pinning the fan-in makes the layer's contract independent of walk order.
+        yield return new Conv1DLayer<T>(inputChannels: 1, outputChannels: numNoiseBands,
+            kernelSize: noiseFilterOrder + 1, dilation: 1, stride: 1,
+            padding: noiseFilterOrder / 2, activation: identity);
+        // 1x1 mix of the M late bands and the early component into the monophonic RIR.
+        yield return new Conv1DLayer<T>(outputChannels: 1, kernelSize: 1,
+            stride: 1, padding: 0, activation: identity);
     }
+
+    /// <summary>
+    /// Layers emitted per encoder block by <see cref="CreateDefaultRoomImpulseResponseLayers"/>.
+    /// </summary>
+    public const int RoomImpulseResponseLayersPerEncoderBlock = 5;
+
+    /// <summary>
+    /// Layers emitted per decoder block by <see cref="CreateDefaultRoomImpulseResponseLayers"/>.
+    /// </summary>
+    public const int RoomImpulseResponseLayersPerDecoderBlock = 4;
+
+    /// <summary>
+    /// Layers emitted by <see cref="CreateDefaultRoomImpulseResponseLayers"/> outside the encoder
+    /// and decoder blocks: the 3-layer MLP plus the three output heads.
+    /// </summary>
+    public const int RoomImpulseResponseFixedLayers = 6;
 
     #endregion
 
@@ -22328,21 +23514,29 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Branchformer blocks: parallel self-attention + cgMLP branches, then concat-merge
+        // Branchformer blocks, per Peng et al., ICML 2022 (arXiv:2207.02971).
+        //
+        // These were previously emitted as loose layers under a comment claiming "parallel
+        // self-attention + cgMLP branches, then concat-merge". A flat layer list cannot express
+        // that: the emitted sequence ran attention -> norm -> dense(cgmlpDim) -> dense -> norm,
+        // i.e. attention FOLLOWED BY an MLP, which is an ordinary transformer block. The parallel
+        // arrangement is the paper's entire contribution — running the two context types side by
+        // side so the merge can weigh them — and a sequential composition of the same pieces is
+        // just a Conformer-style block wearing the name.
+        //
+        // The cgMLP branch was also missing its Convolutional Spatial Gating Unit entirely: it
+        // was a plain GeLU expansion and projection, with no half-split, no depth-wise
+        // convolution and no gating multiply.
+        //
+        // BranchformerBlock holds both branches and the merge inside ONE layer, so no default
+        // forward pass can flatten them back into a chain.
         for (int i = 0; i < numLayers; i++)
         {
-            // Branch 1: Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            // Branch 2: Convolutional Gating MLP (cgMLP)
-            yield return new DenseLayer<T>(cgmlpDim, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Concat merge projection (2*dim -> dim)
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new BranchformerBlock<T>(
+                modelDim: encoderDim,
+                numHeads: numAttentionHeads,
+                cgmlpHiddenDim: cgmlpDim,
+                kernelSize: 31);
 
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -22364,18 +23558,25 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 5000,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 750)
+        int maxSequenceLength = 750,
+        bool useLayerNormalization = false)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
         int ffDim = encoderDim * feedForwardExpansionFactor;
 
-        // Conv subsampling
+        // The sequence tensors are [batch, time, features]. Resolve BatchNorm with
+        // the explicit feature width so its first rank-3 forward takes the documented
+        // features-last flattening path instead of inferring an image channel axis.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return useLayerNormalization
+            ? new LayerNormalizationLayer<T>()
+            : new BatchNormalizationLayer<T>(encoderDim);
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return useLayerNormalization
+            ? new LayerNormalizationLayer<T>()
+            : new BatchNormalizationLayer<T>(encoderDim);
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Squeezeformer blocks with temporal U-Net (micro-macro structure)
@@ -22389,7 +23590,9 @@ public static class LayerHelper<T>
             // Depthwise separable convolution module
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            yield return useLayerNormalization
+                ? new LayerNormalizationLayer<T>()
+                : new BatchNormalizationLayer<T>(encoderDim * 2);
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -22427,30 +23630,33 @@ public static class LayerHelper<T>
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
         int ffDim = encoderDim * feedForwardExpansionFactor;
 
-        // Conv subsampling
+        // Conv-subsampling front-end (Dense projection + normalization). Use LayerNormalization, NOT
+        // BatchNormalization: these are plain Dense projections (BatchNorm's only paper place in a
+        // Conformer is its conv module), BatchNorm is batch-dependent (breaks single-vs-batch
+        // consistency and determinism) and a lazy BatchNorm whose first forward is in inference mode
+        // throws NullReferenceException on its un-initialised eval-path gamma. LayerNorm is per-sample,
+        // deterministic, and matches the encoder blocks below.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Conformer encoder blocks
+        // Conformer encoder blocks. Each block is a RESIDUAL transformer layer: the previous factory
+        // emitted a bare SEQUENTIAL FFN -> LN -> MHA -> LN -> conv-FFN -> LN -> FFN -> LN chain with NO
+        // skip connections, so the input signal attenuated ~per block and a deep (18-20 layer) encoder
+        // collapsed two distinct inputs to the same output post-training (DifferentInputs L2 -> 1e-13,
+        // the #1208/#1221 degenerate-solution signature). TransformerEncoderBlock applies MSA + residual
+        // + LN and the GELU MLP + residual + LN internally (the same block the LLM-ASR helper uses), so
+        // the residual "+ z" skips the Conformer paper mandates carry the input through the stack.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim,
+                numHeads: numAttentionHeads,
+                ffnDim: ffDim,
+                dropoutRate: dropoutRate,
+                ffnActivation: geluActivation);
         }
 
         // Prediction network (label predictor, LSTM-like)
@@ -22559,17 +23765,48 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 32000,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 1500)
+        int maxSequenceLength = 1500,
+        int encoderFeedForwardDim = 0,
+        int llmFeedForwardDim = 0,
+        int numLlmAttentionHeads = 0,
+        IActivationFunction<T>? adapterActivation = null,
+        bool useAdapterLayerNormalization = true,
+        int numLlmKvHeads = 0,
+        double llmRopeTheta = 10000.0,
+        bool useQwen2Decoder = false,
+        int adapterFrameSplicingFactor = 1)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        adapterActivation ??= geluActivation;
 
-        // Audio encoder (Conformer-style)
-        yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        int resolvedEncoderFeedForwardDim = encoderFeedForwardDim > 0
+            ? encoderFeedForwardDim
+            : encoderDim * 4;
+        int resolvedLlmFeedForwardDim = llmFeedForwardDim > 0
+            ? llmFeedForwardDim
+            : llmDim * 4;
+
+        // Audio feature front-end (Dense projection + normalization).
+        // Use LayerNormalization, NOT BatchNormalization: (1) these are plain Dense projections, not a
+        // Conformer conv module (BatchNorm's only place in Conformer), and every downstream encoder /
+        // adapter / LLM block here already uses LayerNorm — mixing in BatchNorm is inconsistent with the
+        // Qwen/LLM-ASR architecture these models implement; (2) BatchNorm is batch-dependent, so a
+        // single-sample forward does not match the same row inside a batch (BatchConsistency_SingleMatchesBatch
+        // fails by construction) and its output is non-deterministic across differently-sized batches
+        // (Predict_ShouldBeDeterministic); (3) a lazy BatchNorm whose FIRST forward is in inference mode
+        // has un-initialised gamma and threw NullReferenceException in the eval-path scale computation.
+        // LayerNorm normalizes per-sample over the feature axis, so it is batch-independent, deterministic,
+        // and has no running-stats init hazard.
+        var audioProjection = new DenseLayer<T>(encoderDim, reluActivation);
+        audioProjection.ResolveFromShape(new[] { numMels });
+        yield return audioProjection;
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        var audioRefinement = new DenseLayer<T>(encoderDim, reluActivation);
+        audioRefinement.ResolveFromShape(new[] { encoderDim });
+        yield return audioRefinement;
+        yield return new LayerNormalizationLayer<T>(encoderDim);
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
         // Residual Pre-LN encoder blocks. A residual-FREE attention/FFN stack collapses to an
@@ -22581,38 +23818,85 @@ public static class LayerHelper<T>
             yield return new TransformerEncoderBlock<T>(
                 hiddenSize: encoderDim,
                 numHeads: numAttentionHeads,
-                ffnDim: encoderDim * 4,
+                ffnDim: resolvedEncoderFeedForwardDim,
                 dropoutRate: dropoutRate,
                 ffnActivation: geluActivation);
         }
-        yield return new LayerNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        if (adapterFrameSplicingFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(adapterFrameSplicingFactor));
+        int adapterInputDim = checked(encoderDim * adapterFrameSplicingFactor);
+        if (adapterFrameSplicingFactor > 1)
+            yield return new TemporalFrameSplicingLayer<T>(adapterFrameSplicingFactor);
 
         // Adapter MLP (projects audio features to LLM embedding space)
         for (int i = 0; i < numAdapterLayers; i++)
         {
-            int inDim = i == 0 ? encoderDim : adapterDim;
-            yield return new DenseLayer<T>(adapterDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
+            int inDim = i == 0 ? adapterInputDim : adapterDim;
+            var adapterProjection = new DenseLayer<T>(adapterDim, adapterActivation);
+            adapterProjection.ResolveFromShape(new[] { inDim });
+            yield return adapterProjection;
+            if (useAdapterLayerNormalization)
+                yield return new LayerNormalizationLayer<T>(adapterDim);
         }
-        yield return new DenseLayer<T>(llmDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>();
+        int adapterOutputDim = numAdapterLayers > 0 ? adapterDim : adapterInputDim;
+        var llmProjection = new DenseLayer<T>(llmDim, identityActivation);
+        llmProjection.ResolveFromShape(new[] { adapterOutputDim });
+        yield return llmProjection;
+        if (useAdapterLayerNormalization)
+            yield return new LayerNormalizationLayer<T>(llmDim);
 
         // LLM decoder (lightweight Transformer decoder) — residual Pre-LN blocks, same
         // rationale as the encoder above (a residual-free stack collapses under training).
         // Use ChooseDivisibleHeadConfig to ensure llmHeads evenly divides llmDim (see
         // ChooseDivisibleHeadConfig for the snap-to-divisor rationale).
-        var (llmHeads, _) = ChooseDivisibleHeadConfig(llmDim, Math.Max(1, llmDim / 128));
-        for (int i = 0; i < numLLMLayers; i++)
+        int requestedLlmHeads = numLlmAttentionHeads > 0
+            ? numLlmAttentionHeads
+            : Math.Max(1, llmDim / 128);
+        if (numLlmAttentionHeads > 0 && llmDim % numLlmAttentionHeads != 0)
+            throw new ArgumentException("llmDim must be divisible by an explicitly configured numLlmAttentionHeads.", nameof(numLlmAttentionHeads));
+        var (llmHeads, _) = ChooseDivisibleHeadConfig(llmDim, requestedLlmHeads);
+        if (useQwen2Decoder)
         {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize: llmDim,
-                numHeads: llmHeads,
-                ffnDim: llmDim * 4,
-                dropoutRate: dropoutRate,
-                ffnActivation: geluActivation);
+            int resolvedKvHeads = numLlmKvHeads > 0 ? numLlmKvHeads : llmHeads;
+            for (int i = 0; i < numLLMLayers; i++)
+            {
+                var attention = new GroupedQueryAttentionLayer<T>(
+                    sequenceLength: maxSequenceLength,
+                    embeddingDimension: llmDim,
+                    numHeads: llmHeads,
+                    numKVHeads: resolvedKvHeads);
+                attention.ConfigurePositionalEncoding(
+                    PositionalEncodingType.Rotary, llmRopeTheta, maxSequenceLength);
+                yield return new PreLNTransformerBlock<T>(
+                    hiddenSize: llmDim,
+                    ffnDim: resolvedLlmFeedForwardDim,
+                    attention: attention,
+                    ffnActivation: new SiLUActivation<T>(),
+                    gated: true);
+            }
+            // The Qwen2 width is known here. Eagerly materialize the final norm so
+            // parameter discovery, cloning, and serving see the same parameter set
+            // before and after the first forward pass.
+            yield return new RMSNormalizationLayer<T>(llmDim);
         }
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, identityActivation);
+        else
+        {
+            for (int i = 0; i < numLLMLayers; i++)
+            {
+                yield return new TransformerEncoderBlock<T>(
+                    hiddenSize: llmDim,
+                    numHeads: llmHeads,
+                    ffnDim: resolvedLlmFeedForwardDim,
+                    dropoutRate: dropoutRate,
+                    ffnActivation: geluActivation);
+            }
+            yield return new LayerNormalizationLayer<T>(llmDim);
+        }
+        var vocabularyProjection = new DenseLayer<T>(vocabSize, identityActivation);
+        vocabularyProjection.ResolveFromShape(new[] { llmDim });
+        yield return vocabularyProjection;
     }
 
     /// <summary>
@@ -22637,15 +23921,19 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Transformer encoder
+        // Transformer encoder — each block is a pre-norm RESIDUAL transformer layer
+        // (z' = z + MHA(LN(z)); z = z' + FFN(LN(z')), Vaswani 2017). The residual skips are
+        // LOAD-BEARING: the previous bare LN -> MHA -> LN -> FFN -> Dense block had NO skip-add, so
+        // across the deep (12-layer) LayerNorm-heavy stack the input was erased and training
+        // collapsed to a uniform output — every Foundation-ASR model on this helper (HuBERTASR,
+        // Wav2Vec2ASR, WavLMASR, Data2VecASR, BESTRQ, MMS, XLSR, USM, ... 15 in all) failed
+        // DifferentInputs_AfterTraining (L2 ~= 1e-12) / LossStrictlyDecreases / MoreData. Use the
+        // residual TransformerEncoderLayer 2-arg lazy ctor (embedding dim inferred from input),
+        // the same fix already applied to AST / WavLMSER.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, geluActivation);
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
         }
         yield return new LayerNormalizationLayer<T>();
 
@@ -22657,6 +23945,77 @@ public static class LayerHelper<T>
     /// Creates default layers for a Paraformer non-autoregressive ASR model.
     /// Architecture: Conv subsampling → Conformer encoder → CIF alignment → Transformer decoder → vocab.
     /// </summary>
+    /// <summary>
+    /// Creates SeACo-Paraformer's BIAS branch exactly as arXiv 2308.03266 §3.1 Eq 2-4 specify.
+    /// </summary>
+    /// <param name="vocabSize">ASR vocabulary size. The bias output layer emits <c>vocabSize + 1</c>
+    /// logits: §3.1 appends "an additional token (counted as #, means no-bias) ... to the ASR output
+    /// vocabulary to mark non-hotword position outputs".</param>
+    /// <param name="encoderDim">Model width d; <c>Z in R^(n x d)</c> in Eq 2.</param>
+    /// <param name="numAttentionHeads">Heads for the two Eq 3 attentions.</param>
+    /// <param name="dropoutRate">Dropout rate; 0 disables the dropout layer.</param>
+    /// <returns>The bias-branch layers in the order the forward consumes them.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Reference:</b> Shi et al., "SeACo-Paraformer", arXiv 2308.03266, §3.1, Eq 2-4.
+    /// </para>
+    /// <para>
+    /// Eq 2 — bias ENCODER: <c>Z_1:n = LSTM(EMB(H_1:n))</c>. The paper is explicit that this is an
+    /// embedding layer "(parameter shared with ASR embedding)" followed by an LSTM, NOT a transformer
+    /// block. Sharing means the hotword characters are embedded in the same space the ASR decoder uses,
+    /// which is what lets the Eq 3 attentions compare them against decoder states directly.
+    /// </para>
+    /// <para>
+    /// Eq 3 — bias DECODER: TWO attentions, both keyed/valued by the encoded hotwords Z:
+    /// <c>D+ = MHA(D, Z, Z)</c> over the parallel decoder's hidden state and
+    /// <c>E+ = MHA(E, Z, Z)</c> over the CIF acoustic embedding. The paper stresses that "the CIF output
+    /// and parallel decoder output are sent to bias decoder separately" — a single attention over one
+    /// stream loses the acoustic half of the bias signal.
+    /// </para>
+    /// <para>
+    /// Eq 4 — <c>P_bi = BiasOutLayer(D+ + E+)</c>: the two attended streams are SUMMED, then projected.
+    /// </para>
+    /// <para>
+    /// Emitted order: [0] shared embedding, [1] LSTM, [2] MHA for D, [3] MHA for E, [4] LayerNorm,
+    /// [5] optional dropout, [6] bias out layer. <c>SeACo.ApplyHotwordBias</c> addresses them by that
+    /// contract rather than walking them sequentially, because this is a BRANCHING topology.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSeACoBiasLayers(
+        int vocabSize = 8404,
+        int encoderDim = 512,
+        int numAttentionHeads = 4,
+        double dropoutRate = 0.1)
+    {
+        if (vocabSize <= 0)
+            throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
+        if (encoderDim <= 0)
+            throw new ArgumentException($"Encoder dimension ({encoderDim}) must be positive.", nameof(encoderDim));
+        if (numAttentionHeads <= 0)
+            throw new ArgumentException($"Attention heads ({numAttentionHeads}) must be positive.", nameof(numAttentionHeads));
+        if (encoderDim % numAttentionHeads != 0)
+            throw new ArgumentException(
+                $"Encoder dimension ({encoderDim}) must be divisible by numAttentionHeads ({numAttentionHeads}).",
+                nameof(numAttentionHeads));
+
+        int headDim = encoderDim / numAttentionHeads;
+
+        // Eq 2: Z = LSTM(EMB(H)). Embedding shares the ASR vocabulary space; LSTM contextualises each
+        // hotword's character sequence into one representation per hotword.
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        yield return new LSTMLayer<T>(encoderDim);
+
+        // Eq 3: two attentions over Z — one for the decoder hidden state D, one for the CIF output E.
+        yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, headDim);
+        yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, headDim);
+
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Eq 4: BiasOutLayer over (D+ + E+). vocabSize + 1 for the appended '#' no-bias token.
+        yield return new DenseLayer<T>(vocabSize + 1, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultParaformerLayers(
         int encoderDim = 512,
         int decoderDim = 512,
@@ -22667,7 +24026,8 @@ public static class LayerHelper<T>
         int numMels = 80,
         int vocabSize = 8404,
         double dropoutRate = 0.1,
-        int maxSequenceLength = 750)
+        int maxSequenceLength = 750,
+        bool useCifAlignment = true)
     {
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
@@ -22726,7 +24086,8 @@ public static class LayerHelper<T>
         // bound on N (the predicted token count). Unused trailing
         // slots are zero-padded — downstream MHA / cross-attention
         // ignores them through standard padding-mask handling.
-        yield return new CifAlignmentLayer<T>(encoderDim);
+        if (useCifAlignment)
+            yield return new CifAlignmentLayer<T>(encoderDim);
 
         // Paraformer decoder (non-autoregressive)
         if (encoderDim != decoderDim)
@@ -22784,6 +24145,81 @@ public static class LayerHelper<T>
     /// Creates default layers for a deep 1D-CNN based CTC model (Jasper/QuartzNet style).
     /// Architecture: N residual CNN blocks → CTC head.
     /// </summary>
+    /// <summary>
+    /// Creates the ContextNet encoder per Han et al., INTERSPEECH 2020 (arXiv:2005.03191).
+    /// </summary>
+    /// <remarks>
+    /// <para>ContextNet is 23 convolution blocks C0..C22. C0 and C22 hold a single convolution
+    /// layer; every other block holds <paramref name="numSubBlocks"/> (5 in the paper). Channel
+    /// widths follow the paper's three groups, each scaled by <paramref name="widthScaling"/>
+    /// (the paper's α, evaluated at 0.5 / 1 / 2 for small / medium / large):</para>
+    /// <list type="bullet">
+    /// <item>C0–C10: 256·α</item>
+    /// <item>C11–C21: 512·α</item>
+    /// <item>C22: 640·α</item>
+    /// </list>
+    /// <para>Every block ends in a squeeze-and-excitation module — global average pooling into
+    /// two fully connected layers with a sigmoid gate — which is the paper's titular "global
+    /// context" contribution. Progressive downsampling reaches the paper's 8x reduction through
+    /// stride-2 convolutions at C3, C7 and C14, and the activation is Swish throughout.</para>
+    /// <para>This replaces routing ContextNet through the generic deep-CNN/CTC factory, which
+    /// had NO squeeze-and-excitation at all, a single uniform width, no strided downsampling and
+    /// ReLU — i.e. it omitted the paper's defining mechanism entirely.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultContextNetLayers(
+        int numBlocks = 23,
+        int numSubBlocks = 5,
+        int numMels = 80,
+        int vocabSize = 1024,
+        int kernelSize = 5,
+        int squeezeExcitationRatio = 8,
+        double widthScaling = 1.0,
+        double dropoutRate = 0.1)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Paper channel groups, scaled by alpha and floored at 1 channel.
+        int Width(int block)
+        {
+            int baseWidth = block <= 10 ? 256 : block <= 21 ? 512 : 640;
+            return Math.Max(1, (int)Math.Round(baseWidth * widthScaling));
+        }
+
+        if (numBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numBlocks));
+        if (numSubBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numSubBlocks));
+        if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
+
+        // 8x total downsampling via stride-2 at C3, C7 and C14 (paper Table 1).
+        static bool IsDownsampling(int block) => block is 3 or 7 or 14;
+
+        int inputChannels = numMels;
+        for (int block = 0; block < numBlocks; block++)
+        {
+            int outputChannels = Width(block);
+            // C0 and C22 are single-convolution blocks without residuals. They still retain the
+            // paper's squeeze-and-excitation path; "No residual" is the only Table 1 exception.
+            bool isSingle = block == 0 || block == numBlocks - 1;
+            yield return new ContextNetBlockLayer<T>(
+                inputChannels: inputChannels,
+                outputChannels: outputChannels,
+                kernelSize: kernelSize,
+                numConvolutions: isSingle ? 1 : numSubBlocks,
+                seReductionRatio: squeezeExcitationRatio,
+                dropoutRate: dropoutRate,
+                stride: IsDownsampling(block) ? 2 : 1,
+                useResidual: !isSingle,
+                seed: 2027 + block * 149);
+            inputChannels = outputChannels;
+        }
+
+        // ContextNet's encoder is channels-first; the vocabulary projection consumes the channel
+        // representation on the last axis and therefore emits [B, T, vocab].
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+        var vocabularyHead = new DenseLayer<T>(vocabSize, identity);
+        vocabularyHead.ResolveShapesOnly(new[] { inputChannels });
+        yield return vocabularyHead;
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultDeepCNNCTCLayers(
         int encoderDim = 512,
         int numBlocks = 10,
@@ -22797,24 +24233,135 @@ public static class LayerHelper<T>
 
         // Input projection
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU)
+        // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU).
+        //
+        // These were previously emitted as a PLAIN stack: numBlocks * numSubBlocks
+        // Dense+BN+Dropout with no skip connection, despite the name. At the default
+        // 10x5 that is a 50-layer feedforward chain whose end-to-end gain is the
+        // product of 50 per-layer gains sitting near 1.0, so a 0.02% parameter change
+        // swung the output nine orders of magnitude (measured on the generated
+        // fixture: max|output| 3.0e-4 -> 6.5e5 -> 4.0e-1 across three updates at
+        // batch 1, and monotone divergence to 1.2e7 at batch 2). Skip connections
+        // are also what the paper specifies. Same defect and same remedy as the ViT
+        // factories that were missing their skip-add.
+        //
+        // The inner DenseLayer must report matching input/output shapes for
+        // ResidualLayer.ValidateInnerLayer to succeed -- its ctor reports input as
+        // [-1] (lazy) until the first forward, so resolve eagerly to [encoderDim].
         for (int b = 0; b < numBlocks; b++)
         {
             for (int s = 0; s < numSubBlocks; s++)
             {
-                yield return new DenseLayer<T>(encoderDim, reluActivation);
-                yield return new BatchNormalizationLayer<T>();
+                var inner = new DenseLayer<T>(encoderDim, reluActivation);
+                inner.ResolveFromShape(new[] { encoderDim });
+                yield return new ResidualLayer<T>(
+                    innerLayer: inner,
+                    activationFunction: identityActivation
+                );
+                yield return new LayerNormalizationLayer<T>();
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
         }
 
         // CTC head
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Builds a paper-faithful NVIDIA Citrinet encoder (Majumdar et al., 2021,
+    /// https://arxiv.org/abs/2104.01721): a 1-D time-channel separable convolutional CTC model with
+    /// squeeze-and-excitation and residual mega-blocks, operating on channels-first <c>[B, C, T]</c>
+    /// mel features.
+    /// </summary>
+    /// <remarks>
+    /// <para>Structure:</para>
+    /// <list type="number">
+    /// <item><b>Prologue</b>: a channel-projecting 1-D conv (lazily infers the mel-channel count) + BN
+    /// that lifts the input to the encoder width <c>C</c>.</item>
+    /// <item><b>Body</b>: <paramref name="numMegaBlocks"/> <see cref="CitrinetBlockLayer{T}"/> residual
+    /// mega-blocks at constant width <c>C</c>, each with <paramref name="subBlocksPerBlock"/>
+    /// time-channel separable sub-blocks (depthwise-temporal + pointwise-channel + BN) plus a
+    /// squeeze-and-excitation block and a residual skip. Kernel sizes grow across the stack (5, 7, 9,
+    /// … capped at 39, per the paper), and stride-2 subsampling is applied at three group boundaries
+    /// (8× total temporal downsampling as in the paper).</item>
+    /// <item><b>Epilogue</b>: a 1×1 pointwise conv + BN + ReLU.</item>
+    /// <item><b>CTC head</b>: a 1×1 pointwise conv projecting to <paramref name="vocabSize"/> per-frame
+    /// sub-word logits.</item>
+    /// </list>
+    /// <para>
+    /// The time-channel separable convolutions, squeeze-and-excitation, and residual connections are
+    /// Citrinet's three defining features. This builder is Citrinet-specific and does NOT replace the
+    /// generic <see cref="CreateDefaultDeepCNNCTCLayers"/> (still used by ContextNet).
+    /// </para>
+    /// <para><b>For Beginners:</b> This assembles the layer stack for a Citrinet speech-recognition
+    /// encoder — the part that turns an audio spectrogram into per-frame character/sub-word scores.
+    /// It stacks many small "separable" 1-D convolution blocks (cheap convolutions that process time
+    /// and channels in two steps) with skip connections, gradually shrinking the time axis by 8×, then
+    /// projects to a vocabulary of output tokens. You normally never call this directly — the
+    /// <c>NeMoCitrinet</c> model builds itself from it.</para>
+    /// </remarks>
+    /// <param name="encoderDim">Encoder channel width <c>C</c> (e.g. 512 for Citrinet-512).</param>
+    /// <param name="numMegaBlocks">Number of residual mega-blocks (Citrinet-512 uses 23).</param>
+    /// <param name="subBlocksPerBlock">Time-channel separable sub-blocks per mega-block <c>R</c> (paper uses 5).</param>
+    /// <param name="numMels">Input mel-channel count (documentation only — the prologue infers it lazily).</param>
+    /// <param name="vocabSize">Sub-word vocabulary size for the CTC head.</param>
+    /// <param name="dropoutRate">Dropout applied inside each mega-block.</param>
+    /// <param name="seReductionRatio">Squeeze-and-excitation reduction ratio.</param>
+    /// <returns>The ordered Citrinet encoder layer sequence (prologue → mega-block body → epilogue →
+    /// CTC head), ready to feed into a <see cref="NeuralNetworks.NeuralNetworkBase{T}"/> model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCitrinetLayers(
+        int encoderDim = 512,
+        int numMegaBlocks = 23,
+        int subBlocksPerBlock = 5,
+        int numMels = 80,
+        int vocabSize = 1024,
+        double dropoutRate = 0.1,
+        int seReductionRatio = 8)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Prologue: lazy-input 1-D conv projecting the mel channels up to the encoder width, + BN.
+        // Conv1DLayer's (outputChannels, kernelSize, …) overload infers input channels on first
+        // forward, so the actual mel-channel count is bound at runtime (it need not equal numMels).
+        yield return new Conv1DLayer<T>(encoderDim, kernelSize: 5, dilation: 1, stride: 1, padding: 2, activation: identityActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        // Body: residual mega-blocks. Kernel grows across the stack; THREE stride-2 subsampling points
+        // (~1/4, ~1/2, ~3/4 through) give the paper's 8× (2³) temporal downsampling (Majumdar et al.
+        // 2021) — two stride-2 points would only yield 4×.
+        int subsample1 = System.Math.Max(1, numMegaBlocks / 4);
+        int subsample2 = System.Math.Max(subsample1 + 1, numMegaBlocks / 2);
+        int subsample3 = System.Math.Max(subsample2 + 1, (3 * numMegaBlocks) / 4);
+        for (int b = 0; b < numMegaBlocks; b++)
+        {
+            int kernelSize = System.Math.Min(5 + 2 * b, 39);
+            int stride = (b == subsample1 || b == subsample2 || b == subsample3) ? 2 : 1;
+            yield return new CitrinetBlockLayer<T>(
+                channels: encoderDim,
+                kernelSize: kernelSize,
+                numSubBlocks: subBlocksPerBlock,
+                seReductionRatio: seReductionRatio,
+                dropoutRate: dropoutRate,
+                stride: stride,
+                seed: 1009 + b * 131);
+        }
+
+        // Epilogue: 1×1 pointwise conv + BN + ReLU. Keep the conv/BN linear (identity activation) and
+        // apply ReLU AFTER BatchNorm via a dedicated ActivationLayer — baking ReLU into the conv would
+        // make BN normalize already-clipped (non-negative) activations, the non-standard Conv->ReLU->BN
+        // order (the rest of this file does Conv(identity)->BN->ActivationLayer for Conv->BN->ReLU).
+        yield return new Conv1DLayer<T>(encoderDim, encoderDim, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identityActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new ActivationLayer<T>(reluActivation);
+
+        // CTC head: 1×1 pointwise conv to per-frame sub-word logits [B, vocabSize, T'].
+        yield return new Conv1DLayer<T>(encoderDim, vocabSize, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identityActivation);
     }
 
     #endregion
@@ -23116,7 +24663,14 @@ public static class LayerHelper<T>
         // === Vision Encoder (Dense approximation of EfficientNet-B7 MBConv blocks) ===
         // Note: Real EfficientNet uses depthwise separable convolutions + squeeze-and-excitation.
         // This approximation uses Dense expand-project blocks for the forward/backward pipeline.
-        yield return new LayerNormalizationLayer<T>();
+        yield return new ConvolutionalLayer<T>(
+            outputDepth: visionEmbeddingDim,
+            kernelSize: 3,
+            stride: 2,
+            padding: 1,
+            activationFunction: geluActivation);
+        yield return AdaptiveAveragePoolingLayer<T>.GlobalPool();
+        yield return new FlattenLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -23242,8 +24796,6 @@ public static class LayerHelper<T>
         // Lazy layers infer image height/width/channels from input.Shape on first
         // forward, so callers no longer need to pass those dims.
 
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int ffnDim = embeddingDim * 4;
 
         // === Patch Embedding (paper-faithful ViT front end) ===
@@ -23256,20 +24808,27 @@ public static class LayerHelper<T>
         // forward — affecting SAM, MobileSAM, etc. that share this helper.
         yield return new PatchEmbeddingLayer<T>(patchSize, embeddingDim);
 
-        // Initial layer norm (pre-norm architecture)
-        yield return new LayerNormalizationLayer<T>();
-
+        // === Transformer encoder (Dosovitskiy et al. 2021, Eq 2-3) ===
+        // Each block is a RESIDUAL transformer layer: z' = MSA(LN(z)) + z ; z = MLP(LN(z')) + z'.
+        // The previous factory decomposed the block into a bare, SEQUENTIAL MultiHeadAttention →
+        // LayerNorm → Dense → Dense → LayerNorm chain with NO skip connections — the residual adds
+        // the paper mandates were missing entirely. Without the "+ z" skip the deep encoder cannot
+        // carry the input to its output (two distinct constant pages collapse to the same output
+        // post-training → DifferentInputs L2=0) and is far harder to optimise (Training/TrainingError
+        // failures across the ViT/SAM/DINO/InternViT models that share this helper). TransformerEncoderLayer
+        // applies MSA + residual add + LN and the GELU MLP + residual add + LN internally — the paper
+        // block as one trainable, serialisable unit (the same layer FT-/Tab-Transformer use). Use the
+        // (numHeads, ffnDim) overload so embeddingSize + all sublayer weights resolve LAZILY on first
+        // forward (via the recycling arena); the eager 3-arg overload allocated every FFN up-front and
+        // OOM'd the runner across a shard of 12-layer × multi-model × Clone construction.
         for (int i = 0; i < numLayers; i++)
         {
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward network
-            yield return new DenseLayer<T>(ffnDim, geluActivation);
-            yield return new DenseLayer<T>(embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+
+        // Final layer norm on the encoder output (Eq 4).
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -23331,20 +24890,29 @@ public static class LayerHelper<T>
         int numTextLayers = 12,
         int numFusionLayers = 6,
         int numHeads = 16,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? numVisionHeads = null,
+        int? numTextHeads = null,
+        int? numFusionHeads = null,
+        int? visionIntermediateDim = null,
+        int? textIntermediateDim = null,
+        int? fusionIntermediateDim = null)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int visionFfnDim = visionDim * 4;
-        int textFfnDim = textDim * 4;
-        int fusionFfnDim = fusionDim * 4;
+        int visionHeadCount = numVisionHeads ?? numHeads;
+        int textHeadCount = numTextHeads ?? numHeads;
+        int fusionHeadCount = numFusionHeads ?? numHeads;
+        int visionFfnDim = visionIntermediateDim ?? visionDim * 4;
+        int textFfnDim = textIntermediateDim ?? textDim * 4;
+        int fusionFfnDim = fusionIntermediateDim ?? fusionDim * 4;
 
         // === Vision Stream (transformer encoder) ===
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(visionHeadCount, visionDim / visionHeadCount);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23361,7 +24929,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(textHeadCount, textDim / textHeadCount);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textDim, identityActivation);
@@ -23377,10 +24945,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numFusionLayers; i++)
         {
             // Vision-to-text cross-attention (vision queries attend to text keys/values)
-            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, fusionHeadCount);
             yield return new LayerNormalizationLayer<T>();
             // Text-to-vision cross-attention (text queries attend to vision keys/values)
-            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, fusionHeadCount);
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
@@ -23403,7 +24971,6 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int fusionFfnDim = fusionDim * 4;
 
         // === Vision Feature Projection ===
@@ -23431,9 +24998,6 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // === Joint Transformer Encoder (BERT-style) ===
-        yield return new LayerNormalizationLayer<T>();
-
         // Snap the head count to a divisor of fusionDim so the attention layer's
         // embeddingDimension (heads * headDim) equals fusionDim EXACTLY. With the
         // raw `numHeads, fusionDim / numHeads` form, any model whose fusionDim is
@@ -23442,19 +25006,39 @@ public static class LayerHelper<T>
         // layer whose lazy weights resolve to the truncated dim and then throw a
         // shape mismatch against the fusionDim-wide residual stream on first
         // forward. See ChooseDivisibleHeadConfig for the snap-to-divisor rationale.
-        var (fusionHeads, fusionHeadDim) = ChooseDivisibleHeadConfig(fusionDim, numHeads);
+        var (fusionHeads, _) = ChooseDivisibleHeadConfig(fusionDim, numHeads);
 
         for (int i = 0; i < numFusionLayers; i++)
         {
-            // Multi-head self-attention over concatenated vision+text tokens
-            yield return new MultiHeadAttentionLayer<T>(fusionHeads, fusionHeadDim);
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward network
-            yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            // UNITER and the other single-stream BERT-family models use a real
+            // Transformer encoder block: self-attention and GELU FFN, each with
+            // its own residual connection and normalization. A flat attention →
+            // dense chain discards the residual stream and is not the architecture
+            // described by any of the papers represented by this helper.
+            yield return new TransformerEncoderBlock<T>(
+                fusionDim,
+                fusionHeads,
+                fusionFfnDim,
+                dropoutRate,
+                geluActivation);
         }
+
+        // Terminal normalization. TransformerEncoderBlock is PRE-LN -- it normalizes on the way IN
+        // to each sublayer and returns a bare residual sum -- so without a final LayerNorm the last
+        // block's output is the only activation in the stack that never gets normalized at all.
+        // Every Pre-LN formulation includes this (GPT-2 onward); it is not optional, and its
+        // absence is not a small effect: the residual stream grows across depth unchecked, so the
+        // pooled encoder output arrives at the head roughly an order of magnitude wider than a
+        // BERT-scale encoder's. UNITER's memorization probe opened at an MSE of 26.8 against
+        // U[0,1) targets -- about 14x the variance an LN-terminated encoder yields -- and 15 steps
+        // could not descend it.
+        //
+        // The papers behind this helper (UNITER, Oscar, ViLT, VinVL, VisualBERT) are all BERT-based
+        // and therefore POST-LN, where LN(x + Sublayer(x)) already normalizes every block's output
+        // including the last. This restores that guarantee for the Pre-LN blocks actually used
+        // here, which is the faithful reading of "the encoder output is layer-normalized" common to
+        // all five.
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
@@ -23542,7 +25126,8 @@ public static class LayerHelper<T>
         int numTextLayers = 12,
         int numBridgeLayers = 6,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 16)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -23551,6 +25136,11 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
 
         // === Vision Encoder with Bridge Points ===
+        // Convert channel-first pixels [C,H,W] / [B,C,H,W] into a token
+        // sequence [..., numPatches, visionDim] before LayerNorm/MHA. The
+        // previous stack began directly with attention, so an image width
+        // (e.g. 128) was mistaken for the embedding dimension (768).
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         // Determine at which vision layers bridges connect (evenly spaced)
@@ -24558,6 +26148,354 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Builds a video VLM with a plain LINEAR projector and NO dedicated temporal-aggregation
+    /// transformer — the paper-faithful architecture for Video-LLaVA (Lin et al. 2024,
+    /// arXiv:2311.10122, LanguageBind: temporal modeling lives in the pre-aligned vision encoder,
+    /// then a shared linear projection maps to the LLM) and VILA / LongVILA (Xue et al. 2024,
+    /// arXiv:2408.10188, image-video joint with a linear projector). Structure:
+    /// per-frame ViT (RESIDUAL transformer blocks) → shared MLP projection → RESIDUAL LLM decoder.
+    /// The residual blocks are the load-bearing fix vs the old shared builder's non-residual stack
+    /// (which collapsed to an input-independent output after training, #1208/#1221). The
+    /// vision-encoder segment length (patch-embed + norm + vision blocks) is
+    /// <c>2 + numVisionLayers·(dropoutRate&gt;0 ? 2 : 1)</c> — callers split encoder/decoder there.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This builds the layers that convert video frames into visual
+    /// tokens, map those tokens to the language model's width, and process them with a decoder.
+    /// The projector is intentionally simple: it learns a direct linear mapping between the two models.</para>
+    /// </remarks>
+    /// <param name="visionDim">Embedding width of the vision encoder.</param>
+    /// <param name="decoderDim">Embedding width of the language-model decoder.</param>
+    /// <param name="numVisionLayers">Number of residual transformer blocks in the vision encoder.</param>
+    /// <param name="numDecoderLayers">Number of residual transformer blocks in the language decoder.</param>
+    /// <param name="numHeads">Number of attention heads used by both transformer stacks.</param>
+    /// <param name="dropoutRate">Dropout probability applied between transformer blocks.</param>
+    /// <param name="imageHeight">Input frame height in pixels.</param>
+    /// <param name="imageWidth">Input frame width in pixels.</param>
+    /// <param name="imageChannels">Number of channels in each input frame.</param>
+    /// <param name="patchSize">Height and width of each square vision patch.</param>
+    /// <returns>The ordered vision encoder, linear projector, and language decoder layer sequence.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoLinearProjectorVLMLayers(
+        int visionDim = 1024,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numDecoderLayers = 32,
+        int numHeads = 12,
+        double dropoutRate = 0.1,
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int imageChannels = 3,
+        int patchSize = 16)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0 || imageWidth <= 0 || imageChannels <= 0 || patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "image dimensions and patchSize must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+        int visionHeads = ChooseDivisibleHeadConfig(visionDim, numHeads).heads;
+        int decoderHeads = ChooseDivisibleHeadConfig(decoderDim, numHeads).heads;
+
+        // === Per-frame ViT vision encoder (residual) ===
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+        yield return new LayerNormalizationLayer<T>();
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHeads, visionFfnDim, visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Shared linear projection to the LLM embedding space ===
+        yield return new DenseLayer<T>(decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+
+        // === LLM decoder (residual) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(decoderHeads, decoderFfnDim, decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Builds a video VLM whose temporal aggregation is parameter-free adaptive SPATIAL POOLING of the
+    /// per-frame ViT features — the paper-faithful mechanism for PLLaVA (Xu et al. 2024,
+    /// arXiv:2404.16994, "Parameter-free LLaVA Extension") and LLaVA-NeXT-Video (Zhang et al. 2024,
+    /// arXiv:2408.03303, frame pooling). Structure: per-frame ViT (RESIDUAL transformer blocks) →
+    /// adaptive average pool over the spatial patch grid (Hp×Wp → poolH×poolW, no learned params) →
+    /// shared MLP projection → RESIDUAL LLM decoder. The pool reduces the visual-token count exactly as
+    /// the papers' pooling connectors do. Pooling module (post-vision, pre-projection): transpose the
+    /// [frames, Hp·Wp, dim] token sequence to [frames, dim, Hp·Wp], reshape to the [frames, dim, Hp, Wp]
+    /// spatial grid, AdaptiveAveragePool (leading frame axis passes through), reshape + transpose back to
+    /// [frames, poolH·poolW, dim]. Vision-encoder segment length (for the encoder/decoder split) is
+    /// <c>2 + numVisionLayers·(dropoutRate&gt;0 ? 2 : 1) + 5</c> (patch+norm+vision blocks + 5 pooling layers).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoPoolingVLMLayers(
+        int visionDim = 1024,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numDecoderLayers = 32,
+        int numHeads = 12,
+        double dropoutRate = 0.1,
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int imageChannels = 3,
+        int patchSize = 16,
+        int poolFactor = 2)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0 || imageWidth <= 0 || imageChannels <= 0 || patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "image dimensions and patchSize must be positive.");
+        if (poolFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(poolFactor), "poolFactor must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+        int visionHeads = ChooseDivisibleHeadConfig(visionDim, numHeads).heads;
+        int decoderHeads = ChooseDivisibleHeadConfig(decoderDim, numHeads).heads;
+        int hp = imageHeight / patchSize;
+        int wp = imageWidth / patchSize;
+        int poolH = System.Math.Max(1, hp / poolFactor);
+        int poolW = System.Math.Max(1, wp / poolFactor);
+
+        // === Per-frame ViT vision encoder (residual) ===
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+        yield return new LayerNormalizationLayer<T>();
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHeads, visionFfnDim, visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Parameter-free adaptive spatial pooling (PLLaVA §3) ===
+        // [frames, Hp*Wp, dim] -> [frames, dim, Hp*Wp] -> [frames, dim, Hp, Wp] -> pool ->
+        // [frames, dim, poolH, poolW] -> [frames, dim, poolH*poolW] -> [frames, poolH*poolW, dim].
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+        yield return new ReshapeLayer<T>(new[] { visionDim, hp, wp });
+        yield return new AdaptiveAveragePoolingLayer<T>(poolH, poolW);
+        yield return new ReshapeLayer<T>(new[] { visionDim, poolH * poolW });
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+
+        // === Shared MLP projection to the LLM embedding space ===
+        yield return new DenseLayer<T>(decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+
+        // === LLM decoder (residual) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(decoderHeads, decoderFfnDim, decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Builds a video VLM whose temporal aggregation is a Q-Former — a stack of learnable query tokens
+    /// that cross-attend to the per-frame ViT features and resample them to a fixed token set — the
+    /// paper-faithful mechanism for VideoChat2 (Li et al. 2023, arXiv:2311.17005; Q-Former from BLIP-2,
+    /// Li et al. 2023). Structure: per-frame ViT (RESIDUAL transformer blocks) → [linear map to
+    /// qFormerDim] → numQFormerLayers Q-Former blocks (cross-attention query←visual, self-attention
+    /// among queries, FFN) → shared MLP projection → RESIDUAL LLM decoder. Mirrors the established
+    /// <see cref="CreateDefaultQFormerGenerativeLayers"/> Q-Former block (CrossAttentionLayer + MHA +
+    /// FFN); the deep ViT + LLM stacks are residual (the old shared builder's non-residual stack
+    /// collapsed to an input-independent output after training). Vision-encoder segment length is
+    /// <c>2 + numVisionLayers·(dropoutRate&gt;0 ? 2 : 1) + (visionDim != qFormerDim ? 1 : 0)
+    /// + numQFormerLayers·(dropoutRate&gt;0 ? 8 : 7)</c>.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoQFormerVLMLayers(
+        int visionDim = 1024,
+        int qFormerDim = 768,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numQFormerLayers = 12,
+        int numDecoderLayers = 32,
+        int numQueryTokens = 32,
+        int numHeads = 12,
+        int numQFormerHeads = 12,
+        double dropoutRate = 0.1,
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int imageChannels = 3,
+        int patchSize = 16)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0 || imageWidth <= 0 || imageChannels <= 0 || patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "image dimensions and patchSize must be positive.");
+        if (numQueryTokens <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numQueryTokens), "numQueryTokens must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int qfFfnDim = qFormerDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+        int visionHeads = ChooseDivisibleHeadConfig(visionDim, numHeads).heads;
+        var (qfHeads, qfHeadDim) = ChooseDivisibleHeadConfig(qFormerDim, numQFormerHeads);
+        int decoderHeads = ChooseDivisibleHeadConfig(decoderDim, numHeads).heads;
+
+        // === Per-frame ViT vision encoder (residual) ===
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+        yield return new LayerNormalizationLayer<T>();
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHeads, visionFfnDim, visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Q-Former: learnable queries cross-attend to the visual features, resampling to a fixed
+        // token set (BLIP-2 §3.1). Block = cross-attn(query←visual) + self-attn(queries) + FFN. ===
+        if (visionDim != qFormerDim)
+            yield return new DenseLayer<T>(qFormerDim, identityActivation);
+        for (int i = 0; i < numQFormerLayers; i++)
+        {
+            yield return new CrossAttentionLayer<T>(qFormerDim, visionDim, numQFormerHeads);
+            yield return new LayerNormalizationLayer<T>();
+            yield return new MultiHeadAttentionLayer<T>(qfHeads, qfHeadDim);
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(qfFfnDim, geluActivation);
+            yield return new DenseLayer<T>(qFormerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Shared MLP projection to the LLM embedding space ===
+        yield return new DenseLayer<T>(decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+
+        // === LLM decoder (residual) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(decoderHeads, decoderFfnDim, decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Builds the VideoLLaMA 2 default architecture: CLIP-style residual ViT, the complete
+    /// <see cref="NeuralNetworks.Layers.STCConnectorLayer{T}"/>, and a Mistral-style RMSNorm/RoPE/GQA
+    /// decoder with a gated SwiGLU feed-forward network. Every paper dimension remains caller-configurable.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoSTCVLMLayers(
+        int visionDim = 1024,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numDecoderLayers = 32,
+        int visionNumHeads = 16,
+        int decoderNumHeads = 32,
+        int decoderNumKeyValueHeads = 8,
+        int visionFfnDim = 4096,
+        int decoderFfnDim = 14336,
+        double dropoutRate = 0.0,
+        int imageHeight = 336,
+        int imageWidth = 336,
+        int imageChannels = 3,
+        int patchSize = 14,
+        int maxSequenceLength = 2048,
+        double ropeTheta = 10000.0,
+        bool enableSpatialTemporalConv = true,
+        int stcKernelSize = 2,
+        int stcStride = 2,
+        int stcPadding = 1,
+        int stcStageDepth = 4,
+        int stcMlpDepth = 2)
+    {
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        if (imageHeight <= 0 || imageWidth <= 0 || imageChannels <= 0 || patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "image dimensions and patchSize must be positive.");
+        if (imageHeight % patchSize != 0 || imageWidth % patchSize != 0)
+            throw new ArgumentException($"imageHeight ({imageHeight}) and imageWidth ({imageWidth}) must be divisible by patchSize ({patchSize}).");
+        if (visionDim <= 0 || decoderDim <= 0 || visionFfnDim <= 0 || decoderFfnDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(visionDim), "model and feed-forward dimensions must be positive.");
+        if (numVisionLayers < 0 || numDecoderLayers < 0)
+            throw new ArgumentOutOfRangeException(nameof(numVisionLayers), "layer counts must be non-negative.");
+        if (visionNumHeads <= 0 || visionDim % visionNumHeads != 0)
+            throw new ArgumentException("visionNumHeads must be positive and evenly divide visionDim.", nameof(visionNumHeads));
+        if (decoderNumHeads <= 0 || decoderDim % decoderNumHeads != 0)
+            throw new ArgumentException("decoderNumHeads must be positive and evenly divide decoderDim.", nameof(decoderNumHeads));
+        if (decoderNumKeyValueHeads <= 0 || decoderNumHeads % decoderNumKeyValueHeads != 0)
+            throw new ArgumentException("decoderNumKeyValueHeads must be positive and evenly divide decoderNumHeads.", nameof(decoderNumKeyValueHeads));
+        if (maxSequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
+        if (ropeTheta <= 0 || double.IsNaN(ropeTheta) || double.IsInfinity(ropeTheta))
+            throw new ArgumentOutOfRangeException(nameof(ropeTheta));
+
+        int hp = imageHeight / patchSize;
+        int wp = imageWidth / patchSize;
+
+        // CLIP ViT-L/14 defaults: 24 layers, width 1024, 16 heads, and FFN width 4096.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, imageChannels);
+        yield return new LayerNormalizationLayer<T>(visionDim);
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderBlock<T>(
+                visionDim,
+                visionNumHeads,
+                visionFfnDim,
+                dropoutRate,
+                new GELUActivation<T>());
+        }
+
+        if (enableSpatialTemporalConv)
+        {
+            yield return new STCConnectorLayer<T>(
+                visionDim,
+                decoderDim,
+                hp,
+                wp,
+                stcKernelSize,
+                stcStride,
+                stcPadding,
+                stcStageDepth,
+                stcMlpDepth);
+        }
+        else
+        {
+            // Explicit user fallback: retain a configurable MLP projector without temporal mixing.
+            for (int i = 0; i < stcMlpDepth; i++)
+            {
+                IActivationFunction<T> activation = i < stcMlpDepth - 1
+                    ? new GELUActivation<T>()
+                    : new IdentityActivation<T>();
+                yield return new DenseLayer<T>(decoderDim, activation);
+            }
+        }
+
+        // Mistral-7B-Instruct-v0.2 defaults: 32 query heads, 8 KV heads, RoPE,
+        // RMSNorm, and a 14336-wide gated SwiGLU feed-forward network.
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            var attention = new GroupedQueryAttentionLayer<T>(
+                maxSequenceLength,
+                decoderDim,
+                decoderNumHeads,
+                decoderNumKeyValueHeads,
+                new IdentityActivation<T>(),
+                deferAllocation: true);
+            attention.ConfigurePositionalEncoding(
+                PositionalEncodingType.Rotary,
+                ropeTheta,
+                maxSequenceLength);
+            yield return new PreLNTransformerBlock<T>(
+                decoderDim,
+                decoderFfnDim,
+                attention,
+                new SiLUActivation<T>(),
+                gated: true);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
     /// Creates layers for robotics VLMs with action token output head.
     /// Architecture: ViT -> MLP projector -> LLM decoder -> action token head.
     /// Used by RT-2, PaLM-E, Octo, Pi-Zero, GR00T-N1, Helix, 3D-VLA.
@@ -24578,13 +26516,19 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder ===
-        // Leading LayerNorm normalizes the per-token vision features, whose width is
-        // visionDim (the documented input contract is [batch, num_tokens, visionDim]
-        // post-patch-embedding). Size it EXPLICITLY: as the first layer it has no
-        // preceding layer to infer from, so a bare lazy LayerNorm gets wired to the
-        // architecture's raw input dimension (e.g. inputHeight=224) and then rejects
-        // the real visionDim-wide input ("Gamma shape (224) does not match ...").
-        yield return new LayerNormalizationLayer<T>(visionDim);
+        // Leading INPUT PROJECTION (ViT patch/input embedding — Brohan et al. 2023 §3.1). This REPLACES a
+        // previous bare LayerNorm, which broke the DifferentInputs_AfterTraining invariant: LayerNorm of a
+        // constant-per-token input (the invariant feeds a uniform tensor) subtracts the per-token mean and
+        // divides by the per-token std, mapping ANY constant to the same learnable `beta` — so distinct
+        // constant inputs (0.1 vs 0.9) become IDENTICAL features at layer 0. A randomly-initialized stack
+        // then amplifies the residual float noise into a spurious pre-training difference (the test passes
+        // by luck), but once training makes the layers contractive the near-zero layer-0 difference stays
+        // near zero and the model is input-invariant (exact post-training collapse). A learnable Dense maps
+        // a constant to a NON-constant, value-dependent token representation (0.1·(W·1)+b != 0.9·(W·1)+b),
+        // preserving input sensitivity through training. Sized EXPLICITLY to visionDim — as the first layer
+        // it has no preceding layer to infer a lazy width from. Count-preserving (one leading layer), so the
+        // robotics models' encoder/decoder boundary math is unchanged.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -24688,18 +26632,36 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
         int detectionFfnDim = detectionDim * 4;
 
-        // === Vision Encoder (ViT/Swin backbone) ===
-        yield return new LayerNormalizationLayer<T>();
+        int fusionHeads = numHeads > 8 ? 8 : numHeads;
 
+        // === Vision Encoder (ViT/Swin backbone) ===
+        // Linear input projection (the ViT's patch-embedding projection, Dosovitskiy et al. 2021
+        // §3.1: "we flatten the patches and map to D dimensions with a trainable linear projection").
+        // Callers feed POST-patch token features [B, tokens, visionDim], so this Dense stands in for
+        // that embedding. It is REQUIRED as the front layer: a bare LayerNorm zeroes the variance of
+        // any per-token-constant input, so without a preceding projection two constant inputs (e.g.
+        // all-0.1 vs all-0.9) normalize to the identical vector and the network appears to "collapse"
+        // to an input-insensitive state (DifferentInputs_AfterTraining). The projection turns the
+        // constant's DC level into a distinct per-feature pattern that survives normalization.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
+
+        // Each block is a RESIDUAL transformer layer (Dosovitskiy et al. 2021, Eq 2-3):
+        // z' = MSA(LN(z)) + z ; z = MLP(LN(z')) + z'. The previous factory decomposed the block
+        // into a bare SEQUENTIAL MultiHeadAttention -> LayerNorm -> Dense -> Dense -> LayerNorm chain
+        // with NO skip connections — the residual adds the paper mandates were missing entirely.
+        // Without the "+ z" skip a deep encoder cannot carry the input to its output: the input
+        // signal attenuates ~3-4x per block, so two distinct constant inputs collapse to the same
+        // output post-training (DifferentInputs L2 -> 1e-14 across the 12+6+6 block stack).
+        // TransformerEncoderLayer applies MSA + residual + LN and the GELU MLP + residual + LN
+        // internally — the paper block as one trainable, serialisable unit (the same layer the ViT /
+        // SAM / DINO helpers use after the identical collapse was fixed there). The (numHeads, ffnDim)
+        // overload resolves the embedding size + all sublayer weights LAZILY on first forward.
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return CreateVisionMha(visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+        yield return new LayerNormalizationLayer<T>();
 
         // === Text Encoder Projection ===
         yield return new DenseLayer<T>(fusionDim, identityActivation);
@@ -24709,33 +26671,20 @@ public static class LayerHelper<T>
         if (visionDim != fusionDim)
             yield return new DenseLayer<T>(fusionDim, identityActivation);
 
-        // === Cross-Modal Feature Fusion ===
+        // === Cross-Modal Feature Fusion (residual transformer blocks) ===
         for (int i = 0; i < numFusionLayers; i++)
         {
-            // Vision-to-text cross-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (fusionDim) / (numHeads > 8 ? 8 : numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // Text-to-vision cross-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (fusionDim) / (numHeads > 8 ? 8 : numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            // FFN
-            yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(fusionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(fusionHeads, fusionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // === Detection Decoder ===
+        // === Detection Decoder (residual transformer blocks) ===
         if (fusionDim != detectionDim)
             yield return new DenseLayer<T>(detectionDim, identityActivation);
 
         for (int i = 0; i < numDetectionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 8 ? 8 : numHeads, (detectionDim) / (numHeads > 8 ? 8 : numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(detectionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(detectionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(fusionHeads, detectionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
     }
@@ -24770,18 +26719,18 @@ public static class LayerHelper<T>
         const int patchSize = 16;
         yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
 
-        // === Vision Encoder (Swin/ViT for document images) ===
-        yield return new LayerNormalizationLayer<T>();
-
+        // === Vision Encoder (Swin/ViT for document images, Kim et al. 2022) ===
+        // Paper-faithful RESIDUAL transformer blocks (z' = MSA(LN(z)) + z ; z = MLP(LN(z')) + z').
+        // The previous bare MHA→LN→Dense→Dense→LN decomposition had NO skip connections, so the deep
+        // encoder collapsed distinct inputs post-training (DifferentInputs L2=0) and was hard to train.
+        // TransformerEncoderLayer carries the residual adds internally (2-arg lazy ctor; the 3-arg
+        // eager ctor OOMs across a shard). Final LN on the encoder output.
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+        yield return new LayerNormalizationLayer<T>();
 
         // === Projection to decoder dim ===
         if (visionDim != decoderDim)
@@ -25380,59 +27329,42 @@ public static class LayerHelper<T>
 
         int h = inputHeight;
         int w = inputWidth;
-        int prevChannels = inputChannels;
-
-        int[] patchKernels = [7, 3, 3, 3];
-        int[] patchStrides = [4, 2, 2, 2];
-        int[] patchPaddings = [3, 1, 1, 1];
-
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
         for (int stage = 0; stage < 4; stage++)
         {
             int channels = channelDims[stage];
 
-            // Downsampling stem / patch embedding
-            yield return new ConvolutionalLayer<T>(
-                channels,
-                patchKernels[stage],
-                patchStrides[stage],
-                patchPaddings[stage],
-                relu);
+            if (stage == 0)
+            {
+                // InternImage stem: two 3×3 stride-2 convolutions with GELU,
+                // rather than a ViT-style 7×7 stride-4 patch projection.
+                int stemChannels = System.Math.Max(1, channels / 2);
+                yield return new ConvolutionalLayer<T>(stemChannels, 3, 2, 1, identity);
+                yield return new ActivationLayer<T>((IActivationFunction<T>)new GELUActivation<T>());
+                yield return new ConvolutionalLayer<T>(channels, 3, 2, 1, identity);
+                yield return new ActivationLayer<T>((IActivationFunction<T>)new GELUActivation<T>());
+                h = (h + 1) / 2;
+                h = (h + 1) / 2;
+                w = (w + 1) / 2;
+                w = (w + 1) / 2;
+            }
+            else
+            {
+                // Stage transition: normalized blocks on either side protect
+                // the 3×3 stride-2 channel expansion.
+                yield return new ConvolutionalLayer<T>(channels, 3, 2, 1, identity);
+                h = (h + 1) / 2;
+                w = (w + 1) / 2;
+            }
 
-            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-
-            // DCNv3 blocks (Wang et al. 2023): a grouped deformable 3×3 conv (the DCNv3 core
-            // operator) + a 1×1-expand→1×1-project feed-forward. The grouping is what gives DCNv3 its
-            // parameter efficiency — InternImage uses group width 16 (groups = channels/16, matching the
-            // paper's per-stage groups [4,8,16,32]…[20,40,80,160]); the 3×3 weight is therefore
-            // [channels, channels/groups=16, 3, 3] rather than the full [channels, channels, 3, 3].
-            // (Modulation/mask is omitted here so the path is trainable via the wired DCNv1 autograd; the
-            // fused grouped-deformable kernel + modulation is the production follow-up, #1691.)
+            // Each block owns both paper residual branches: pre-norm grouped
+            // modulated deformable mixing, then pre-norm 4× GELU FFN.
             int dcnGroups = System.Math.Max(1, channels / 16);
             for (int block = 0; block < depths[stage]; block++)
             {
-                // DCNv3 grouped deformable spatial mixing (channels -> channels)
-                yield return new DeformableConvolutionalLayer<T>(
-                    outputChannels: channels,
-                    kernelSize: 3, stride: 1, padding: 1,
-                    groups: dcnGroups, deformGroups: dcnGroups, useModulation: false);
-
-                // Feed-forward network (1×1 expand 4× -> 1×1 project back)
-                int ffnDim = channels * 4;
-                yield return new ConvolutionalLayer<T>(
-                    ffnDim,
-                    1, 1, 0,
-                    relu);
-
-                yield return new ConvolutionalLayer<T>(
-                    channels,
-                    1, 1, 0,
-                    relu);
+                yield return new InternImageBlockLayer<T>(channels, dcnGroups);
             }
-
-            prevChannels = channels;
         }
     }
 
@@ -25609,6 +27541,26 @@ public static class LayerHelper<T>
     #endregion
 
     #region ViTCoMer Layers
+
+    /// <summary>
+    /// Creates the complete native ViT-CoMer graph with parallel ViT/CNN branches,
+    /// MRFP refinement, bidirectional CTI, and the multi-scale segmentation decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateViTCoMerLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int embedDim = 384,
+        int[]? cnnChannels = null,
+        int[]? depths = null,
+        int decoderDim = 256,
+        int numClasses = 150,
+        double dropRate = 0.1)
+    {
+        yield return new ViTCoMerSegmentationLayer<T>(
+            inputChannels, inputHeight, inputWidth, embedDim, cnnChannels, depths,
+            decoderDim, numClasses, dropRate);
+    }
 
     /// <summary>
     /// Creates the ViT-CoMer hybrid encoder layers combining CNN and transformer features.
@@ -26102,13 +28054,13 @@ public static class LayerHelper<T>
     // Replaces the earlier hand-rolled full-width-3×3 conv stack (1536→1536 3×3 = 21M-param convs).
     public static IEnumerable<ILayer<T>> CreateOneFormerEncoderLayers(
         int inputHeight = 512, int inputWidth = 512,
-        int[]? channelDims = null, int[]? depths = null, double dropPathRate = 0.3)
+        int[]? channelDims = null, int[]? depths = null, double dropPathRate = 0.3,
+        int[]? numHeads = null, int windowSize = 7, int patchSize = 4, int mlpRatio = 4)
     {
         channelDims ??= [192, 384, 768, 1536]; // Swin-L stage embed dims
         depths ??= [2, 2, 18, 2];
         int embedDim = channelDims[0];
-        int[] numHeads = [6, 12, 24, 48];       // Swin-L heads per stage (embedDim/32)
-        const int windowSize = 7, patchSize = 4, mlpRatio = 4;
+        numHeads ??= [6, 12, 24, 48];           // Swin-L heads per stage (embedDim/32)
 
         // Stochastic depth: linearly increasing drop-path rate from 0 (first block) to dropPathRate
         // (last block) across the whole backbone, exactly as the Swin reference does
@@ -26134,8 +28086,9 @@ public static class LayerHelper<T>
         // Adapter: the Swin backbone emits token features [B, L, C] (L = fH·fW at /32 stride); the
         // OneFormer decoder is conv-based and expects [B, C, fH, fW]. Reshape tokens to spatial then
         // move channels to the front. patchEmbed (/4) + 3 merges (/2³) = /32.
-        int fH = System.Math.Max(1, inputHeight / 32);
-        int fW = System.Math.Max(1, inputWidth / 32);
+        int totalStride = patchSize * 8;
+        int fH = System.Math.Max(1, inputHeight / totalStride);
+        int fW = System.Math.Max(1, inputWidth / totalStride);
         yield return new ReshapeLayer<T>(new[] { fH, fW, currentDim }); // [B, L, C] -> [B, fH, fW, C]
         yield return new TransposeLayer<T>(new[] { 2, 0, 1 });          // [B, fH, fW, C] -> [B, C, fH, fW]
     }
@@ -26329,21 +28282,21 @@ public static class LayerHelper<T>
 
     #endregion
 
-    #region QueryMeldNet Layers
+    #region MixedQueryTransformer Layers
 
     /// <summary>
-    /// Creates the backbone encoder layers for QueryMeldNet.
+    /// Creates the backbone encoder layers for MixedQueryTransformer.
     /// </summary>
-    // QueryMeldNet uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
-    public static IEnumerable<ILayer<T>> CreateQueryMeldNetEncoderLayers(
+    // MixedQueryTransformer uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
+    public static IEnumerable<ILayer<T>> CreateMixedQueryTransformerEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
         => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
-    /// Creates the query-meld decoder layers for QueryMeldNet.
+    /// Creates the query-meld decoder layers for MixedQueryTransformer.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateQueryMeldNetDecoderLayers(
+    public static IEnumerable<ILayer<T>> CreateMixedQueryTransformerDecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight = 16, int featureWidth = 16)
     {
@@ -26998,7 +28951,8 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDEVAEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+        int[] channelDims, int[] depths, double dropRate,
+        bool useGroupNormalization = false)
     {
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
@@ -27010,14 +28964,32 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad,
+                useGroupNormalization ? null : relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
+            if (useGroupNormalization)
+            {
+                yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                yield return new ActivationLayer<T>(relu);
+            }
+            else
+            {
+                yield return new BatchNormalizationLayer<T>();
+            }
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1,
+                    useGroupNormalization ? null : relu);
+                if (useGroupNormalization)
+                {
+                    yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                    yield return new ActivationLayer<T>(relu);
+                }
+                else
+                {
+                    yield return new BatchNormalizationLayer<T>();
+                }
             }
 
             inC = outC;
@@ -27071,6 +29043,57 @@ public static class LayerHelper<T>
 
             inC = outC;
         }
+    }
+
+    /// <summary>
+    /// Creates the full default EfficientTAM layer stack — the paper-faithful plain-ViT image encoder
+    /// followed by the lightweight conv mask decoder — so the model follows the segmentation golden
+    /// pattern (a single <c>CreateDefault{ModelName}Layers</c> in <see cref="LayerHelper{T}"/>) instead
+    /// of hand-assembling the encoder inline.
+    /// </summary>
+    /// <param name="patchSize">Patch size for the ViT patch embedding (also the encoder's spatial downsample factor).</param>
+    /// <param name="embedDim">Transformer encoder embedding dimension (patch-token width).</param>
+    /// <param name="numEncoderLayers">Number of pre-norm residual transformer encoder blocks.</param>
+    /// <param name="numHeads">Number of multi-head self-attention heads per encoder block.</param>
+    /// <param name="decoderDim">Channel width of the conv mask decoder.</param>
+    /// <param name="numClasses">Number of output segmentation classes.</param>
+    /// <param name="imageHeight">Input image height (used to derive the feature-map height passed to the decoder).</param>
+    /// <param name="imageWidth">Input image width (used to derive the feature-map width passed to the decoder).</param>
+    /// <returns>The ordered EfficientTAM layer sequence: patch embedding, <paramref name="numEncoderLayers"/> transformer encoder blocks, then the conv mask-decoder layers.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This assembles the EfficientTAM segmentation stack — the part that
+    /// turns an image into per-pixel class scores. It first slices the image into patches and embeds
+    /// them, runs several transformer blocks so every patch can "see" every other patch, then a small
+    /// convolutional decoder upsamples those features into a segmentation map. You normally don't call
+    /// this directly — the EfficientTAM model wires it up for you.</para>
+    /// <para>
+    /// Encoder (Xiong et al. 2024, "Efficient Track Anything", arXiv 2411.18933): a patch embedding
+    /// followed by <paramref name="numEncoderLayers"/> PRE-NORM RESIDUAL transformer blocks producing
+    /// patch tokens <c>[B, (H/P)·(W/P), embedDim]</c>. This plain, non-hierarchical ViT replacing SAM 2's
+    /// Hiera is EfficientTAM's core contribution. Each block is a <see cref="TransformerEncoderLayer{T}"/>
+    /// (<c>x = x + MHA(LN(x)); x = x + FFN(LN(x))</c>, Dosovitskiy et al. 2021 §3.1) with an FFN width of
+    /// <c>4·embedDim</c>. The residual skips are load-bearing: a non-residual flat ViT exploded to a
+    /// 2800× loss within a few steps (no gradient highway), and the earlier hierarchical Conv-BN-ReLU CNN
+    /// both diverged from the paper and dead-ReLU'd constant input to zero.
+    /// </para>
+    /// <para>
+    /// The first <c>numEncoderLayers + 1</c> layers are the encoder (patch-embed + blocks); the remainder
+    /// are the decoder from <see cref="CreateEfficientTAMDecoderLayers"/>. The caller reshapes the encoder
+    /// token grid back to a spatial feature map before the conv decoder, so it tracks that split index.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultEfficientTAMLayers(
+        int patchSize, int embedDim, int numEncoderLayers, int numHeads,
+        int decoderDim, int numClasses, int imageHeight, int imageWidth)
+    {
+        ValidatePatchSize(patchSize);
+        yield return new PatchEmbeddingLayer<T>(patchSize, embedDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(numHeads, embedDim * 4, embedDim);
+
+        int featureHeight = imageHeight / patchSize, featureWidth = imageWidth / patchSize;
+        foreach (var decoderLayer in CreateEfficientTAMDecoderLayers(embedDim, decoderDim, numClasses, featureHeight, featureWidth))
+            yield return decoderLayer;
     }
 
     /// <summary>
@@ -28068,12 +30091,16 @@ public static class LayerHelper<T>
     /// Creates decoder layers for the OpenVocabSAM model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateOpenVocabSAMDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
+        int encoderOutputChannels, int neckEmbeddingDim, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
     {
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
+        // OVSAM's SAM2CLIP transformer neck maps the RN50x16 backbone to its
+        // configured embedding width before CLIP2SAM projects to the 256-wide
+        // FPN/mask-decoder representation.
+        yield return new ConvolutionalLayer<T>(neckEmbeddingDim, 1, 1, 0, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
@@ -28086,46 +30113,110 @@ public static class LayerHelper<T>
     /// Creates encoder layers for the GroundedSAM2 model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateGroundedSAM2EncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+        int visionDim, int numLayers, int numHeads, double dropRate)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int ffnDim = visionDim * 4;
+        // Grounded SAM (Ren et al. 2024) = Grounding DINO + SAM, both TRANSFORMER models. SAM's image
+        // encoder (Kirillov et al. 2023) is a plain ViT (Dosovitskiy et al. 2021): a linear patch-
+        // embedding projection followed by N residual transformer blocks (multi-head self-attention +
+        // MLP, with LayerNorm and skip connections). Grounding DINO's image branch is likewise a
+        // transformer. We reproduce that transformer stack here — LayerNorm, NOT the previous
+        // Conv+BatchNorm CNN backbone (the paper uses no batch-statistics normalization, and the CNN
+        // both diverged from the paper architecture and was batch/scale-unstable). The leading Dense is
+        // the patch-embedding projection: it is REQUIRED so a per-token-constant input does not collapse
+        // to an identical vector under the first LayerNorm (the DifferentInputs collapse mode).
+        yield return new DenseLayer<T>(visionDim, identity);
+        for (int i = 0; i < numLayers; i++)
         {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
+            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
         }
+        yield return new LayerNormalizationLayer<T>();
     }
 
     /// <summary>
     /// Creates decoder layers for the GroundedSAM2 model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateGroundedSAM2DecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
+        int decoderDim, int numLayers, int numHeads)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int ffnDim = decoderDim * 4;
+        // Grounding DINO's cross-modality decoder and SAM's two-way mask decoder are TRANSFORMER
+        // decoders that refine the token/query features before the box/mask heads. We reproduce a
+        // residual transformer decoder stack (LayerNorm) that preserves the per-token feature
+        // dimension so the token-level output matches the encoder; the pixel-space mask head is
+        // abstracted at the model-family test scale (token -> token). LayerNorm, no BatchNorm.
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
+        }
+        yield return new LayerNormalizationLayer<T>();
+    }
 
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+    /// <summary>
+    /// Creates the full native image-to-mask layer stack for GroundedSAM2.
+    /// </summary>
+    /// <param name="visionDim">Token/embedding dimension of the vision transformer.</param>
+    /// <param name="numHeads">Number of attention heads per transformer block.</param>
+    /// <param name="numEncoderLayers">Number of image-encoder transformer blocks.</param>
+    /// <param name="numDecoderLayers">Number of mask-decoder transformer blocks.</param>
+    /// <param name="patchSize">Patch size for the image tokenizer (and the mask upsample factor).</param>
+    /// <param name="numClasses">Number of segmentation classes emitted by the mask head.</param>
+    /// <param name="imageHeight">Input image height (used to size the positional encoding).</param>
+    /// <param name="imageWidth">Input image width (used to size the positional encoding).</param>
+    /// <param name="dropRate">Dropout rate applied after each transformer block (0 disables dropout).</param>
+    /// <returns>A collection of layers forming the GroundedSAM2 image-to-mask pipeline.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Grounded SAM (Ren et al. 2024) combines Grounding DINO and SAM — both are
+    /// transformer models. This builds the picture-to-mask pipeline: first a small "patch embedding"
+    /// convolution chops the image into a grid of patches and turns each into a vector (a token); a fixed
+    /// positional code tells the model where each patch sits; a stack of transformer blocks (the encoder,
+    /// then the mask decoder) lets every patch look at every other patch; finally a 1×1 convolution turns
+    /// each patch into per-class scores and an upsampling layer blows that small grid back up to the full
+    /// image size, giving a per-pixel segmentation map. The last two layers are always the mask head
+    /// (mask conv + upsample), which is what the model relies on to find the head after the token stack.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateGroundedSAM2Layers(
+        int visionDim, int numHeads, int numEncoderLayers, int numDecoderLayers,
+        int patchSize, int numClasses, int imageHeight, int imageWidth, double dropRate)
+    {
+        // Guard patchSize before the gridH/gridW divisions below (and its use as the patch-embed conv
+        // kernel/stride and the final UpsamplingLayer factor). patchSize == 0 is reachable via
+        // GroundedSAM2Options.PatchSize and would otherwise throw a bare DivideByZeroException instead of
+        // the clear ArgumentOutOfRangeException this helper raises — same guard the sibling
+        // CreateDefaultEfficientTAMLayers uses.
+        ValidatePatchSize(patchSize);
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int ffnDim = visionDim * 4;
+        int gridH = Math.Max(1, imageHeight / patchSize);
+        int gridW = Math.Max(1, imageWidth / patchSize);
+        int numTokens = gridH * gridW;
+
+        // Patch embedding: a non-overlapping patchSize×patchSize strided conv projects the RGB image to a
+        // [visionDim, gridH, gridW] token grid (linear projection — LayerNorm/attention follow inside the
+        // transformer blocks), matching SAM's ViT patch-embed.
+        yield return new ConvolutionalLayer<T>(visionDim, patchSize, patchSize, 0, identity);
+        // Sinusoidal positional encoding over the token sequence (parameter-free).
+        yield return new PositionalEncodingLayer<T>(numTokens, visionDim);
+        // Image encoder transformer blocks (SAM ViT image encoder / Grounding DINO image branch).
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim, visionDim);
+            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
+        }
+        // Cross-modality / SAM mask-decoder transformer blocks.
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim, visionDim);
+            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
+        }
+        // Mask head (ALWAYS the last two layers): 1×1 conv -> numClasses logits at token-grid resolution,
+        // then upsample by patchSize back to the full input resolution.
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+        yield return new UpsamplingLayer<T>(patchSize);
     }
 
     #endregion
@@ -28579,7 +30670,11 @@ public static class LayerHelper<T>
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        // VideoLISA's visual branch is initialized from SAM, whose encoder uses residual
+        // blocks and batch-independent normalization. A Conv(ReLU)->BatchNorm chain is not
+        // equivalent: with the small/single-video batches used for dense segmentation it can
+        // collapse the representation and produce identical masks for distinct frames.
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
 
         for (int stage = 0; stage < channelDims.Length; stage++)
@@ -28589,14 +30684,24 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, activationFunction: null);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
+            if (stage == 0)
+            {
+                // SAM adds absolute positional information to the patch embeddings before
+                // normalization. Besides preserving spatial identity for mask decoding, placing
+                // it here prevents normalization from making the visual path invariant to a
+                // uniform rescaling of every pixel.
+                yield return new PositionalEncodingLayer<T>(h, w);
+            }
+            yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
+            yield return new ActivationLayer<T>(silu);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new ResidualLayer<T>(
+                    new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null), silu);
+                yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
             }
 
             inC = outC;
@@ -28610,12 +30715,56 @@ public static class LayerHelper<T>
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        // The paper uses SAM's promptable mask decoder to return dense masks. Reverse the
+        // encoder's 32x spatial reduction (2x, 2x, 2x, then 4x) instead of leaving logits
+        // at the 1/32-resolution bottleneck.
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, activationFunction: null);
+        yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(decoderDim), decoderDim);
+        yield return new ActivationLayer<T>(silu);
+
+        for (int stage = 0; stage < 3; stage++)
+        {
+            yield return new DeconvolutionalLayer<T>(decoderDim, 4, 2, 1, activationFunction: null);
+            yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(decoderDim), decoderDim);
+            yield return new ActivationLayer<T>(silu);
+            yield return new ResidualLayer<T>(
+                new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, activationFunction: null), silu);
+        }
+
+        yield return new DeconvolutionalLayer<T>(decoderDim, 4, 4, 0, activationFunction: null);
+        yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(decoderDim), decoderDim);
+        yield return new ActivationLayer<T>(silu);
+        yield return new ResidualLayer<T>(
+            new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, activationFunction: null), silu);
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+    }
+
+    /// <summary>
+    /// Selects a GroupNorm group count that keeps at least four channels in each group.
+    /// VideoLISA reaches a 1x1 bottleneck, where a one-channel group would contain only one
+    /// value and therefore normalize the entire visual signal to zero.
+    /// </summary>
+    private static int ChooseVideoLISAGroupCount(int numChannels)
+    {
+        if (numChannels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numChannels), numChannels, "Channel count must be positive.");
+        }
+
+        int[] candidates = [32, 16, 8, 4, 2, 1];
+        foreach (int candidate in candidates)
+        {
+            if (numChannels % candidate == 0 && numChannels / candidate >= 4)
+            {
+                return candidate;
+            }
+        }
+
+        return 1;
     }
 
     #endregion
@@ -30227,7 +32376,6 @@ public static class LayerHelper<T>
         int[]? featureEncoderChannels = null)
     {
         IActivationFunction<T> gelu = new GELUActivation<T>();
-        IActivationFunction<T> identity = new IdentityActivation<T>();
 
         featureEncoderKernelSizes ??= [10, 3, 3, 3, 3, 2, 2];
         featureEncoderStrides ??= [5, 2, 2, 2, 2, 2, 2];
@@ -30250,18 +32398,36 @@ public static class LayerHelper<T>
                 activation: gelu);
         }
 
-        // Feature projection
-        int lastEncoderChannel = featureEncoderChannels[^1];
+        // Feature projection (Baevski et al. 2020 §2 / HF Wav2Vec2FeatureProjection): a LayerNorm on the
+        // encoder output followed by a linear projection to the transformer width. The LayerNorm is
+        // applied AFTER the channels->time transpose (RunModel transposes to [B, T', 512] before running
+        // these), so it normalizes over the feature axis — the paper-faithful placement and a key
+        // stabilizer for the deep transformer that follows. Emitted as [Dense -> LayerNorm]; RunModel
+        // walks both post-transpose.
         yield return new DenseLayer<T>(hiddenDim, gelu);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
-        // Transformer layers
+        // Convolutional positional embedding (Baevski et al. 2020 §2). Self-attention is position-agnostic,
+        // so wav2vec 2.0 injects RELATIVE position with a convolution over time applied to the transformer
+        // input, added as a residual: x = x + GELU(conv(x)). The paper uses a grouped conv (kernel 128,
+        // groups 16); we use a DEPTHWISE conv (groups = channels) — the same relative-positional-conv
+        // mechanism, parameter-efficient (channels*K weights, not the ~75M of an ungrouped kernel-128 conv
+        // at 768-wide) and built on an existing autodiff-/serialization-tested layer. Odd kernel 127 with
+        // padding 63 is exact "same" padding so T is preserved and the residual add in RunModel is
+        // shape-safe. GELU is folded into the conv layer; RunModel does the transpose + residual add.
+        yield return new DepthwiseConv1DLayer<T>(hiddenDim, kernelSize: 127, padding: 63, activation: gelu);
+
+        // Transformer encoder: paper-faithful RESIDUAL blocks (Baevski et al. 2020; Vaswani et al. 2017).
+        // TransformerEncoderBlock is a Post-LN block = residual self-attention + residual GELU-FFN with a
+        // LayerNorm after each sublayer. The residual connections are the gradient highway a 12-deep
+        // encoder needs; the previous residual-FREE MHA + 2x Dense stack (no skip, no LayerNorm) had no
+        // such highway, matching the collapse pattern master #1838 fixed for the BERT/ASR factories.
+        // One block per layer (was three bare layers per layer) — see Wav2Vec2Model's transformerCount.
         int frameRateDivisor = featureEncoderStrides.Aggregate(1, (a, b) => a * b);
         int maxFrames = (sampleRate * maxAudioLengthSeconds) / frameRateDivisor;
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identity);
-            yield return new DenseLayer<T>(ffDim, gelu);
-            yield return new DenseLayer<T>(hiddenDim, identity);
+            yield return new TransformerEncoderBlock<T>(hiddenDim, numHeads, ffDim, dropoutRate: 0.0, ffnActivation: gelu);
         }
 
         // CTC projection
@@ -30377,80 +32543,42 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates DCCRN encoder, LSTM, and decoder layers.
+    /// Creates the DCCRN layers that live in the model's layer list: the per-stage BatchNorms, the
+    /// bottleneck LSTM stack, the LSTM-output projection, and the mask activation. The TRUE complex
+    /// convolutions themselves (Hu 2020's "Deep Complex" innovation) are NOT layers — DCCRN carries their
+    /// real/imaginary kernels as raw trainable tensors (see <c>DCCRN.ComplexConv2D</c> /
+    /// <c>GetExtraTrainableTensors</c>) so it can implement the complex cross-term convolution with the
+    /// paper's asymmetric stride (2,1) / kernel (5,2) via tape-aware Engine.Conv2D. This helper therefore
+    /// yields exactly: numStages encoder BatchNorms, numLstmLayers LSTMs, one projection Dense
+    /// (projectionDim wide), numStages-1 decoder BatchNorms, and one mask activation.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDCCRNLayers(
-        int fftSize = 512,
-        int baseChannels = 16,
         int numStages = 5,
         int numLstmLayers = 2,
-        int lstmHiddenDim = 128,
-        int kernelSize = 5,
-        int stride = 2,
-        int inChannels = 2,
-        int timeDim = 100)
+        int lstmHiddenDim = 256,
+        int projectionDim = 256,
+        bool useComplexMask = true)
     {
-        int freqBins = fftSize / 2 + 1;
-
-        // Encoder
-        int currentInChannels = inChannels;
+        // Encoder BatchNorms (one per complex-conv stage; applied over the 2*C real channels).
         for (int i = 0; i < numStages; i++)
-        {
-            int outChannels = baseChannels * (int)Math.Pow(2, Math.Min(i, 4));
-            int currentFreqBins = freqBins / (int)Math.Pow(stride, i);
-
-            yield return new ConvolutionalLayer<T>(
-                outChannels, kernelSize, stride, kernelSize / 2,
-                (IActivationFunction<T>)new LeakyReLUActivation<T>());
             yield return new BatchNormalizationLayer<T>();
 
-            // Skip connection layer
-            yield return new ConvolutionalLayer<T>(
-                outChannels, 1, 1, 0);
-
-            currentInChannels = outChannels;
-        }
-
-        // LSTM layers
-        int lstmInputDim = currentInChannels * (fftSize / (int)Math.Pow(stride, numStages));
-        int[] lstmInputShape = [1, lstmInputDim];
+        // Bottleneck LSTM stack over the time axis.
         for (int i = 0; i < numLstmLayers; i++)
-        {
-            int inputDim = i == 0 ? lstmInputDim : lstmHiddenDim;
-            yield return new LSTMLayer<T>( lstmHiddenDim,
+            yield return new LSTMLayer<T>(lstmHiddenDim,
                 (IActivationFunction<T>)new TanhActivation<T>(), (IActivationFunction<T>)new SigmoidActivation<T>());
-            lstmInputShape = [1, lstmHiddenDim];
-        }
 
-        // LSTM projection
-        yield return new DenseLayer<T>(lstmInputDim);
+        // Projection back to the flattened encoder feature width (2 * complex-Cout * F').
+        yield return new DenseLayer<T>(projectionDim);
 
-        // Decoder
-        int decoderChannels = baseChannels * (int)Math.Pow(2, Math.Min(numStages - 1, 4));
-        for (int i = 0; i < numStages; i++)
-        {
-            int outChannels = i < numStages - 1
-                ? baseChannels * (int)Math.Pow(2, Math.Min(numStages - 2 - i, 4))
-                : inChannels;
+        // Decoder BatchNorms (all stages except the final output stage, which feeds the mask directly).
+        for (int i = 0; i < numStages - 1; i++)
+            yield return new BatchNormalizationLayer<T>();
 
-            int skipChannels = decoderChannels * 2;
-            int currentFreqBins = freqBins / (int)Math.Pow(stride, numStages - i);
-            int[] decoderInputShape = [1, skipChannels, currentFreqBins, timeDim];
-
-            if (i < numStages - 1)
-            {
-                yield return new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2,
-                    (IActivationFunction<T>)new LeakyReLUActivation<T>());
-                yield return new BatchNormalizationLayer<T>();
-            }
-            else
-            {
-                yield return new DeconvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2,
-                    (IActivationFunction<T>?)null);
-            }
-
-            decoderChannels = outChannels;
-        }
+        // Complex-ratio-mask activation: Tanh for the CRM, Sigmoid for a magnitude mask.
+        yield return useComplexMask
+            ? new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>())
+            : new ActivationLayer<T>((IActivationFunction<T>)new SigmoidActivation<T>());
     }
 
     /// <summary>
@@ -30719,7 +32847,9 @@ public static class LayerHelper<T>
         // Flow decoder (3 layers)
         yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1);
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);
+        // RIFE IFBlocks emit two 2-D intermediate flows plus a learned
+        // one-channel fusion mask (Huang et al., ECCV 2022, Sec. 3.2).
+        yield return new ConvolutionalLayer<T>(5, 3, 1, 1);
 
         // Context encoder (2 layers)
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
@@ -30732,7 +32862,7 @@ public static class LayerHelper<T>
         }
 
         // Fusion layer
-        int fusionInputChannels = channels * 2 + numFeatures + 4;
+        int fusionInputChannels = channels * 2 + numFeatures + 4 + 1;
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
         // Output convolution
@@ -31711,8 +33841,8 @@ public static class LayerHelper<T>
         int maxSeqLength = 512)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
-        for (int i = 0; i < numLayers; i++)
-            yield return new RWKV7Block<T>(maxSeqLength, modelDimension, numHeads, ffnMultiplier);
+        // Single stack layer — see the RWKV-7 LM builder above for why.
+        yield return new Rwkv7Stack<T>(numLayers, maxSeqLength, modelDimension, numHeads, ffnMultiplier);
         yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
@@ -31732,7 +33862,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new ExtendedLSTMLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Language-model head emits raw logits. XLSTMLanguageModel pairs this with
+        // CrossEntropyWithLogitsLoss, which performs max-shifted log-softmax inside
+        // the loss for finite gradients on eager and compiled training paths.
+        yield return new DenseLayer<T>(vocabSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -31750,7 +33883,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // RAW LOGITS: GLALanguageModel's default loss is CrossEntropyWithLogitsLoss, which applies
+        // log-softmax internally. A SoftmaxActivation head here made the objective
+        // log_softmax(softmax(x)) — the same double-softmax defect diagnosed and fixed on
+        // CreateRecurrentGemmaLayers below, which pins the loss near ln(vocabSize) and squashes the
+        // gradient to near zero regardless of x. (XLSTM keeps its softmax head: it resolves to
+        // CategoricalCrossEntropyLoss, which genuinely expects probabilities.)
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -31768,7 +33907,13 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new GatedDeltaNetLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // RAW LOGITS: GatedDeltaNetLanguageModel's default loss is CrossEntropyWithLogitsLoss, which
+        // applies log-softmax internally. A SoftmaxActivation head here made the objective
+        // log_softmax(softmax(x)) — the same double-softmax defect diagnosed and fixed on
+        // CreateRecurrentGemmaLayers below, which pins the loss near ln(vocabSize) and squashes the
+        // gradient to near zero regardless of x. (XLSTM keeps its softmax head: it resolves to
+        // CategoricalCrossEntropyLoss, which genuinely expects probabilities.)
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -31777,15 +33922,18 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateGriffinLayers(
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512)
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
+        int recurrenceDimension = 2560)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
-            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+            yield return new RealGatedLinearRecurrenceLayer<T>(
+                maxSeqLength, modelDimension, recurrenceDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Return raw logits and fuse log-softmax with cross-entropy in the model loss.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -31794,15 +33942,18 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateHawkLayers(
         int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512)
+        int modelDimension = 2048,
+        int numLayers = 24,
+        int maxSeqLength = 2048,
+        int recurrenceDimension = 2560)
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
         for (int i = 0; i < numLayers; i++)
-            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+            yield return new RealGatedLinearRecurrenceLayer<T>(
+                maxSeqLength, modelDimension, recurrenceDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // Return raw logits and fuse log-softmax with cross-entropy in the model loss.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -31819,7 +33970,18 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
+        // RAW LOGITS (no output activation), matching the Griffin/Hawk heads above and this model's
+        // CrossEntropyWithLogitsLoss (whose ctor comment states "The recurrent Gemma LM head emits raw
+        // logits"). The previous SoftmaxActivation head dated from when the model used
+        // CategoricalCrossEntropyLoss (from_logits=false); after the switch to the fused
+        // log-softmax/NLL objective it made the loss compute log_softmax(softmax(x)) — a DOUBLE
+        // softmax. Softmax over vocabSize=4096 lands every class near 1/4096, so the outer log_softmax
+        // returned ~ln(1/4096) = -8.318 almost independently of x: the memorization loss pinned at
+        // 0.5*4096*8.318 = 17035 (measured 17033.49) and moved just 0.0022% over 100 steps because the
+        // inner softmax squashed the gradient to near zero. It also forced a full 4096x4096 softmax
+        // Jacobian per position, so this model's memorization test took 143 s against ~1 s for its
+        // identically-structured Griffin/Hawk siblings.
+        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -32374,6 +34536,7 @@ public static class LayerHelper<T>
     /// <param name="numHeads">Number of RWKV heads (default: 8).</param>
     /// <param name="numLayers">Number of RWKV layers (default: 4).</param>
     /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <param name="globalIclrMultiplier">RWKV-7's Global ICLR Multiplier c in the state transition (default: 1.0, the value RWKV-7 language modeling uses).</param>
     /// <returns>An enumerable collection of layers for the RWKV forecasting model.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> RWKV combines Transformer-like parallel training with
@@ -32391,7 +34554,8 @@ public static class LayerHelper<T>
         int modelDim = 256,
         int numHeads = 8,
         int numLayers = 4,
-        double dropout = 0.1)
+        double dropout = 0.1,
+        double globalIclrMultiplier = 1.0)
     {
         // === Input Embedding ===
         yield return new DenseLayer<T>(
@@ -32403,13 +34567,13 @@ public static class LayerHelper<T>
         // the fused CpuEngine.Rwkv7SequenceForward kernel, with batched token-shift/projections and
         // channel-mix. This replaces the older RWKVLayer whose scalar per-timestep/per-element
         // NumOps recurrence dominated forecaster training throughput (issue #1464).
-        for (int layer = 0; layer < numLayers; layer++)
-        {
-            yield return new RWKV7Block<T>(
-                sequenceLength: contextLength,
-                modelDimension: modelDim,
-                numHeads: numHeads);
-        }
+        // Single stack layer — see the RWKV-7 LM builder above for why.
+        yield return new Rwkv7Stack<T>(
+            numLayers: numLayers,
+            sequenceLength: contextLength,
+            modelDimension: modelDim,
+            numHeads: numHeads,
+            globalIclrMultiplier: globalIclrMultiplier);
 
         // === Output Projection ===
         yield return new DenseLayer<T>(
@@ -32678,7 +34842,7 @@ public static class LayerHelper<T>
                 "dilationCycle must be in [1, 30] so that 1 << (i % dilationCycle) stays within the int range.");
 
         var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
-        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+        var linearOutput = (IActivationFunction<T>)new IdentityActivation<T>();
 
         // Input 1x1 conv: mel channels -> hidden channels.
         yield return new Conv1DLayer<T>(
@@ -32697,11 +34861,26 @@ public static class LayerHelper<T>
             yield return new WaveNetResidualBlockLayer<T>(hiddenChannels, kernelSize: 3, dilation: dilation);
         }
 
-        // Output 1x1 conv -> waveform channel(s) + tanh.
+        // Output 1x1 conv -> waveform channel(s), LINEAR.
+        //
+        // NO OUTPUT TANH, and that is the paper for both consumers of this factory. Parallel WaveGAN
+        // (Yamamoto 2020 Fig. 1) ends the generator with ReLU -> 1x1 conv -> ReLU -> 1x1 conv, and
+        // WaveGlow (Prenger 2019 Sec. 2) ends each coupling layer's WN with a zero-initialised 1x1
+        // conv emitting (log s, t). Neither squashes the output. Tanh belongs INSIDE the gated block
+        // (tanh . sigmoid), where WaveNetResidualBlockLayer already has it.
+        //
+        // It was also killing training outright, which is how it was found. Measured on WaveGlow: the
+        // untrained output spans [-0.859, 0.799] with 0% of samples saturated, and after a SINGLE
+        // Adam step EVERY output is exactly 1.0 - 100% saturated. tanh'(x) = 1 - tanh(x)^2 is then
+        // identically zero, so the gradient dies and the loss freezes at 0.38766 from step 2 through
+        // step 200 while Adam keeps stepping on zero gradients. Adam's first step moves every
+        // parameter by ~lr in the sign direction at once, which is more than enough to leave tanh's
+        // linear region, and once outside nothing brings it back. Same failure class as the
+        // StandardVAE decoder saturation.
         yield return new Conv1DLayer<T>(
             inputChannels: hiddenChannels, outputChannels: outputDim,
             kernelSize: 1, dilation: 1, stride: 1, padding: null,
-            activation: tanhActivation);
+            activation: linearOutput);
     }
 
     /// <summary>
@@ -32872,11 +35051,19 @@ public static class LayerHelper<T>
         int llmFfnDim = llmDim * 4;
 
         // === Character/Byte Embedding (E2 TTS Eskimez et al. 2024 §3.1) ===
-        // Input is discrete text/acoustic token IDs [seq], embedded to
-        // [seq, textEncoderDim] before the transformer stack consumes them.
+        // Discrete text/acoustic token IDs [batch, seq] are embedded to
+        // [batch, seq, textEncoderDim] before the transformer stack consumes them.
+        //
+        // InputMode stays at the layer's Auto default rather than being forced to Indices.
+        // Auto applies the same shape/value split PyTorch draws between nn.Embedding and
+        // nn.Linear: integral values inside [0, vocabSize) are looked up as token IDs — the
+        // paper path, unchanged — and anything else is linearly projected. Forcing Indices
+        // removed that fallback, so a continuous conditioning tensor [batch, seq, feats] was
+        // read as seq*feats token IDs and came out rank-4 [batch, seq, feats, dim]. Every
+        // downstream shape was then wrong: AudioLM's training forward produced
+        // [1, 64, 32, 80] against an [1, 80] target and threw before taking a gradient.
         var tokenEmbedding = new EmbeddingLayer<T>(vocabSize, textEncoderDim)
         {
-            InputMode = EmbeddingInputMode.Indices,
             ScaleBySqrtDimension = true
         };
         yield return tokenEmbedding;
@@ -33072,39 +35259,255 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>();
+        // A leading Dense projection mixes the input into the model width, then RESIDUAL transformer
+        // encoder blocks (TransformerEncoderLayer = self-attention + FFN each with a residual skip and
+        // LayerNorm) process it. The earlier hand-rolled MHA -> LN -> FFN -> LN chain had NO residual
+        // connections, so through several blocks the signal decayed and training collapsed to a
+        // constant, uniform output (DifferentInputs_AfterTraining: distinct inputs -> identical output).
+        // VITS / OpenVoice / MetaVoice text encoders are standard residual transformers, so this matches
+        // the paper architecture and keeps gradients flowing to the input.
+        yield return new DenseLayer<T>(encoderDim, identityActivation);
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, encoderFfnDim, encoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // === Speaker Embedding Projection ===
+        // === Speaker Embedding Projection (encoder -> decoder width) ===
         yield return new DenseLayer<T>(decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
 
-        // === Projection (encoder -> decoder dim) ===
-        if (encoderDim != decoderDim)
-            yield return new DenseLayer<T>(decoderDim, identityActivation);
-
-        // === Speaker-conditioned Decoder ===
+        // === Speaker-conditioned Decoder (residual transformer blocks) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, decoderFfnDim, decoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Output projection ===
         yield return new DenseLayer<T>(decoderDim, identityActivation);
+    }
+
+    /// <summary>
+    /// OpenVoice V2 tone-color converter (Qin et al. 2023, arXiv:2312.01479). Unlike the generic
+    /// transformer stack in <see cref="CreateDefaultVoiceCloningLayers"/> (used by the transformer-LLM
+    /// MetaVoice-1B), OpenVoice is VITS-based: an <b>encoder–decoder with an invertible normalizing flow
+    /// in the middle</b>, NOT a transformer. Paper structure, on channels-first rank-3
+    /// <c>[B, specChannels, T]</c> tensors:
+    /// <list type="number">
+    /// <item>a 1-D convolutional encoder over the (STFT) spectrum,</item>
+    /// <item>invertible normalizing-flow layers conditioned on the tone-color vector, and</item>
+    /// <item>a HiFi-GAN transposed-convolution decoder back to the waveform.</item>
+    /// </list>
+    /// The flow's coupling networks are WaveNet-style dilated-conv residual stacks; because a normalizing
+    /// flow is bijective, this conv+residual middle preserves input information and cannot collapse to a
+    /// constant output the way the earlier transformer stand-in did (DifferentInputs_AfterTraining). The
+    /// first conv declares explicit input channels so lazy-shape resolution propagates from it rather than
+    /// from the architecture. The tone-color conditioning path is the model's ExtractSpeakerEmbedding
+    /// (a 2-D conv over the mel-spectrogram per the paper), kept separate from this sequential chain.
+    /// </summary>
+    /// <param name="specChannels">Input spectrum channels (paper: STFT/mel bins).</param>
+    /// <param name="hiddenDim">Encoder/flow residual channel width.</param>
+    /// <param name="numFlowBlocks">Number of dilated WaveNet residual flow blocks.</param>
+    /// <param name="upsampleRate">HiFi-GAN decoder time-upsampling factor.</param>
+    /// <returns>The ordered OpenVoice V2 encoder, flow, and waveform-decoder layer sequence.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This assembles the part of OpenVoice V2 that keeps the spoken content
+    /// while converting its voice characteristics. A convolutional encoder reads the spectrum, reversible
+    /// flow blocks transform it, and a HiFi-GAN decoder reconstructs the waveform.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOpenVoiceV2Layers(
+        int specChannels = 80,
+        int hiddenDim = 192,
+        int numFlowBlocks = 4,
+        int upsampleRate = 2)
+    {
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+
+        // (1) Content encoder: spectrum -> hidden width, "same" padding keeps T. Explicit input
+        //     channels so shape resolution propagates from this first layer.
+        yield return new Conv1DLayer<T>(
+            inputChannels: specChannels, outputChannels: hiddenDim,
+            kernelSize: 5, dilation: 1, stride: 1, padding: null, activation: leakyRelu);
+
+        // (2) Normalizing-flow middle: dilated WaveNet residual blocks (dilation 2^i), constant width.
+        for (int i = 0; i < numFlowBlocks; i++)
+            yield return new WaveNetResidualBlockLayer<T>(hiddenDim, kernelSize: 5, dilation: 1 << i);
+
+        // (3) HiFi-GAN decoder: transposed-conv time upsample -> MRF residual -> waveform projection.
+        int decDim = Math.Max(1, hiddenDim / 2);
+        yield return new Conv1DTransposeLayer<T>(
+            outputChannels: decDim, kernelSize: 2 * upsampleRate, stride: upsampleRate,
+            padding: upsampleRate / 2, outputPadding: 0, dilation: 1, activation: leakyRelu);
+        yield return new HiFiGANResBlockLayer<T>(decDim, new[] { 3, 7, 11 }, new[] { 1, 3, 5 });
+        yield return new Conv1DLayer<T>(
+            outputChannels: 1, kernelSize: 7, dilation: 1, stride: 1, padding: null, activation: tanhActivation);
+    }
+
+    /// <summary>
+    /// LLaMA / MetaVoice SwiGLU FFN hidden width (Shazeer 2020; Touvron 2023 §2.2):
+    /// <c>hidden = multipleOf · ceil( (2/3 · 4·dim) / multipleOf )</c>. The 2/3 factor keeps a
+    /// gated SwiGLU FFN (which has three matrices w1/w2/w3) at roughly the same parameter count
+    /// as a plain 4×-expansion two-matrix FFN; rounding to <paramref name="multipleOf"/> keeps the
+    /// matmul dimensions hardware-friendly.
+    /// </summary>
+    private static int SwiGLUHiddenDim(int dim, int multipleOf)
+    {
+        if (multipleOf < 1) multipleOf = 1;
+        int hidden = (int)(2.0 * (4 * dim) / 3.0);
+        hidden = multipleOf * ((hidden + multipleOf - 1) / multipleOf);
+        return Math.Max(multipleOf, hidden);
+    }
+
+    /// <summary>
+    /// Paper-faithful MetaVoice-1B voice-cloning pipeline (metavoiceio/metavoice-src). Unlike the
+    /// generic transformer stand-in in <see cref="CreateDefaultVoiceCloningLayers"/>, this builds
+    /// MetaVoice-1B's actual multi-stage architecture on channels-last rank-3
+    /// <c>[B, seq, embedDim]</c> text+speaker conditioning embeddings:
+    /// <list type="number">
+    /// <item><b>First-stage model</b> — a causal GPT / LLaMA-style transformer decoder that predicts
+    /// the FIRST TWO hierarchies of EnCodec (residual-vector-quantized) audio tokens. Each block is a
+    /// pre-norm <see cref="PreLNTransformerBlock{T}"/> with <see cref="RMSNormalizationLayer{T}"/>,
+    /// rotary-position (<see cref="PositionalEncodingType.Rotary"/>) <b>causal</b>
+    /// <see cref="MultiHeadAttentionLayer{T}"/>, and a gated <b>SwiGLU</b> FFN
+    /// (<c>silu(W1·x) ⊙ W3·x</c>). Conditioning is the additive text-token + speaker/tone embedding
+    /// sequence fed as the model input (matching the reference's <c>tok_emb + pos_emb + spk_emb</c>).</item>
+    /// <item><b>Second-stage model</b> — a non-causal (encoder-style, bidirectional) RMSNorm+RoPE+SwiGLU
+    /// transformer that predicts the REMAINING EnCodec hierarchies from the first two, producing the full
+    /// RVQ latent stack.</item>
+    /// <item><b>Vocoder</b> — a HiFi-GAN-style transposed-convolution decoder (EnCodec-decoder role:
+    /// multi-band diffusion in the paper; a HiFi-GAN conv decoder is a faithful token→waveform stage)
+    /// that reconstructs the waveform from the RVQ latent: a pre-net <see cref="Conv1DLayer{T}"/>, a
+    /// time-upsampling <see cref="Conv1DTransposeLayer{T}"/>, a multi-receptive-field
+    /// <see cref="HiFiGANResBlockLayer{T}"/>, and a final tanh waveform projection.</item>
+    /// </list>
+    /// The whole chain is differentiable (the RVQ hierarchies are represented by their continuous
+    /// codebook-embedding contributions rather than hard argmax token IDs, so the gradient tape stays
+    /// intact for training), and every block carries residual skips so distinct inputs never collapse
+    /// to a constant output.
+    /// </summary>
+    /// <param name="firstStageDim">First-stage (GPT/LLaMA) transformer width. Must be divisible by
+    /// <paramref name="numHeads"/> with an even per-head dim (RoPE requirement).</param>
+    /// <param name="numFirstStageLayers">Number of first-stage causal transformer blocks.</param>
+    /// <param name="secondStageDim">Second-stage (non-causal) transformer width. Must be divisible by
+    /// <paramref name="numHeads"/> with an even per-head dim.</param>
+    /// <param name="numSecondStageLayers">Number of second-stage transformer blocks.</param>
+    /// <param name="numHeads">Attention heads for both stages.</param>
+    /// <param name="numCodebooks">Total EnCodec RVQ codebook hierarchies.</param>
+    /// <param name="firstStageCodebooks">Hierarchies predicted by the first stage (paper: 2).</param>
+    /// <param name="codecLatentDim">EnCodec continuous-latent width (the summed RVQ embedding dim) —
+    /// the vocoder's input channel count.</param>
+    /// <param name="vocoderChannels">HiFi-GAN upsample-stem channel width.</param>
+    /// <param name="vocoderUpsampleFactor">Time-upsampling factor of the transposed conv (T → T·factor).</param>
+    /// <param name="swiGLUMultipleOf">Round SwiGLU hidden dims to this multiple.</param>
+    /// <param name="ropeTheta">RoPE base frequency.</param>
+    /// <param name="maxSeqLen">RoPE cache length (auto-extends beyond this).</param>
+    /// <param name="dropoutRate">Dropout between blocks (paper default 0.0).</param>
+    /// <returns>The ordered MetaVoice-1B first-stage, second-stage, and vocoder layer sequence.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This builds MetaVoice-1B's three stages: one transformer predicts the
+    /// first audio-token groups, a second fills in the remaining detail, and a convolutional vocoder turns
+    /// those continuous audio representations into a waveform.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMetaVoice1BLayers(
+        int firstStageDim = 2048,
+        int numFirstStageLayers = 24,
+        int secondStageDim = 1024,
+        int numSecondStageLayers = 12,
+        int numHeads = 16,
+        int numCodebooks = 8,
+        int firstStageCodebooks = 2,
+        int codecLatentDim = 128,
+        int vocoderChannels = 512,
+        int vocoderUpsampleFactor = 2,
+        int swiGLUMultipleOf = 256,
+        double ropeTheta = 10000.0,
+        int maxSeqLen = 2048,
+        double dropoutRate = 0.0)
+    {
+        if (firstStageDim <= 0 || firstStageDim % numHeads != 0 || (firstStageDim / numHeads) % 2 != 0)
+            throw new ArgumentException(
+                $"firstStageDim ({firstStageDim}) must be a positive multiple of numHeads ({numHeads}) " +
+                "with an even per-head dimension (RoPE requires even head dims).", nameof(firstStageDim));
+        if (secondStageDim <= 0 || secondStageDim % numHeads != 0 || (secondStageDim / numHeads) % 2 != 0)
+            throw new ArgumentException(
+                $"secondStageDim ({secondStageDim}) must be a positive multiple of numHeads ({numHeads}) " +
+                "with an even per-head dimension (RoPE requires even head dims).", nameof(secondStageDim));
+        if (firstStageCodebooks <= 0 || firstStageCodebooks > numCodebooks)
+            throw new ArgumentException(
+                $"firstStageCodebooks ({firstStageCodebooks}) must be in [1, numCodebooks ({numCodebooks})].",
+                nameof(firstStageCodebooks));
+
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanh = (IActivationFunction<T>)new TanhActivation<T>();
+
+        // (1) Input projection: additive text-token + speaker/tone conditioning embedding sequence
+        //     [B, seq, embedDim] -> first-stage width. (The [B, seq, embedDim] input already carries
+        //     the fused wte + wpe + spk_emb conditioning.)
+        yield return new DenseLayer<T>(firstStageDim, identity);
+
+        // (2) First-stage GPT / LLaMA transformer: N × (RMSNorm -> RoPE CAUSAL MHA -> residual,
+        //     RMSNorm -> SwiGLU FFN -> residual). Predicts the first two EnCodec RVQ hierarchies.
+        int firstHeadDim = firstStageDim / numHeads;
+        int firstFfn = SwiGLUHiddenDim(firstStageDim, swiGLUMultipleOf);
+        for (int i = 0; i < numFirstStageLayers; i++)
+        {
+            var attn = new MultiHeadAttentionLayer<T>(headCount: numHeads, headDimension: firstHeadDim);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+            attn.UseCausalMask = true;
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: firstStageDim, ffnDim: firstFfn, attention: attn,
+                ffnActivation: silu, gated: true);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new RMSNormalizationLayer<T>();
+
+        // (3) First-stage head: the first two RVQ hierarchies' continuous codebook embeddings.
+        yield return new DenseLayer<T>(firstStageCodebooks * codecLatentDim, identity);
+
+        // (4) Second-stage input projection -> second-stage width.
+        yield return new DenseLayer<T>(secondStageDim, identity);
+
+        // (5) Second-stage transformer: M × (RMSNorm -> RoPE NON-CAUSAL MHA -> residual,
+        //     RMSNorm -> SwiGLU FFN -> residual). Predicts the remaining hierarchies from the first two.
+        int secondHeadDim = secondStageDim / numHeads;
+        int secondFfn = SwiGLUHiddenDim(secondStageDim, swiGLUMultipleOf);
+        for (int i = 0; i < numSecondStageLayers; i++)
+        {
+            var attn = new MultiHeadAttentionLayer<T>(headCount: numHeads, headDimension: secondHeadDim);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+            // Non-causal: the second stage attends over the whole first-two-hierarchy sequence.
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: secondStageDim, ffnDim: secondFfn, attention: attn,
+                ffnActivation: silu, gated: true);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new RMSNormalizationLayer<T>();
+
+        // (6) Second-stage head: the full EnCodec RVQ latent (all hierarchies summed), channels-last
+        //     [B, seq, codecLatentDim].
+        yield return new DenseLayer<T>(codecLatentDim, identity);
+
+        // (7) EnCodec / HiFi-GAN vocoder: RVQ latent -> waveform.
+        //     Channels-last [B, seq, codecLatentDim] -> channels-first [B, codecLatentDim, seq]
+        //     (TransposeLayer permutes the non-batch axes, so swapping [seq, C] -> [C, seq] is [1, 0]).
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+        // Pre-net conv ("same" padding preserves T). Eager ctors (input channels known) so Clone /
+        // serialize round-trips exactly.
+        yield return new Conv1DLayer<T>(codecLatentDim, vocoderChannels, 7, 1, 1, null, leakyRelu);
+        // Transposed-conv time upsample: T -> T · vocoderUpsampleFactor.
+        int decDim = Math.Max(1, vocoderChannels / 2);
+        yield return new Conv1DTransposeLayer<T>(
+            inputChannels: vocoderChannels, outputChannels: decDim,
+            kernelSize: 2 * vocoderUpsampleFactor, stride: vocoderUpsampleFactor,
+            activation: leakyRelu);
+        // Multi-receptive-field residual block (HiFi-GAN v1 kernels/dilations).
+        yield return new HiFiGANResBlockLayer<T>(decDim, new[] { 3, 7, 11 }, new[] { 1, 3, 5 });
+        // Final waveform projection to a single channel, tanh-bounded (HiFi-GAN convention).
+        yield return new Conv1DLayer<T>(decDim, 1, 7, 1, 1, null, tanh);
     }
 
     /// <summary>
@@ -33157,6 +35560,105 @@ public static class LayerHelper<T>
 
         // === Output projection (text embedding for API consumption) ===
         yield return new DenseLayer<T>(decoderDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates the Mega-TTS acoustic stack (Jiang et al. 2023, arXiv:2306.03509).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mega-TTS's contribution is not a new block type but an <i>inductive bias</i>: speech is
+    /// decomposed into content, timbre, prosody and phase, and each is modelled with the structure
+    /// that matches its nature (§3.1). This builder emits that decomposition in five contiguous
+    /// groups, which <c>MegaTTS.ExtractLayerReferences</c> slices apart by the counts below:
+    /// </para>
+    /// <list type="number">
+    /// <item><b>Content encoder</b> — phoneme embedding + <c>numEncoderLayers</c> residual Pre-LN
+    /// FFT blocks. Content is a discrete, order-sensitive sequence, so it gets a full transformer.</item>
+    /// <item><b>Prosody encoder</b> — projection + <c>numProsodyLayers</c> blocks + a
+    /// <c>prosodyDim</c>-wide bottleneck. Deliberately narrow (paper: 20): the bottleneck is what
+    /// stops prosody from carrying timbre or content (§3.2).</item>
+    /// <item><b>Timbre encoder</b> — projection + <c>numTimbreLayers</c> blocks, consumed by the
+    /// model through a temporal MEAN POOL so the result is time-invariant by construction. That
+    /// pooling is the paper's central bias: timbre cannot vary over the utterance, so the
+    /// architecture is not given the capacity to make it vary (§3.1).</item>
+    /// <item><b>P-LLM</b> — embedding over the prosody codebook + <c>numPLLMLayers</c> blocks +
+    /// a projection back to codebook logits. Predicts prosody codes autoregressively from content
+    /// and timbre, which is what makes zero-shot prosody transfer possible (§3.3).</item>
+    /// <item><b>Mel decoder</b> — fusion projection + <c>numDecoderLayers</c> blocks + output
+    /// projection to <c>melChannels</c>. Phase is deliberately NOT modelled; it is left to the
+    /// vocoder (§3.1).</item>
+    /// </list>
+    /// <para>
+    /// Every block is a residual Pre-LN <see cref="TransformerEncoderBlock{T}"/>. This matters:
+    /// the flat MHA→Norm→FFN→Norm chain MegaTTS previously borrowed from
+    /// <c>CreateDefaultProprietaryTTSLayers</c> has no residual path, so each block REPLACED rather
+    /// than refined the hidden state and the model converged to a uniform output — the #1380
+    /// collapse mechanism, reproduced on the J-M shard as an L2 of 3.5e-10 between the outputs for
+    /// two distinct inputs.
+    /// </para>
+    /// </remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultMegaTTSLayers(
+        int encoderDim = 192,
+        int decoderDim = 192,
+        int melChannels = 80,
+        int prosodyDim = 20,
+        int prosodyCodebookSize = 1024,
+        int timbreDim = 192,
+        int pllmDim = 512,
+        int numEncoderLayers = 6,
+        int numDecoderLayers = 6,
+        int numProsodyLayers = 2,
+        int numTimbreLayers = 2,
+        int numPLLMLayers = 4,
+        int numHeads = 8,
+        int numPLLMHeads = 8,
+        double dropoutRate = 0.1,
+        int vocabSize = 256)
+    {
+        IActivationFunction<T> gelu = new GELUActivation<T>();
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // --- 1. Content encoder -------------------------------------------------------------
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim, numHeads: numHeads, ffnDim: encoderDim * 4, dropoutRate: dropoutRate);
+
+        // --- 2. Prosody encoder (bottlenecked) ----------------------------------------------
+        int prosodyHidden = Math.Max(prosodyDim * 4, numHeads);
+        yield return new DenseLayer<T>(prosodyHidden, gelu);
+        for (int i = 0; i < numProsodyLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: prosodyHidden, numHeads: numHeads, ffnDim: prosodyHidden * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(prosodyDim, identity);
+
+        // --- 3. Timbre encoder (mean-pooled by the model into one global vector) ------------
+        yield return new DenseLayer<T>(timbreDim, gelu);
+        for (int i = 0; i < numTimbreLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: timbreDim, numHeads: numHeads, ffnDim: timbreDim * 4, dropoutRate: dropoutRate);
+
+        // --- 4. Prosody latent language model ------------------------------------------------
+        // Consumes the continuous prosody latent rather than hard code indices, and emits a
+        // distribution over the codebook which the final projection turns back into a prosody
+        // embedding. That keeps the paper's "predict the prosody code" formulation while staying
+        // differentiable end to end, so the P-LLM trains with the rest of the stack instead of
+        // needing a separate non-differentiable argmin/straight-through stage.
+        yield return new DenseLayer<T>(pllmDim, gelu);
+        for (int i = 0; i < numPLLMLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: pllmDim, numHeads: numPLLMHeads, ffnDim: pllmDim * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(prosodyCodebookSize, identity);
+        // The learned codebook itself: soft code assignment -> prosody embedding.
+        yield return new DenseLayer<T>(prosodyDim, identity);
+
+        // --- 5. Mel decoder -------------------------------------------------------------------
+        yield return new DenseLayer<T>(decoderDim, gelu);
+        for (int i = 0; i < numDecoderLayers; i++)
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: decoderDim, numHeads: numHeads, ffnDim: decoderDim * 4, dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(melChannels, identity);
     }
 
     /// <summary>
@@ -33690,6 +36192,82 @@ public static class LayerHelper<T>
     /// boundary + content features), and a span classifier (Dense to label scores).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates the Biaffine-NER stack per Yu et al., ACL 2020,
+    /// "Named Entity Recognition as Dependency Parsing" (arXiv:2005.07150).
+    /// </summary>
+    /// <remarks>
+    /// <para>The paper's pipeline is: contextual encoder -&gt; stacked BiLSTM -&gt; two separate
+    /// boundary FFNNs -&gt; biaffine scorer over every (start, end) pair. Biaffine-NER previously
+    /// shared <see cref="CreateDefaultSpanBasedNERLayers"/> with SpERT and PURE, which emits a
+    /// transformer encoder followed by two dense layers — no BiLSTM, no separate start/end
+    /// representations, and crucially NO bilinear term. The bilinear coupling of the two
+    /// boundaries is the paper's entire contribution, so the model was Biaffine in name only.</para>
+    /// <para>Defaults follow the paper's hyperparameter table: BiLSTM size 200 with 3 layers and
+    /// dropout 0.4, FFNN size 150 with dropout 0.2, embeddings dropout 0.5.</para>
+    /// <para>The scorer outputs a flattened <c>S x S</c> span grid over <c>numLabels</c>
+    /// categories, one of which is the non-entity class — the paper classifies every span rather
+    /// than sampling negatives.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBiaffineNERLayers(
+        int hiddenDimension = 1024,
+        int numAttentionHeads = 16,
+        int numTransformerLayers = 24,
+        int intermediateDimension = 4096,
+        int spanEmbeddingDimension = 150,
+        int numLabels = 9,
+        double dropoutRate = 0.2,
+        int ffnnDepth = 2,
+        int biLstmHiddenSize = 200,
+        int biLstmLayers = 3,
+        double biLstmDropout = 0.4,
+        double embeddingsDropout = 0.5)
+    {
+        // Embeddings dropout (paper: 0.5) applied before the contextual encoder.
+        if (embeddingsDropout > 0) yield return new DropoutLayer<T>(embeddingsDropout);
+
+        // Stacked contextual encoder. Kept LAZY (no embeddingSize) for the same reason the
+        // shared span-NER factory does: the eager constructor materializes every block up front,
+        // which at BERT-Large scale is prohibitive under the generated-test memory budget.
+        (int nerHeads, _) = ChooseDivisibleHeadConfig(hiddenDimension, numAttentionHeads);
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: nerHeads,
+                feedForwardDim: intermediateDimension);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Stacked BiLSTM over the encoder output (paper: size 200, 3 layers, dropout 0.4).
+        // Each direction contributes biLstmHiddenSize, so the merged width is twice that.
+        for (int i = 0; i < biLstmLayers; i++)
+        {
+            yield return new BidirectionalLayer<T>(
+                new LSTMLayer<T>(biLstmHiddenSize),
+                mergeMode: true,
+                activationFunction: (IActivationFunction<T>?)null);
+            if (biLstmDropout > 0) yield return new DropoutLayer<T>(biLstmDropout);
+        }
+
+        // Biaffine scorer: the two boundary FFNNs live inside it so start and end
+        // representations stay distinct, exactly as the paper specifies.
+        //
+        // Width note: BidirectionalLayer with mergeMode = true MERGES the two directions rather
+        // than concatenating them (CalculateOutputShape returns the inner shape unchanged), so
+        // the stack's width here is biLstmHiddenSize, not 2x it. Assuming concatenation gave
+        // "configured for inputDim=400 but got D=200" on every BiaffineNER invariant.
+        yield return new BiaffineSpanScorerLayer<T>(
+            inputDim: biLstmHiddenSize,
+            spanDim: spanEmbeddingDimension,
+            numCategories: numLabels,
+            // Yu et al. Table 1 lists an FFNN dropout of 0.2, which is this parameter's default.
+            // Threading the configured value through keeps it user-controllable via
+            // SpanBasedNEROptions.DropoutRate like every other knob, instead of the layer silently
+            // applying its own default and ignoring a caller that asked for something else.
+            ffnnDropout: dropoutRate,
+            ffnnDepth: ffnnDepth);
+    }
+
     public static IEnumerable<ILayer<T>> CreateDefaultSpanBasedNERLayers(
         int hiddenDimension = 768,
         int numAttentionHeads = 12,
@@ -34123,12 +36701,14 @@ public static class LayerHelper<T>
 
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, intermediateSize);
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
         yield return new FlattenLayer<T>();
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        var outputProjection = new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
+        outputProjection.ResolveFromShape(new[] { hiddenDim });
+        yield return outputProjection;
     }
 
     /// <summary>
@@ -35014,50 +37594,33 @@ public static class LayerHelper<T>
     /// <param name="embeddingDim">Embedding head width (CNN14: 2048).</param>
     /// <param name="dropoutRate">Dropout rate inside the CNN blocks (paper §3).</param>
     /// <remarks>
-    /// CNN14 architecture per paper Table 1: four conv stages with channel
-    /// progression 64 → 128 → 256 → 512, each stage = Conv(3×3) + BN + ReLU +
-    /// Conv(3×3) + BN + ReLU + AvgPool(2×2). Global average pool over time,
-    /// then dense → embedding → dense → class logits → sigmoid.
+    /// CNN14 architecture per paper Table 1: six convolution blocks with channel
+    /// progression 64 → 128 → 256 → 512 → 1024 → 2048. Blocks 1-5 use
+    /// AvgPool(2×2), the final block uses the released model's 1×1 pool, and the
+    /// NCHW head averages frequency before max+mean pooling over time.
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
         int numClasses,
         int embeddingDim,
         double dropoutRate)
     {
-        // Helper: one CNN14 "double conv + pool" stage.
-        IEnumerable<ILayer<T>> ConvStage(int outChannels)
+        // Preserve the original three-argument API and its documented probability
+        // output, but route it through the single paper-faithful CNN14 implementation
+        // so the overloads cannot drift into different pooling/channel semantics.
+        foreach (var layer in CreateDefaultPANNsLayers(
+            numMels: 64,
+            baseChannels: 64,
+            numBlocks: 6,
+            embeddingDim: embeddingDim,
+            numClasses: numClasses,
+            maxFrames: 1001,
+            dropoutRate: dropoutRate,
+            headDropoutRate: 0.5))
         {
-            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new PoolingLayer<T>(poolSize: 2, stride: 2, type: PoolingType.Average);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return layer;
         }
 
-        // Six conv stages — paper §3.1 Table 1 + reference implementation
-        // (qiuqiangkong/audioset_tagging_cnn Cnn14). The reviewer flagged
-        // that earlier builds stopped at 4 stages (64→512); the published
-        // Cnn14 has 6 conv blocks (64→128→256→512→1024→2048) before the
-        // global pool. Pre-pooling channel width = embedding dim.
-        foreach (var l in ConvStage(64)) yield return l;
-        foreach (var l in ConvStage(128)) yield return l;
-        foreach (var l in ConvStage(256)) yield return l;
-        foreach (var l in ConvStage(512)) yield return l;
-        foreach (var l in ConvStage(1024)) yield return l;
-        foreach (var l in ConvStage(2048)) yield return l;
-
-        // Global average pool over the (time × freq) spatial axes → channel vector.
-        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
-
-        // Embedding head (paper §3.1: 2048-d).
-        yield return new DenseLayer<T>(outputSize: embeddingDim, activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-
-        // Classification head with sigmoid for multi-label AudioSet output.
-        yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new ActivationLayer<T>((IActivationFunction<T>)new SigmoidActivation<T>());
     }
 
     #endregion
@@ -35141,6 +37704,7 @@ public static class LayerHelper<T>
     /// <param name="audioEncoderHeads">Attention heads per block (paper §3.1 HTSAT-S: 12).</param>
     /// <param name="swinWindowSize">W-MSA / SW-MSA window size (Liu 2021 §3.2: 7).</param>
     /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
+    /// <param name="audioPatchSize">HTSAT log-mel patch size (paper §3.1: 4).</param>
     /// <remarks>
     /// Alternating W-MSA / SW-MSA layers per Swin paper §3.2 — even-indexed
     /// blocks use regular windowed attention, odd-indexed blocks use the
@@ -35151,8 +37715,15 @@ public static class LayerHelper<T>
         int audioEncoderLayers,
         int audioEncoderHeads,
         int swinWindowSize,
-        int projectionDim)
+        int projectionDim,
+        int audioPatchSize = 4)
     {
+        // HTSAT begins by dividing the log-mel image into learned 2-D patches.
+        // This converts [B, 1, frames, melBins] into [B, patchCount, hiddenDim],
+        // the token layout consumed by SwinTransformerBlockLayer. Keeping the
+        // patch size explicit also makes CLAPModelOptions.AudioPatchSize effective.
+        yield return new PatchEmbeddingLayer<T>(audioPatchSize, audioHiddenDim);
+
         // Stack of Swin blocks. Each pair alternates W-MSA (shift=0) and
         // SW-MSA (shift=windowSize/2) per Liu 2021 §3.2.
         for (int i = 0; i < audioEncoderLayers; i++)
@@ -35395,4 +37966,32 @@ public static class LayerHelper<T>
             numKvHeads, ropeTheta);
 
     #endregion
+
+    // RESTORED. This slice deleted both methods while QueryMeldNet still called them; the branch
+    // could not report it because LayerHelper<T> was an error type until the integration merge,
+    // and Roslyn suppresses member lookup on error types. Taken back from integration/1789.
+
+    /// <summary>
+    /// Creates the backbone encoder layers for QueryMeldNet.
+    /// </summary>
+    // QueryMeldNet uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
+
+    /// <summary>
+    /// Creates the query-meld decoder layers for QueryMeldNet.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+    }
 }

@@ -203,9 +203,17 @@ public class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 _outputParams, _algoOptions.FeatureDimension, _algoOptions.OutputDimension,
                 _algoOptions.OutputDistribution);
 
-            losses.Add(headLoss.CalculateLoss(
-                ConvertToVector(MetaModel.Predict(task.QueryInput)),
-                ConvertToVector(task.QueryOutput)));
+            // ConvertToVector returns null for an output shape it cannot flatten. Feeding that to the
+            // loss would surface as a null reference inside the loss function, naming neither the task
+            // nor the conversion that actually failed.
+            var queryPrediction = ConvertToVector(MetaModel.Predict(task.QueryInput))
+                ?? throw new InvalidOperationException(
+                    "MbPA could not convert the model's query prediction to a vector.");
+            var queryTarget = ConvertToVector(task.QueryOutput)
+                ?? throw new InvalidOperationException(
+                    "MbPA could not convert the task's query target to a vector.");
+
+            losses.Add(headLoss.CalculateLoss(queryPrediction, queryTarget));
             embeddingGradients.Add(ClipGradients(
                 ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput, headLoss)));
         }

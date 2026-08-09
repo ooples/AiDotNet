@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -53,12 +53,6 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
 public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
-    /// <summary>
-    /// Default Adam learning rate for GNN training. Lower than standard (0.001) because
-    /// graph convolution aggregates neighbor features, amplifying gradient magnitudes.
-    /// </summary>
-    private const double DefaultTrainLearningRate = 0.0001;
-
     private readonly GraphNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
@@ -284,12 +278,28 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public GraphNeuralNetwork()
-        : this(new NeuralNetworkArchitecture<T>(
+        : this((GraphNeuralNetworkOptions?)null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance from fully customizable GCN options.
+    /// </summary>
+    public GraphNeuralNetwork(GraphNeuralNetworkOptions? options)
+        : this(CreateDefaultArchitecture(options),
+            graphConvolutionalVectorActivation: (IVectorActivationFunction<T>?)null,
+            options: options)
+    {
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateDefaultArchitecture(GraphNeuralNetworkOptions? options)
+    {
+        var resolvedOptions = options ?? new GraphNeuralNetworkOptions();
+        return new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
-            inputSize: 128,
-            outputSize: 7), graphConvolutionalVectorActivation: (IVectorActivationFunction<T>?)null)
-    {
+            inputSize: resolvedOptions.NodeFeatureSize,
+            outputSize: resolvedOptions.NumClasses);
     }
 
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
@@ -301,10 +311,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? CreateDefaultOptimizer(this);
         _options = options ?? new GraphNeuralNetworkOptions();
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
         Options = _options;
-        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
+        AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
         _graphConvolutionalVectorActivation = graphConvolutionalVectorActivation;
@@ -348,10 +359,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? CreateDefaultOptimizer(this);
         _options = options ?? new GraphNeuralNetworkOptions();
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this, _options);
         Options = _options;
-        AuxiliaryLossWeight = NumOps.FromDouble(0.05);
+        UseAuxiliaryLoss = _options.UseAuxiliaryLoss;
+        AuxiliaryLossWeight = NumOps.FromDouble(_options.AuxiliaryLossWeight);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
         _graphConvolutionalScalarActivation = graphConvolutionalActivation;
@@ -362,14 +374,177 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         InitializeLayers();
     }
 
-    private static AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(GraphNeuralNetwork<T> model)
+    private static AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        GraphNeuralNetwork<T> model,
+        GraphNeuralNetworkOptions options)
     {
         return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             model,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = DefaultTrainLearningRate
+                InitialLearningRate = options.LearningRate,
+                // Kipf & Welling regularize only the first graph-convolution
+                // weight matrix, not later weights or any biases.
+                //
+                // The range is resolved from the CONSTRUCTED layers, not computed as
+                // CalculatedInputSize * HiddenSize. That product assumed two things a custom
+                // Architecture.Layers can break: that the first graph convolution is the first
+                // trainable block in the flat parameter vector (so its weights start at index 0),
+                // and that its shape matches the option-derived one. Either being false silently
+                // shrinks a different slice of parameters than the paper's rule names. It has to
+                // be lazy because the constructor calls this BEFORE InitializeLayers.
+                Regularization = new FirstLayerWeightsL2Regularization(
+                    options.L2Regularization,
+                    () => ResolveFirstGraphConvWeightRange(model))
             });
+    }
+
+    /// <summary>
+    /// Locates the first graph-convolution weight matrix inside the flat parameter vector, as the
+    /// half-open range <c>[start, start + count)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>GraphConvolutionalLayer</c> lays its parameters out as weights then bias, and
+    /// <c>InputFeatures * OutputFeatures</c> is the weight block, so the bias is excluded by taking
+    /// only that prefix of the layer's own slice. An empty range means no graph convolution is
+    /// present -- possible with a fully custom layer list -- and regularizing nothing is the correct
+    /// reading of a rule that names a layer this network does not have.
+    /// </remarks>
+    private static (int Start, int Count) ResolveFirstGraphConvWeightRange(GraphNeuralNetwork<T> model)
+    {
+        int start = 0;
+        foreach (var layer in model.Layers)
+        {
+            if (layer is GraphConvolutionalLayer<T> graphConv)
+            {
+                return (start, checked(graphConv.InputFeatures * graphConv.OutputFeatures));
+            }
+
+            start = checked(start + (int)layer.ParameterCount);
+        }
+
+        return (0, 0);
+    }
+
+    private sealed class FirstLayerWeightsL2Regularization
+        : AiDotNet.Regularization.RegularizationBase<T, Tensor<T>, Tensor<T>>
+    {
+        private readonly Func<(int Start, int Count)> _resolveRange;
+        private bool _rangeResolved;
+        private int _start;
+        private int _weightCount;
+
+        public FirstLayerWeightsL2Regularization(double strength, Func<(int Start, int Count)> resolveRange)
+            : base(new RegularizationOptions
+            {
+                Type = RegularizationType.L2,
+                Strength = strength
+            })
+        {
+            _resolveRange = resolveRange ?? throw new ArgumentNullException(nameof(resolveRange));
+
+            // STRENGTH IS A SHRINKAGE FACTOR, so it has to land in [0, 1]. Regularize computes
+            // 1 - strength: above 1 the shrinkage goes negative and every first-layer weight FLIPS
+            // SIGN on each application, and below 0 it exceeds 1 and amplifies the weights it is
+            // supposed to shrink. Neither fails anywhere, they just train something else.
+            if (strength < 0.0 || strength > 1.0 || double.IsNaN(strength))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(strength), strength,
+                    "L2 shrinkage strength must be in [0, 1]; 1 - strength is applied as a multiplier.");
+            }
+        }
+
+        /// <summary>
+        /// Resolves and caches the regularized parameter range on first use.
+        /// </summary>
+        /// <remarks>
+        /// Deferred because the network constructs its optimizer before its layers, so the range does
+        /// not exist yet at construction. Cached because the layer shapes are fixed once built, and
+        /// re-walking them on every gradient step would put a layer scan on the training path.
+        /// </remarks>
+        private (int Start, int Count) Range()
+        {
+            if (!_rangeResolved)
+            {
+                (_start, _weightCount) = _resolveRange();
+                if (_start < 0 || _weightCount < 0)
+                {
+                    throw new InvalidOperationException(
+                        $"The first-layer weight range resolved to start {_start}, count {_weightCount}; " +
+                        "both must be non-negative.");
+                }
+
+                _rangeResolved = true;
+            }
+
+            return (_start, _weightCount);
+        }
+
+        public override Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients)
+        {
+            if (gradient.Length != coefficients.Length)
+                throw new ArgumentException("Gradient and coefficient vectors must have the same length.");
+
+            var result = new Vector<T>(gradient.Length);
+            var strength = NumOps.FromDouble(Options.Strength);
+            var (start, end) = ClampedRange(gradient.Length);
+
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                result[i] = i >= start && i < end
+                    ? NumOps.Add(gradient[i], NumOps.Multiply(strength, coefficients[i]))
+                    : gradient[i];
+            }
+
+            return result;
+        }
+
+        /// <summary>The regularized half-open index range, clipped to a vector of <paramref name="length"/>.</summary>
+        private (int Start, int End) ClampedRange(int length)
+        {
+            var (start, count) = Range();
+            int clampedStart = Math.Min(start, length);
+            return (clampedStart, Math.Min(clampedStart + count, length));
+        }
+
+        public override Tensor<T> Regularize(Tensor<T> gradient, Tensor<T> coefficients)
+        {
+            var result = Regularize(gradient.ToVector(), coefficients.ToVector());
+            return Tensor<T>.FromVector(result).Reshape(gradient.Shape.ToArray());
+        }
+
+        public override Vector<T> Regularize(Vector<T> data)
+        {
+            var result = new Vector<T>(data.Length);
+            var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
+            var (start, end) = ClampedRange(data.Length);
+
+            for (int i = 0; i < data.Length; i++)
+                result[i] = i >= start && i < end ? NumOps.Multiply(data[i], shrinkage) : data[i];
+
+            return result;
+        }
+
+        public override Matrix<T> Regularize(Matrix<T> data)
+        {
+            var result = new Matrix<T>(data.Rows, data.Columns);
+            var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
+            var (start, end) = ClampedRange(data.Rows * data.Columns);
+            int flatIndex = 0;
+
+            for (int row = 0; row < data.Rows; row++)
+            {
+                for (int column = 0; column < data.Columns; column++, flatIndex++)
+                {
+                    result[row, column] = flatIndex >= start && flatIndex < end
+                        ? NumOps.Multiply(data[row, column], shrinkage)
+                        : data[row, column];
+                }
+            }
+
+            return result;
+        }
     }
 
     /// <summary>
@@ -400,7 +575,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         {
             // Per Kipf & Welling 2017, GCN uses softmax output + cross-entropy loss.
             // The default layers include softmax which is needed for the loss to work correctly.
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(
+                Architecture,
+                _options.HiddenSize,
+                _options.NumLayers,
+                _options.DropoutRate,
+                _options.UseBias));
         }
     }
 
@@ -841,7 +1021,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         int numNodes = input.Shape[0];
         var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
 
-        // Set adjacency for graph layers before training
+        // Set adjacency for graph layers before training.
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(true);
@@ -849,6 +1029,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
         }
 
+        // Keep the paper's persistent Adam optimizer and train directly through
+        // the tape. NeuralNetworkBase.Train performs LSUV conditioning, which is
+        // not part of Kipf and Welling's reference GCN training procedure.
         TrainWithTape(input, expectedOutput, _optimizer);
 
         SetTrainingMode(false);
@@ -1058,6 +1241,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        var options = new GraphNeuralNetworkOptions(_options);
+
         // Create a new instance with the same architecture and activation functions
         // Determine which constructor to use based on which activation functions are set
         bool hasVectorActivations = _graphConvolutionalVectorActivation != null ||
@@ -1086,7 +1271,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 graphConvolutionalVectorActivation: _graphConvolutionalVectorActivation,
                 activationLayerVectorActivation: _activationLayerVectorActivation,
                 finalDenseLayerVectorActivation: _finalDenseLayerVectorActivation,
-                finalActivationLayerVectorActivation: _finalActivationLayerVectorActivation);
+                finalActivationLayerVectorActivation: _finalActivationLayerVectorActivation,
+                options: options);
         }
         else
         {
@@ -1096,7 +1282,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 graphConvolutionalActivation: _graphConvolutionalScalarActivation,
                 activationLayerActivation: _activationLayerScalarActivation,
                 finalDenseLayerActivation: _finalDenseLayerScalarActivation,
-                finalActivationLayerActivation: _finalActivationLayerScalarActivation);
+                finalActivationLayerActivation: _finalActivationLayerScalarActivation,
+                options: options);
         }
     }
 }

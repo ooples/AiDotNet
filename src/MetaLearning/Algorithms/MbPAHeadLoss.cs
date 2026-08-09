@@ -130,7 +130,7 @@ internal sealed class MbPAHeadLoss<T> : ILossFunction<T>
 
         var loss = CalculateLoss(flatPredicted, flatActual);
         var gradient = Tensor<T>.FromVector(CalculateDerivative(flatPredicted, flatActual))
-            .Reshape(predicted.Shape);
+            .Reshape(predicted.Shape.ToArray());
 
         return (loss, gradient);
     }

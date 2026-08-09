@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -40,6 +40,9 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 public class DINOLoss<T> : ContrastiveLossBase<T>
 {
 
+
+    // Engine and NumOps come from ContrastiveLossBase; redeclaring them here shadows the base
+    // members rather than adding anything.
 
     private readonly double _studentTemperature;
     private readonly double _teacherTemperature;
@@ -357,7 +360,6 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
-
     /// <summary>
     /// Differentiable DINO cross-entropy: -sum(P_teacher * log P_student).
     /// </summary>
@@ -394,9 +396,29 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         if (view1 is null) throw new ArgumentNullException(nameof(view1));
         if (view2 is null) throw new ArgumentNullException(nameof(view2));
 
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            view1, view2, "DINO", nameof(view1), nameof(view2));
+
+        // The output width is checked against the CONFIGURED one too: a mismatch would otherwise
+        // surface as an engine broadcast error that never mentions the DINO output dimension the
+        // caller actually got wrong.
+        if (view2.Shape[1] != _outputDim)
+        {
+            throw new ArgumentException(
+                $"DINO was configured for an output dimension of {_outputDim}, but the logits are "
+                + $"{view2.Shape[1]} wide.", nameof(view2));
+        }
+
         int batchSize = view1.Shape[0];
 
-        var centeredTeacher = ApplyCenter(view2);
+        // TEACHER DETACHED, NOT MERELY DOCUMENTED. The teacher is an EMA copy updated outside the
+        // optimizer and its centre is a running statistic, so neither is differentiated -- but the
+        // remarks saying so do not enforce it. ApplyCenter, TensorMultiplyScalar and Softmax all
+        // record, so any tape history view2 arrived with leaks a gradient path into the teacher
+        // branch. StopGradient blocks it at the boundary.
+        var teacherSource = Engine.StopGradient(view2);
+
+        var centeredTeacher = ApplyCenter(teacherSource);
         var teacherLogits = Engine.TensorMultiplyScalar(
             centeredTeacher, NumOps.FromDouble(1.0 / _teacherTemperature));
         var teacherProbs = Engine.Softmax(teacherLogits, axis: -1);
