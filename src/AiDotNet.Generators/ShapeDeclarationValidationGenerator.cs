@@ -48,6 +48,7 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
 {
     private const string LayoutAttributeName = "AiDotNet.Attributes.TensorLayoutAttribute";
     private const string ShapeContractName = "AiDotNet.Interfaces.IShapeContract";
+    private const string ElementWiseAttributeName = "AiDotNet.Attributes.ElementWiseShapeAttribute";
 
     // THE TENSOR TYPE LIVES IN AiDotNet.Tensors.LinearAlgebra, NOT AiDotNet.LinearAlgebra.
     // ADNSHAPE004 previously compared against the latter, which matches nothing in this
@@ -190,13 +191,21 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             // Only THIS check looks up the chain. The duplicate-axis and ambiguous-rank rules below
             // keep using `layouts`, the type's own declarations, because a base's malformed layout
             // should be reported once on the base and not again on each of its subclasses.
+            // [ElementWiseShape] IS an input declaration, just a rank-agnostic one: it states that
+            // whatever goes in comes out with exactly the same dimensions, at any rank.
+            // ShapeContractGenerator already treats it that way and emits the contract directly from
+            // it. Demanding a [TensorLayout] as well would mean writing a FIXED set of ranks onto a
+            // layer documented to accept any -- narrowing a correct contract into a false one, and
+            // making a rank-5 input violate a rule the layer does not actually have.
             bool declaresInputLayout = false;
             for (var t = type; t is not null && !declaresInputLayout; t = t.BaseType)
             {
-                declaresInputLayout = t.GetAttributes()
-                    .Where(a => a.AttributeClass?.ToDisplayString() == LayoutAttributeName)
-                    .Select(Parse)
-                    .Any(l => l.Axes.Count > 0 && l.IsInput);
+                declaresInputLayout =
+                    t.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == ElementWiseAttributeName)
+                    || t.GetAttributes()
+                        .Where(a => a.AttributeClass?.ToDisplayString() == LayoutAttributeName)
+                        .Select(Parse)
+                        .Any(l => l.Axes.Count > 0 && l.IsInput);
             }
 
             // Interfaces are excluded: IMultiPortShapeContract and friends REFINE IShapeContract
