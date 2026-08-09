@@ -26,10 +26,10 @@ namespace AiDotNet.TextToSpeech;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Frames,
     Direction = TensorLayoutDirection.Input,
     Note = "A mel-spectrogram: MelChannels bands by however many frames the acoustic model produced.")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Length,
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Length,
     Direction = TensorLayoutDirection.Output,
-    Note = "A waveform whose length is the frame count times UpsampleFactor - a SCALED relation, not "
-         + "a constant, because the frame count is free.")]
+    Note = "A mono waveform whose length is the frame count times UpsampleFactor - a SCALED relation, "
+         + "not a constant, because the frame count is free.")]
 public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContract
 {
     /// <summary>
@@ -50,23 +50,47 @@ public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContr
     /// a correct contract without writing one.
     /// </para>
     /// <para>
-    /// IT IS NOT THE DEFAULT, because this law has never been exercised against a real Predict, and
-    /// the reason is itself a defect worth recording: <b>this class has ZERO subclasses.</b> All 17
-    /// vocoders - HiFiGAN, WaveNet, WaveRNN, BigVGAN, DiffWave, Vocos, MelGAN, ParallelWaveGAN,
-    /// UnivNet, ISTFTNet, WaveGlow, WaveGrad, PriorGrad, FreGrad, APNet, APNet2, MultiBandMelGAN -
-    /// declare <c>: TtsModelBase&lt;T&gt;, IVocoder&lt;T&gt;</c> and skip this base entirely, so
-    /// nothing inherits what it defines. That is the same defect the segmentation family had, where
-    /// eight family bases had no users until the models were re-parented onto them.
+    /// This base had ZERO SUBCLASSES until the vocoders were re-parented onto it: all 17 declared
+    /// <c>: TtsModelBase&lt;T&gt;, IVocoder&lt;T&gt;</c> and skipped it, so nothing inherited what it
+    /// defined - the same defect the segmentation family had. Re-parenting them took the reachable
+    /// count from 0 to 17 and made the law measurable for the first time.
     /// </para>
     /// <para>
-    /// Until those 17 are re-parented, a law declared here would be a claim about nothing. Declining
-    /// is the honest default; <see cref="WaveformUpsampleContract"/> is ready for the moment a
-    /// subclass exists to test it against.
+    /// IT IS NOT THE DEFAULT, because measuring all 17 gave <b>3 agreed and 14 DISAGREED</b>, and the
+    /// reason is not a wrong ratio - it is that <c>Predict</c> does not mean the same thing across
+    /// this family. Only the GAN vocoders synthesise a whole waveform in one call:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description><b>Agreed</b> - HiFiGAN, MelGAN, UnivNet: <c>[1,80,8] -&gt; [1,1,2048]</c>,
+    /// exactly 8 frames x 256.</description></item>
+    /// <item><description><c>[1,80,1]</c> - BigVGAN, DiffWave, FreGrad, PriorGrad, WaveGrad. These are
+    /// DIFFUSION vocoders and Predict is one denoising step, not a synthesis.</description></item>
+    /// <item><description><c>[1,513,2048]</c> - APNet, ISTFTNet. 513 is the FFT bin count: they emit a
+    /// SPECTRUM and run the iSTFT separately, so their output axis is frequency.</description></item>
+    /// <item><description><c>[1,1]</c> / <c>[1,1,8]</c> - WaveNet, WaveRNN, WaveGlow, ParallelWaveGAN:
+    /// autoregressive or flow models producing one step per call.</description></item>
+    /// <item><description><c>[1,2048]</c> - Vocos gets the LENGTH right and omits the channel axis.
+    /// </description></item>
+    /// <item><description><c>[1,1,2048]</c> against a contract of <c>[1,1,2400]</c> - MultiBandMelGAN
+    /// upsamples by 256 while its HopSize says 300, so those two disagree in the model itself.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// So the interface is shared and the OPERATION is not, which is a finding about IVocoder rather
+    /// than about this contract. The three that were verified opt in by overriding this with
+    /// <see cref="WaveformUpsampleContract"/>; the rest decline until each one's Predict is given a
+    /// meaning worth stating.
     /// </para>
     /// </remarks>
     public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
 
     /// <summary>The family law, exposed so a vocoder with an extra axis can still reuse it.</summary>
+    /// <remarks>
+    /// The mono CHANNEL axis is measured, not decorative. The first version of this law returned
+    /// <c>[Batch, Length]</c> and the forward pass returned <c>[1,1,2048]</c> for a <c>[1,80,8]</c>
+    /// mel: the ratio was exactly right - 8 frames x an UpsampleFactor of 256 - and only the rank was
+    /// wrong, because the generator ends at one output channel rather than squeezing it away.
+    /// </remarks>
     protected IReadOnlyList<OutputAxisContract>? WaveformUpsampleContract(int inputRank)
     {
         int factor = UpsampleFactor;
@@ -74,6 +98,7 @@ public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContr
         return
         [
             new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(1)),
             new OutputAxisContract(TensorAxis.Length, AxisRelation.Scaled(TensorAxis.Frames, factor)),
         ];
     }
@@ -95,9 +120,15 @@ public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContr
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
     /// <param name="lossFunction">Optional loss function override.</param>
+    /// <param name="maxGradNorm">
+    /// Gradient-clipping norm, forwarded to <see cref="TtsModelBase{T}"/>. Present because this base
+    /// previously omitted it while its own parent accepted it, so a vocoder that clipped gradients
+    /// (DiffWave) could not be re-parented onto this class without losing the setting.
+    /// </param>
     protected VocoderBase(
         NeuralNetworkArchitecture<T> architecture,
-        ILossFunction<T>? lossFunction = null
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0
     )
-        : base(architecture, lossFunction) { }
+        : base(architecture, lossFunction, maxGradNorm) { }
 }

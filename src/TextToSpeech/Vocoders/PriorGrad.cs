@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Lee et al."
 )]
-public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
+public class PriorGrad<T> : VocoderBase<T>
 {
     private readonly PriorGradOptions _options;
 
@@ -90,15 +90,14 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using PriorGrad's data-dependent adaptive prior diffusion.
     /// Per the paper (Lee et al., 2022): Instead of N(0,I) prior, uses N(0, sigma^2(mel)) where sigma depends on mel energy. This focuses diffusion on harder-to-model regions, enabling 6-step generation matching 50-step DiffWave.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

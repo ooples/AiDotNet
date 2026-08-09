@@ -161,6 +161,15 @@ public class ModelContractConformanceTests
 
                 // What the model ACTUALLY does.
                 var (actual, failure) = TryPredict(model, shape);
+
+                // NOTE on a skip this harness cannot fix, seen with the vocoders. Every axis is
+                // clamped to Extent to keep a probe cheap, and for HiFiGAN that handed 64 mel
+                // channels to kernels built for 80: "Input channels (64) must match kernel
+                // in_channels (80)". Retrying UNCLAMPED does not help, because the architecture the
+                // harness constructed also says 64 - the 80 comes from the model's own options and is
+                // never reflected back into the architecture it was handed. That is a model-side
+                // inconsistency, not a clamp that can be widened, so those models are verified by
+                // VocoderShapeContractTests instead, which builds them at their real mel width.
                 if (actual is null) { skipped.Add($"{open.Name}: {failure}"); continue; }
 
                 if (predictedShape.SequenceEqual(actual)) { agreed++; continue; }

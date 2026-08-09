@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Ai et al."
 )]
-public class APNet<T> : TtsModelBase<T>, IVocoder<T>
+public class APNet<T> : VocoderBase<T>
 {
     private readonly APNetOptions _options;
 
@@ -87,15 +87,14 @@ public class APNet<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using APNet's dual-stream amplitude and phase prediction.
     /// Per the paper (Ai et al., 2023): Two parallel sub-networks predict amplitude spectrum A(f,t) and phase spectrum P(f,t) separately from mel input. An anti-wrapping loss constrains phase continuity. Final waveform is reconstructed via iSTFT: x(n) = iSTFT(A * exp(j*P)). Achieves better phase prediction than Griffin-Lim.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

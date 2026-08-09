@@ -44,7 +44,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2016,
     Authors = "van den Oord et al."
 )]
-public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
+public class WaveNet<T> : VocoderBase<T>
 {
     private readonly WaveNetOptions _options;
 
@@ -91,9 +91,8 @@ public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel-spectrogram to waveform using WaveNet's autoregressive sample-by-sample generation.
@@ -104,7 +103,7 @@ public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
     /// (4) Two 1x1 conv layers with ReLU + softmax over mu-law quantized levels.
     /// Autoregressive: each sample is conditioned on all previous samples and the mel frame.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

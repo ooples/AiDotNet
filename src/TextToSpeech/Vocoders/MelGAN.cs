@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2019,
     Authors = "Kumar et al."
 )]
-public class MelGAN<T> : TtsModelBase<T>, IVocoder<T>
+public class MelGAN<T> : VocoderBase<T>
 {
     private readonly MelGANOptions _options;
 
@@ -87,9 +87,16 @@ public class MelGAN<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    /// <inheritdoc />
+    /// <remarks>
+    /// MEASURED: <c>[1,80,8] -&gt; [1,1,2048]</c>, 8 mel frames x an UpsampleFactor of 256. One of the
+    /// three vocoders whose Predict is a whole-waveform synthesis.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => WaveformUpsampleContract(inputRank);
+
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using MelGAN's fully convolutional generator.
@@ -100,7 +107,7 @@ public class MelGAN<T> : TtsModelBase<T>, IVocoder<T>
     /// (4) Multi-scale discriminator with feature matching loss.
     /// Key: 10x faster than real-time on CPU, no sequential dependencies.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

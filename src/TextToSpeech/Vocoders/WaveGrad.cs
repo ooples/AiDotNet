@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Chen et al."
 )]
-public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
+public class WaveGrad<T> : VocoderBase<T>
 {
     private readonly WaveGradOptions _options;
 
@@ -95,9 +95,8 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using WaveGrad's continuous noise-level score estimation.
@@ -107,7 +106,7 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
     /// (3) Noise schedule: linear or custom, searched via grid search for few-step generation,
     /// (4) Key: continuous noise level enables flexible iteration count at inference.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

@@ -47,7 +47,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2020,
     Authors = "Kong et al."
 )]
-public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
+public class HiFiGAN<T> : VocoderBase<T>
 {
     private readonly HiFiGANOptions _options;
 
@@ -94,9 +94,27 @@ public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor
+    /// <inheritdoc />
+    /// <remarks>
+    /// MEASURED: <c>[1,80,8] -&gt; [1,1,2048]</c>, which is 8 mel frames x an UpsampleFactor of 256.
+    /// One of only three vocoders whose Predict is a whole-waveform synthesis - see VocoderBase for
+    /// the fourteen whose Predict means something else.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => WaveformUpsampleContract(inputRank);
+
+    // The explicit IVocoder.SampleRate / .MelChannels forwarders that used to sit here are gone:
+    // VocoderBase already forwards both to TtsModelBase.SampleRate / .MelChannels, and this
+    // constructor assigns those from the same _options fields the forwarders read. Identical values,
+    // one source.
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// NOT the hop size. HiFi-GAN's generator upsamples by the PRODUCT of its transposed-conv rates
+    /// (Kong et al. 2020), which is why the base declares this virtual rather than hard-wiring
+    /// HopSize into the shape contract.
+    /// </remarks>
+    public override int UpsampleFactor
     {
         get
         {
@@ -116,7 +134,7 @@ public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
     /// (4) Final conv: channels -> 1 with tanh activation for [-1,1] waveform output.
     /// Discriminators (MPD + MSD) used only during training.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
