@@ -264,8 +264,18 @@ public class CausalDiscoveryOptions : ModelOptions
     /// A finite value in <c>[0, 1]</c>, or <see langword="null"/> to use CCM's default threshold of <c>0.2</c>.
     /// </value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Lower values remove weak reverse links more aggressively; higher values
-    /// retain more bidirectional links.</para>
+    /// <para><b>For Beginners:</b> CCM decides which of two series drives the other by checking which
+    /// one predicts the other better. Real data almost always makes one direction score a little
+    /// higher by chance, so without a margin the algorithm would claim a cause for every pair it
+    /// looks at. This setting is that margin.
+    ///
+    /// It is a RELATIVE margin, not an absolute one: the gap between the two skills is divided by the
+    /// larger of them, so at the default of 0.2 the weaker direction has to be at least 20% below the
+    /// stronger one. Skills of 0.5 and 0.4 clear it; 0.9 and 0.75 do not, even though their absolute
+    /// gap is larger. Raise it toward 1 for fewer, more confident arrows; lower it toward 0 for more
+    /// arrows, more of which will be guesses. Pairs that do not clear the margin keep both
+    /// directions, which is how CCM reports genuine mutual coupling. Leave it unset to take the
+    /// default.</para>
     /// <para><b>Reference:</b> Sugihara et al., "Detecting Causality in Complex Ecosystems," Science, 2012.</para>
     /// <para>Used by <see cref="AiDotNet.CausalDiscovery.TimeSeries.CCMAlgorithm{T}"/>. For a pair
     /// (X, Y) with forward/backward cross-map skills f and b, the relative asymmetry is
@@ -357,36 +367,4 @@ public class CausalDiscoveryOptions : ModelOptions
     /// <see cref="MaxKlWeight"/> over the first 25% of epochs. When false, uses a fixed weight.</para>
     /// </remarks>
     public bool? UseKlWarmUp { get; set; }
-
-    /// <summary>
-    /// How much stronger one cross-map direction must be than the other before Convergent Cross
-    /// Mapping will orient an edge between two series. Default: null (0.2).
-    /// </summary>
-    /// <value>
-    /// A value between 0 and 1, or <c>null</c> to use the algorithm's default of <c>0.2</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// CCM tests both directions and compares their cross-map skill. The two skills are almost never
-    /// exactly equal, so without a margin every pair produces an edge in whichever direction happened
-    /// to score marginally higher, including pairs that are only mutually driven by a third series.
-    /// This is that margin: a pair whose two skills differ by less than it is left unoriented.
-    /// </para>
-    /// <para>
-    /// Valid range is 0 to 1, since the compared skills are correlations. Raise it to report only
-    /// pairs with a decisive asymmetry; lower it to admit weaker directional evidence.
-    /// </para>
-    /// <para><b>For Beginners:</b> Convergent Cross Mapping decides which of two time series drives
-    /// the other by checking which one predicts the other better. Real data almost always makes one
-    /// direction score a little higher purely by chance, so without a rule the algorithm would claim
-    /// a cause for every pair it looks at.
-    ///
-    /// This setting is how much better one direction has to be before that claim is made. At the
-    /// default of 0.2 the winning direction must beat the other by 0.2, and pairs closer than that
-    /// are reported as related but with no direction. Raise it toward 1 to get fewer, more confident
-    /// arrows; lower it toward 0 to get more arrows, more of which will be guesses. Leave it unset to
-    /// take the default.
-    /// </para>
-    /// </remarks>
-    public double? DirectionalityAsymmetryThreshold { get; set; }
 }

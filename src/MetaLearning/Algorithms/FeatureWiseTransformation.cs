@@ -36,7 +36,13 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-internal sealed class FeatureWiseTransformation<T>
+// PUBLIC, AND IT HAS TO STAY PUBLIC. This was narrowed to internal on the assumption that nothing
+// exposed it -- true only because LFTAlgorithm lives in a different slice of the #1789 split and was
+// not on the branch where the narrowing was made. LFTAlgorithm.Transformation returns this type from
+// a public property so the learned hyper-parameters can be inspected, so narrowing it is CS0053 the
+// moment the two slices meet. If this should genuinely be an implementation detail, the property is
+// what has to change first.
+public sealed class FeatureWiseTransformation<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
