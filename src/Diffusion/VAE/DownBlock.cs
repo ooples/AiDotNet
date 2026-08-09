@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
-public class DownBlock<T> : LayerBase<T>
+public partial class DownBlock<T> : LayerBase<T>
 {
     /// <summary>
     /// Residual blocks in this down block.
@@ -216,7 +216,7 @@ public class DownBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [batch, inChannels, H, W].</param>
     /// <returns>Output tensor with shape [batch, outChannels, H/2, W/2] if hasDownsample, else [batch, outChannels, H, W].</returns>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _lastInput = input;
         var x = input;

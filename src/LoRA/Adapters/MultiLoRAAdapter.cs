@@ -221,7 +221,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
 
         // Create a new LoRA layer for this task
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         LoRALayer<T> taskAdapter = new LoRALayer<T>(inputSize, outputSize, rank, alpha);
 
         _taskAdapters[taskName] = taskAdapter;
@@ -335,7 +335,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
     /// The magic: Different tasks produce different outputs even though they share the same base layer!
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
@@ -596,7 +596,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
         Vector<T> baseParams = _baseLayer.GetParameters();
 
         int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
+        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Create new parameters with merged weights

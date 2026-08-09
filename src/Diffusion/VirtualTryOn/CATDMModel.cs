@@ -42,7 +42,9 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("CATDM: Controllable Appearance Transfer Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2311.18405", Year = 2024, Authors = "Zeng et al.")]
+[ResearchPaper(// Title corrected: the arXiv id was already right, but the recorded title invented an expansion of the
+// acronym — CAT-DM is "Controllable ACCELERATED", not "Controllable Appearance Transfer".
+    "CAT-DM: Controllable Accelerated Virtual Try-on with Diffusion Model", "https://arxiv.org/abs/2311.18405", Year = 2024, Authors = "Zeng et al.")]
 public class CATDMModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
