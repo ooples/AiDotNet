@@ -24,6 +24,7 @@ AIDN073 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, R
 AIDN074 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, NotImplementedException in production code
 AIDN075 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Console output used instead of a logging abstraction
 AIDN076 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Catch block swallows the exception
+AIDN077 | AiDotNet.GoldenPattern | Error | GoldenPatternValidationGenerator, Settable property initializes lazily in its getter
 AIDN060 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double field in generic <T> class
 AIDN061 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[] field in generic <T> class
 AIDN062 | AiDotNet.TypeSafety | Info | HardcodedDoubleFieldGenerator, Hardcoded double[,]/double[][] field in generic <T> class

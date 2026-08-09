@@ -108,6 +108,21 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         description: "Every catch must call Logger.LogError/LogWarning with the exception so developers can " +
                      "diagnose it. An empty catch makes the failure invisible.");
 
+    internal static readonly DiagnosticDescriptor ComputingGetterOnSettableProperty = new(
+        id: "AIDN077",
+        title: "Settable property initializes lazily in its getter",
+        messageFormat: "Property '{0}.{1}' builds its value in the getter -- initialize it in the constructor, or leave it null when unconfigured",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A settable property whose getter constructs rather than returns is indistinguishable from " +
+                     "configuration to any caller that reads it, including cloning and serialization, so reading " +
+                     "it silently does work. It also makes the property unable to report 'not configured': " +
+                     "MultilayerPerceptronOptions.Optimizer built a default bound to a throwaway model, and " +
+                     "because the getter never returned null the correctly-bound fallback in the consuming " +
+                     "model's constructor was unreachable. Every other options class in the library initializes " +
+                     "in its constructor.");
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var optionsFindings = context.SyntaxProvider.CreateSyntaxProvider(
@@ -116,6 +131,13 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
                         || cds.Identifier.ValueText.EndsWith("Config", System.StringComparison.Ordinal)),
                 transform: static (ctx, _) => AnalyzeOptionsCopyConstructor(ctx))
             .Where(static f => f.Count > 0);
+
+        var lazyGetterFindings = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => node is PropertyDeclarationSyntax p
+                    && p.AccessorList is not null
+                    && p.AccessorList.Accessors.Count > 1,
+                transform: static (ctx, _) => AnalyzeComputingGetter(ctx))
+            .Where(static f => f is not null);
 
         var nodeFindings = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => IsInterestingNode(node),
@@ -129,6 +151,14 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
                     Report(spc, f);
         });
 
+        context.RegisterSourceOutput(lazyGetterFindings.Collect(), static (spc, findings) =>
+        {
+            foreach (var f in findings)
+            {
+                if (f is not null) Report(spc, f);
+            }
+        });
+
         context.RegisterSourceOutput(nodeFindings.Collect(), static (spc, findings) =>
         {
             foreach (var f in findings)
@@ -136,6 +166,65 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
                 if (f is not null) Report(spc, f);
             }
         });
+    }
+
+    /// <summary>
+    /// Flags a settable property whose getter builds a value instead of returning one.
+    /// </summary>
+    /// <remarks>
+    /// Only properties with BOTH a getter and a setter are considered. A computed read-only
+    /// property is a legitimate derived value -- it advertises that it is derived by having no
+    /// setter, and nothing treats it as configuration. It is the combination that misleads: a
+    /// setter says "this is configuration you may set", while a constructing getter means reading
+    /// it has effects.
+    /// </remarks>
+    private static Finding? AnalyzeComputingGetter(GeneratorSyntaxContext ctx)
+    {
+        if (ctx.Node is not PropertyDeclarationSyntax property) return null;
+        if (property.AccessorList is null) return null;
+
+        AccessorDeclarationSyntax? getter = null;
+        bool hasSetter = false;
+
+        foreach (var accessor in property.AccessorList.Accessors)
+        {
+            if (accessor.Keyword.ValueText == "get") getter = accessor;
+            else if (accessor.Keyword.ValueText is "set" or "init") hasSetter = true;
+        }
+
+        if (!hasSetter || getter?.Body is null) return null;
+
+        // Construction only counts when the value is KEPT -- assigned or returned. A getter that
+        // throws is doing the opposite of lazy initialization: it refuses to fabricate a value for
+        // unset state, which is a guard worth keeping. Counting `throw new InvalidOperationException`
+        // as construction flagged four correct properties on MetaLearningTaskBase, and at Error
+        // severity a false positive breaks the build for code that is right.
+        bool constructs = getter.Body.DescendantNodes().Any(n =>
+            !IsThrown(n)
+            && (n is ObjectCreationExpressionSyntax
+                || (n is InvocationExpressionSyntax i
+                    && i.Expression.ToString().Contains("Create"))));
+
+        if (!constructs) return null;
+
+        var owner = (property.Parent as ClassDeclarationSyntax)?.Identifier.ValueText ?? "?";
+        return new Finding(
+            ComputingGetterOnSettableProperty,
+            property.Identifier.GetLocation(),
+            owner,
+            property.Identifier.ValueText);
+    }
+
+    /// <summary>Determines whether an expression is the operand of a throw.</summary>
+    private static bool IsThrown(SyntaxNode node)
+    {
+        for (var current = node.Parent; current is not null; current = current.Parent)
+        {
+            if (current is ThrowStatementSyntax or ThrowExpressionSyntax) return true;
+            if (current is AccessorDeclarationSyntax) return false;
+        }
+
+        return false;
     }
 
     private static void Report(SourceProductionContext spc, Finding f) =>
