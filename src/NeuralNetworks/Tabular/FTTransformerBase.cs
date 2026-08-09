@@ -108,6 +108,28 @@ public abstract class FTTransformerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
+    /// <summary>
+    /// Trainable layers a subclass adds on top of the backbone, walked after it by all three
+    /// parameter surfaces.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The task head is the case this exists for. A classifier and a regressor share this entire
+    /// backbone and differ only by a final projection, and each used to re-implement
+    /// ParameterCount, GetParameters and SetParameters purely to append that one layer -- three
+    /// members per subclass, six per architecture, saying nothing except "and then the head".
+    /// </para>
+    /// <para>
+    /// Declaring the head here instead means the subclass states WHAT it adds and the fold below
+    /// decides where it goes, so count, vector and restore cannot disagree about it. Mirrors
+    /// <c>NeuralNetworkBase.GetExtraTrainableLayers</c>, which solves the same problem for the
+    /// models that do derive from it.
+    /// </para>
+    /// </remarks>
+    protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<ILayer<T>>();
+
+    /// <inheritdoc cref="GetParameters"/>
     public virtual long ParameterCount
     {
         get
@@ -118,6 +140,10 @@ public abstract class FTTransformerBase<T>
                 count += (int)layer.ParameterCount;
             }
             count += (int)FinalLayerNorm.ParameterCount;
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) count += (int)extra.ParameterCount;
+            }
             return count;
         }
     }
@@ -282,6 +308,17 @@ public abstract class FTTransformerBase<T>
             allParams.Add(normParams[i]);
         }
 
+        // Subclass head, last, in the same position ParameterCount and SetParameters put it.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            var extraParams = extra.GetParameters();
+            for (int i = 0; i < extraParams.Length; i++)
+            {
+                allParams.Add(extraParams[i]);
+            }
+        }
+
         return new Vector<T>([.. allParams]);
     }
 
@@ -323,6 +360,21 @@ public abstract class FTTransformerBase<T>
             normParams[i] = parameters[offset + i];
         }
         FinalLayerNorm.SetParameters(normParams);
+        offset += normCount;
+
+        // Subclass head, last, matching GetParameters and ParameterCount.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            int extraCount = checked((int)extra.ParameterCount);
+            var extraParams = new Vector<T>(extraCount);
+            for (int i = 0; i < extraCount; i++)
+            {
+                extraParams[i] = parameters[offset + i];
+            }
+            extra.SetParameters(extraParams);
+            offset += extraCount;
+        }
     }
 
     /// <summary>
