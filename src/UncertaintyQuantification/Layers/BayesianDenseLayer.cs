@@ -1,7 +1,4 @@
-﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
-// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
-using AiDotNet.Attributes;
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -31,70 +28,8 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// to express uncertainty in its predictions.
 /// </para>
 /// </remarks>
-// A fully-connected layer that happens to sample its weights: the shape rule is DenseLayer's, and it is
-// read off ForwardTraced rather than assumed. The guard checks only the LAST dimension - "expects
-// last-dimension feature size {_inputSize}" - and the tail reconstructs the output as the input's shape
-// with `outputShape[^1] = _outputSize`. Every leading axis is carried through untouched, at any rank.
-//
-// Rank 1 and rank 4 are declared because this layer ACCEPTS them, not because they are typical. The
-// rank-4 axes are named [Batch, Channels, Height, Features] rather than with placeholders because that
-// is exactly the convolution hand-off, and naming it makes the consequence legible: fed a feature map,
-// this layer maps WIDTH as its feature axis - almost never what an author meant, and worth being able
-// to see rather than discovering from a size mismatch two layers later.
-[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "Per-position projection: the leading axes are carried through untouched.")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IShapeContract
+public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Hand-written rather than generated, for the same reason <c>DenseLayer</c> writes its own: the last
-    /// axis takes a size the CONFIGURATION fixes, and an attribute cannot carry a constructor argument.
-    /// <c>ForwardTraced</c> ends by copying every leading dimension and overwriting only the last -
-    /// <c>outputShape[^1] = _outputSize</c> - with the rank-1 and rank-2 special cases reshaping to
-    /// <c>[_outputSize]</c> and returning <c>[batch, _outputSize]</c> respectively. Same rule, three
-    /// spellings.
-    /// </para>
-    /// <para>
-    /// Sampling the posterior does not touch the shape: the sampled weights are added to
-    /// <c>_weightMean</c>, which is <c>[_outputSize, _inputSize]</c> whether or not a sample is drawn.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (_outputSize <= 0 || inputRank < 1) return null;
-
-        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
-        OutputAxisContract Pass(TensorAxis axis) => new(axis, AxisRelation.Same(axis));
-
-        // Enumerated rather than generated, because every leading axis needs a DISTINCT role: a relation
-        // refers to its input BY ROLE, so two anonymous placeholders in one layout could not be told
-        // apart and the whole naming would be refused. Ranks beyond four decline honestly.
-        return inputRank switch
-        {
-            1 => new[] { features },
-            2 => new[] { Pass(TensorAxis.Batch), features },
-            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
-            4 => new[]
-            {
-                Pass(TensorAxis.Batch), Pass(TensorAxis.Channels), Pass(TensorAxis.Height), features,
-            },
-            _ => null,
-        };
-    }
-
     private readonly Random _rng;
     private readonly object _rngLock = new();
     private readonly int _inputSize;
@@ -171,6 +106,9 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         // Initialize weight and bias parameters
         InitializeParameters();
     }
+
+    /// <inheritdoc/>
+    public override long ParameterCount => 2L * _outputSize * _inputSize + 2L * _outputSize;
 
     private void InitializeParameters()
     {
@@ -287,6 +225,36 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         _samplePending = false;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>THIS IS WHERE THE POSTERIOR SAMPLE IS REFRESHED, and it has to be here rather than in
+    /// Forward.</b> The eager path draws a fresh reparameterized epsilon inside
+    /// <see cref="Forward"/>, but a COMPILED training tape never calls Forward again -- it replays
+    /// captured tensor references. So on the compiled path the same epsilon was reused for every
+    /// step of training, and a Bayesian layer that never resamples is not Bayesian: the
+    /// reparameterization trick degenerates into one frozen noise draw, and the variance
+    /// parameters are fitted against a constant.
+    /// </para>
+    /// <para>
+    /// <see cref="RefreshCompiledTrainingSample"/> was written for exactly this and was called by
+    /// nothing -- it is <c>internal</c>, so there was no external caller either. The comment on
+    /// the sampling branch in Forward claims "compiled replay refreshes the same captured tensor
+    /// references between steps", which described an intention rather than any code path.
+    /// </para>
+    /// <para>
+    /// <c>ZeroGrad</c> is the right hook because it is the per-step boundary BOTH paths cross:
+    /// every training loop zeroes gradients once per step, eager or compiled, so the refresh
+    /// happens exactly once per step on either. Doing it here rather than adding a new hook also
+    /// means no caller has to learn about Bayesian layers to train one correctly.
+    /// </para>
+    /// </remarks>
+    public override void ZeroGrad()
+    {
+        base.ZeroGrad();
+        RefreshCompiledTrainingSample();
+    }
+
     /// <summary>
     /// Computes the KL divergence between the weight distribution and the prior.
     /// </summary>
@@ -373,22 +341,25 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         bool useSample = IsTrainingMode || _samplePending;
         if (IsTrainingMode && !_samplePending)
             FillSampleEpsilon();
-        if (useSample && (_sampledWeightEpsilon is null || _sampledBiasEpsilon is null))
-            throw new InvalidOperationException("Bayesian posterior sample was not initialized.");
-
         Tensor<T> effectiveWeights = _weightMean;
         Tensor<T> effectiveBias = _biasMean;
         if (useSample)
         {
+            // The null check lives inside this branch rather than above it so the compiler can
+            // narrow both fields for the rest of the block. Guarding outside and then suppressing
+            // at each use gave the same runtime behaviour while hiding the nullability.
+            if (_sampledWeightEpsilon is null || _sampledBiasEpsilon is null)
+                throw new InvalidOperationException("Bayesian posterior sample was not initialized.");
+
             var weightStd = Engine.TensorSqrt(Engine.TensorExp(_weightLogVar));
             effectiveWeights = Engine.TensorAdd(
                 _weightMean,
-                Engine.TensorMultiply(weightStd, _sampledWeightEpsilon!));
+                Engine.TensorMultiply(weightStd, _sampledWeightEpsilon));
 
             var biasStd = Engine.TensorSqrt(Engine.TensorExp(_biasLogVar));
             effectiveBias = Engine.TensorAdd(
                 _biasMean,
-                Engine.TensorMultiply(biasStd, _sampledBiasEpsilon!));
+                Engine.TensorMultiply(biasStd, _sampledBiasEpsilon));
         }
 
         _samplePending = false;
@@ -438,7 +409,24 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
     {
         var priorVar = NumOps.Multiply(_priorSigma, _priorSigma);
         var half = NumOps.FromDouble(0.5);
+        // THE SAME TWO CHECKS UpdateParameters(T) ALREADY MAKES AGAINST THIS BUFFER. Without them a
+        // null or short buffer surfaces as a NullReferenceException or IndexOutOfRangeException from
+        // inside the innermost loop below, naming neither the buffer nor the layer.
         var gradients = GetParameterGradients();
+        if (gradients is null)
+        {
+            throw new InvalidOperationException(
+                "BayesianDenseLayer has no gradient buffer to add KL divergence gradients to; "
+                + "run a backward pass before calling AddKLDivergenceGradients.");
+        }
+
+        if (gradients.Length != ParameterCount)
+        {
+            throw new InvalidOperationException(
+                $"BayesianDenseLayer gradient buffer length {gradients.Length} "
+                + $"does not match ParameterCount {ParameterCount}.");
+        }
+
         int gradientIndex = 0;
 
         for (int i = 0; i < _outputSize; i++)
@@ -506,6 +494,13 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
                     parameter[i],
                     NumOps.Multiply(learningRate, ParameterGradients[gradientIndex++]));
             }
+
+            // A compiled tape retains the posterior parameter tensors by reference, exactly as it
+            // retains the epsilon tensors that FillSampleEpsilon invalidates for the same reason.
+            // These were mutated element by element with no invalidation, so a persistent-device
+            // backend replayed the cached pre-update contents and the compiled step kept training
+            // against stale weights. The eager backend hides this entirely.
+            Engine.InvalidatePersistentTensor(parameter);
         }
     }
 
@@ -513,6 +508,77 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
     public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);
+        _sampledWeightEpsilon = null;
+        _sampledBiasEpsilon = null;
+        _samplePending = false;
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var paramCount = _outputSize * _inputSize * 2 + _outputSize * 2;
+        var parameters = new Vector<T>(paramCount);
+        int idx = 0;
+
+        // Pack weight means
+        for (int i = 0; i < _outputSize; i++)
+            for (int j = 0; j < _inputSize; j++)
+                parameters[idx++] = _weightMean[i, j];
+
+        // Pack weight log variances
+        for (int i = 0; i < _outputSize; i++)
+            for (int j = 0; j < _inputSize; j++)
+                parameters[idx++] = _weightLogVar[i, j];
+
+        // Pack bias means
+        for (int i = 0; i < _outputSize; i++)
+            parameters[idx++] = _biasMean[i];
+
+        // Pack bias log variances
+        for (int i = 0; i < _outputSize; i++)
+            parameters[idx++] = _biasLogVar[i];
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets all trainable parameters.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var expectedCount = _outputSize * _inputSize * 2 + _outputSize * 2;
+        if (parameters.Length != expectedCount)
+            throw new ArgumentException($"Expected {expectedCount} parameters, got {parameters.Length}");
+
+        int idx = 0;
+
+        // Unpack weight means
+        for (int i = 0; i < _outputSize; i++)
+            for (int j = 0; j < _inputSize; j++)
+                _weightMean[i, j] = parameters[idx++];
+
+        // Unpack weight log variances
+        for (int i = 0; i < _outputSize; i++)
+            for (int j = 0; j < _inputSize; j++)
+                _weightLogVar[i, j] = parameters[idx++];
+
+        // Unpack bias means
+        for (int i = 0; i < _outputSize; i++)
+            _biasMean[i] = parameters[idx++];
+
+        // Unpack bias log variances
+        for (int i = 0; i < _outputSize; i++)
+            _biasLogVar[i] = parameters[idx++];
+
+        // Same in-place mutation, same requirement: notify persistent-device backends that the
+        // retained posterior tensors changed, or a compiled replay serves the previous contents.
+        foreach (var parameter in GetTrainableParameters())
+        {
+            Engine.InvalidatePersistentTensor(parameter);
+        }
+
         _sampledWeightEpsilon = null;
         _sampledBiasEpsilon = null;
         _samplePending = false;

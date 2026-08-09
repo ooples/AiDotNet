@@ -103,6 +103,16 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     // Key format: "{environmentId}_msg_{sourceRank}_{destRank}_{tag}"
     private static readonly Dictionary<string, Queue<Vector<T>>> _messageQueues = new();
 
+    /// <summary>Live backends per environment, so the LAST one out can clear undelivered state.</summary>
+    /// <remarks>
+    /// An undelivered queue is deliberately preserved while a peer might still receive from it (see
+    /// ClearEnvironmentState). That guard had no exit: once every backend had shut down, a non-empty
+    /// queue survived indefinitely, and the next session reusing the same environmentId -- including
+    /// the default "default" -- could dequeue a message from the previous one. Counting live backends
+    /// gives the guard a terminating condition.
+    /// </remarks>
+    private static readonly Dictionary<string, int> _activeBackends = new();
+
     private const int BarrierTimeoutMs = 30000; // 30 seconds
     private const int MessageTimeoutMs = 30000; // 30 seconds for point-to-point
 
@@ -179,6 +189,12 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     /// <inheritdoc/>
     protected override void OnInitialize()
     {
+        lock (_globalLock)
+        {
+            _activeBackends[_environmentId] =
+                (_activeBackends.TryGetValue(_environmentId, out int live) ? live : 0) + 1;
+        }
+
         // Base class handles initialization state
         // No additional initialization required for in-memory backend
     }
@@ -188,8 +204,20 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         lock (_globalLock)
         {
-            // Clear only this environment's shared state
-            ClearEnvironmentState(_environmentId);
+            int live = _activeBackends.TryGetValue(_environmentId, out int n) ? n - 1 : 0;
+            if (live > 0)
+            {
+                _activeBackends[_environmentId] = live;
+            }
+            else
+            {
+                _activeBackends.Remove(_environmentId);
+            }
+
+            // Clear only this environment's shared state. FORCE once the last backend is gone: the
+            // in-flight guards exist to protect a PEER, and with no peer left there is nothing to
+            // protect -- only stale state for whoever reuses this environmentId next.
+            ClearEnvironmentState(_environmentId, force: live <= 0);
         }
     }
 
@@ -207,11 +235,15 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
 
         lock (_globalLock)
         {
-            ClearEnvironmentState(environmentId);
+            // FORCE: this method's contract is "clears all shared state for an environment", which a
+            // preserved in-flight queue would quietly violate -- and its stated purpose is test
+            // isolation, where leaked state is exactly what it exists to prevent.
+            _activeBackends.Remove(environmentId);
+            ClearEnvironmentState(environmentId, force: true);
         }
     }
 
-    private static void ClearEnvironmentState(string environmentId)
+    private static void ClearEnvironmentState(string environmentId, bool force = false)
     {
         // Remove this environment's shared buffers — but NOT any collective that is still IN FLIGHT (a
         // buffer with pending consumers). This backend simulates separate processes with shared static
@@ -222,7 +254,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         // collective's own pending-consumer protocol to remove when the last rank finishes.
         var buffersToRemove = _sharedBuffers.Keys
             .Where(k => k.StartsWith($"{environmentId}_"))
-            .Where(k => !_pendingConsumers.TryGetValue(k, out int pending) || pending <= 0)
+            .Where(k => force || !_pendingConsumers.TryGetValue(k, out int pending) || pending <= 0)
             .ToList();
         foreach (var key in buffersToRemove)
         {
@@ -248,7 +280,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         // genuinely in flight and is left for its receiver.
         var messagesToRemove = _messageQueues.Keys
             .Where(k => k.StartsWith($"{environmentId}_"))
-            .Where(k => _messageQueues[k].Count == 0)
+            .Where(k => force || _messageQueues[k].Count == 0)
             .ToList();
         foreach (var key in messagesToRemove)
         {
@@ -259,7 +291,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         // counter is owned by its pending-consumer protocol and removed when the last rank finishes.
         var consumersToRemove = _pendingConsumers.Keys
             .Where(k => k.StartsWith($"{environmentId}_"))
-            .Where(k => _pendingConsumers[k] <= 0)
+            .Where(k => force || _pendingConsumers[k] <= 0)
             .ToList();
         foreach (var key in consumersToRemove)
         {

@@ -127,6 +127,7 @@ public class NeuralNetworkHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetDefaultLossFunction_Embedding_ReturnsCosineSimilarity()
     {
+        await Task.Yield();
         var lossFunction = NeuralNetworkHelper<double>.GetDefaultLossFunction(NeuralNetworkTaskType.Embedding);
 
         Assert.NotNull(lossFunction);
@@ -204,6 +205,7 @@ public class NeuralNetworkHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetDefaultActivationFunction_Embedding_ReturnsIdentity()
     {
+        await Task.Yield();
         var activation = NeuralNetworkHelper<double>.GetDefaultActivationFunction(NeuralNetworkTaskType.Embedding);
 
         Assert.NotNull(activation);
@@ -458,6 +460,7 @@ public class NeuralNetworkHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ApplyOutputActivation_Embedding_NoChange()
     {
+        await Task.Yield();
         var architecture = new NeuralNetworkArchitecture<double>(
             InputType.OneDimensional,
             NeuralNetworkTaskType.Embedding,

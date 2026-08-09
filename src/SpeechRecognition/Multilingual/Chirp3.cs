@@ -42,18 +42,8 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
-public partial class Chirp3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class Chirp3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Traced through the graph, not read off a name: InitializeLayers builds
-    /// <c>LayerHelper.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize)</c>, whose last
-    /// emitted layer is the CTC output head <c>DenseLayer&lt;T&gt;(vocabSize)</c> (after the final
-    /// LayerNorm). PredictCore folds Layers in order and PostprocessOutput is the identity, so that
-    /// head's width is the last axis Predict returns.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly Chirp3Options _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -114,7 +104,7 @@ public partial class Chirp3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     // Chirp 3 has a published architecture, so it uses the paper-faithful Conformer factory.
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: _options.FeedForwardExpansionFactor, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

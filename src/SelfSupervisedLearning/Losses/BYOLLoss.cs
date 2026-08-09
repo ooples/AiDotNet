@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -62,6 +62,11 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
     /// </remarks>
     public override Tensor<T> ComputeLoss(Tensor<T> onlinePrediction, Tensor<T> targetProjection)
     {
+        // Shapes, not just ranks: the engine broadcasts, so a [8, 1] against a [8, 768] returns a
+        // finite loss computed against the wrong target instead of failing.
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            onlinePrediction, targetProjection, "BYOL", nameof(onlinePrediction), nameof(targetProjection));
+
         if (onlinePrediction is null) throw new ArgumentNullException(nameof(onlinePrediction));
         if (targetProjection is null) throw new ArgumentNullException(nameof(targetProjection));
 
@@ -264,4 +269,10 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
+
+    /// <summary>Row-wise L2 normalization on the tape.</summary>
+    /// <remarks>
+    /// The epsilon sits inside the square root so a zero row scales by a finite value rather than
+    /// dividing by zero, and its derivative stays finite there too.
+    /// </remarks>
 }

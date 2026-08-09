@@ -42,61 +42,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1")]
-// Exactly the two ranks this block's own guard admits - OnFirstForward: "requires rank-3 [C,H,W] or
-// rank-4 [B,C,H,W] input" - declared separately rather than as one BatchOptional layout, because a
-// derived contract keys on the declared axis count and would leave the unbatched rank resolving to
-// nothing. OutputAxesFor is hand-written: both spatial extents depend on the constructor's stride.
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
+public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Taken from this block's own resolution, not from the residual add: <c>OnFirstForward</c> computes
-    /// <c>outH = (inputHeight - 1) / _stride + 1</c> and resolves
-    /// <c>ResolveShapes(new[] { _inChannels, inputHeight, inputWidth }, new[] { _outChannels, outH, outW })</c>.
-    /// </para>
-    /// <para>
-    /// That expression IS the sliding window for the 3x3 / pad=1 main path, which is why it is declared as
-    /// <c>Window(kernel: 3, stride: _stride, padding: 1)</c> rather than as a division:
-    /// <c>floor((in + 2*1 - (3-1) - 1) / stride) + 1</c> reduces to <c>(in - 1) / stride + 1</c> exactly.
-    /// The layer's own comment flags the alternative as a real defect - plain <c>in / stride</c> gives 3
-    /// for in=7, stride=2 where the convolution produces 4, and the mismatch reaches the downsample
-    /// branch's BatchNorm shape and breaks the residual add.
-    /// </para>
-    /// <para>
-    /// Channels are <c>Fixed(_outChannels)</c> and not <c>Same</c>: the shortcut is 1x1-convolved and
-    /// re-normalised precisely when <c>_stride != 1 || _inChannels != _outChannels</c>, so the block
-    /// widens its input rather than carrying the channel count through.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank is not (3 or 4) || _outChannels <= 0 || _stride <= 0) return null;
-
-        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels));
-        var height = new OutputAxisContract(
-            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, kernel: 3, stride: _stride, padding: 1));
-        var width = new OutputAxisContract(
-            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, kernel: 3, stride: _stride, padding: 1));
-
-        return inputRank == 3
-            ? new[] { channels, height, width }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                channels, height, width,
-            };
-    }
-
     /// <summary>
     /// The expansion factor for BasicBlock. BasicBlock does not expand channels.
     /// </summary>
@@ -147,6 +94,12 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     private Tensor<T>? _gpuBn2Out;
     private Tensor<T>? _gpuPreActivation;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
+    public override long ParameterCount =>
+        _conv1.ParameterCount + _bn1.ParameterCount + _conv2.ParameterCount + _bn2.ParameterCount +
+        (_downsampleConv?.ParameterCount ?? 0) + (_downsampleBn?.ParameterCount ?? 0);
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -439,6 +392,25 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         _downsampleBn?.UpdateParameters(learningRate);
     }
 
+    /// <summary>
+    /// Gets all trainable parameters.
+    /// </summary>
+    /// <returns>A vector containing all parameters.</returns>
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        allParams.AddRange(_conv1.GetParameters().ToArray());
+        allParams.AddRange(_bn1.GetParameters().ToArray());
+        allParams.AddRange(_conv2.GetParameters().ToArray());
+        allParams.AddRange(_bn2.GetParameters().ToArray());
+        if (_downsampleConv is not null && _downsampleBn is not null)
+        {
+            allParams.AddRange(_downsampleConv.GetParameters().ToArray());
+            allParams.AddRange(_downsampleBn.GetParameters().ToArray());
+        }
+        return new Vector<T>([.. allParams]);
+    }
+
     public override Vector<T> GetParameterGradients()
     {
         var grads = new List<T>();
@@ -460,6 +432,20 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         _conv1.ClearGradients(); _bn1.ClearGradients();
         _conv2.ClearGradients(); _bn2.ClearGradients();
         _downsampleConv?.ClearGradients(); _downsampleBn?.ClearGradients();
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Pre-Forward: every sub-layer's shape is unresolved so each
+        // ParameterCount returns 0 — slicing collapses. Buffer the
+        // whole vector and replay from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
+        ApplyParameters(parameters);
     }
 
     private Vector<T>? _pendingParameters;

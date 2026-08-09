@@ -405,7 +405,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         // Wire into the base train-optimizer slot so TrainWithTape uses our
         // configured Adam (initial lr=1e-6, ramping toward the paper's
         // headline lr=1e-3), not the framework default.
-        SetBaseTrainOptimizer(_optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        SetBaseTrainOptimizer(_optimizer);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         // Wire the loss into the base slot too. _lossFunction was assigned in both constructors
         // and never read, so a caller-supplied lossFunction was silently discarded and training

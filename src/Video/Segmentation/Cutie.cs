@@ -650,7 +650,13 @@ public class Cutie<T> : NeuralNetworkBase<T>
                 var term = Engine.TensorBroadcastMultiply(value, weight);                 // [b,C,h,w]
                 accumulated = accumulated is null ? term : Engine.TensorAdd(accumulated, term);
             }
-            attended = Engine.TensorMultiplyScalar(accumulated!, NumOps.FromDouble(1.0 / _memoryBank.Count));
+            // The loop above runs at least once because this branch is only entered for a
+            // non-empty bank, so accumulated is set. Assert it rather than suppress, so a change
+            // to the enclosing condition surfaces here instead of as a NullReferenceException.
+            if (accumulated is null)
+                throw new InvalidOperationException("Memory readout accumulated no terms despite a non-empty memory bank.");
+
+            attended = Engine.TensorMultiplyScalar(accumulated, NumOps.FromDouble(1.0 / _memoryBank.Count));
         }
 
         // ALWAYS run the memory-attention layers (indices 10-13), even when the memory bank is empty, so

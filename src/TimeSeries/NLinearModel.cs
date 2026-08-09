@@ -90,15 +90,21 @@ public class NLinearModel<T> : TimeSeriesModelBase<T>
         return pred;
     }
 
-    // Full forecast on a RAW window: x-normalize, run the normalized NLinear map, then y-denormalize.
-    private double Forecast(double[] window)
+    // Full forecast from a RAW series accessor: x-normalize each entry BEFORE the window's
+    // non-finite clamp, run the normalized NLinear map, then y-denormalize.
+    //
+    // Normalizing inside the accessor is what keeps training and inference imputing in the SAME
+    // space. LastWindow clamps a non-finite entry to 0.0 wherever it is applied: applied to
+    // normalized values (as TrainCore does) that means the mean in raw terms, but applied to raw
+    // values it meant (0 - _xMean) / _xStd once normalized afterwards. The same corrupt input
+    // therefore mapped to a different value at inference than during training, and the gap grows
+    // with _xMean.
+    private double Forecast(Func<int, double> rawAt, int count)
     {
-        var windowNorm = new double[_l];
-        for (int j = 0; j < _l; j++)
-            windowNorm[j] = (window[j] - _xMean) / _xStd;
-
+        var windowNorm = LastWindow(_l, j => (rawAt(j) - _xMean) / _xStd, count);
         return ForecastNormalized(windowNorm) * _yStd + _yMean;
     }
+
 
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -212,8 +218,7 @@ public class NLinearModel<T> : TimeSeriesModelBase<T>
 
     public override T PredictSingle(Vector<T> input)
     {
-        var window = LastWindow(_l, j => Convert.ToDouble(input[j]), input.Length);
-        double pred = Forecast(window);
+        double pred = Forecast(j => Convert.ToDouble(input[j]), input.Length);
         return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
     }
 

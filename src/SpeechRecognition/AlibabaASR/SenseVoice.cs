@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,18 +44,6 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("FunAudioLLM: Voice Understanding and Generation Foundation Models for Natural Interaction Between Humans and LLMs", "https://arxiv.org/abs/2407.04051", Year = 2024, Authors = "Du et al.")]
 public class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
-    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
-    /// <c>LayerHelper.CreateDefaultParaformerLayers</c> ends with
-    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>, and <c>InitializeLayers</c> passes
-    /// <c>vocabSize: _options.VocabSize</c>. SenseVoice also carries a Classification task tag
-    /// (emotion / event), but those labels are decoded from special tokens inside this same
-    /// vocabulary - there is no separate class head in the graph, so the width stays the vocabulary.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly SenseVoiceOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -112,8 +100,42 @@ public class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SenseVoice-Native" : "SenseVoice-ONNX", Description = "SenseVoice: multi-task speech understanding (Alibaba, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
+    /// <summary>Version of the trailing section of this payload.</summary>
+    /// <remarks>
+    /// Version 1 added DecoderDim, NumDecoderLayers, FeedForwardDim, UseCifAlignment, LearningRate and
+    /// WeightDecay. Payloads written before it end after Language, which is what the reader keys on --
+    /// this method is the last thing NeuralNetworkBase.Serialize writes, so an exhausted stream is an
+    /// exact signal rather than a guess.
+    /// </remarks>
+    private const int NetworkSpecificPayloadVersion = 1;
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language);
+        // The configuration a caller can actually set. Without these a saved model reloaded
+        // with default decoder width, depth, feed-forward size, CIF alignment and optimizer
+        // settings -- a different model from the one that was saved, reported as success.
+        w.Write(NetworkSpecificPayloadVersion); w.Write(_options.DecoderDim); w.Write(_options.NumDecoderLayers); w.Write(_options.FeedForwardDim); w.Write(_options.UseCifAlignment); w.Write(_options.LearningRate); w.Write(_options.WeightDecay); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
+        var stream = r.BaseStream;
+        if (!stream.CanSeek || stream.Position < stream.Length)
+        {
+            int payloadVersion = r.ReadInt32();
+            if (payloadVersion != NetworkSpecificPayloadVersion)
+            {
+                throw new InvalidOperationException(
+                    $"SenseVoice was saved with network-payload version {payloadVersion}, but this build " +
+                    $"reads version {NetworkSpecificPayloadVersion}. Load it with a matching version of " +
+                    "AiDotNet, or re-save it from one.");
+            }
+
+            _options.DecoderDim = r.ReadInt32(); _options.NumDecoderLayers = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32(); _options.UseCifAlignment = r.ReadBoolean(); _options.LearningRate = r.ReadDouble(); _options.WeightDecay = r.ReadDouble();
+        }
+        else
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "AiDotNet.SenseVoice: this model was saved before the decoder and optimizer settings were " +
+                "persisted, so they keep their defaults. Re-save the model to carry them forward.");
+        }
+ if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { var options = new SenseVoiceOptions(_options); if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new SenseVoice<T>(Architecture, mp, options); return new SenseVoice<T>(Architecture, options); }
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }

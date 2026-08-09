@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Chen et al."
 )]
-public class WaveGrad<T> : VocoderBase<T>
+public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveGradOptions _options;
 
@@ -81,6 +81,10 @@ public class WaveGrad<T> : VocoderBase<T>
     {
         _options = options ?? new WaveGradOptions();
         _useNativeMode = true;
+        // WaveGrad (Chen et al., 2021, S3.2) trains with Adam; WaveGradOptions.LearningRate carries
+        // the paper's 2e-4 as its default and lets callers override it. Constructing the optimizer
+        // bare left it on AdamW's own default rate, which -- combined with Train() never passing it
+        // through (see below) -- meant the configured value did nothing at all.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -95,8 +99,9 @@ public class WaveGrad<T> : VocoderBase<T>
         InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    int IVocoder<T>.SampleRate => _options.SampleRate;
+    int IVocoder<T>.MelChannels => _options.MelChannels;
+    public int UpsampleFactor => _options.HopSize;
 
     /// <summary>
     /// Converts mel to waveform using WaveGrad's continuous noise-level score estimation.
@@ -106,7 +111,7 @@ public class WaveGrad<T> : VocoderBase<T>
     /// (3) Noise schedule: linear or custom, searched via grid search for few-step generation,
     /// (4) Key: continuous noise level enables flexible iteration count at inference.
     /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
@@ -184,7 +189,14 @@ public class WaveGrad<T> : VocoderBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected, _optimizer);
+            // WaveGrad (Chen et al., 2021, S3.2 and Algorithm 1) trains against an L1 objective, not
+            // the L2 the framework defaults to. The paper is explicit that L1 was chosen for training
+            // STABILITY -- precisely the failure seen here: under MSE the memorization loss climbed
+            // from 0.6358 to 4.9003 rather than falling.
+            //
+            // The two-argument TrainWithTape overload also left _optimizer assigned but never read,
+            // so training ran on the framework default optimizer entirely.
+            TrainWithCustomLoss(input, predicted => MeanAbsoluteDifference(predicted, expected), _optimizer);
         }
         finally
         {
@@ -192,15 +204,32 @@ public class WaveGrad<T> : VocoderBase<T>
         }
     }
 
+    /// <summary>
+    /// Mean absolute error, built from <c>Engine</c> primitives so the autodiff tape records every
+    /// step. This is WaveGrad's L1 training objective (Chen et al., 2021, S3.2).
+    /// </summary>
+    private Tensor<T> MeanAbsoluteDifference(Tensor<T> predicted, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(predicted, target);
+        var magnitude = Engine.TensorAbs(diff);
+        var allAxes = System.Linq.Enumerable.Range(0, magnitude.Shape.Length).ToArray();
+        return Engine.ReduceMean(magnitude, allAxes, keepDims: false);
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        // The model-level UpdateParameters(Vector<T>) contract is a SETTER -- it receives the
+        // already-updated parameter vector. Forwarding to the layer-level UpdateParameters, which
+        // applies a gradient STEP, made every optimizer update land twice: once inside the optimizer
+        // and again here. That double-application is what blew the memorization loss from 0.6358 to
+        // 4.9003 in a single step. SetParameters is the correct sink (cf. LiteDVDNet).
         int idx = 0;
         foreach (var l in Layers)
         {
             int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
+            l.SetParameters(parameters.Slice(idx, c));
             idx += c;
         }
     }

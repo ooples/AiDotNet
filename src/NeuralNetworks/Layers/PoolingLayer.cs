@@ -40,59 +40,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 2")]
-// Roles and ranks straight from OnFirstForward, which reads [C, H, W] at rank 3 and [B, C, H, W] at
-// rank 4 and throws for anything else. One declaration with BatchOptional covers both, which is what
-// that method's own two branches describe. Ranks above 4 reach ForwardTraced (it collapses the leading
-// axes into a batch) but never reach OnFirstForward without throwing, so they are not declared.
-// OutputAxesFor below is hand-written: the spatial relation depends on PoolSize/Stride, both ctor args.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
+public partial class PoolingLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Hand-written from this layer's own <c>CalculateOutputDimension</c>, which is
-    /// <c>(inputDim - poolSize) / stride + 1</c>. That is the sliding-window formula with padding 0 and
-    /// dilation 1 - <c>floor((in + 0 - 1*(k-1) - 1) / s) + 1</c> reduces to exactly it - so
-    /// <c>Window(PoolSize, Stride, padding: 0)</c> is the relation, not an approximation of it. This layer
-    /// exposes no padding parameter, which is why the padding term is 0 rather than configurable.
-    /// </para>
-    /// <para>
-    /// Channels pass through untouched: <c>OnFirstForward</c> resolves
-    /// <c>[inputDepth, inputHeight, inputWidth] -&gt; [inputDepth, outH, outW]</c>, so only the two spatial
-    /// axes move. Note that a "divide by stride" shorthand would be wrong here whenever
-    /// <c>PoolSize != Stride</c> - overlapping windows are supported and give a larger output than the
-    /// stride alone suggests.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (PoolSize <= 0 || Stride <= 0) return null;
-
-        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
-        var height = new OutputAxisContract(
-            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, PoolSize, Stride, padding: 0));
-        var width = new OutputAxisContract(
-            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, PoolSize, Stride, padding: 0));
-
-        return inputRank switch
-        {
-            3 => new[] { channels, height, width },
-            4 => new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                channels,
-                height,
-                width,
-            },
-            _ => null,
-        };
-    }
-
     /// <summary>
     /// Gets the size of the pooling window.
     /// </summary>
@@ -444,6 +393,54 @@ public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Updates the parameters of the pooling layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is part of the training process, but since PoolingLayer has no trainable parameters,
+    /// this method does nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
+    /// 
+    /// However, since PoolingLayer just performs a fixed mathematical operation (pooling) and doesn't
+    /// have any internal values that can be learned or adjusted, this method is empty.
+    /// 
+    /// This is unlike layers such as Dense or Convolutional layers, which have weights and biases
+    /// that get updated during training.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // Pooling layers don't have trainable parameters, so this method does nothing.
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters from the pooling layer as a single vector.
+    /// </summary>
+    /// <returns>An empty vector since PoolingLayer has no trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters from the layer as a single vector. Since PoolingLayer
+    /// has no trainable parameters, it returns an empty vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
+    /// 
+    /// Since PoolingLayer:
+    /// - Only performs fixed mathematical operations (max or average calculation)
+    /// - Has no weights, biases, or other learnable parameters
+    /// - The method returns an empty list
+    /// 
+    /// This is different from layers like Dense layers, which would return their weights and biases.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // PoolingLayer has no trainable parameters
+        return Vector<T>.Empty();
     }
 
     /// <summary>

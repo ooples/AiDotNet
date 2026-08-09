@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
@@ -339,12 +339,6 @@ public abstract class LayerTestBase
     // =========================================================================
 
     /// <summary>
-    /// Whether the shape-robustness sweep applies. Override to <c>false</c> ONLY for a layer whose input
-    /// shape is genuinely not perturbable, never to silence a crash.
-    /// </summary>
-    protected virtual bool ShapeRobustnessApplicable => true;
-
-    /// <summary>
     /// Feeds the layer input shapes one step away from its declared one, and requires every outcome to be
     /// either a real output or a deliberate rejection.
     /// </summary>
@@ -371,7 +365,13 @@ public abstract class LayerTestBase
     public async Task Forward_NearbyShapes_AreHandledOrDeliberatelyRejected()
     {
         await Task.Yield();
-        if (!ShapeRobustnessApplicable) return;
+
+        // NO OPT-OUT. There used to be a ShapeRobustnessApplicable hook, and an override to false
+        // returned from this test having asserted NOTHING -- so the layers most likely to need this
+        // invariant were the ones most likely to be excused from it, silently and permanently.
+        // Every layer can participate, because the invariant already accepts an explicit rejection:
+        // a layer whose input shape is genuinely fixed satisfies it by REFUSING nearby shapes with a
+        // validation exception that names the constraint, which is the correct behaviour anyway.
         using var _arena = TensorArena.Create();
 
         var probes = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.ProbeShapes(InputShape);
@@ -431,29 +431,90 @@ public abstract class LayerTestBase
         }
     }
 
-    /// <summary>An exception that states a shape constraint, as opposed to one that leaks an assumption.</summary>
-    /// <remarks>
-    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
-    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
-    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
-    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
-    /// </remarks>
     /// <summary>Environmental failure - the machine, not the layer.</summary>
     private static bool IsResourceExhaustion(System.Exception ex)
         => ex is System.OutOfMemoryException or System.InsufficientExecutionStackException
             or System.OperationCanceledException;
 
+    /// <summary>An exception that STATES a shape constraint, as opposed to one that leaks an assumption.</summary>
+    /// <remarks>
+    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
+    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
+    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
+    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
+    /// <para>
+    /// THREE TYPES WERE REMOVED BECAUSE THEY SWALLOW THE DEFECT THIS INVARIANT HUNTS. The target is a
+    /// layer that ASSUMES a shape silently and then fails from inside a kernel; accepting the generic
+    /// failure modes as "deliberate rejection" meant exactly that failure counted as a pass:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>InvalidOperationException is what a kernel throws when its own state is wrong -- the
+    /// canonical shape of the bug, not of a rejection.</item>
+    /// <item>NotSupportedException and NotImplementedException say the layer does not do this at all.
+    /// That is a gap in the layer, and marking it as a well-stated shape constraint hides it.</item>
+    /// </list>
+    /// <para>
+    /// A layer that genuinely means to reject a shape has five precise types and ArgumentException
+    /// available, all of which state the constraint.
+    /// </para>
+    /// </remarks>
+    /// <summary>Whether an exception is the layer deliberately refusing a shape.</summary>
+    /// <remarks>
+    /// <para>
+    /// The dedicated exception types are self-evidently shape rejections and are accepted outright.
+    /// A bare <see cref="System.ArgumentException"/> is not: it is also what an internal argument
+    /// failure throws, so accepting every one of them let a defect that names no shape constraint
+    /// pass as correct behaviour -- which is the exact distinction this invariant exists to draw.
+    /// </para>
+    /// <para>
+    /// So a generic ArgumentException has to SAY something about shape. The vocabulary below is the
+    /// language layer validation actually uses; a message drawn from none of it is treated as a
+    /// crash and reported, which is the safe direction: a real rejection worded outside this
+    /// vocabulary shows up as a failure asking for a clearer message, whereas the old behaviour hid
+    /// real defects.
+    /// </para>
+    /// </remarks>
     private static bool IsDeliberateShapeRejection(System.Exception ex)
-        => ex is AiDotNet.Exceptions.TensorShapeMismatchException
+    {
+        if (ex is AiDotNet.Exceptions.TensorShapeMismatchException
             or AiDotNet.Exceptions.TensorDimensionException
             or AiDotNet.Exceptions.TensorRankException
             or AiDotNet.Exceptions.InvalidInputDimensionException
             or AiDotNet.Exceptions.VectorLengthMismatchException
-            or System.ArgumentException
-            or System.InvalidOperationException
-            or System.NotSupportedException
-            or System.NotImplementedException
-            or System.RankException;
+            or System.RankException)
+        {
+            return true;
+        }
+
+        if (ex is not System.ArgumentException) return false;
+
+        return NamesAShapeConstraint(ex.Message);
+    }
+
+    /// <summary>The words a shape validation message uses when it states a constraint.</summary>
+    /// <remarks>
+    /// SHAPE-SPECIFIC ONLY. An earlier list also carried "expected", "size", "must be", "must have"
+    /// and "mismatch" -- none of which is evidence of a SHAPE constraint. `ArgumentException("Expected
+    /// a non-null value.")` matched, so an internal argument failure was accepted as deliberate shape
+    /// validation, which is the exact conflation this invariant exists to prevent. Every term below
+    /// names a tensor axis or an extent and cannot appear in a generic argument message by accident.
+    /// </remarks>
+    private static readonly string[] ShapeConstraintVocabulary =
+    {
+        "shape", "dimension", "dimensions", "rank", "axis", "axes",
+        "height", "width", "channel", "channels", "batch", "divisible",
+    };
+
+    private static bool NamesAShapeConstraint(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        foreach (var word in ShapeConstraintVocabulary)
+        {
+            if (message!.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        }
+        return false;
+    }
 
     /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
     private static string DescribeDiscoveredRelation(List<(int[] Input, int[] Output)> observations)
@@ -650,182 +711,6 @@ public abstract class LayerTestBase
             Assert.True(count > 0,
                 "Layer is expected to have trainable parameters but ParameterCount is 0.");
         }
-    }
-
-    // =========================================================================
-    // DIAGNOSTIC: is this layer's GetParameters() override redundant?
-    // Reports, never asserts. Output feeds the override-deletion work list.
-    // =========================================================================
-
-    /// <summary>
-    /// Records whether this layer's hand-written <c>GetParameters()</c> is value-for-value
-    /// identical to what <see cref="LayerBase{T}"/> now produces, and is therefore deletable.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <c>GetParameters</c> used to be ABSTRACT, which forced all 710 layers to hand-write a walk of
-    /// their own tensors while <c>ParameterCount</c> stayed virtual with a registry-based default —
-    /// two independently written answers to one question, per layer, and the source of every
-    /// model-level count mismatch. The base implements it now, so most of those overrides are dead
-    /// weight. Most, not all: this reports which.
-    /// </para>
-    /// <para>
-    /// Equal LENGTH is not sufficient evidence to delete one. The base emits <c>Parameters</c>, then
-    /// registered tensors, then sub-layers in REGISTRATION order; a hand-written getter uses field
-    /// order. Where those differ the totals still match while the layout silently changes, which
-    /// invalidates saved checkpoints and mis-pairs <c>SetParameters</c> — worse than the bug this
-    /// work set out to fix, and invisible to a count-based test. Four layers really do differ this
-    /// way (ViTCoMerSegmentationLayer, VideoGigaGANGeneratorLayer, VocosGeneratorLayer, NBEATSBlock),
-    /// so the comparison is elementwise on VALUES.
-    /// </para>
-    /// <para>
-    /// It runs here, on <c>LayerTestBase</c>, rather than as a standalone sweep because the 254
-    /// generated layer classes construct their layer correctly and probe a Forward first. A sweep
-    /// driven by default constructors reached 35 layers and could only compare unresolved ones,
-    /// where both sides are empty and the comparison proves nothing either way.
-    /// </para>
-    /// <para>
-    /// Never asserts. A legitimately different override — weight tying that shares one tensor across
-    /// slots, a GAN reading frozen modules — is correct, not a defect.
-    /// </para>
-    /// </remarks>
-    [Fact(Timeout = 30000)]
-    public async Task Parameters_ReportOverrideRedundancy()
-    {
-        await Task.Yield();
-        using var _arena = TensorArena.Create();
-        var layer = CreateLayer();
-        var type = layer.GetType();
-
-        var gp = type.GetMethod("GetParameters",
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
-            null, Type.EmptyTypes, null);
-        // Nothing to report when the layer already relies on the base implementation.
-        if (gp is null || gp.DeclaringType is null
-            || gp.DeclaringType.Name.StartsWith("LayerBase", StringComparison.Ordinal))
-        {
-            Record(type, "INHERITS");
-            return;
-        }
-
-        ProbeForward(layer);
-
-        Vector<double> actual;
-        try { actual = layer.GetParameters(); }
-        catch { Record(type, "UNMEASURABLE"); return; }
-
-        List<double> expected;
-        try { expected = BaseOrderValues(layer); }
-        catch (Exception ex)
-        {
-            // Sparse-backed layers cannot be flattened generically: GetFlat throws on a sparse
-            // tensor, and SparseLinearLayer reads _weights.Values[nz] through a sparse-only API.
-            // Those layers must keep their override, so "cannot reconstruct" is a legitimate
-            // verdict here -- not a test failure. A diagnostic that breaks the suite it reports
-            // on is worse than no diagnostic.
-            Record(type, $"UNMEASURABLE {ex.GetType().Name}");
-            return;
-        }
-
-        if (actual.Length == 0 && expected.Count == 0) { Record(type, "UNRESOLVED"); return; }
-
-        bool same = expected.Count == actual.Length;
-        for (int i = 0; i < actual.Length && same; i++)
-            if (Math.Abs(actual[i] - expected[i]) > 1e-12) same = false;
-
-        // Distinguish the THREE ways an override can diverge, because they need opposite fixes:
-        //   UNREGISTERED - the override returns MORE than the registry holds, so the layer owns
-        //                  tensors it never declared via [TrainableParameter]/RegisterTrainable-
-        //                  Parameter. The base cannot see them. This is the automation gap: attribute
-        //                  the fields and the generator registers them, after which the override is
-        //                  removable. Deleting first silently drops those weights -- FinBERT went
-        //                  from 6,603 parameters to 819 exactly this way.
-        //   OVERCOUNT    - the registry holds more than the override returns; the override is hiding
-        //                  something the base would expose.
-        //   ORDER        - same length, different values: field order vs registration order. Keep
-        //                  the override, or realign registration deliberately.
-        string verdict =
-            same ? $"REDUNDANT {actual.Length}"
-            : expected.Count < actual.Length ? $"UNREGISTERED {actual.Length}/{expected.Count}"
-            : expected.Count > actual.Length ? $"OVERCOUNT {actual.Length}/{expected.Count}"
-            : $"ORDER {actual.Length}";
-        Record(type, verdict);
-    }
-
-    /// <summary>Reproduces LayerBase.GetParameters' order: Parameters, own tensors, then sub-layers.</summary>
-    private static List<double> BaseOrderValues(ILayer<double> layer)
-    {
-        var values = new List<double>();
-        var t = layer.GetType();
-
-        var pField = t.GetField("Parameters",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance
-            | System.Reflection.BindingFlags.FlattenHierarchy);
-        if (pField?.GetValue(layer) is Vector<double> own)
-            for (int i = 0; i < own.Length; i++) values.Add(own[i]);
-
-        // GetTrainableParameters is declared on LayerBase<T>, not on ILayer<T>.
-        if (t.GetMethod("GetTrainableParameters",
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
-                ?.Invoke(layer, null) is System.Collections.IEnumerable tensors)
-        {
-            foreach (var obj in tensors)
-            {
-                if (obj is not Tensor<double> ten) continue;
-                // Mirror LayerBase exactly: a sparse tensor contributes its STORED entries read
-                // through DataVector, never a densified GetFlat walk. Reconstructing in any other
-                // order or extent would compare the override against something the base does not
-                // actually produce, which is worse than not measuring at all.
-                if (ten is SparseTensor<double> sp)
-                    for (int i = 0; i < sp.NonZeroCount; i++) values.Add(sp.DataVector[i]);
-                else
-                    for (int i = 0; i < ten.Length; i++) values.Add(ten.GetFlat(i));
-            }
-        }
-
-        foreach (var sub in layer.GetSubLayers())
-        {
-            if (sub is null) continue;
-            var sv = sub.GetParameters();
-            for (int i = 0; i < sv.Length; i++) values.Add(sv[i]);
-        }
-
-        return values;
-    }
-
-    private void ProbeForward(ILayer<double> layer)
-    {
-        using var probe = new Tensor<double>(InputShape);
-        for (int i = 0; i < probe.Length; i++) probe[i] = 0.01 * (i + 1);
-        try { layer.Forward(probe); }
-        catch
-        {
-            try
-            {
-                layer.GetType().GetMethod("Forward", new[] { typeof(Tensor<double>[]) })
-                    ?.Invoke(layer, new object[] { new[] { probe, probe } });
-            }
-            catch { /* unprobeable; compare whatever state the ctor produced */ }
-        }
-    }
-
-    private static readonly object _redundancyLock = new();
-
-    private static void Record(Type layerType, string verdict)
-    {
-        // Appended to a shared file rather than ITestOutputHelper: the verdict is only useful
-        // aggregated across all 254 generated classes, and per-test output is not collectable
-        // that way. Best-effort — a diagnostic must never fail the suite it reports on.
-        try
-        {
-            lock (_redundancyLock)
-            {
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "override-redundancy.txt"),
-                    $"{verdict}\t{layerType.FullName}{Environment.NewLine}");
-            }
-        }
-        catch { }
     }
 
     // =========================================================================
@@ -1132,15 +1017,33 @@ public abstract class LayerTestBase
         // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
         // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
         // payload layout, so it is read directly.
+        // THE PUBLIC SPARSE API, NOT THE INTERNAL PAYLOAD. This read the backing DataVector of
+        // the very type under test, so a change to that payload's layout would silently change
+        // what the gradient check compares -- the helper would keep returning a number and the
+        // number would mean something else. SparseTensor<double> exposes Values / RowIndices /
+        // ColumnIndices, which is what the SparseTensor suites themselves assert against.
+        //
+        // COO construction is rank-2, so the column stride is Shape[1]; a non-rank-2 sparse
+        // tensor has no COO reading and is refused rather than indexed on a guess.
         static double ReadAnalyticalScalar(Tensor<double> grad, Tensor<double> param, int i)
         {
-            if (grad is SparseTensor<double> gsp) return gsp.DataVector[i];
+            if (grad is SparseTensor<double> gsp)
+            {
+                return i >= 0 && i < gsp.Values.Length ? gsp.Values[i] : 0.0;
+            }
+
             if (param is SparseTensor<double> psp)
             {
-                int cols = psp.Shape[psp.Shape.Length - 1];
-                int flat = psp.RowIndices[i] * cols + psp.ColumnIndices[i];
-                return flat >= 0 && flat < grad.Length ? grad.DataVector[flat] : 0.0;
+                Assert.True(psp.Shape.Length == 2,
+                    $"SparseTensor COO indices are rank-2; got rank {psp.Shape.Length}, so " +
+                    "RowIndices/ColumnIndices cannot be mapped to a flat gradient index.");
+                if (i < 0 || i >= psp.RowIndices.Length) return 0.0;
+
+                int cols = psp.Shape[1];
+                int flat = (psp.RowIndices[i] * cols) + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? grad[flat] : 0.0;
             }
+
             return grad[i];
         }
 

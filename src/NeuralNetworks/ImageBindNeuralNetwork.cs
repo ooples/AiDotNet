@@ -753,6 +753,20 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     {
         var encoded = EncodeImageNativeTensor(image);
         int embeddingDim = encoded.Shape[^1];
+
+        // EncodeImageNativeTensor returns [batch, embeddingDim], and the loop below reads the first
+        // embeddingDim flat elements -- row 0. This method returns one Vector<T>, and so does its
+        // caller GetImageEmbedding, so there is no shape here that can carry a batch: every row past
+        // the first would be dropped with nothing to tell the caller it happened. Refuse instead.
+        long embeddingCount = encoded.Length / embeddingDim;
+        if (embeddingCount != 1)
+        {
+            throw new ArgumentException(
+                $"The image encoder produced {embeddingCount} embeddings, but this returns a single " +
+                "vector. Pass one image rather than a batch, and call once per image to encode several.",
+                nameof(image));
+        }
+
         var result = new Vector<T>(embeddingDim);
         for (int i = 0; i < embeddingDim; i++)
         {

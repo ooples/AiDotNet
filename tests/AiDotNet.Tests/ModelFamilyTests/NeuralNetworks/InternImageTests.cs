@@ -30,16 +30,6 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 // 180 s gate at <double>. <float> halves per-step compute + the tape/activation footprint
 // while keeping the full Tiny architecture and the self-relative invariants intact — the same
 // lever the generated heavy-backbone scaffolds use via Fp32TestClassNames.
-//
-// OptimizerStep_ParamL2_DoesNotExplode was timing out on top of all of that, and it is not a slowness
-// problem: measured ALONE on the CI-matched Release build it takes 10 s against its 120 s gate (12x
-// headroom). It is also the one invariant the rungs above cannot help with — a SINGLE Train call plus
-// two whole-parameter L2 sweeps, so there is no iteration count for MoreDataShort/Long,
-// TrainingIterations or MemorizationTaskIterations to trim, and the fixture is already <float> at
-// 32x32. That leaves starvation as the cause, and dedicated cores as the fix: 30 DCNv3 blocks of
-// managed GEMM cannot share the machine with fifteen other classes doing the same thing. No
-// HeavyTimeout — this belongs in the PR gate and passes comfortably once un-contended.
-[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class InternImageTests : SegmentationTestBase<float>
 {
     private const int NumClasses = 4;

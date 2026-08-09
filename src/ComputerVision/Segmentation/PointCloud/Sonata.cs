@@ -53,27 +53,39 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
-public class Sonata<T> : Common.SemanticSegmentationBase<T>
+public class Sonata<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly SonataOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only Sonata's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from SemanticSegmentationBase -> SegmentationModelBase.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly SonataModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are all inherited and
-    // say exactly the same thing.
+    /// <summary>
+    /// Gets whether this Sonata instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal SonataModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -97,17 +109,15 @@ public class Sonata<T> : Common.SemanticSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 40,
         SonataModelSize modelSize = SonataModelSize.Base, double dropRate = 0.1,
         SonataOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
-        // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SonataOptions(); Options = _options;
-        // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
-        // base's 512x512x3.
-        if (architecture.InputHeight <= 0) _height = 1;
-        if (architecture.InputWidth <= 0) _width = 1;
-        if (architecture.InputDepth <= 0) _channels = 6;
-        _modelSize = modelSize; _dropRate = dropRate;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 6;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -131,18 +141,21 @@ public class Sonata<T> : Common.SemanticSegmentationBase<T>
     public Sonata(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 40, SonataModelSize modelSize = SonataModelSize.Base,
         SonataOptions? options = null)
-        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
-        // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SonataOptions(); Options = _options;
-        // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
-        // base's 512x512x3.
-        if (architecture.InputHeight <= 0) _height = 1;
-        if (architecture.InputWidth <= 0) _width = 1;
-        if (architecture.InputDepth <= 0) _channels = 6;
-        _modelSize = modelSize; _dropRate = 0.1;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"Sonata ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 6;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load Sonata ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -177,7 +190,7 @@ public class Sonata<T> : Common.SemanticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -194,7 +207,7 @@ public class Sonata<T> : Common.SemanticSegmentationBase<T>
         _ => ([48, 96, 192, 384], [2, 2, 6, 2], 256)
     };
 
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -203,7 +216,7 @@ public class Sonata<T> : Common.SemanticSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -219,6 +232,12 @@ public class Sonata<T> : Common.SemanticSegmentationBase<T>
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
+
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -309,9 +328,29 @@ public class Sonata<T> : Common.SemanticSegmentationBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new Sonata<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new Sonata<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
+
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;
-    // GetClassMap (argmax of Segment) and GetProbabilityMap (softmax of Segment) come from
-    // SemanticSegmentationBase and are the same two expressions this file used to spell out.
+    #region ISemanticSegmentation Implementation
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
+    #endregion
 }

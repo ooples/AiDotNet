@@ -5,8 +5,6 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Attributes;
 using AiDotNet.Tensors.LinearAlgebra;
 
-using AiDotNet.Models.Parameters;
-
 namespace AiDotNet.OnlineLearning;
 
 /// <summary>
@@ -66,31 +64,6 @@ namespace AiDotNet.OnlineLearning;
 [ResearchPaper("Online Passive-Aggressive Algorithms", "https://doi.org/10.1162/jmlr.2006.7.19.551", Year = 2006, Authors = "Koby Crammer, Ofer Dekel, Joseph Keshet, Shai Shalev-Shwartz, Yoram Singer")]
 public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The learned weights followed by the bias, the layout the hand-written pair used. Kept as ONE component because the variable-length part comes first and only a LAST component can take the remainder. This also fixes a measured mismatch: the inherited ParameterCount was NumFeatures, which the restore sets to length - 1 to leave room for the bias, so the count reported 5 against a 6-element vector and a saved vector could not be reloaded.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new VariableLengthParameterSource<T>(
-            () => _weights is null ? 0 : _weights.Length + 1,
-            () =>
-            {
-                if (_weights is null) return new Vector<T>(0);
-                var parameters = new Vector<T>(_weights.Length + 1);
-                for (int i = 0; i < _weights.Length; i++) parameters[i] = _weights[i];
-                parameters[_weights.Length] = _bias;
-                return parameters;
-            },
-            value =>
-            {
-                if (value.Length == 0) return;
-                NumFeatures = value.Length - 1;
-                _weights = new Vector<T>(NumFeatures);
-                for (int i = 0; i < NumFeatures; i++) _weights[i] = value[i];
-                _bias = value[NumFeatures];
-                IsInitialized = true;
-            }));
-    }
     /// <summary>
     /// The weight vector (coefficients).
     /// </summary>
@@ -405,6 +378,43 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     #region IFullModel Implementation
 
     /// <summary>
+    /// Gets the model parameters (weights + bias).
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        if (_weights is null)
+        {
+            return new Vector<T>(0);
+        }
+
+        var parameters = new Vector<T>(_weights.Length + 1);
+        for (int i = 0; i < _weights.Length; i++)
+        {
+            parameters[i] = _weights[i];
+        }
+        parameters[_weights.Length] = _bias;
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Sets the model parameters.
+    /// </summary>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length == 0) return;
+
+        NumFeatures = parameters.Length - 1;
+        _weights = new Vector<T>(NumFeatures);
+        for (int i = 0; i < NumFeatures; i++)
+        {
+            _weights[i] = parameters[i];
+        }
+        _bias = parameters[NumFeatures];
+        IsInitialized = true;
+    }
+
+    /// <summary>
     /// Creates a new instance with specified parameters.
     /// </summary>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
@@ -463,7 +473,12 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     public double Epsilon => _epsilon;
 
     /// <summary>Gets the number of passes used by the offline Train wrapper.</summary>
-    public int BatchEpochs => _batchEpochs;
+    /// <remarks>
+    /// INTERNAL, not public. Users configure models through AiModelBuilder / AiModelResult, and the
+    /// constructor already takes batchEpochs -- a public getter adds a second entry point to the same
+    /// value outside the facade. Kept accessible to the test assembly via InternalsVisibleTo.
+    /// </remarks>
+    internal int BatchEpochs => _batchEpochs;
 
     /// <summary>
     /// Computes the epsilon-insensitive loss on the provided data.

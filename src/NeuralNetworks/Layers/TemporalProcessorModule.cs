@@ -1,5 +1,4 @@
 ﻿using AiDotNet.ActivationFunctions;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -53,11 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// whose features would actively pull the first frame towards black.
 /// </para>
 /// </remarks>
-// Processes a sequence in place: shape-preserving at rank 3 [Batch, Time, Features].
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class TemporalProcessorModule<T> : LayerBase<T>, IShapeContract
+public partial class TemporalProcessorModule<T> : LayerBase<T>
 {
     #region Fields
 
@@ -229,6 +224,43 @@ public partial class TemporalProcessorModule<T> : LayerBase<T>, IShapeContract
         yield return _alignPrevious;
         yield return _fuse;
         yield return _gate;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var all = new List<T>();
+        foreach (var layer in AllSubLayers())
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++) all.Add(p[i]);
+        }
+
+        return new Vector<T>([.. all]);
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        int expected = 0;
+        foreach (var layer in AllSubLayers()) expected += layer.GetParameters().Length;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters for this TemporalProcessorModule, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+        foreach (var layer in AllSubLayers())
+        {
+            int count = layer.GetParameters().Length;
+            if (count == 0) continue;
+            layer.SetParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     /// <inheritdoc/>

@@ -25,22 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 4, 2", TestConstructorArgs = "4, 2, 4")]
-// A recurrent cell: it consumes a SEQUENCE and emits one hidden state per step, so the time axis is
-// carried through and only the trailing width changes. ForwardTraced spells both halves out - it reads
-// sequenceLength = input.Shape[Rank-2] and requires input.Shape[Rank-1] == _inputSize, then returns
-// outputShape = input.Shape with the last entry overwritten by _hiddenSize.
-// BatchOptional covers rank 2 as well as rank 3, and rank 2 is genuinely supported rather than merely
-// tolerated: ForwardTraced has an explicit `if (input.Rank == 2) return Reshape(result,
-// [sequenceLength, _hiddenSize])` branch, i.e. an unbatched [Time, Features] sequence.
-// Higher ranks run too - every axis before the last two is folded into batchSize - but each extra
-// leading axis would need a distinct role for a relation to name it, and there is no second batch-like
-// role to give it, so OutputAxesFor declines beyond rank 3 rather than guessing.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
+public partial class HippoMemoryCellLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
     private readonly int _inputSize;
@@ -94,6 +79,12 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>Gets the configured discretization method.</summary>
     public string Discretization => _discretization;
+
+    /// <inheritdoc />
+    public override long ParameterCount =>
+        _memoryWeights.Length + _memoryBias.Length +
+        _hiddenWeights.Length + _hiddenBias.Length +
+        (_useGate ? _gateWeights.Length + _gateBias.Length : 0);
 
     /// <inheritdoc />
     public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => _useGate
@@ -337,40 +328,6 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
             RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
         }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Hand-written rather than generated, because the trailing axis CHANGES: this is a projection to
-    /// the hidden width, so the axis roles alone would describe it as shape-preserving and be wrong.
-    /// Derived from the tail of <see cref="ForwardTraced"/>:
-    /// <c>outputShape = input.Shape.ToArray(); outputShape[^1] = _hiddenSize;</c>
-    /// </para>
-    /// <para>
-    /// <c>Fixed(_hiddenSize)</c> is legitimate here in the way a hardcoded number would not be - the
-    /// hidden width is a constructor argument kept in a field, and it is the same value the base
-    /// constructor already publishes as the output shape (<c>base(new[] { -1, inputSize },
-    /// new[] { -1, hiddenSize })</c>). The time axis is <c>Same</c> because the loop emits exactly one
-    /// hidden state per step and stacks them on axis 1.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        // ForwardTraced rejects rank < 2 outright, and ranks above 3 have no distinct role available
-        // for the extra leading axes, so both decline honestly.
-        if (inputRank is not (2 or 3) || _hiddenSize <= 0) return null;
-
-        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
-        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
-
-        return inputRank == 2
-            ? new[] { time, features }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                time, features,
-            };
     }
 
     /// <inheritdoc />
@@ -788,6 +745,33 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++) result[i, j] = augmented[i, n + j];
         return result;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        int offset = 0;
+        foreach (var tensor in ParameterTensors())
+        {
+            T[] data = tensor.DataVector.GetDataArray();
+            for (int i = 0; i < tensor.Length; i++) result[offset++] = data[i];
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int expected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} HiPPO cell parameters, got {parameters.Length}.", nameof(parameters));
+        int offset = 0;
+        foreach (var tensor in ParameterTensors())
+        {
+            T[] data = tensor.DataVector.GetDataArray();
+            for (int i = 0; i < tensor.Length; i++) data[i] = parameters[offset++];
+        }
     }
 
     private IEnumerable<Tensor<T>> ParameterTensors()

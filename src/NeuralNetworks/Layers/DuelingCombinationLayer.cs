@@ -1,7 +1,4 @@
 ﻿using AiDotNet.ActivationFunctions;
-// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
-// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
-using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -45,22 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// gradients for both heads automatically.
 /// </para>
 /// </remarks>
-// FEATURE-LAST, like DenseLayer: ForwardTraced checks only the TRAILING axis
-// ("expects last-dim feature size {_featureDim}"), flattens everything before it into a batch, and
-// then restores the caller's leading axes verbatim. Batch is optional because rank 1 is a first-class
-// case in that method - "1D in -> 1D out" - not an accident of broadcasting.
-//
-// Only ranks 1 and 2 are declared even though the flatten-and-restore path accepts more. This is a
-// Q-value head: its input is a state feature vector, and there is no evidence in this file for what
-// a third axis would MEAN. Naming it would be inventing a role, and an axis named wrongly is worse
-// than an axis not declared - the extra ranks still work, inference just declines to describe them.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output,
-    Note = "Trailing axis leaves as the action count: Q(s,a) has one value per action.")]
-[AutoParameters]
-public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
+public partial class DuelingCombinationLayer<T> : LayerBase<T>
 {
     private readonly int _featureDim;
     private readonly int _actionSize;
@@ -125,6 +107,10 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
+    public override long ParameterCount =>
+        (long)_featureDim * 1 + 1 + (long)_featureDim * _actionSize + _actionSize;
+
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -170,36 +156,6 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
                     $"Shape mismatch for {paramName} at dim {dim}: incoming={incoming.Shape[dim]}, " +
                     $"existing={existing.Shape[dim]}.");
         }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Read off the tail of <c>ForwardTraced</c>: the returned tensor keeps every leading axis
-    /// (<c>outShape[i] = input.Shape[i]</c>) and sets the last one to <c>_actionSize</c>. So the
-    /// feature axis is <c>Fixed(_actionSize)</c> - the constructor argument - and the batch axis is
-    /// carried through.
-    /// </para>
-    /// <para>
-    /// <c>_featureDim</c> is the INPUT width, not an output relation, which is why it does not appear
-    /// here. It is enforced as a precondition ("expects last-dim feature size {_featureDim}") and
-    /// never shows up in the result; both heads project it away in the two
-    /// <c>Engine.TensorMatMul(flatInput, ...)</c> calls.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank is not (1 or 2) || _actionSize <= 0) return null;
-
-        var actions = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_actionSize));
-
-        return inputRank == 1
-            ? new[] { actions }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                actions,
-            };
     }
 
     /// <inheritdoc/>
@@ -265,6 +221,31 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
         for (int i = 0; i < input.Rank - 1; i++) outShape[i] = input.Shape[i];
         outShape[^1] = _actionSize;
         return Engine.Reshape(q, outShape);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var p = new Vector<T>((int)ParameterCount);
+        int idx = 0;
+        for (int i = 0; i < _valueWeights.Length; i++) p[idx++] = _valueWeights[i];
+        for (int i = 0; i < _valueBias.Length; i++) p[idx++] = _valueBias[i];
+        for (int i = 0; i < _advantageWeights.Length; i++) p[idx++] = _advantageWeights[i];
+        for (int i = 0; i < _advantageBias.Length; i++) p[idx++] = _advantageBias[i];
+        return p;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
+        int idx = 0;
+        for (int i = 0; i < _valueWeights.Length; i++) _valueWeights[i] = parameters[idx++];
+        for (int i = 0; i < _valueBias.Length; i++) _valueBias[i] = parameters[idx++];
+        for (int i = 0; i < _advantageWeights.Length; i++) _advantageWeights[i] = parameters[idx++];
+        for (int i = 0; i < _advantageBias.Length; i++) _advantageBias[i] = parameters[idx++];
     }
 
     /// <inheritdoc/>

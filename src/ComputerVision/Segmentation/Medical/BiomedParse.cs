@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BiomedParse: a Biomedical Foundation Model for Image Parsing of Everything Everywhere All at Once", "https://arxiv.org/abs/2405.12971", Year = 2024, Authors = "Zhao et al.")]
-public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
+public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly BiomedParseOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -66,38 +66,32 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     private static readonly int[] DefaultDepths = [2, 2, 6, 2];
     private const int DefaultDecoderDim = 256;
 
-    /// <summary>
-    /// The imaging modalities BiomedParse was trained on, passed to the base constructor.
-    /// </summary>
-    private static readonly string[] BiomedParseModalities =
-        ["CT", "MRI_T1", "MRI_T2", "Xray", "Ultrasound", "Pathology", "Dermoscopy", "Fundus", "Microscopy"];
-
     #region Fields
-    // Only BiomedParse's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from MedicalSegmentationBase -> SegmentationModelBase, as do SupportedModalities and
-    // Supports2D.
+    private int _height, _width, _channels, _numClasses;
     private int[] _channelDims;
     private int _decoderDim;
     private int[] _depths;
     private double _dropRate;
+    private bool _useNativeMode;
+    private string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
-    // SegmentationModelBase and say exactly the same thing.
-    internal bool UseNativeMode => _useNativeMode;
-
     /// <summary>
-    /// BiomedParse is a 2D slice model; it does not process volumes.
+    /// Gets whether this BiomedParse instance supports training.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Overrides MedicalSegmentationBase's <c>true</c> default. Supports2D and SupportsFewShot
-    /// already match the base's defaults and so are not re-declared.
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
     /// </para>
     /// </remarks>
-    public override bool Supports3D => false;
+    public override bool SupportsTraining => _useNativeMode;
+    internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -120,38 +114,19 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0.1,
         BiomedParseOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture,
-        // defaults the loss to CrossEntropyWithLogitsLoss and stores the modality list - exactly
-        // what the deleted lines did by hand. `optimizer` is passed straight through INCLUDING
-        // null; the base's lazy CreateDefaultOptimizer() produces the same
-        // `new AdamWOptimizer<...>(this)` default, which could never be written as a
-        // base-constructor argument because `this` is unavailable there.
-        : base(architecture, optimizer, lossFunction, numClasses, BiomedParseModalities)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new BiomedParseOptions(); Options = _options;
-        ApplyBiomedParseInputFallback(architecture);
-        _dropRate = dropRate;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _channelDims = DefaultChannelDims;
         _depths = DefaultDepths;
         _decoderDim = DefaultDecoderDim;
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Re-applies BiomedParse's 1024x1024 fallback for architectures that carry no input geometry.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// SegmentationModelBase falls back to 512x512 when the architecture supplies no input height
-    /// or width. BiomedParse's documented fallback is 1024x1024, so it is restored here for that
-    /// unset case only - when the architecture does specify dimensions, the base's value already
-    /// matches and nothing changes.
-    /// </para>
-    /// </remarks>
-    private void ApplyBiomedParseInputFallback(NeuralNetworkArchitecture<T> architecture)
-    {
-        if (architecture.InputHeight <= 0) _height = 1024;
-        if (architecture.InputWidth <= 0) _width = 1024;
     }
 
     /// <summary>
@@ -172,24 +147,39 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     public BiomedParse(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         BiomedParseOptions? options = null)
-        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
-        // geometry, stores the modality list and opens the InferenceSession - the same lines this
-        // used to repeat.
-        : base(architecture, onnxModelPath, numClasses, BiomedParseModalities)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new BiomedParseOptions(); Options = _options;
-        ApplyBiomedParseInputFallback(architecture);
-        _dropRate = 0.1;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"BiomedParse ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0.1;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         _channelDims = DefaultChannelDims;
         _depths = DefaultDepths;
         _decoderDim = DefaultDecoderDim;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load BiomedParse ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
 
     #region Public Methods
-    // PredictCore is inherited from SegmentationModelBase and dispatches to Forward / PredictOnnx
-    // exactly as the deleted override did.
+    /// <summary>
+    /// Runs a forward pass to produce segmentation logits.
+    /// </summary>
+    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
+    /// <returns>Segmentation logits tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>
     /// Performs one training step.
@@ -210,7 +200,7 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -220,7 +210,7 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     #endregion
 
     #region Private Methods
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -233,7 +223,7 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
         return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
@@ -260,7 +250,22 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
         return result;
     }
 
-    // AddBatchDimension and RemoveBatchDimension are inherited from SegmentationModelBase.
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        int[] shape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < shape.Length; i++)
+            shape[i] = tensor.Shape[i + 1];
+        var result = new Tensor<T>(shape);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
     #endregion
 
     #region Abstract Implementation
@@ -388,21 +393,33 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new BiomedParse<T>(Architecture, Optimizer, LossFunction, _numClasses, _dropRate, _options)
+        ? new BiomedParse<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new BiomedParse<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
-    // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
-    // BiomedParse owns no further unmanaged resources.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IMedicalSegmentation Implementation
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase.
-    // SupportedModalities is supplied to the base constructor via BiomedParseModalities; Supports2D
-    // (true) and SupportsFewShot (false) are MedicalSegmentationBase's defaults already, and
-    // Supports3D is overridden to false alongside the other properties above.
-
-    /// <inheritdoc/>
-    public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI_T1", "MRI_T2", "Xray", "Ultrasound", "Pathology", "Dermoscopy", "Fundus", "Microscopy"];
+    bool IMedicalSegmentation<T>.Supports3D => false;
+    bool IMedicalSegmentation<T>.Supports2D => true;
+    bool IMedicalSegmentation<T>.SupportsFewShot => false;
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
@@ -421,21 +438,9 @@ public class BiomedParse<T> : Common.MedicalSegmentationBase<T>
         }
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
-    /// <inheritdoc/>
-    public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume)
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
         => throw new NotSupportedException("BiomedParse does not support 3D volumetric segmentation. Use SegmentSlice for 2D slices.");
-
-    /// <summary>
-    /// Not supported: BiomedParse has no few-shot pathway.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Overridden rather than inherited so the BiomedParse-specific message is preserved verbatim.
-    /// MedicalSegmentationBase's SegmentFewShot would also throw NotSupportedException here (since
-    /// SupportsFewShot is false), but with a generic message.
-    /// </para>
-    /// </remarks>
-    public override MedicalSegmentationResult<T> SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
         => throw new NotSupportedException("BiomedParse does not support few-shot segmentation. Use SegmentSlice for standard inference.");
     #endregion
 }

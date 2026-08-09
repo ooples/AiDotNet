@@ -46,6 +46,22 @@ public abstract class FinancialNLPTestBase<T> : FinancialModelTestBase<T>
         var tensor = new Tensor<T>(shape);
         if (IsInputShape(shape))
         {
+            // ZERO STAYS ZERO. The token mapping below rewrote an all-zero request into
+            // non-zero token IDs, so FinancialModelTestBase.ZeroInput_ShouldNotCrash -- whose
+            // entire subject is what the model does with a zero input -- never actually sent
+            // one. The test passed while testing something else, which is worse than not
+            // having it: the zero path is exactly where an embedding lookup or a division by
+            // a zero norm tends to break.
+            //
+            // Token 0 is also the conventional [PAD] id for these encoders, so an all-zero
+            // input is a legal, meaningful sequence rather than an out-of-range lookup.
+            if (value == 0.0)
+            {
+                for (int i = 0; i < tensor.Length; i++)
+                    tensor[i] = NumOps.Zero;
+                return tensor;
+            }
+
             // Distinct base token per scalar so different `value`s produce different token
             // sequences (0.1 and 0.9 must map to different embeddings, not the same one).
             int baseTok = value < 0.5 ? 3 : 37;

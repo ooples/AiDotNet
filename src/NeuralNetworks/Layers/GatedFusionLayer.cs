@@ -31,47 +31,19 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// or always trusting one, this learns a per-value dial: where the dial is near 1 it takes the
 /// first component's answer, near 0 the second's, and in between it blends them.</para>
 /// </remarks>
-// Rank 3 is what the constructor itself declares - `base(new[] { -1, -1, 2 * width }, new[] { -1, -1, width })` -
-// and the two leading -1s are the batch and the sequence position the class docs describe ("per position
-// and per channel"). No other rank is declared, because no other rank is stated anywhere in this layer.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "The two streams arrive concatenated on the last axis, so it carries 2 * width channels.")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class GatedFusionLayer<T> : LayerBase<T>, IShapeContract
+public partial class GatedFusionLayer<T> : LayerBase<T>
 {
     /// <summary>Width of each input stream (half the concatenated input width).</summary>
     private readonly int _width;
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// HAND-WRITTEN because the feature axis halves, and by a constructor argument rather than by
-    /// anything visible in the roles. ForwardTraced ENFORCES the input width
-    /// (<c>if (input.Shape[lastAxis] != 2 * _width) throw</c>) and then narrows twice by exactly
-    /// <c>_width</c>, so the emitted width is <c>_width</c> and nothing else - which is why this is
-    /// <c>Fixed(_width)</c> rather than a scale: the halving is a consequence of the guard, not the rule.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 3 || _width <= 0) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_width)),
-        };
-    }
 
     /// <summary>Produces the gate from the concatenated pair.</summary>
     private readonly DenseLayer<T> _gate;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override long ParameterCount => _gate.ParameterCount;
 
     /// <summary>
     /// Creates a gated fusion layer.
@@ -127,6 +99,12 @@ public partial class GatedFusionLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
         => _gate.SetTrainableParameters(parameters);
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _gate.GetParameters();
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters) => _gate.SetParameters(parameters);
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters) => _gate.UpdateParameters(parameters);

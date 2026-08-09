@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -175,9 +175,15 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;       // background, table
         _numStructureClasses = 7;   // background, table, column, row, column header, projected row header, spanning cell
+        // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
+        // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { EnableGradientClipping = true, MaxGradientNorm = 1.0 });
+            {
+                InitialLearningRate = 0.0001,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+            });
 
         ImageSize = imageSize;
 
@@ -233,9 +239,15 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         _numQueries = numQueries;
         _numTableClasses = 2;
         _numStructureClasses = 7;
+        // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
+        // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { EnableGradientClipping = true, MaxGradientNorm = 1.0 });
+            {
+                InitialLearningRate = 0.0001,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+            });
 
         ImageSize = imageSize;
 
@@ -1182,6 +1194,9 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
             // not match GetParameters() (a layer's gradient count differs from its
             // ParameterCount), throwing in Engine.Subtract once the forward stopped
             // crashing. TrainWithTape owns the whole step.
+            // Pass the configured optimizer through. The two-argument overload left _optimizer
+            // assigned but never read, so training ran on the framework default instead of DETR's
+            // 1e-4 (Smock et al., 2022) and the memorization loss went from 0.0000 to 12.3652.
             TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally

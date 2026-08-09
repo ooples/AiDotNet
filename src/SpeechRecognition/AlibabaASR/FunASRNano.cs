@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -43,16 +43,6 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("FunASR: A Fundamental End-to-End Speech Recognition Toolkit", "https://arxiv.org/abs/2305.11013", Year = 2024, Authors = "Gao et al.")]
 public class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from the output construction: <c>PredictCore</c> folds the whole <c>Layers</c> chain and
-    /// <c>PostprocessOutput</c> is the identity, so the width is the final layer's output dimension.
-    /// This model builds <c>LayerHelper.CreateDefaultConformerLayers</c>, whose CTC head ends with
-    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>, and <c>InitializeLayers</c> passes
-    /// <c>vocabSize: _options.VocabSize</c>.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly FunASRNanoOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -104,7 +94,25 @@ public class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+
+        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
+        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
+        // training mode when it did. The next Predict then runs with dropout live and stochastic
+        // batch-norm statistics, so it silently returns a different answer for the same input, and
+        // nothing about that failure points back at the exception that caused it.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked-attention Mask Transformer for Universal Image Segmentation", "https://arxiv.org/abs/2112.01527", Year = 2022, Authors = "Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar")]
-public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
+public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly Mask2FormerOptions _options;
 
@@ -79,34 +79,43 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
 
     #region Fields
 
-    // Only Mask2Former's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from PanopticSegmentationBase -> SegmentationModelBase.
+    private readonly int _height;
+    private readonly int _width;
+    private readonly int _channels;
+    private readonly int _numClasses;
     private readonly int _numQueries;
     private readonly Mask2FormerModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
     /// <summary>
-    /// Gets whether using native mode (trainable) or ONNX mode (inference only).
+    /// Gets whether this Mask2Former instance supports training.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode (trainable) and <c>false</c>
+    /// in ONNX mode (inference only). Mask2Former can be trained on any of the three segmentation
+    /// tasks (semantic, instance, panoptic) or all at once.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal Mask2FormerModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
 
     #endregion
-
-    /// <summary>
-    /// Mask2Former's stuff/thing split: the first third of the class list is "stuff" (amorphous
-    /// regions like sky or road), the rest are countable "things". Kept as a static helper so both
-    /// constructors can hand the same split to the panoptic base before any field is assigned.
-    /// </summary>
-    private static int StuffClassCount(int numClasses) => Math.Max(1, numClasses / 3);
 
     #region Constructors
 
@@ -141,14 +150,20 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         Mask2FormerModelSize modelSize = Mask2FormerModelSize.SwinTiny,
         double dropRate = 0.1,
         Mask2FormerOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new Mask2FormerOptions();
         Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = dropRate;
+        _useNativeMode = true;
+        _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
@@ -178,16 +193,31 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         int numQueries = 100,
         Mask2FormerModelSize modelSize = Mask2FormerModelSize.SwinTiny,
         Mask2FormerOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new Mask2FormerOptions();
         Options = _options;
+
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"Mask2Former ONNX model not found: {onnxModelPath}");
+
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = 0.0;
+        _useNativeMode = false;
+        _onnxModelPath = onnxModelPath;
+        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load Mask2Former ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -267,7 +297,7 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(processedInput, processedTarget, Optimizer);
+            TrainWithTape(processedInput, processedTarget, _optimizer);
         }
         finally
         {
@@ -293,8 +323,7 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         };
     }
 
-    /// <inheritdoc />
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -305,8 +334,7 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         return features;
     }
 
-    /// <inheritdoc />
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -324,7 +352,21 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         return result;
     }
 
-    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase.
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        int[] newShape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
+        var result = new Tensor<T>(newShape);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
 
     #endregion
 
@@ -471,23 +513,40 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
             : new Mask2Former<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
-    // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
+    /// <summary>
+    /// Releases managed resources.
+    /// </summary>
+    /// <param name="disposing">True from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees ONNX session resources. Use <c>using</c> statement.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
+        base.Dispose(disposing);
+    }
 
     #endregion
 
     #region IPanopticSegmentation Implementation
 
-    // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment / NumStuffClasses /
-    // NumThingClasses all arrive from PanopticSegmentationBase.
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
+    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
 
-    /// <inheritdoc />
-    public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
+    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        int numStuff = NumStuffClasses;
+        int numStuff = Math.Max(1, _numClasses / 3);
         var instanceMap = new Tensor<T>([h, w]);
         var panopticMap = new Tensor<T>([h, w]);
         var segments = new List<PanopticSegment<T>>();

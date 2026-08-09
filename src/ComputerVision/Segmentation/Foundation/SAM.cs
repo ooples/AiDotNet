@@ -61,17 +61,8 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything", "https://arxiv.org/abs/2304.02643", Year = 2023, Authors = "Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Dollár, Ross Girshick")]
-public class SAM<T> : Common.PromptableSegmentationBase<T>
+public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// This encoder downsamples by 16, not the family's 32. Measured, not assumed: a [1,3,64,64] input
-    /// returns [1,C,4,4] where the inherited /32 law claims [1,C,2,2]. The conformance sweep surfaced
-    /// the difference - which is what a virtual family law plus per-model overrides exists for.
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-        => SpatialStrideContract(inputRank, 16);
-
     private readonly SAMOptions _options;
 
     /// <summary>
@@ -81,15 +72,15 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
 
     #region Fields
 
-    // Only SAM's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed, _encoderLayerEnd and the
-    // promptable state (_imageEmbedding, _imageSet) all come from PromptableSegmentationBase ->
-    // SegmentationModelBase.
+    private int _height, _width, _channels, _numClasses;
     private readonly SAMModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private bool _useNativeMode;
+    private string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
     /// <summary>
     /// Builds the paper's mask objective from <paramref name="options"/>.
     /// </summary>
@@ -116,17 +107,25 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
             (new DiceLoss<T>(), o.MaskDiceWeight));
     }
 
-    // SAM's own promptable state. _imageEmbedding and _imageSet live on PromptableSegmentationBase.
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
+
+    // Promptable segmentation state
+    private Tensor<T>? _imageEmbedding;
     private Tensor<T>? _imageProbabilities;
 
     #endregion
 
     #region Properties
 
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
-    // SegmentationModelBase and say exactly the same thing.
+    /// <summary>
+    /// Gets whether this SAM instance supports training.
+    /// </summary>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal SAMModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -164,20 +163,18 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         // where focal deliberately down-weights easy background and dice corrects the foreground/
         // background imbalance a promptable segmenter depends on. Use the paper's composite for the
         // single-mask case; multi-class keeps softmax CE, which is the correct generalisation.
-        //
-        // The base resolves numClasses/native-mode and defaults the optimizer, but SAM's default is
-        // not the base's plain AdamW - it carries the paper's warmup schedule - so it is still built
-        // here, EAGERLY, exactly as before. `_optimizer` is a settable field on SegmentationModelBase
-        // precisely so a model can do this.
-        : base(architecture, optimizer, lossFunction ?? BuildMaskLoss(options, numClasses), numClasses)
+        : base(architecture, lossFunction ?? BuildMaskLoss(options, numClasses))
     {
         _options = options ?? new SAMOptions();
         Options = _options;
-        // SAM's own 1024x1024 input default, which differs from the base's 512x512.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = dropRate;
+        _useNativeMode = true;
+        _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -250,22 +247,30 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         SAMOptions? options = null)
         // Same paper objective as the native constructor above (focal + dice, 20:1), kept in sync so
         // the two entry points do not disagree about what SAM optimises.
-        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
-        // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, BuildMaskLoss(options, numClasses))
     {
-        // The base's ONNX constructor installs a plain CrossEntropyWithLogitsLoss because it has no
-        // lossFunction parameter. Restore SAM's paper objective so the two entry points still agree
-        // about what SAM optimises, exactly as the old `: base(architecture, BuildMaskLoss(...))` did.
-        LossFunction = BuildMaskLoss(options, numClasses);
         _options = options ?? new SAMOptions();
         Options = _options;
+
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"SAM ONNX model not found: {onnxModelPath}");
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = 0.0;
+        _useNativeMode = false;
+        _onnxModelPath = onnxModelPath;
+        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load SAM ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -302,7 +307,7 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
             // Use the constructor-selected AdamW instance. The overload without an
             // optimizer falls back to NeuralNetworkBase's Adam and would silently
             // discard SAM's paper hyperparameters and any user-supplied optimizer.
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -326,7 +331,7 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         };
     }
 
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -339,7 +344,7 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
@@ -366,7 +371,22 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         return result;
     }
 
-    // AddBatchDimension and RemoveBatchDimension come from SegmentationModelBase.
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    {
+        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    {
+        int[] shape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < shape.Length; i++)
+            shape[i] = tensor.Shape[i + 1];
+        var result = new Tensor<T>(shape);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
 
     #endregion
 
@@ -498,36 +518,40 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
             options: new SAMOptions(_options))
         : new SAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new SAMOptions(_options));
 
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
-    // and SAM owns no further unmanaged resources.
+    /// <summary>
+    /// Releases managed resources.
+    /// </summary>
+    protected override void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; }
+            _disposed = true;
+        }
+        base.Dispose(disposing);
+    }
 
     #endregion
 
     #region IPromptableSegmentation Implementation
 
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;
-    // SupportsPointPrompts/BoxPrompts/MaskPrompts/TextPrompts come from PromptableSegmentationBase
-    // with exactly these values (true, true, true, false).
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    bool IPromptableSegmentation<T>.SupportsPointPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsBoxPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsMaskPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsTextPrompts => false;
 
-    /// <summary>
-    /// Encodes an image into the embedding the prompt methods score against. SAM's encoder is the
-    /// full forward pass, so this is simply <see cref="NeuralNetworkBase{T}.Predict"/>.
-    /// </summary>
-    protected override Tensor<T> EncodeImage(Tensor<T> image) => Predict(image);
-
-    /// <inheritdoc/>
-    public override void SetImage(Tensor<T> image)
+    void IPromptableSegmentation<T>.SetImage(Tensor<T> image)
     {
-        // Same two steps as before - encode once, then cache the softmax of that embedding for
-        // SegmentEverything - plus the base's _imageSet flag that EnsureImageSet() reads.
-        var embedding = EncodeImage(image);
-        _imageEmbedding = embedding;
-        _imageSet = true;
-        _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(embedding);
+        _imageEmbedding = Predict(image);
+        _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(_imageEmbedding);
     }
 
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -553,8 +577,7 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromBox(Tensor<T> box)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -571,8 +594,7 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromMask(Tensor<T> mask)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -587,8 +609,7 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc/>
-    public override List<PromptedSegmentationResult<T>> SegmentEverything()
+    List<PromptedSegmentationResult<T>> IPromptableSegmentation<T>.SegmentEverything()
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);

@@ -47,18 +47,8 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://arxiv.org/abs/2305.05084", Year = 2023, Authors = "Rekesh et al.")]
-public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Traced through the graph, not read off a name: InitializeLayers builds
-    /// <c>LayerHelper.CreateDefaultLLMASRLayers(..., vocabSize: _options.VocabSize)</c>, which ends in
-    /// <c>vocabularyProjection = new DenseLayer&lt;T&gt;(vocabSize)</c> - emitted after BOTH decoder
-    /// branches, so the width does not depend on which one runs. The adapter and LLM widths
-    /// (EncoderDim, DecoderDim) are interior only. PostprocessOutput is the identity.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly NemotronSpeechOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -111,7 +101,7 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultLLMASRLayers(encoderDim: _options.EncoderDim, adapterDim: _options.EncoderDim, llmDim: _options.DecoderDim, numEncoderLayers: _options.NumEncoderLayers, numLLMLayers: _options.NumDecoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

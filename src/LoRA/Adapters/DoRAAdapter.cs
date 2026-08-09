@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -59,8 +58,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2402.09353
 /// </para>
 /// </remarks>
-[AutoParameters]
-public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
+public class DoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Magnitude component of the decomposed weights (scalar per output neuron).
@@ -76,7 +74,7 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// Each output neuron gets one magnitude value.
     /// </para>
     /// </remarks>
-    private Tensor<T> _magnitude;
+    private Vector<T> _magnitude;
 
     /// <summary>
     /// Gradients for the magnitude component, computed during backpropagation.
@@ -92,6 +90,26 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// Cached input matrix from forward pass (used for computing magnitude gradients in backward).
     /// </summary>
     private Matrix<T>? _lastInputMatrix;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DoRA adds the magnitude parameters (one per output neuron) to the standard LoRA parameters.
+    /// Total = (base layer parameters if not frozen) + LoRA parameters + magnitude parameters.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
+            int loraCount = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
+            int magnitudeCount = _magnitude != null ? _magnitude.Length : 0;
+            return baseCount + loraCount + magnitudeCount;
+        }
+    }
 
     /// <summary>
     /// Initializes a new DoRA adapter wrapping an existing layer.
@@ -129,13 +147,14 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     {
         // Initialize magnitude from base layer weights
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-        _magnitude = new Tensor<T>([outputSize]);
+        _magnitude = new Vector<T>(outputSize);
 
         // Decompose initial weights to get magnitude
         DecomposeWeights();
 
         // Update parameters to include magnitude
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        UpdateParametersFromComponents();
     }
 
     /// <summary>
@@ -437,6 +456,98 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
+        // Update parameter vector
+        UpdateParametersFromComponents();
+    }
+
+    /// <summary>
+    /// Gets the current parameters as a vector.
+    /// </summary>
+    /// <returns>Vector containing all parameters (base if not frozen, LoRA, magnitude).</returns>
+    public override Vector<T> GetParameters()
+    {
+        return Parameters.Clone();
+    }
+
+    /// <summary>
+    /// Sets the layer parameters from a vector.
+    /// </summary>
+    /// <param name="parameters">Vector containing all parameters.</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
+        }
+
+        Parameters = parameters.Clone();
+        UpdateComponentsFromParameters();
+    }
+
+    /// <summary>
+    /// Updates the parameter vector from the current component states.
+    /// </summary>
+    private void UpdateParametersFromComponents()
+    {
+        int idx = 0;
+
+        // Pack base layer parameters (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseParams = _baseLayer.GetParameters();
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                Parameters[idx++] = baseParams[i];
+            }
+        }
+
+        // Pack LoRA parameters
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        for (int i = 0; i < loraParams.Length; i++)
+        {
+            Parameters[idx++] = loraParams[i];
+        }
+
+        // Pack magnitude parameters
+        for (int i = 0; i < _magnitude.Length; i++)
+        {
+            Parameters[idx++] = _magnitude[i];
+        }
+    }
+
+    /// <summary>
+    /// Updates the components from the parameter vector.
+    /// </summary>
+    private void UpdateComponentsFromParameters()
+    {
+        int idx = 0;
+
+        // Unpack base layer parameters (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
+            Vector<T> baseParams = new Vector<T>(baseParamCount);
+            for (int i = 0; i < baseParamCount; i++)
+            {
+                baseParams[i] = Parameters[idx++];
+            }
+            _baseLayer.SetParameters(baseParams);
+        }
+
+        // Unpack LoRA parameters
+        int loraParamCount = checked((int)_loraLayer.ParameterCount);
+        Vector<T> loraParams = new Vector<T>(loraParamCount);
+        for (int i = 0; i < loraParamCount; i++)
+        {
+            loraParams[i] = Parameters[idx++];
+        }
+        _loraLayer.SetParameters(loraParams);
+
+        // Unpack magnitude parameters
+        for (int i = 0; i < _magnitude.Length; i++)
+        {
+            _magnitude[i] = Parameters[idx++];
+        }
     }
 
     /// <summary>

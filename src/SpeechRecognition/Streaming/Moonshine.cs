@@ -41,19 +41,8 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Moonshine: Speech Recognition for Live Transcription and Voice Commands", "https://arxiv.org/abs/2410.15608", Year = 2024, Authors = "Useful Sensors")]
-public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from this model's own output construction, not from a name. <c>PredictCore</c> folds
-    /// every layer in <c>Layers</c>, and <c>InitializeLayers</c> fills <c>Layers</c> from
-    /// <c>LayerHelper&lt;T&gt;.CreateDefaultWhisperEncoderDecoderLayers(..., vocabSize: _options.VocabSize, ...)</c>,
-    /// whose LAST emitted layer is the vocabulary projection
-    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c> - the decoder's own <c>decoderDim</c> is the
-    /// width one layer earlier, not the final one. <c>PostprocessOutput</c> is the identity.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly MoonshineOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -105,7 +94,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultWhisperEncoderDecoderLayers(encoderDim: _options.EncoderDim, decoderDim: _options.EncoderDim, numEncoderLayers: _options.NumEncoderLayers, numDecoderLayers: _options.NumEncoderLayers / 2, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

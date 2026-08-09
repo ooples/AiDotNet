@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -39,6 +39,17 @@ namespace AiDotNet.TimeSeries;
 [ResearchPaper("Forecasting at Scale", "https://doi.org/10.1080/00031305.2017.1380080", Year = 2018, Authors = "Sean J. Taylor, Benjamin Letham")]
 public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
+    /// <summary>
+    /// The number of potential trend changepoints laid out across the history when the caller has
+    /// not supplied their own.
+    /// </summary>
+    /// <remarks>
+    /// Taylor and Letham's reference implementation uses <c>n_changepoints = 25</c>. It controls how
+    /// flexible the piecewise-linear trend is allowed to be: more changepoints fit sharper turns and
+    /// risk following noise, fewer produce a stiffer trend.
+    /// </remarks>
+    private const int DefaultChangepointCount = 25;
+
     /// <summary>
     /// Stores the configuration options for the Prophet model.
     /// </summary>
@@ -264,13 +275,13 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         _changepointTimes = BuildChangepointTimes(n, tMin, tMax);
         int changepointCount = _changepointTimes.Length;
 
-        _effectiveSeasonalPeriods = ComputeEffectiveSeasonalPeriods(n);
+        _effectiveSeasonalPeriods = ComputeEffectiveSeasonalPeriods(tMax - tMin);
         int order = Math.Max(1, _prophetOptions.FourierOrder);
         int[] harmonicsPerPeriod = new int[_effectiveSeasonalPeriods.Length];
         int seasonalLen = 0;
         for (int pi = 0; pi < _effectiveSeasonalPeriods.Length; pi++)
         {
-            harmonicsPerPeriod[pi] = Math.Min(order, Math.Max(1, (int)Math.Floor(_effectiveSeasonalPeriods[pi] / 2.0)));
+            harmonicsPerPeriod[pi] = HarmonicCount(_effectiveSeasonalPeriods[pi], order);
             seasonalLen += 2 * harmonicsPerPeriod[pi];
         }
 
@@ -319,12 +330,21 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
                 }
             }
 
-            // Holiday indicators.
-            for (int hc = 0; hc < holidayCount; hc++)
+            // Holiday indicators. The row's time is converted ONCE and tested against a pre-built
+            // set, rather than converted again inside IsHoliday for every holiday: the old form did
+            // n x holidayCount conversions, each inside its own try/catch.
+            if (holidayCount > 0)
             {
-                design[i, col] = IsHoliday(ti, hc) ? NumOps.One : NumOps.Zero;
-                ridge[col] = holidayRidge;
-                col++;
+                DateTime? rowDate = TryToDate(ti);
+                for (int hc = 0; hc < holidayCount; hc++)
+                {
+                    bool onHoliday = rowDate.HasValue
+                        && _prophetOptions.Holidays is not null
+                        && rowDate.Value == _prophetOptions.Holidays[hc].Date;
+                    design[i, col] = onHoliday ? NumOps.One : NumOps.Zero;
+                    ridge[col] = holidayRidge;
+                    col++;
+                }
             }
 
             // Extra regressors (columns 1.. of the input).
@@ -350,9 +370,15 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             // Cholesky is fast and stable for the (regularized, PD) normal matrix.
             beta = new CholeskyDecomposition<T>(normal).Solve(rhs);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException
+            || ex is ArithmeticException)
         {
-            // Fall back to SVD if the matrix is ill-conditioned.
+            // Only the types a non-positive-definite matrix actually raises. A bare catch(Exception)
+            // here turned a NullReferenceException or an out-of-range index into a silent fallback,
+            // and the model then produced a wrong fit with no diagnostic at all. Reported before the
+            // fallback runs, matching the pattern already used in the optimizer catch below.
+            System.Diagnostics.Trace.TraceWarning(
+                $"[ProphetModel] Cholesky solve failed on the normal matrix; falling back to SVD. {ex}");
             beta = new SvdDecomposition<T>(normal).Solve(rhs);
         }
 
@@ -389,7 +415,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             return explicitCps;
         }
 
-        int count = Math.Min(25, Math.Max(0, n - 2));
+        int count = Math.Min(DefaultChangepointCount, Math.Max(0, n - 2));
         if (count <= 0) return new Vector<T>(0);
 
         double span = 0.8 * (tMax - tMin);
@@ -406,7 +432,24 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// when supplied; otherwise falls back to the enabled standard seasonalities (weekly/yearly/daily), keeping
     /// only periods the training window actually covers (at least two full cycles) so seasonality is identifiable.
     /// </summary>
-    private double[] ComputeEffectiveSeasonalPeriods(int n)
+    /// <param name="timeSpan">
+    /// The observed span in the SAME units as the periods, <c>tMax - tMin</c>.
+    /// </param>
+    /// <remarks>
+    /// The guard compares durations, not a duration against a row COUNT. SeasonalPeriods are
+    /// documented in days, the standard seasonalities are durations in days, and FitLeastSquares
+    /// reads column 0 as the time value -- so comparing them against y.Length only coincided with the
+    /// right answer for daily-sampled data. Sub-daily OADate input admitted periods the window does
+    /// not cover (a week of hourly data is 168 rows but only 7 days, so a yearly period passed a row
+    /// count of 168 &gt;= 2 * 365.25 nowhere near a two-cycle span... and conversely 3000 hourly rows
+    /// admitted yearly seasonality over 125 days of data), and any coarser scale dropped periods it
+    /// did cover.
+    ///
+    /// The two-cycle threshold now applies to explicit periods as well. One cycle cannot separate a
+    /// seasonal term from the trend, so admitting a period the window covers only once reports
+    /// seasonality that the data cannot identify.
+    /// </remarks>
+    private double[] ComputeEffectiveSeasonalPeriods(double timeSpan)
     {
         var periods = new List<double>();
         var configured = _prophetOptions.SeasonalPeriods;
@@ -414,29 +457,56 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             foreach (int period in configured)
             {
-                if (period >= 2 && period <= n) periods.Add(period);
+                if (period >= 2 && 2 * period <= timeSpan) periods.Add(period);
             }
         }
         else
         {
-            if (_prophetOptions.WeeklySeasonality && 2 * 7 <= n) periods.Add(7.0);
-            if (_prophetOptions.YearlySeasonality && 2 * 365.25 <= n) periods.Add(365.25);
-            if (_prophetOptions.DailySeasonality && 2 * 24 <= n) periods.Add(24.0);
+            if (_prophetOptions.WeeklySeasonality && 2 * 7 <= timeSpan) periods.Add(7.0);
+            if (_prophetOptions.YearlySeasonality && 2 * 365.25 <= timeSpan) periods.Add(365.25);
+            if (_prophetOptions.DailySeasonality && 2 * 24 <= timeSpan) periods.Add(24.0);
         }
         return periods.ToArray();
     }
 
-    /// <summary>Returns whether the time value <paramref name="t"/> falls on the holiday at index <paramref name="holidayIndex"/>.</summary>
-    private bool IsHoliday(T t, int holidayIndex)
+    /// <summary>
+    /// How many Fourier harmonics a period of length <paramref name="period"/> contributes, given a
+    /// configured Fourier <paramref name="order"/>.
+    /// </summary>
+    /// <remarks>
+    /// ONE definition, called from both the design-matrix layout and the seasonal evaluation. The
+    /// mapping from (period, order) to positions in <c>_seasonalComponents</c> depends on both sites
+    /// producing the same count, and serialization stores the periods and the order rather than the
+    /// counts, so deserialization reproduces the layout through this formula too. If two copies ever
+    /// disagreed, the bounds check in the evaluation would not report it -- it would return a
+    /// truncated seasonal term and the model would forecast wrongly with no diagnostic.
+    ///
+    /// Capped at floor(period / 2) because harmonics above the Nyquist limit of the period are not
+    /// separately identifiable, and floored at 1 so a period shorter than 2 still contributes its
+    /// fundamental.
+    /// </remarks>
+    private static int HarmonicCount(double period, int order)
+        => Math.Min(order, Math.Max(1, (int)Math.Floor(period / 2.0)));
+
+    /// <summary>
+    /// Converts a model time value to its calendar date, or null when it is outside the OLE
+    /// Automation date range.
+    /// </summary>
+    /// <remarks>
+    /// Catches only ArgumentException, which is what DateTime.FromOADate raises for an
+    /// out-of-range value. The previous IsHoliday caught every exception type, so an out-of-range
+    /// holiday index was reported as "not a holiday" and the design matrix silently lost that
+    /// column's indicator instead of failing.
+    /// </remarks>
+    private static DateTime? TryToDate(T t)
     {
         try
         {
-            DateTime date = DateTime.FromOADate(Convert.ToDouble(t));
-            return date.Date == _prophetOptions.Holidays[holidayIndex].Date;
+            return DateTime.FromOADate(Convert.ToDouble(t)).Date;
         }
-        catch (Exception)
+        catch (ArgumentException)
         {
-            return false;
+            return null;
         }
     }
 
@@ -599,7 +669,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         for (int pi = 0; pi < _effectiveSeasonalPeriods.Length; pi++)
         {
             double period = _effectiveSeasonalPeriods[pi];
-            int harmonics = Math.Min(order, Math.Max(1, (int)Math.Floor(period / 2.0)));
+            int harmonics = HarmonicCount(period, order);
             for (int h = 1; h <= harmonics; h++)
             {
                 if (idx + 1 >= _seasonalComponents.Length) return seasonal;
@@ -848,6 +918,38 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             writer.Write(holiday.Ticks);
         }
         writer.Write(_prophetOptions.RegressorCount);
+
+        // Every remaining scalar option, plus the residual statistics.
+        //
+        // These were not written, so DeserializeCore rebuilt a DEFAULT options object and the fit
+        // survived the round trip while the behaviour around it did not: a model trained with
+        // ApplyTransformation returned untransformed predictions after loading, DetectAnomalies and
+        // GetAnomalyThreshold threw because EnableAnomalyDetection reverted to false (telling the
+        // user to retrain a model that had been trained correctly), and PredictWithIntervals threw
+        // because _residualStdDev reverted to zero.
+        //
+        // Optimizer and TransformPrediction are an interface reference and a delegate. Neither can
+        // be written to a binary stream, so a caller who set them must re-supply them after loading;
+        // that is stated on the deserializing side as well.
+        writer.Write(_prophetOptions.InitialTrendValue);
+        writer.Write(_prophetOptions.InitialChangepointValue);
+        writer.Write(_prophetOptions.ForecastHorizon);
+        writer.Write(_prophetOptions.ChangePointPriorScale);
+        writer.Write(_prophetOptions.SeasonalityPriorScale);
+        writer.Write(_prophetOptions.HolidayPriorScale);
+        writer.Write(_prophetOptions.YearlySeasonality);
+        writer.Write(_prophetOptions.WeeklySeasonality);
+        writer.Write(_prophetOptions.DailySeasonality);
+        writer.Write(_prophetOptions.OptimizeParameters);
+        writer.Write(_prophetOptions.ApplyTransformation);
+        writer.Write(_prophetOptions.EnableAnomalyDetection);
+        writer.Write(_prophetOptions.AnomalyThresholdSigma);
+        writer.Write(_prophetOptions.ComputePredictionIntervals);
+        writer.Write(_prophetOptions.PredictionIntervalWidth);
+
+        writer.Write(Convert.ToDouble(_residualMean));
+        writer.Write(Convert.ToDouble(_residualStdDev));
+        writer.Write(Convert.ToDouble(_anomalyThreshold));
     }
 
     /// <summary>
@@ -929,6 +1031,33 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             _prophetOptions.Holidays.Add(new DateTime(reader.ReadInt64()));
         }
         _prophetOptions.RegressorCount = reader.ReadInt32();
+
+        // Read back in exactly the order SerializeCore wrote them.
+        //
+        // NOT RESTORED, because they cannot be: Optimizer is an interface reference and
+        // TransformPrediction is a delegate, so both revert to their defaults (null, and identity).
+        // A caller who supplied either must re-supply it on the loaded model; ApplyTransformation is
+        // restored faithfully, so a model saved with a custom transform will apply the IDENTITY
+        // transform until its TransformPrediction is set again.
+        _prophetOptions.InitialTrendValue = reader.ReadDouble();
+        _prophetOptions.InitialChangepointValue = reader.ReadDouble();
+        _prophetOptions.ForecastHorizon = reader.ReadInt32();
+        _prophetOptions.ChangePointPriorScale = reader.ReadDouble();
+        _prophetOptions.SeasonalityPriorScale = reader.ReadDouble();
+        _prophetOptions.HolidayPriorScale = reader.ReadDouble();
+        _prophetOptions.YearlySeasonality = reader.ReadBoolean();
+        _prophetOptions.WeeklySeasonality = reader.ReadBoolean();
+        _prophetOptions.DailySeasonality = reader.ReadBoolean();
+        _prophetOptions.OptimizeParameters = reader.ReadBoolean();
+        _prophetOptions.ApplyTransformation = reader.ReadBoolean();
+        _prophetOptions.EnableAnomalyDetection = reader.ReadBoolean();
+        _prophetOptions.AnomalyThresholdSigma = reader.ReadDouble();
+        _prophetOptions.ComputePredictionIntervals = reader.ReadBoolean();
+        _prophetOptions.PredictionIntervalWidth = reader.ReadDouble();
+
+        _residualMean = NumOps.FromDouble(reader.ReadDouble());
+        _residualStdDev = NumOps.FromDouble(reader.ReadDouble());
+        _anomalyThreshold = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>

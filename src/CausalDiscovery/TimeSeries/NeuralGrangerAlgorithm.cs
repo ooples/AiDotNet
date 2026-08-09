@@ -94,7 +94,7 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
         // Put every series on a common scale before applying a single group-sparsity
         // coefficient. Otherwise a change of physical units changes the balance between
         // prediction loss and lambda and therefore changes the selected causal graph.
-        var standardizedData = StandardizeSeries(data, n, d);
+        var standardizedData = StandardizeColumns(data);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / inputDim));
@@ -123,6 +123,11 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
 
             T invN = NumOps.FromDouble(1.0 / effectiveN);
 
+            // The hidden buffer is allocated ONCE per target and overwritten, not once per sample.
+            // Allocating it inside the sample loop cost d * _maxEpochs * effectiveN allocations,
+            // which is exactly the temporary-allocation cost the comment below claims was removed.
+            var hidden = new T[h];
+
             for (int epoch = 0; epoch < _maxEpochs; epoch++)
             {
                 var gW1 = new Matrix<T>(inputDim, h);
@@ -133,8 +138,7 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
                 for (int s = 0; s < effectiveN; s++)
                 {
                     // Forward: hidden = sigmoid(x * W1 + b1). Use the raw matrix storage
-                    // directly instead of allocating two temporary vectors per hidden unit.
-                    var hidden = new T[h];
+                    // (hidden is reused across samples; every element is overwritten below.)
                     for (int k = 0; k < h; k++)
                     {
                         T sum = b1[k];
@@ -198,37 +202,6 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
         }
 
         return result;
-    }
-
-    private Matrix<T> StandardizeSeries(Matrix<T> data, int sampleCount, int variableCount)
-    {
-        var standardized = new Matrix<T>(sampleCount, variableCount);
-        for (int variable = 0; variable < variableCount; variable++)
-        {
-            double mean = 0.0;
-            for (int sample = 0; sample < sampleCount; sample++)
-                mean += NumOps.ToDouble(data[sample, variable]);
-            mean /= sampleCount;
-
-            double squaredDeviation = 0.0;
-            for (int sample = 0; sample < sampleCount; sample++)
-            {
-                double deviation = NumOps.ToDouble(data[sample, variable]) - mean;
-                squaredDeviation += deviation * deviation;
-            }
-
-            double standardDeviation = Math.Sqrt(squaredDeviation / sampleCount);
-            if (standardDeviation < 1e-12)
-                continue;
-
-            for (int sample = 0; sample < sampleCount; sample++)
-            {
-                double value = (NumOps.ToDouble(data[sample, variable]) - mean) / standardDeviation;
-                standardized[sample, variable] = NumOps.FromDouble(value);
-            }
-        }
-
-        return standardized;
     }
 
     /// <summary>

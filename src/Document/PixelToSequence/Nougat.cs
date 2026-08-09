@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Attributes;
@@ -290,6 +290,23 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     // ids and the flat chain hands it continuous encoder features -- running the real forward
     // end-to-end throws "Index -1 ... out of bounds for embedding table with vocabulary size
     // 50000". See the task notes; do not try to solve it by re-wiring ForwardForTraining alone.
+
+    /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            EnsureNativeInitialized();
+            return base.ParameterCount;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        EnsureNativeInitialized();
+        return base.GetParameters();
+    }
 
     /// <inheritdoc/>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)

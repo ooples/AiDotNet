@@ -8,6 +8,15 @@ using Xunit.Abstractions;
 namespace AiDotNet.Tests.IntegrationTests;
 
 /// <summary>
+/// Forces the parameter sweeps to run sequentially. xUnit parallelises test CLASSES by default,
+/// and each of these constructs every model in the library; run together they doubled peak memory
+/// and the host was killed mid-run. Sharing a collection is xUnit's way of saying "not at the
+/// same time as each other".
+/// </summary>
+[CollectionDefinition("ParameterSweeps", DisableParallelization = true)]
+public class ParameterSweepCollection { }
+
+/// <summary>
 /// Asserts, across EVERY constructable model, that <c>ParameterCount</c> and
 /// <c>GetParameters().Length</c> describe the same tensors.
 /// </summary>
@@ -30,15 +39,6 @@ namespace AiDotNet.Tests.IntegrationTests;
 /// solve: you would fix one, re-run, discover the next, and never know how many are left.
 /// </para>
 /// </remarks>
-/// <summary>
-/// Forces the parameter sweeps to run sequentially. xUnit parallelises test CLASSES by default,
-/// and each of these constructs every model in the library; run together they doubled peak memory
-/// and the host was killed mid-run. Sharing a collection is xUnit's way of saying "not at the
-/// same time as each other".
-/// </summary>
-[CollectionDefinition("ParameterSweeps", DisableParallelization = true)]
-public class ParameterSweepCollection { }
-
 [Collection("ParameterSweeps")]
 [Trait("Category", "Sweep")]
 public class ParameterCountContractTests
@@ -84,8 +84,24 @@ public class ParameterCountContractTests
         // is worse than no gate: it is indistinguishable from a pass. The file survives the crash,
         // and the last line in it names the model that was being measured when the host died.
         var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "parameter-count-violations.txt");
+        // DISPOSED ON EVERY PATH, AND A FAILURE TO OPEN IS REPORTED. The manual dispose ran only
+        // on the normal path, so a throw from the enumeration below -- Assembly.GetTypes() raises
+        // ReflectionTypeLoadException, and this sweep calls it -- leaked the handle and left the
+        // partial log the comment above calls "the deliverable" unflushed. The empty catch was the
+        // other half: when the file could not be opened at all, every later write silently went
+        // nowhere and the run looked like one that simply found nothing.
         System.IO.StreamWriter? log = null;
-        try { log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true }; } catch { }
+        try
+        {
+            log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true };
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"NOTE: could not open {logPath} ({ex.GetType().Name}: {ex.Message}); " +
+                              "the console output below is the only record of this run.");
+        }
+
+        using var _logHandle = log;
 
         foreach (var closedType in GetConstructableModelTypes())
         {
@@ -160,8 +176,6 @@ public class ParameterCountContractTests
                 GC.WaitForPendingFinalizers();
             }
         }
-
-        log?.Dispose();
 
         _output.WriteLine($"Checked {checkedCount} models; {skipped} skipped (no flat vector), " +
                           $"{unmeasurable} unmeasurable; {violations.Count} violations.");

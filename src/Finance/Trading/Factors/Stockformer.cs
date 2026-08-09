@@ -168,14 +168,12 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
                (options ?? new StockformerOptions<T>()).PredictionHorizon,
                (options ?? new StockformerOptions<T>()).NumFeatures)
     {
+        // Already validated: BuildArchitecture, called in the base initializer above, runs
+        // options.Validate() before any layer is constructed. The two hand-written checks that used to
+        // live here (HiddenDimension, NumDirectionClasses) are part of that now, alongside the rest --
+        // every dimension, the head/width divisibility, and the non-finite doubles that an ordinary
+        // range comparison lets through.
         _options = options ?? new StockformerOptions<T>();
-
-        if (_options.HiddenDimension <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), _options.HiddenDimension,
-                "HiddenDimension must be positive.");
-        if (_options.NumDirectionClasses <= 1)
-            throw new ArgumentOutOfRangeException(nameof(options), _options.NumDirectionClasses,
-                "NumDirectionClasses must be at least 2 for the classification task to be meaningful.");
 
         _bands = new StockformerBands<T>(_options.WaveletOrder, _options.WaveletLevels);
 
@@ -244,12 +242,27 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     }
 
     /// <summary>
-    /// The paper's training objective for one cross-section.
+    /// The paper's training objective for one cross-section, computed as a DIAGNOSTIC.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// NOT THE OBJECTIVE THE MODEL IS TRAINED ON, and the difference matters. This method returns
+    /// plain <c>double</c> values through <c>ToVector</c>, which severs the gradient tape, and
+    /// training runs through <c>PredictCore</c>, which returns the fused return head alone. The
+    /// direction head, the low-frequency heads and the classification term therefore receive NO
+    /// gradient: only the return head is trained.
+    /// </para>
+    /// <para>
+    /// The class documentation presents joint multi-task training as the paper's contribution, and
+    /// that part is not yet wired. Use this to MEASURE the multi-task objective -- to compare runs,
+    /// to check the classification term is moving -- but do not read a falling total here as evidence
+    /// that the direction head is learning, because nothing updates it.
+    /// </para>
+    /// </remarks>
     /// <param name="perStockReturns">Input window, rows are stocks.</param>
     /// <param name="returnTarget">Realized forward return per stock.</param>
     /// <param name="directionTarget">Realized direction class per stock.</param>
-    /// <returns>Regression term, classification term, and their unweighted sum.</returns>
+    /// <returns>Regression term, classification term, and their task-weighted sum.</returns>
     public (double Regression, double Classification, double Total) ComputeLoss(
         Matrix<T> perStockReturns, Vector<T> returnTarget, Vector<T> directionTarget)
     {
@@ -453,8 +466,17 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
     {
         get
         {
+            // InitializeLayers returns immediately when Layers.Count > 0, so calling it does NOT
+            // guarantee _encoder gets built. Deserialization and clone flows restore Layers through
+            // the base class without going through the encoder construction, and the previous
+            // `return _encoder!` then dereferenced null and surfaced as a NullReferenceException
+            // from whichever forward path happened to touch it first.
             if (_encoder is null) InitializeLayers();
-            return _encoder!;
+
+            return _encoder ?? throw new InvalidOperationException(
+                $"{nameof(Stockformer<T>)}: the dual encoder is not built. Layers were restored "
+                + "without it, which happens when a model is deserialized or cloned through the base "
+                + "class; rebuild the model from its options before predicting.");
         }
     }
 
@@ -512,23 +534,38 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
         // each layer initialised from an unseeded RNG and two models built from identical options
         // disagreed from the first prediction, so StockformerOptions' documented "reference seed of 1"
         // applied to nothing. Mirrors FactorVAE, the sibling in this folder.
-        => new(inputType: InputType.TwoDimensional,
-               taskType: NeuralNetworkTaskType.Regression,
-               inputHeight: Math.Max(2, options.SequenceLength),
-               inputWidth: Math.Max(1, options.NumFeatures),
-               outputSize: Math.Max(1, options.NumAssets))
+    {
+        // THE FIRST THING THAT TOUCHES THE OPTIONS. This runs from the constructor's base initializer,
+        // so it precedes both the architecture and every layer built from it -- which is the only
+        // placement that turns a bad option into a message naming that option, rather than into a
+        // shape error thrown from inside a layer, or a NaN that only appears after training starts.
+        options.Validate();
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: options.SequenceLength,
+            inputWidth: options.NumFeatures,
+            outputSize: options.NumAssets)
         {
             RandomSeed = options.Seed ?? 1,
         };
+    }
 
 
-    /// <summary>Lifts each scalar band value to the model width through the lift layer.</summary>
     /// <summary>Projects the D input factors to the model width, through the lift layer.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The lift layer has not been built yet. It is created in the layer-construction pass, so a call
+    /// that reaches here first is a wiring bug rather than a user error.
+    /// </exception>
     private Tensor<T> Lift(Tensor<T> band, int assets, int time, int featureCount)
     {
+        var lift = _lift ?? throw new InvalidOperationException(
+            $"{nameof(Stockformer<T>)}: the lift layer is not built. Construct the layers before a forward pass.");
+
         var flat = Engine.Reshape(band, new[] { assets * time, featureCount });
         return Engine.Reshape(
-            _lift!.Forward(flat), new[] { assets, time, _options.HiddenDimension });
+            lift.Forward(flat), new[] { assets, time, _options.HiddenDimension });
     }
 
     /// <summary>
@@ -673,7 +710,33 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < bands.Columns; c++) input[(r * bands.Columns) + c] = bands[r, c];
 
-        var restored = filter.Forward(input);   // [rows, time]
+        var restored = filter.Forward(input);   // [rows, restoredTime]
+
+        // TWO DIFFERENT FAILURES, reported differently. A rank other than 2 means the layer returned
+        // an unexpected shape, which is a wiring problem, not a window-length mismatch; folding the
+        // two together made the message claim the filter "restores to 0, which is the configured
+        // SequenceLength" and advise passing a window of 0 steps, and SequenceLength is validated
+        // positive, so both statements were false.
+        if (restored.Shape.Length != 2)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(Stockformer<T>)}: the learnable inverse filter returned a rank-"
+                + $"{restored.Shape.Length} tensor; a rank-2 [rows, time] result is required.");
+        }
+
+        // The upsample filters are DenseLayer(_options.SequenceLength), so their output width is
+        // ALWAYS SequenceLength, whatever the input window length is. Reading with `time` as the row
+        // stride therefore ran past the end of `restored` when time > SequenceLength, and picked
+        // values out of the wrong row when time < SequenceLength. ReadShape accepts any time length,
+        // so PredictBands could reach both.
+        int restoredTime = restored.Shape[1];
+        if (restoredTime != time)
+        {
+            throw new ArgumentException(
+                $"The input window has {time} timesteps but the learnable inverse filter restores to "
+                + $"{restoredTime}, which is the configured SequenceLength. Pass a window of "
+                + $"{restoredTime} steps, or build the model with SequenceLength = {time}.");
+        }
 
         // Back to [assets, time, features].
         var result = new Tensor<T>(new[] { assets, time, featureCount });

@@ -3,10 +3,6 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
-// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
-// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
-using AiDotNet.Attributes;
-
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -65,15 +61,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// this be dropped into any model's adversarial objective.
 /// </para>
 /// </remarks>
-// Rank 3 [Channels, Height, Width] -> [1, Hp, Wp], matching the ResolveShapes call in OnFirstForward.
-// OutputAxesFor is hand-written because the spatial relation depends on the kernel/stride/padding
-// schedule, which is built from constructor arguments.
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
+public partial class PatchGANDiscriminator<T> : LayerBase<T>
 {
     #region Constants
 
@@ -151,56 +139,6 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
 
             return r;
         }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// The channel axis collapses to the single real/fake score per patch, so it is
-    /// <see cref="AxisRelation.Fixed"/> at 1. Height and Width both follow the whole convolution
-    /// stack.
-    /// </para>
-    /// <para>
-    /// <b>A stack of convolutions IS a single convolution.</b> This looked at first like it needed a
-    /// composite relation the vocabulary does not have — one window per block. It does not. Composing
-    /// <c>(k1,s1,p1)</c> then <c>(k2,s2,p2)</c> gives exactly <c>k = k1 + (k2-1)*s1</c>,
-    /// <c>s = s1*s2</c>, <c>p = p1 + p2*s1</c>, because
-    /// <c>floor((floor(a/s1) + b) / s2) == floor((a + b*s1) / (s1*s2))</c> for integer <c>b</c>. The
-    /// identity is exact, not an approximation, so folding the schedule left to right yields ONE
-    /// <see cref="AxisRelation.Window"/> that reproduces the resolved shape for every input size.
-    /// </para>
-    /// <para>
-    /// The folded kernel is the receptive field: this method's <c>kernel</c> always equals
-    /// <see cref="ReceptiveField"/>, which the class computes independently by walking the schedule
-    /// backwards. Two derivations, one number - that is the cross-check that this is right.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 3) return null;
-
-        int padding = PaddingFor(_kernelSize);
-
-        // Fold the Ck blocks, then the 1-channel output convolution (kernel, stride 1, same padding).
-        int kernel = _kernelSize;
-        int stride = StrideAt(0);
-        int pad = padding;
-        for (int i = 1; i <= _numLayers; i++)
-        {
-            int s = i < _numLayers ? StrideAt(i) : 1;
-            kernel += (_kernelSize - 1) * stride;
-            pad += padding * stride;
-            stride *= s;
-        }
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(1)),
-            new OutputAxisContract(
-                TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, kernel, stride, pad)),
-            new OutputAxisContract(
-                TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, kernel, stride, pad)),
-        };
     }
 
     /// <summary>
@@ -441,6 +379,43 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         }
 
         yield return _convOut;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var all = new List<T>();
+        foreach (var layer in AllSubLayers())
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++) all.Add(p[i]);
+        }
+
+        return new Vector<T>([.. all]);
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        int expected = 0;
+        foreach (var layer in AllSubLayers()) expected += layer.GetParameters().Length;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters for this PatchGANDiscriminator, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+        foreach (var layer in AllSubLayers())
+        {
+            int count = layer.GetParameters().Length;
+            if (count == 0) continue;
+            layer.SetParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     /// <inheritdoc/>

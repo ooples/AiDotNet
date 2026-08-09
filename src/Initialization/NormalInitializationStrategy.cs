@@ -1,4 +1,4 @@
-namespace AiDotNet.Initialization;
+﻿namespace AiDotNet.Initialization;
 
 /// <summary>
 /// Initializes weights from a normal distribution with a configurable mean and standard deviation.

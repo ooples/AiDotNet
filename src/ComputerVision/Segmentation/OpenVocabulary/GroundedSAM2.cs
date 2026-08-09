@@ -59,25 +59,20 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", "https://arxiv.org/abs/2401.14159", Year = 2024, Authors = "Ren et al.")]
-public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
+public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Does NOT downsample: measured [1,3,64,64] -> [1,C,64,64], so the spatial axes pass straight
-    /// through where the family's inherited law would claim a /32 grid.
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-        => SpatialStrideContract(inputRank, 1);
-
     private readonly GroundedSAM2Options _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only GroundedSAM2's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from OpenVocabSegmentationBase -> SegmentationModelBase.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly int _decoderDim;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
 
     // Native image->mask pipeline configuration (paper-backed, sourced from GroundedSAM2Options).
     private readonly int _patchSize;
@@ -91,8 +86,7 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     //   [1 .. _maskConvIndex)        : positional encoding + encoder/decoder transformer blocks (token space)
     //   [_maskConvIndex]             : 1x1 conv -> numClasses mask logits at token-grid resolution
     //   [_upsampleIndex]             : upsample by patchSize -> full input resolution
-    // _encoderLayerEnd (encoder boundary, retained for serialization round-trip compatibility)
-    // comes from SegmentationModelBase.
+    private int _encoderLayerEnd;    // encoder boundary, retained for serialization round-trip compatibility
     private int _maskConvIndex;
     private int _upsampleIndex;
     private bool _customLayers;
@@ -100,9 +94,17 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, MaxCategories (256)
-    // and MaxPromptLength (77) are all supplied identically by the base.
+    /// <summary>
+    /// Gets whether this GroundedSAM2 instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -125,15 +127,15 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         GroundedSAM2Options? options = null)
-        // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
-        // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GroundedSAM2Options(); Options = _options;
-        // Grounded SAM 2 defaults to 1024x1024, not the base's 512x512, so the fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _dropRate = dropRate;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _decoderDim = _options.DecoderDim > 0 ? _options.DecoderDim : 256;
         _visionDim = _options.VisionDim > 0 ? _options.VisionDim : 256;
         _numEncoderLayers = _options.NumVisionLayers > 0 ? _options.NumVisionLayers : 6;
@@ -161,20 +163,26 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
     public GroundedSAM2(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         GroundedSAM2Options? options = null)
-        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
-        // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GroundedSAM2Options(); Options = _options;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"GroundedSAM2 ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _dropRate = 0;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _dropRate = 0;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         _decoderDim = _options.DecoderDim > 0 ? _options.DecoderDim : 256;
         _visionDim = _options.VisionDim > 0 ? _options.VisionDim : 256;
         _numEncoderLayers = _options.NumVisionLayers > 0 ? _options.NumVisionLayers : 6;
         _numDecoderLayers = _options.NumDecoderLayers > 0 ? _options.NumDecoderLayers : 6;
         _numHeads = _options.NumHeads > 0 ? _options.NumHeads : 8;
         _patchSize = _options.PatchSize > 0 ? _options.PatchSize : 16;
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load GroundedSAM2 ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -209,7 +217,7 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -219,11 +227,11 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
-        => Optimizer ?? base.GetOrCreateBaseOptimizer();
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
     #endregion
 
     #region Private Methods
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         // Native GroundedSAM2 is an image -> pixel-mask model: it takes an RGB image [C,H,W] / [B,C,H,W]
         // and returns per-pixel class logits [B, numClasses, H, W] (matching the ONNX contract). The image
@@ -236,14 +244,14 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
                 "GroundedSAM2 expects an image tensor [C, H, W] or [B, C, H, W].", nameof(input));
 
         bool unbatched = input.Rank == 3;
-        var x = unbatched ? AddBatchDimensionView(input) : input;   // [B, C, H, W]
+        var x = unbatched ? AddBatchDimension(input) : input;   // [B, C, H, W]
 
         // A user-supplied custom layer stack is run straight through without the structured reshapes.
         if (_customLayers)
         {
             var custom = x;
             foreach (var layer in Layers) custom = layer.Forward(custom);
-            return unbatched ? RemoveBatchDimensionView(custom) : custom;
+            return unbatched ? RemoveBatchDimension(custom) : custom;
         }
 
         // 1. Patch embedding -> [B, visionDim, gridH, gridW].
@@ -266,13 +274,13 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         var maskLogits = Layers[_maskConvIndex].Forward(spatial);   // [B, numClasses, gridH, gridW]
         maskLogits = Layers[_upsampleIndex].Forward(maskLogits);    // [B, numClasses, H, W]
 
-        return unbatched ? RemoveBatchDimensionView(maskLogits) : maskLogits;
+        return unbatched ? RemoveBatchDimension(maskLogits) : maskLogits;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimensionView(input);
+        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
@@ -283,16 +291,13 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         var outputData = new T[outputTensor.Length];
         for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-        if (!hasBatch) result = RemoveBatchDimensionView(result); return result;
+        if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    // NOT the base's AddBatchDimension / RemoveBatchDimension: those allocate a fresh tensor and copy,
-    // which would sever the autodiff tape across the batch-dim promotion inside Forward. GroundedSAM2
-    // reshapes through Engine so the tape survives, so the Engine-based pair keeps its own names.
-    private Tensor<T> AddBatchDimensionView(Tensor<T> tensor)
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
         => Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
 
-    private Tensor<T> RemoveBatchDimensionView(Tensor<T> tensor)
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         if (tensor.Rank < 2 || tensor.Shape[0] != 1)
             throw new ArgumentException("A removable batch dimension must have size 1.", nameof(tensor));
@@ -365,8 +370,17 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         var dummy = new Tensor<T>([_channels, _height, _width]);
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
+        // Still best-effort and still not rethrown -- a real forward failure surfaces again on the
+        // actual Train/Predict -- but `catch { }` discarded the diagnosis as well, so that later
+        // failure carried no hint the warm-up had already hit the same problem.
         try { _ = Forward(dummy); }
-        catch { /* best-effort; a real forward failure surfaces on the actual Train/Predict */ }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"{nameof(GroundedSAM2<T>)}: lazy shape resolution failed on a "
+                + $"{_channels}x{_height}x{_width} warm-up pass; shapes stay unresolved until the "
+                + $"first real Train/Predict. {ex}");
+        }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 
@@ -394,7 +408,7 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
                 nameof(input));
 
         var activations = new Dictionary<string, Tensor<T>>();
-        var x = input.Rank == 3 ? AddBatchDimensionView(input) : input;
+        var x = input.Rank == 3 ? AddBatchDimension(input) : input;
         if (_customLayers)
         {
             var current = x;
@@ -516,13 +530,29 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
             options: new GroundedSAM2Options(_options))
         : new GroundedSAM2<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, new GroundedSAM2Options(_options));
 
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
-    // and GroundedSAM2 owns no other unmanaged resource.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IOpenVocabSegmentation Implementation
-    /// <inheritdoc/>
-    public override OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IOpenVocabSegmentation<T>.MaxCategories => 256;
+    int IOpenVocabSegmentation<T>.MaxPromptLength => 77;
+
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
@@ -557,8 +587,7 @@ public class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classNames.ToArray(), Scores = scores, SemanticMap = semanticMap };
     }
 
-    /// <inheritdoc/>
-    public override OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt)
-        => SegmentWithText(image, new[] { prompt });
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithPrompt(Tensor<T> image, string prompt)
+        => ((IOpenVocabSegmentation<T>)this).SegmentWithText(image, new[] { prompt });
     #endregion
 }

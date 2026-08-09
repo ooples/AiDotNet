@@ -119,14 +119,25 @@ public class GraphAttentionLayerCore<T>
 
         var result = new Tensor<T>(new[] { nodes, nodes });
 
+        // Each pair's score and adjacency lookup are computed ONCE per row and reused by both passes.
+        // The two loops previously read adjacency[(u * nodes) + v] through NumOps.ToDouble and
+        // re-evaluated LeakyReLU(sourceScore[u] + targetScore[v]) for every pair twice over, which
+        // doubles the conversion cost of the hot inner loop on a dense adjacency.
+        var scores = new double[nodes];
+        var isNeighbour = new bool[nodes];
+
         for (int u = 0; u < nodes; u++)
         {
             // Max-subtracted softmax over the neighbourhood only.
             double max = double.NegativeInfinity;
             for (int v = 0; v < nodes; v++)
             {
-                if (NumOps.ToDouble(adjacency[(u * nodes) + v]) == 0.0) continue;
-                max = Math.Max(max, LeakyReLU(sourceScore[u] + targetScore[v]));
+                bool neighbour = NumOps.ToDouble(adjacency[(u * nodes) + v]) != 0.0;
+                isNeighbour[v] = neighbour;
+                if (!neighbour) continue;
+
+                scores[v] = LeakyReLU(sourceScore[u] + targetScore[v]);
+                max = Math.Max(max, scores[v]);
             }
 
             // An isolated node has no neighbours to normalize over. Leaving its row at zero is the
@@ -138,14 +149,14 @@ public class GraphAttentionLayerCore<T>
             var exps = new double[nodes];
             for (int v = 0; v < nodes; v++)
             {
-                if (NumOps.ToDouble(adjacency[(u * nodes) + v]) == 0.0) continue;
-                exps[v] = Math.Exp(LeakyReLU(sourceScore[u] + targetScore[v]) - max);
+                if (!isNeighbour[v]) continue;
+                exps[v] = Math.Exp(scores[v] - max);
                 sum += exps[v];
             }
 
             for (int v = 0; v < nodes; v++)
             {
-                if (exps[v] == 0.0) continue;
+                if (!isNeighbour[v]) continue;
                 result[(u * nodes) + v] = NumOps.FromDouble(exps[v] / sum);
             }
         }
@@ -204,6 +215,16 @@ public class GraphAttentionLayerCore<T>
         if (headOutputs == null) throw new ArgumentNullException(nameof(headOutputs));
         if (headOutputs.Count == 0)
             throw new ArgumentException("At least one head is required.", nameof(headOutputs));
+
+        // Head 0 is rank-checked before its shape is read. The validation loop below starts at h = 1,
+        // so a rank-1 first head used to throw IndexOutOfRangeException out of Shape[1] rather than
+        // the ArgumentException every other malformed head gets.
+        if (headOutputs[0].Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"Head 0 has shape [{string.Join(",", headOutputs[0].Shape.ToArray())}]; "
+                + "expected a rank-2 [nodes, features] tensor.", nameof(headOutputs));
+        }
 
         int nodes = headOutputs[0].Shape[0];
         int features = headOutputs[0].Shape[1];

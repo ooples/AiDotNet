@@ -264,8 +264,18 @@ public class CausalDiscoveryOptions : ModelOptions
     /// A finite value in <c>[0, 1]</c>, or <see langword="null"/> to use CCM's default threshold of <c>0.2</c>.
     /// </value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Lower values remove weak reverse links more aggressively; higher values
-    /// retain more bidirectional links.</para>
+    /// <para><b>For Beginners:</b> CCM decides which of two series drives the other by checking which
+    /// one predicts the other better. Real data almost always makes one direction score a little
+    /// higher by chance, so without a margin the algorithm would claim a cause for every pair it
+    /// looks at. This setting is that margin.
+    ///
+    /// It is a RELATIVE margin, not an absolute one: the gap between the two skills is divided by the
+    /// larger of them, so at the default of 0.2 the weaker direction has to be at least 20% below the
+    /// stronger one. Skills of 0.5 and 0.4 clear it; 0.9 and 0.75 do not, even though their absolute
+    /// gap is larger. Raise it toward 1 for fewer, more confident arrows; lower it toward 0 for more
+    /// arrows, more of which will be guesses. Pairs that do not clear the margin keep both
+    /// directions, which is how CCM reports genuine mutual coupling. Leave it unset to take the
+    /// default.</para>
     /// <para><b>Reference:</b> Sugihara et al., "Detecting Causality in Complex Ecosystems," Science, 2012.</para>
     /// <para>Used by <see cref="AiDotNet.CausalDiscovery.TimeSeries.CCMAlgorithm{T}"/>. For a pair
     /// (X, Y) with forward/backward cross-map skills f and b, the relative asymmetry is

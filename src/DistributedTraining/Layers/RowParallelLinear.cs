@@ -21,40 +21,8 @@ namespace AiDotNet.DistributedTraining.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-// The SHARDING IS INVISIBLE FROM THE OUTSIDE, which is the whole point of the ḡ conjugate operator and
-// the only reason a shape contract is expressible here at all. Each rank consumes its own input slice
-// [batch, localIn] and produces a PARTIAL [batch, outputSize]; the all-reduce sums the partials without
-// touching the shape, so the output width every rank reports is the full _outputSize, not a shard of it.
-// A contract that divided the output by WorldSize would describe an intermediate that never leaves this
-// method.
-//
-// Rank 2 only. ForwardTraced adds the bias as Reshape(_bias, [1, _outputSize]) against a [batch, out]
-// matmul result - a two-axis broadcast - and nothing in the layer declares a leading-axis passthrough.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "Features is this rank's INPUT SHARD width (LocalInputSize), not the full inputSize.")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
+public sealed partial class RowParallelLinear<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// The trailing axis is <c>Fixed(_outputSize)</c>, the constructor argument the weight shard is built
-    /// against (<c>new Tensor&lt;T&gt;([outputSize, _localInputSize])</c>) and the width the bias is
-    /// broadcast at. It is deliberately NOT sharded: row parallelism partitions the INPUT dimension, so
-    /// the output leaves at full width after <c>_g.Apply</c>.
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 2 || _outputSize <= 0) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize)),
-        };
-    }
-
     private readonly ICommunicationBackend<T> _backend;
     private readonly ReduceFromTensorParallelRegion<T> _g;
     private readonly int _fullInputSize;
@@ -65,6 +33,7 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _bias;          // [outputSize] (replicated)
 
     public override bool SupportsTraining => true;
+    public override long ParameterCount => _outputSize * (long)_localInputSize + _outputSize;
     public int LocalInputSize => _localInputSize;
 
     public RowParallelLinear(
@@ -130,6 +99,34 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
                 _weightShard[o, i] = fullWeight[o, start + i];
             _bias[o] = fullBias[o];
         }
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new T[ParameterCount];
+        int idx = 0;
+        for (int o = 0; o < _outputSize; o++)
+            for (int i = 0; i < _localInputSize; i++)
+                p[idx++] = _weightShard[o, i];
+        for (int o = 0; o < _outputSize; o++)
+            p[idx++] = _bias[o];
+        return new Vector<T>(p);
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null)
+            throw new System.ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new System.ArgumentException(
+                $"Expected {ParameterCount} parameters (out {_outputSize} x localIn {_localInputSize} + bias {_outputSize}), got {parameters.Length}.",
+                nameof(parameters));
+        int idx = 0;
+        for (int o = 0; o < _outputSize; o++)
+            for (int i = 0; i < _localInputSize; i++)
+                _weightShard[o, i] = parameters[idx++];
+        for (int o = 0; o < _outputSize; o++)
+            _bias[o] = parameters[idx++];
     }
 
     public override void UpdateParameters(T learningRate)

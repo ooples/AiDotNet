@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -501,7 +501,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var inputSize = inputShape[0];
         var rbmOutputSizes = Layers
             .Where(l => l is RBMLayer<T>)
-            .Select(l => l.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0])
+            // Metadata reports geometry, it does not demand it; an unresolved axis is reported as
+            // LayerShape.Dynamic (-1) rather than throwing out of a diagnostic call.
+            .Select(l => l.GetOutputLayerShape()[0])
             .ToList();
 
         _layerSizes = [inputSize, .. rbmOutputSizes];
@@ -906,6 +908,55 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var loss = CalculateLoss(batch, reconstructed);
 
         return (reconstructed, loss);
+    }
+
+    /// <summary>
+    /// Updates the parameters of the DBM with the given vector of parameter values.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <remarks>
+    /// This method updates all the parameters of the DBM (weights and biases) from a single vector.
+    /// It expects the parameters to be arranged in the same order as they are returned by GetParameters.
+    /// </remarks>
+    /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            // When using Layers-based forward/backward (supervised), use Layers parameters.
+            // When using CD training (_layerWeights), use internal parameter store.
+            if (Layers.Count > 0)
+                return (int)Layers.Sum(l => l.ParameterCount);
+
+            int count = 0;
+            for (int i = 0; i < _layerWeights.Count; i++)
+            {
+                count += _layerWeights[i].Length + _layerBiases[i].Length;
+            }
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        // When using Layers-based forward/backward (supervised), delegate to base.
+        if (Layers.Count > 0)
+            return base.GetParameters();
+
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        int index = 0;
+        for (int i = 0; i < _layerWeights.Count; i++)
+        {
+            var weightVec = _layerWeights[i].ToVector();
+            for (int j = 0; j < weightVec.Length; j++)
+                parameters[index++] = weightVec[j];
+
+            var biasVec = _layerBiases[i].ToVector();
+            for (int j = 0; j < biasVec.Length; j++)
+                parameters[index++] = biasVec[j];
+        }
+        return parameters;
     }
 
     public override void UpdateParameters(Vector<T> parameters)

@@ -1,5 +1,6 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -103,9 +104,19 @@ internal static class CopyOnWriteCloneHelper
         // the stable, PyTorch-style ownership boundary for cloning.
         if (root is NeuralNetworkBase<T> neuralNetwork)
         {
+            // `Layers` IS the registered graph, and it is what NeuralNetworkBase itself passes to this
+            // same walk. This used to call a GetCopyOnWriteLayerRoots() that exists nowhere in the
+            // repository -- a call that survived review because NeuralNetworkBase is an error type
+            // while the #1789 split is mid-flight (its declaration depends on types slice 01 has not
+            // landed yet), and Roslyn suppresses member lookup on an error type to avoid cascading
+            // diagnostics. So the compiler could not report it and a search could not find it; it
+            // would have failed the moment the branch built cleanly.
+            //
+            // structureVersion -1 keeps the caching disabled: a clone walks a graph the version
+            // counter has never seen, so a cached answer would describe the wrong model.
             return new List<ITrainableLayer<T>>(
                 TapeTrainingStep<T>.CollectTrainableLayers(
-                    neuralNetwork.GetCopyOnWriteLayerRoots(),
+                    neuralNetwork.Layers,
                     structureVersion: -1));
         }
 
@@ -240,10 +251,9 @@ internal static class CopyOnWriteCloneHelper
         }
 
         bool sawGeneric = false;
-        foreach (var iface in sequenceType.GetInterfaces())
+        foreach (var iface in sequenceType.GetInterfaces()
+                     .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
         {
-            if (!iface.IsGenericType || iface.GetGenericTypeDefinition() != typeof(IEnumerable<>))
-                continue;
             sawGeneric = true;
             if (!IsLeafType<T>(iface.GetGenericArguments()[0])) return true;
         }

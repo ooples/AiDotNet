@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -427,10 +427,6 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
-
-    /// <summary>
-    /// IContrastiveLoss implementation — delegates to in-batch contrastive loss.
-    /// </summary>
     /// <summary>
     /// Differentiable in-batch InfoNCE: queries against keys, positives on the diagonal.
     /// </summary>
@@ -441,11 +437,15 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
     /// </remarks>
     public override Tensor<T> ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        if (view1 is null) throw new ArgumentNullException(nameof(view1));
-        if (view2 is null) throw new ArgumentNullException(nameof(view2));
+        ContrastiveTapeOps<T>.RequireMatchingRank2(
+            view1, view2, "InfoNCE", nameof(view1), nameof(view2));
 
         var logits = ObjectiveOps.SimilarityMatrix(view1, view2, _temperature, _normalize);
         var logProbs = ObjectiveOps.LogSoftmax(logits, axis: 1);
         return Engine.TensorNegate(ObjectiveOps.MeanDiagonal(logProbs));
     }
+
+    /// <summary>Row-wise L2 normalization on the tape.</summary>
+
+    /// <summary>Constant identity selector picking each query's own key. Constant DATA, no gradient.</summary>
 }

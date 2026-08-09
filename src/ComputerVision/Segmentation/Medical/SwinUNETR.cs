@@ -58,36 +58,39 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Swin UNETR: Swin Transformers for Semantic Segmentation of Brain Tumors in MRI Images", "https://arxiv.org/abs/2201.01266", Year = 2022, Authors = "Ali Hatamizadeh, Vishwesh Nath, Yucheng Tang, Dong Yang, Holger R. Roth, Daguang Xu")]
-public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
+public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Does NOT downsample: measured [1,3,64,64] -> [1,C,64,64]. A UNETR decoder upsamples back to the
-    /// input grid, which is the point of the architecture.
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-        => SpatialStrideContract(inputRank, 1);
-
     private readonly SwinUNETROptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only SwinUNETR's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from MedicalSegmentationBase -> SegmentationModelBase.
-    private static readonly string[] ModalitiesSupported = ["MRI_T1", "MRI_T2", "MRI_FLAIR", "CT"];
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly SwinUNETRModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, SupportedModalities,
-    // Supports3D, Supports2D and SupportsFewShot are all supplied identically by the base.
+    /// <summary>
+    /// Gets whether this SwinUNETR instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal SwinUNETRModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -111,27 +114,20 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
         SwinUNETRModelSize modelSize = SwinUNETRModelSize.Tiny, double dropRate = 0.1,
         SwinUNETROptions? options = null)
-        // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
-        // lazily via CreateDefaultOptimizer(), overridden below to keep the paper's AdamW recipe.
-        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SwinUNETROptions(); Options = _options;
-        // Swin UNETR defaults to 96x96 crops, not the base's 512x512, so the fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 96;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 96;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-        InitializeLayers();
-    }
-
-    /// <summary>
-    /// Per Hatamizadeh 2022 §4.2 ("Training Setup"): AdamW with peak learning rate 8e-4, cosine
-    /// decay, and weight decay 1e-5. A short linear warmup is the standard transformer/PyTorch
-    /// recipe for stabilizing randomly initialized dense heads on tiny batches while preserving
-    /// the paper's optimizer, peak LR, and decay shape.
-    /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        // Per Hatamizadeh 2022 §4.2 ("Training Setup"): AdamW with peak
+        // learning rate 8e-4, cosine decay, and weight decay 1e-5. A short
+        // linear warmup is the standard transformer/PyTorch recipe for
+        // stabilizing randomly initialized dense heads on tiny batches while
+        // preserving the paper's optimizer, peak LR, and decay shape.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 0.0008,
@@ -146,6 +142,9 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
                 WeightDecay = 1e-5,
             });
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        InitializeLayers();
+    }
 
     /// <summary>
     /// Initializes SwinUNETR in ONNX (inference-only) mode.
@@ -166,14 +165,21 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     public SwinUNETR(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14, SwinUNETRModelSize modelSize = SwinUNETRModelSize.Tiny,
         SwinUNETROptions? options = null)
-        // The base validates the path, sets ONNX mode and opens the InferenceSession.
-        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SwinUNETROptions(); Options = _options;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"SwinUNETR ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 96;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 96;
-        _modelSize = modelSize; _dropRate = 0.1;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load SwinUNETR ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -206,14 +212,14 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         bool inputWasUnbatched = input.Shape.Length == 3;
-        if (inputWasUnbatched) input = AddLeadingBatchDimension(input);
+        if (inputWasUnbatched) input = AddBatchDimension(input);
         else if (input.Shape.Length != 4 && input.Shape.Length != 5) throw new ArgumentException($"SwinUNETR supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
 
         expectedOutput = NormalizeTrainingTarget(expectedOutput, inputWasUnbatched);
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -231,19 +237,19 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         _ => ([48, 96, 192, 384], [2, 2, 6, 2], 256)
     };
 
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddLeadingBatchDimension(input);
+        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddLeadingBatchDimension(input);
+        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
@@ -257,11 +263,11 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    // RemoveBatchDimension comes from SegmentationModelBase (identical, plus a Shape[0] == 1 guard).
-    // AddBatchDimension does NOT: the base's promotes rank-3 [C,H,W] only, while SwinUNETR promotes
-    // rank-2/3/4 tensors (2D masks, 3D volumes), so the rank-agnostic version keeps its own name.
-    private static Tensor<T> AddLeadingBatchDimension(Tensor<T> tensor)
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     { var s = new int[tensor.Shape.Length + 1]; s[0] = 1; for (int i = 0; i < tensor.Shape.Length; i++) s[i + 1] = tensor.Shape[i]; var result = new Tensor<T>(s); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
 
     private Tensor<T> NormalizeTrainingTarget(Tensor<T> target, bool inputWasUnbatched)
     {
@@ -270,10 +276,10 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         // Also keep backward compatibility with one-hot/probability masks:
         //   logits [B, C, H, W] + target [B, C, H, W]
         if (target.Shape.Length == 2)
-            return AddLeadingBatchDimension(target);
+            return AddBatchDimension(target);
 
         if (inputWasUnbatched && target.Shape.Length == 3 && target.Shape[0] == _numClasses)
-            return AddLeadingBatchDimension(target);
+            return AddBatchDimension(target);
 
         if (target.Shape.Length == 3 || target.Shape.Length == 4 || target.Shape.Length == 5)
             return target;
@@ -322,7 +328,7 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
-        return Optimizer ?? base.GetOrCreateBaseOptimizer();
+        return _optimizer ?? base.GetOrCreateBaseOptimizer();
     }
 
     /// <summary>
@@ -389,13 +395,30 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         ? new SwinUNETR<T>(Architecture, optimizer: null, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new SwinUNETR<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
-    // and SwinUNETR owns no other unmanaged resource.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IMedicalSegmentation Implementation
-    /// <summary>Segments a single 2D medical slice.</summary>
-    public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["MRI_T1", "MRI_T2", "MRI_FLAIR", "CT"];
+    bool IMedicalSegmentation<T>.Supports3D => true;
+    bool IMedicalSegmentation<T>.Supports2D => true;
+    bool IMedicalSegmentation<T>.SupportsFewShot => false;
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
         var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
@@ -414,11 +437,10 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         }
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
-    /// <summary>Segments a 3D volume slice-by-slice and aggregates the per-structure statistics.</summary>
-    public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume)
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
     {
         if (volume.Rank <= 3)
-            return SegmentSlice(volume);
+            return ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
         int numC = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
         var volLabels = new Tensor<T>([depth, h, w]);
         var volProbs = new Tensor<T>([numC, depth, h, w]);
@@ -430,7 +452,7 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
                 for (int y = 0; y < h; y++)
                     for (int x = 0; x < w; x++)
                         slice[c, y, x] = volume[c, d, y, x];
-            var result = SegmentSlice(slice);
+            var result = ((IMedicalSegmentation<T>)this).SegmentSlice(slice);
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
                     volLabels[d, y, x] = result.Labels[y, x];
@@ -451,9 +473,7 @@ public class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
             structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
         return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
     }
-    /// <inheritdoc/>
-    public override MedicalSegmentationResult<T> SegmentFewShot(
-        Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => SegmentSlice(queryImage);
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
     #endregion
 }

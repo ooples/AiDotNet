@@ -7,8 +7,6 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
-using AiDotNet.ReinforcementLearning.Parameters;
-
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
 /// <summary>
@@ -44,13 +42,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     Authors = "Sutton, R. S.")]
 public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The Q-table entries that actually exist, in dictionary order. This agent walked the entries rather than padding each state out to ActionSize, and for a sparsely visited table the two give different lengths.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new QTableEntriesParameterSource<T>(_qTable));
-    }
     private DynaQOptions<T> _options;
 
     /// <inheritdoc/>
@@ -256,6 +247,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -289,6 +281,59 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, (string, T)>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, (string, T)>>();
         _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
         _epsilon = state.Epsilon;
+    }
+
+    /// <summary>
+    /// The Q-table's <c>(state, action)</c> entries in a fixed order.
+    /// </summary>
+    /// <remarks>
+    /// ONE ordered enumeration, shared by <see cref="ParameterCount"/>, <see cref="GetParameters"/>
+    /// and <see cref="SetParameters"/>. Export walked the actual dictionary entries while restore
+    /// looped 0..ActionSize-1 for every state, so a ragged table -- the normal state of a tabular
+    /// agent that has not tried every action -- put values back on the wrong (state, action) pairs
+    /// and inserted entries the agent never visited.
+    ///
+    /// Ordinal by key rather than dictionary order: Dictionary guarantees nothing about enumeration
+    /// order across insertions, so a vector written in one order and read back in another is
+    /// silently wrong.
+    /// </remarks>
+    private List<(string State, int Action)> OrderedQTableEntries()
+    {
+        var entries = new List<(string State, int Action)>();
+        var states = new List<string>(_qTable.Keys);
+        states.Sort(StringComparer.Ordinal);
+
+        foreach (string state in states)
+        {
+            var actions = new List<int>(_qTable[state].Keys);
+            actions.Sort();
+            foreach (int action in actions) entries.Add((state, action));
+        }
+
+        return entries;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var entries = OrderedQTableEntries();
+        var v = new Vector<T>(entries.Count);
+        for (int i = 0; i < entries.Count; i++) v[i] = _qTable[entries[i].State][entries[i].Action];
+        return v;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var entries = OrderedQTableEntries();
+
+        if (parameters.Length != entries.Count)
+        {
+            throw new ArgumentException(
+                $"Expected {entries.Count} parameters for the Q-table's stored (state, action) "
+                + $"entries; got {parameters.Length}.", nameof(parameters));
+        }
+
+        for (int i = 0; i < entries.Count; i++)
+            _qTable[entries[i].State][entries[i].Action] = parameters[i];
     }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()

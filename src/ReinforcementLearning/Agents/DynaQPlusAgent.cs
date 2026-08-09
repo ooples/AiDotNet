@@ -7,8 +7,6 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
-using AiDotNet.ReinforcementLearning.Parameters;
-
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
 /// <summary>
@@ -44,13 +42,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     Authors = "Sutton, R. S.")]
 public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The Q-table entries that exist, walked in sorted state order and ascending action index. This agent sorted its keys before flattening where its siblings did not, so its serialization order is stable across runs regardless of visit order, and that has to be preserved or existing checkpoints renumber.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new QTableEntriesParameterSource<T>(_qTable, sortStateKeys: true, ascendingActions: true));
-    }
     private DynaQPlusOptions<T> _options;
 
     /// <inheritdoc/>
@@ -225,6 +216,7 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -257,6 +249,61 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
         _epsilon = state.Epsilon;
         _totalSteps = state.TotalSteps;
+    }
+    public override Vector<T> GetParameters()
+    {
+        // Length 0 when nothing has been learned yet, matching ParameterCount. The previous
+        // `: 1` invented a parameter the agent does not have, purely to satisfy a test that
+        // asserted a freshly constructed agent has parameters. That premise was wrong for
+        // tabular RL and the padding is what desynchronised the two APIs.
+        var entries = OrderedQTableEntries();
+        var v = new Vector<T>(entries.Count);
+        for (int i = 0; i < entries.Count; i++) v[i] = _qTable[entries[i].State][entries[i].Action];
+        return v;
+    }
+
+    /// <summary>
+    /// The Q-table's <c>(state, action)</c> entries in a fixed order.
+    /// </summary>
+    /// <remarks>
+    /// ONE ordered enumeration, shared by <see cref="ParameterCount"/>, <see cref="GetParameters"/>
+    /// and <see cref="SetParameters"/>. GetParameters allocated the real entry count but then wrote
+    /// ActionSize values per state, so a ragged table -- the normal state of a tabular agent that has
+    /// not tried every action -- wrote PAST the end of the vector. SetParameters had the mirror
+    /// defect, inserting zero-valued entries for actions the agent had never visited and shifting
+    /// every later value onto the wrong pair.
+    /// </remarks>
+    private List<(string State, int Action)> OrderedQTableEntries()
+    {
+        var entries = new List<(string State, int Action)>();
+        var states = new List<string>(_qTable.Keys);
+        states.Sort(StringComparer.Ordinal);
+
+        foreach (string state in states)
+        {
+            var actions = new List<int>(_qTable[state].Keys);
+            actions.Sort();
+            foreach (int action in actions) entries.Add((state, action));
+        }
+
+        return entries;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        var entries = OrderedQTableEntries();
+
+        if (parameters.Length != entries.Count)
+        {
+            throw new ArgumentException(
+                $"Expected {entries.Count} parameters for the Q-table's stored (state, action) "
+                + $"entries; got {parameters.Length}.", nameof(parameters));
+        }
+
+        for (int i = 0; i < entries.Count; i++)
+            _qTable[entries[i].State][entries[i].Action] = parameters[i];
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

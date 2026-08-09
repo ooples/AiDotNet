@@ -140,21 +140,36 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
                 nameof(gradients));
         }
 
-        var currentParams = GetParameters();
-        var safeGradients = new Vector<T>(gradients.Length);
-        for (int i = 0; i < gradients.Length; i++)
+        // THE VECTOR IS POST-UPDATE PARAMETER VALUES, NOT RAW GRADIENTS. Every sibling recurrent
+        // model -- GLA, GatedDeltaNet, Griffin, Hawk -- distributes it straight to the layers and
+        // says why: "The canonical optimizer supplies post-update parameter values. Applying a
+        // second hard-coded SGD step here both bypassed the configured optimizer and materialized
+        // two full-model vectors." Finch was the last model still applying that second step, with a
+        // learning rate and a clip bound of its own that no caller could reach.
+        //
+        // The overflow guard the inline step carried is not lost: it moves to the optimizer, where
+        // FinchOptions.EnableGradientClipping / MaxGradientNorm configure it -- so it now applies to
+        // the real gradients before the step rather than to already-stepped values after it.
+        int offset = 0;
+        foreach (var layer in Layers)
         {
-            double gradient = NumOps.ToDouble(gradients[i]);
-            // RWKV-6 recurrent products can transiently overflow on an
-            // unscaled smoke batch. Keep the update finite and bounded so one
-            // bad element cannot poison the entire model state.
-            if (double.IsNaN(gradient) || double.IsInfinity(gradient)) gradient = 0.0;
-            gradient = Math.Max(-1.0, Math.Min(1.0, gradient));
-            safeGradients[i] = NumOps.FromDouble(gradient);
+            int count = (int)layer.ParameterCount;
+            if (count <= 0)
+            {
+                continue;
+            }
+
+            layer.UpdateParameters(gradients.Slice(offset, count));
+            offset += count;
         }
-        T learningRate = NumOps.FromDouble(_learningRate);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(safeGradients, learningRate));
-        SetParameters(currentParams);
+
+        if (offset != gradients.Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter distribution consumed {offset} of {gradients.Length} values; the layer "
+                + "parameter counts no longer sum to ParameterCount, so part of the vector would be "
+                + "silently discarded.");
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

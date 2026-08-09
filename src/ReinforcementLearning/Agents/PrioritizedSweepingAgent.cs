@@ -7,8 +7,6 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
-using AiDotNet.ReinforcementLearning.Parameters;
-
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
 /// <summary>
@@ -44,13 +42,6 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     Authors = "Moore, A. W. & Atkeson, C. G.")]
 public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The Q-table entries that exist, walked in sorted state order and ascending action index. This agent sorted its keys before flattening where its siblings did not, so its serialization order is stable across runs regardless of visit order, and that has to be preserved or existing checkpoints renumber.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new QTableEntriesParameterSource<T>(_qTable, sortStateKeys: true, ascendingActions: true));
-    }
     private PrioritizedSweepingOptions<T> _options;
 
     /// <inheritdoc/>
@@ -264,6 +255,7 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -306,6 +298,46 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         _epsilon = state.Epsilon;
+    }
+    public override Vector<T> GetParameters()
+    {
+        // Length 0 when nothing has been learned yet, matching ParameterCount. The previous
+        // `: 1` invented a parameter the agent does not have, purely to satisfy a test that
+        // asserted a freshly constructed agent has parameters. That premise was wrong for
+        // tabular RL and the padding is what desynchronised the two APIs.
+        int paramCount = checked((int)QTableEntryCount);
+        var v = new Vector<T>(paramCount);
+        int idx = 0;
+
+        // Sort states by key for deterministic ordering
+        var sortedStates = _qTable.OrderBy(kvp => kvp.Key);
+        foreach (var stateEntry in sortedStates)
+        {
+            // Actions are already in deterministic order (0 to ActionSize-1)
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                v[idx++] = stateEntry.Value[a];
+            }
+        }
+
+
+        return v;
+    }
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        // Sort states by key for deterministic ordering
+        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
+        foreach (var stateKey in sortedStates)
+        {
+            for (int a = 0; a < _options.ActionSize; a++)
+            {
+                if (idx < parameters.Length)
+                {
+                    _qTable[stateKey][a] = parameters[idx++];
+                }
+            }
+        }
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

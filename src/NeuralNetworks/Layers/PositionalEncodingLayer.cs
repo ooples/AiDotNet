@@ -38,16 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerProperty(IsTrainable = false, TestInputShape = "16, 8", TestConstructorArgs = "16, 8")]
-// Adds position signals to a sequence: shape-preserving, but NOT rank-agnostic - it needs a real
-// sequence axis, so it declares [Batch, Time, Features] rather than claiming any rank.
-// Rank 2 comes from this layer's own [LayerProperty(TestInputShape = "16, 8")] - 16 positions of an
-// 8-wide embedding, so [Time, Features]. ADNSHAPE005 caught the rank-3-only declaration.
-[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
+public partial class PositionalEncodingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The maximum sequence length that this layer can handle.
@@ -389,6 +380,57 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Updates the parameters of the positional encoding layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is part of the training process, but since PositionalEncodingLayer has no trainable parameters,
+    /// this method does nothing. The positional encodings are fixed and do not change during training.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
+    /// 
+    /// However, since PositionalEncodingLayer uses fixed encodings that are calculated once at initialization
+    /// and don't change during training, this method is empty.
+    /// 
+    /// This is different from layers like Dense or Convolutional layers, which have weights and biases
+    /// that get updated during training. The positional encodings are based on a mathematical formula
+    /// rather than learned from data.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // No parameters to update in this layer
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters from the positional encoding layer as a single vector.
+    /// </summary>
+    /// <returns>An empty vector since PositionalEncodingLayer has no trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters from the layer as a single vector. Since PositionalEncodingLayer
+    /// has no trainable parameters, it returns an empty vector. The positional encodings are fixed values
+    /// determined by a mathematical formula, not learnable parameters.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
+    /// 
+    /// Since PositionalEncodingLayer:
+    /// - Uses fixed encodings based on a mathematical formula
+    /// - Has no weights, biases, or other learnable parameters
+    /// - The method returns an empty list
+    /// 
+    /// This is different from layers like Dense layers, which would return their weights and biases.
+    /// The positional encodings are fixed by design and don't need to be learned from data.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // PositionalEncodingLayer has no trainable parameters
+        return Vector<T>.Empty();
     }
 
     /// <summary>

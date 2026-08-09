@@ -68,9 +68,16 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     /// </para>
     /// <para>
     /// Sourced from the dedicated <see cref="CausalDiscoveryOptions.ConfoundingEvidenceCutoff"/>
-    /// (default <c>0.05</c> = tolerate ≤ 5% wrong-way evidence before declaring confounding). See the
-    /// RCD calibration tests, which verify a clean LiNGAM DAG scores well under the cutoff while a
-    /// latent-confounder structure scores well over it.
+    /// (default <c>0.05</c> = tolerate up to 5% wrong-way evidence before declaring confounding).
+    /// </para>
+    /// <para>
+    /// COVERAGE, stated accurately: what is exercised today is an integration test asserting that
+    /// RCD returns a non-empty graph on linear data. The clean-versus-confounded separation this
+    /// cutoff is calibrated for -- a clean LiNGAM DAG scoring well under it while a latent-confounder
+    /// structure scores well over it, and the first-round stop firing when no clean root exists -- is
+    /// NOT covered. <see cref="ConfoundingRatio"/> is exposed <c>internal</c> so those cases can be
+    /// asserted directly without a full discovery run; until they are, treat the default as
+    /// reasoned rather than measured.
     /// </para>
     /// </summary>
     private readonly double _confoundingScoreCutoff;
@@ -156,21 +163,24 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             // pick the argmin. This uses Hyvärinen's max-entropy differential-entropy
             // approximation, which detects the non-Gaussian dependence that identifies causal
             // direction even for near-collinear variables (a histogram MI cannot).
+            // ONE evidence computation per candidate, reused by the stop test. Selection and
+            // ConfoundingRatio walked the same `remaining` loop, called the same DiffMutualInfo pairs
+            // and accumulated the same sum of min(0, diffMI)^2 -- so the selected candidate's
+            // DiffMutualInfo calls ran twice per round, and the wrong-way-evidence formula lived in
+            // two places that had to be edited together.
+            double bestEffectEvidence = 0;
+            double bestTotalEvidence = 0;
+
             foreach (int candidate in remaining)
             {
-                double effectEvidence = 0;   // Σ min(0, DiffMI)²  — squared WRONG-WAY (effect) evidence
-                foreach (int other in remaining)
-                {
-                    if (other == candidate) continue;
-                    double diffMI = DiffMutualInfo(residualData, n, candidate, other);
-                    double neg = Math.Min(0.0, diffMI);
-                    effectEvidence += neg * neg;
-                }
+                var (effectEvidence, totalEvidence) = DirectionEvidence(residualData, n, candidate, remaining);
 
                 if (effectEvidence < bestScore)
                 {
                     bestScore = effectEvidence;
                     bestVar = candidate;
+                    bestEffectEvidence = effectEvidence;
+                    bestTotalEvidence = totalEvidence;
                 }
             }
 
@@ -186,7 +196,9 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             // clean root exists (latent confounding), e.g. ≈ 0.5 for a symmetric common-cause pair.
             // Normalizing by the total evidence removes the per-dataset scale drift that made the raw
             // Σ min(0, DiffMI)² sum (≈ 1e-4) never reach the cutoff — the dead-code bug this fixes.
-            double confoundingRatio = ConfoundingRatio(residualData, n, bestVar, remaining);
+            double confoundingRatio = bestTotalEvidence > 1e-12
+                ? bestEffectEvidence / bestTotalEvidence
+                : double.NaN;
             // Stop when the best candidate carries too much wrong-way evidence (latent confounding),
             // OR when its direction evidence is degenerate/indeterminate (ConfoundingRatio returns NaN
             // for ~zero or non-finite total evidence — perfectly collinear/deterministic residuals). In
@@ -265,30 +277,26 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     }
 
     /// <summary>
-    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pair (i, j):
-    /// a positive value means <c>i → j</c> (variable i is the cause), a negative value means
-    /// <c>j → i</c>. Both variables are standardized; the regression residuals in each direction
-    /// are r_{i|j} = x_i − ρ·x_j and r_{j|i} = x_j − ρ·x_i (ρ = correlation), and the measure is
-    /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
-    /// <see cref="DifferentialEntropy(double[], int)"/>.
+    /// Both direction-evidence accumulators for <paramref name="candidate"/> against the other
+    /// variables in <paramref name="remaining"/>, in ONE pass.
     /// </summary>
-    /// <summary>
-    /// Scale-free confounding ratio for <paramref name="candidate"/> against the other variables in
-    /// <paramref name="remaining"/>: <c>Σⱼ min(0, DiffMI(candidate, j))² / Σⱼ DiffMI(candidate, j)²</c>
-    /// — the fraction of the candidate's squared direction-evidence (DirectLiNGAM entropy criterion)
-    /// that indicates it is an EFFECT of some other variable rather than a cause. Returns a value in
-    /// <c>[0, 1]</c>: ≈ 0 when the candidate is a clean root (all evidence points outward), rising
-    /// toward ≈ 0.5 for a symmetric common-cause (latently-confounded) pair where direction is
-    /// unidentifiable. Degenerate direction evidence (perfectly collinear/deterministic residuals →
-    /// ~zero or non-finite total evidence) returns <see cref="double.NaN"/> (INDETERMINATE — not a
-    /// clean root); the discovery loop treats NaN as a stop, not as an exogenous cause. Exposed
-    /// <c>internal</c> so the RCD calibration tests can assert the clean-vs-
-    /// confounded separation directly without depending on a full discovery run.
-    /// </summary>
-    internal static double ConfoundingRatio(double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
+    /// <returns>
+    /// <c>EffectEvidence</c> is the sum of squared WRONG-WAY evidence, min(0, DiffMI)^2, which the
+    /// discovery loop ranks candidates by. <c>TotalEvidence</c> is the sum of DiffMI^2, the
+    /// denominator that makes <see cref="ConfoundingRatio"/> scale-free.
+    /// </returns>
+    /// <remarks>
+    /// One definition of the criterion, called from both the candidate ranking and the confounding
+    /// stop. The two used to accumulate the same quantity from the same DiffMutualInfo calls, so the
+    /// selected candidate's calls ran twice per round and a change to the criterion had to be made
+    /// in two places to stay correct.
+    /// </remarks>
+    private static (double EffectEvidence, double TotalEvidence) DirectionEvidence(
+        double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
     {
-        double effectEvidence = 0;   // Σ min(0, DiffMI)²  — squared WRONG-WAY (effect) evidence
-        double totalEvidence = 0;    // Σ DiffMI²          — total squared direction-evidence
+        double effectEvidence = 0;   // sum of min(0, DiffMI)^2 -- squared WRONG-WAY (effect) evidence
+        double totalEvidence = 0;    // sum of DiffMI^2         -- total squared direction-evidence
+
         foreach (int other in remaining)
         {
             if (other == candidate) continue;
@@ -297,13 +305,41 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             effectEvidence += neg * neg;
             totalEvidence += diffMI * diffMI;
         }
-        // Degenerate direction evidence (perfectly collinear/deterministic residuals → ~zero or
+
+        return (effectEvidence, totalEvidence);
+    }
+
+    /// <summary>
+    /// Scale-free confounding ratio for <paramref name="candidate"/> against the other variables in
+    /// <paramref name="remaining"/>: the fraction of the candidate's squared direction-evidence
+    /// (DirectLiNGAM entropy criterion) indicating it is an EFFECT of some other variable rather than
+    /// a cause. Returns a value in <c>[0, 1]</c>: near 0 when the candidate is a clean root (all
+    /// evidence points outward), rising toward 0.5 for a symmetric common-cause (latently-confounded)
+    /// pair where direction is unidentifiable. Degenerate direction evidence (perfectly
+    /// collinear/deterministic residuals, so near-zero or non-finite total evidence) returns
+    /// <see cref="double.NaN"/> (INDETERMINATE, not a clean root); the discovery loop treats NaN as a
+    /// stop, not as an exogenous cause. Exposed <c>internal</c> so the RCD calibration tests can
+    /// assert the clean-vs-confounded separation directly without depending on a full discovery run.
+    /// </summary>
+    internal static double ConfoundingRatio(double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
+    {
+        var (effectEvidence, totalEvidence) = DirectionEvidence(residualData, n, candidate, remaining);
+
+        // Degenerate direction evidence (perfectly collinear/deterministic residuals, so near-zero or
         // non-finite total evidence): the direction is UNIDENTIFIABLE, which is NOT the same as a clean
-        // root (ratio ≈ 0). Return NaN so the caller stops without fabricating edges, rather than
+        // root (ratio near 0). Return NaN so the caller stops without fabricating edges, rather than
         // treating a variable with no directional evidence as a clean exogenous cause.
         return totalEvidence > 1e-12 ? effectEvidence / totalEvidence : double.NaN;
     }
 
+    /// <summary>
+    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pair (i, j):
+    /// a positive value means <c>i → j</c> (variable i is the cause), a negative value means
+    /// <c>j → i</c>. Both variables are standardized; the regression residuals in each direction
+    /// are r_{i|j} = x_i − ρ·x_j and r_{j|i} = x_j − ρ·x_i (ρ = correlation), and the measure is
+    /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
+    /// <see cref="DifferentialEntropy(double[], int)"/>.
+    /// </summary>
     private static double DiffMutualInfo(double[,] data, int n, int i, int j)
     {
         double meanI = 0, meanJ = 0;

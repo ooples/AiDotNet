@@ -58,14 +58,19 @@ public class TemporalSegmentNetworkModeratorTests
 
         var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 3);
 
-        var shortFindings = moderator.EvaluateVideo(shortVideo, 30.0);
-        var longFindings = moderator.EvaluateVideo(longVideo, 30.0);
+        moderator.EvaluateVideo(shortVideo, 30.0);
+        int sampledForShort = moderator.LastSampledFrameCount;
 
-        Assert.NotNull(shortFindings);
-        Assert.NotNull(longFindings);
+        moderator.EvaluateVideo(longVideo, 30.0);
+        int sampledForLong = moderator.LastSampledFrameCount;
 
-        // Segment count is fixed by configuration, not by frame count.
-        Assert.Equal(3, moderator.SegmentCount);
+        // THE COST PROPERTY, NOT A PROPERTY ROUND-TRIP. Asserting moderator.SegmentCount == 3
+        // checked only that the constructor stored the argument it was handed; it held even if
+        // EvaluateVideo walked all 300 frames, which is the one regression this method's name
+        // claims to catch. What a K-segment sampler guarantees is that a 10x longer video yields
+        // the SAME number of segment-level inputs.
+        Assert.Equal(3, sampledForShort);
+        Assert.Equal(sampledForShort, sampledForLong);
     }
 
     [Fact]
@@ -79,6 +84,11 @@ public class TemporalSegmentNetworkModeratorTests
         var findings = moderator.EvaluateVideo(frames, 30.0);
 
         Assert.NotNull(findings);
+
+        // A duplicate-group query over an empty list finds no groups and passes. Without this,
+        // a moderator that detected nothing at all satisfied the whole assertion below.
+        Assert.NotEmpty(findings);
+
         var duplicated = findings.GroupBy(f => f.Category).Where(g => g.Count() > 1).ToList();
         Assert.True(duplicated.Count == 0,
             "Consensus is applied before the decision, so each category must produce at most one " +
@@ -104,6 +114,8 @@ public class TemporalSegmentNetworkModeratorTests
     public void EveryConsensusFunction_IsAccepted_AndDeterministic()
     {
         var frames = Frames(60);
+        var perMode = new Dictionary<SegmentalConsensus, IReadOnlyList<SafetyFinding>>();
+
         foreach (SegmentalConsensus consensus in (SegmentalConsensus[])Enum.GetValues(typeof(SegmentalConsensus)))
         {
             var moderator = new FrameSamplingVideoModerator<double>(segmentCount: 4, consensus: consensus);
@@ -119,7 +131,23 @@ public class TemporalSegmentNetworkModeratorTests
                 Assert.Equal(first[i].Category, second[i].Category);
                 Assert.Equal(first[i].Confidence, second[i].Confidence, 12);
             }
+
+            perMode[consensus] = first;
         }
+
+        // THE MODES MUST BE DISTINGUISHABLE FROM EACH OTHER. Accepting each mode and checking it
+        // repeats itself is satisfied when Average, Max and Weighted are all wired to one code path
+        // -- which would make DefaultConsensus_IsAverage_ThePapersBest assert a preference between
+        // three names for the same computation. The paper reports 93.5 / 91.6 / 92.4 on UCF101
+        // precisely because they are different functions.
+        var confidenceProfiles = perMode.Values
+            .Select(fs => string.Join(",", fs.Select(f => f.Confidence.ToString("F12"))))
+            .ToList();
+
+        Assert.True(confidenceProfiles.Distinct().Count() > 1,
+            "Every SegmentalConsensus mode produced identical findings, so the consensus function " +
+            "is not being applied -- all modes appear to share one code path. Modes: " +
+            string.Join(", ", perMode.Keys));
     }
 
     [Fact]

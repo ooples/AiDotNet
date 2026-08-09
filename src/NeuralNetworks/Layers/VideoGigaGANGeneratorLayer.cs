@@ -33,69 +33,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "2, 3, 8, 8",
     TestConstructorArgs = "3, 8, 8, 8, 1, 1, 2, 2, 0.5")]
-// Roles from this layer's own guard in ForwardTraced - "requires [F,C,H,W] or [B,F,C,H,W] input" - and
-// its class remarks, which say the same. Those are the ONLY two ranks it accepts; anything else throws.
-// One declaration with BatchOptional covers both, and it covers the rank the layer is tested at
-// ([LayerProperty(TestInputShape = "2, 3, 8, 8")] is the unbatched [F,C,H,W] form).
-// OutputAxesFor below is HAND-WRITTEN: the spatial factor is a constructor argument.
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContract
+public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Read off the two return statements that close <c>ForwardTraced</c>:
-    /// <c>Reshape(output, new[] { frames, _inputChannels, outputHeight, outputWidth })</c> and its
-    /// batched twin, with <c>outputHeight = _inputHeight * _scaleFactor</c> and likewise for width.
-    /// The batch and frame counts are read from the input and carried through; the channel count and
-    /// both spatial extents are the layer's own.
-    /// </para>
-    /// <para>
-    /// CHANNELS is <c>Same</c>, not <c>Fixed(_inputChannels)</c>, and the two are equivalent here only
-    /// because the layer refuses any other width: <c>ForwardTraced</c> throws unless
-    /// <c>input.Shape[channelAxis] == _inputChannels</c>. <c>Same</c> is the honest statement of what a
-    /// super-resolution generator does - it enlarges an image and hands back the same channels, and the
-    /// final <c>Engine.TensorAdd(output, bicubicResidual)</c> against the upsampled input makes that
-    /// structural rather than incidental.
-    /// </para>
-    /// <para>
-    /// SPATIAL is <c>Scaled</c> and not <c>Window</c>: the enlargement is a chain of
-    /// <c>PixelShuffleLayer</c> stages whose factors multiply to exactly <c>_scaleFactor</c>, and the
-    /// constructor already restricts that to 2, 4 or 8 ("VideoGigaGAN supports 2x, 4x, or 8x
-    /// upscaling"). Nothing rounds, so there is no window to express.
-    /// </para>
-    /// <para>
-    /// The <c>inputHeight</c>/<c>inputWidth</c> constructor arguments are NOT expressed as
-    /// <c>Fixed</c> on the input side. A layout declares which axes exist, not how long they are, and
-    /// the extent guard belongs to the forward pass that raises it - stating it here would say the
-    /// output extent is a constant, which would go stale the moment the layer is rebuilt at another
-    /// resolution.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank is not (4 or 5) || _scaleFactor <= 0) return null;
-
-        var frames = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
-        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Same(TensorAxis.Channels));
-        var height = new OutputAxisContract(
-            TensorAxis.Height, AxisRelation.Scaled(TensorAxis.Height, _scaleFactor));
-        var width = new OutputAxisContract(
-            TensorAxis.Width, AxisRelation.Scaled(TensorAxis.Width, _scaleFactor));
-
-        return inputRank == 4
-            ? new[] { frames, channels, height, width }
-            : new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                frames, channels, height, width,
-            };
-    }
-
     private readonly int _inputChannels;
     private readonly int _inputHeight;
     private readonly int _inputWidth;
@@ -483,6 +422,35 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
         foreach (var layer in _mainPixelShuffles) yield return layer;
         foreach (var layer in _shuttlePixelShuffles) yield return layer;
         yield return _outputProjection;
+    }
+
+    /// <inheritdoc/>
+    public override long ParameterCount => OrderedLayers().Sum(layer => layer.ParameterCount);
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var values = new List<T>((int)ParameterCount);
+        foreach (var layer in OrderedLayers())
+        {
+            var parameters = layer.GetParameters();
+            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
+        }
+        return new Vector<T>(values.ToArray());
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
+        int offset = 0;
+        foreach (var layer in OrderedLayers())
+        {
+            int count = (int)layer.ParameterCount;
+            layer.SetParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
     }
 
     /// <inheritdoc/>

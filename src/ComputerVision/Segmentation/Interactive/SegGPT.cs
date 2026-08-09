@@ -56,28 +56,39 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegGPT: Segmenting Everything In Context", "https://arxiv.org/abs/2304.03284", Year = 2023, Authors = "Wang et al.")]
-public class SegGPT<T> : Common.PromptableSegmentationBase<T>
+public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly SegGPTOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    // Only SegGPT's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from PromptableSegmentationBase -> SegmentationModelBase, as do _imageEmbedding and
-    // _imageSet.
+    private readonly int _height, _width, _channels, _numClasses;
     private readonly SegGPTModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
+    private readonly bool _useNativeMode;
+    private readonly string? _onnxModelPath;
+    private InferenceSession? _onnxSession;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
-    // SegmentationModelBase and say exactly the same thing.
+    /// <summary>
+    /// Gets whether this SegGPT instance supports training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal SegGPTModelSize ModelSize => _modelSize;
+    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -101,35 +112,17 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         SegGPTModelSize modelSize = SegGPTModelSize.ViTLarge, double dropRate = 0.1,
         SegGPTOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
-        // defaults the loss to CrossEntropyWithLogitsLoss - exactly what the deleted lines did by
-        // hand. `optimizer` is passed straight through INCLUDING null; the base's lazy
-        // CreateDefaultOptimizer() produces the same `new AdamWOptimizer<...>(this)` default, which
-        // could never be written as a base-constructor argument because `this` is unavailable there.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegGPTOptions(); Options = _options;
-        ApplySegGPTInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = dropRate;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 448;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 448;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
+        _useNativeMode = true; _onnxModelPath = null;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options);
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Re-applies SegGPT's 448x448 fallback for architectures that carry no input geometry.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// SegmentationModelBase falls back to 512x512 when the architecture supplies no input height
-    /// or width. SegGPT's documented fallback is 448x448 (the in-context painting resolution the
-    /// paper uses), so it is restored here for that unset case only - when the architecture does
-    /// specify dimensions, the base's value already matches and nothing changes.
-    /// </para>
-    /// </remarks>
-    private void ApplySegGPTInputFallback(NeuralNetworkArchitecture<T> architecture)
-    {
-        if (architecture.InputHeight <= 0) _height = 448;
-        if (architecture.InputWidth <= 0) _width = 448;
     }
 
     /// <summary>
@@ -151,21 +144,37 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
     public SegGPT(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, SegGPTModelSize modelSize = SegGPTModelSize.ViTLarge,
         SegGPTOptions? options = null)
-        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
-        // geometry and opens the InferenceSession - the same lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegGPTOptions(); Options = _options;
-        ApplySegGPTInputFallback(architecture);
-        _modelSize = modelSize; _dropRate = 0.1;
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"SegGPT ONNX model not found: {onnxModelPath}");
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 448;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 448;
+        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.1;
+        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options);
+        try { _onnxSession = new InferenceSession(onnxModelPath); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load SegGPT ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
 
     #region Public Methods
-    // PredictCore is inherited from SegmentationModelBase and dispatches to Forward / PredictOnnx
-    // exactly as the deleted override did.
+    /// <summary>
+    /// Runs a forward pass to produce segmentation logits.
+    /// </summary>
+    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
+    /// <returns>Segmentation logits tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>
     /// Performs one training step.
@@ -184,7 +193,7 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, Optimizer);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
@@ -210,7 +219,7 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         return (options.ChannelDimensions.ToArray(), options.StageDepths.ToArray(), options.DecoderDimension);
     }
 
-    protected override Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -219,7 +228,7 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+    private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -236,7 +245,11 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    // AddBatchDimension and RemoveBatchDimension are inherited from SegmentationModelBase.
+    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+
+    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
     #region Abstract Implementation
@@ -330,41 +343,39 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
             options: new SegGPTOptions(_options))
         : new SegGPT<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new SegGPTOptions(_options));
 
-    // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
-    // SegGPT owns no further unmanaged resources.
+    /// <summary>
+    /// Releases managed resources including the ONNX inference session.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose().</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IPromptableSegmentation Implementation
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase.
-    // _imageEmbedding, _imageSet, SetImage and the Supports*Prompts flags (point/box/mask true,
-    // text false) all come from PromptableSegmentationBase with these exact values; only SegGPT's
-    // cached class probabilities are model-specific.
+    private Tensor<T>? _imageEmbedding;
     private Tensor<T>? _imageProbabilities;
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    bool IPromptableSegmentation<T>.SupportsPointPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsBoxPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsMaskPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsTextPrompts => false;
 
-    /// <summary>
-    /// Encodes an image by running a full forward pass, as SegGPT's explicit SetImage did.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The base's SetImage stores this return value in <c>_imageEmbedding</c> and marks the image
-    /// set, so the observable behaviour is unchanged; SetImage below only adds the probability cache.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> EncodeImage(Tensor<T> image) => Predict(image);
-
-    /// <inheritdoc/>
-    public override void SetImage(Tensor<T> image)
+    void IPromptableSegmentation<T>.SetImage(Tensor<T> image)
     {
-        base.SetImage(image);
-        var embedding = _imageEmbedding;
-        if (embedding is not null)
-        {
-            _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(embedding);
-        }
+        _imageEmbedding = Predict(image);
+        _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(_imageEmbedding);
     }
 
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -390,8 +401,7 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromBox(Tensor<T> box)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -408,8 +418,7 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromMask(Tensor<T> mask)
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
@@ -424,8 +433,7 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
         return BuildPromptMaskResult(scoreMap, h, w);
     }
 
-    /// <inheritdoc/>
-    public override List<PromptedSegmentationResult<T>> SegmentEverything()
+    List<PromptedSegmentationResult<T>> IPromptableSegmentation<T>.SegmentEverything()
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);

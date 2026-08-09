@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -73,8 +72,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// January 2024
 /// </para>
 /// </remarks>
-[AutoParameters]
-public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
+public class RoSAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Sparse weight matrix that captures specific/rare patterns.
@@ -90,7 +88,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// that the low-rank component can't represent efficiently.
     /// </para>
     /// </remarks>
-    private Tensor<T> _sparseWeights;
+    private Matrix<T> _sparseWeights;
 
     /// <summary>
     /// Gradients for the sparse weight component, computed during backpropagation.
@@ -149,6 +147,38 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     public double SparsityRatio { get; set; }
 
     /// <summary>
+    /// Gets the total number of trainable parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// RoSA parameters include:
+    /// - Base layer parameters (if not frozen)
+    /// - LoRA parameters (rank * (inputSize + outputSize))
+    /// - Non-zero sparse parameters (varies based on sparsity)
+    ///
+    /// For parameter counting, we report the full sparse matrix size, but in practice
+    /// only the non-zero elements need to be stored and updated.
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            // long throughout. Sparse weights at full rank == OutputShape
+            // × InputShape can overflow int32 for foundation models with
+            // large hidden dims. Closes #1271.7Bnj.
+            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
+            long loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0L;
+            // CRITICAL: Compute sparse count from layer dimensions when _sparseWeights is null —
+            // returning 0 causes base constructor to allocate too-small buffer.
+            long sparseCount = _sparseWeights != null
+                ? ((long)_sparseWeights.Rows * _sparseWeights.Columns)
+                : ((long)GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0] * GetInputShape()[0]);
+            return baseCount + loraCount + sparseCount;
+        }
+    }
+
+    /// <summary>
     /// Initializes a new RoSA adapter wrapping an existing layer.
     /// </summary>
     /// <param name="baseLayer">The layer to adapt with RoSA.</param>
@@ -204,7 +234,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         // Initialize sparse weights
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-        _sparseWeights = new Tensor<T>([outputSize, inputSize]);
+        _sparseWeights = new Matrix<T>(outputSize, inputSize);
 
         // Initialize with small random values (will be pruned)
         InitializeSparseWeights();
@@ -214,6 +244,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameters to include sparse component
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        UpdateParametersFromComponents();
     }
 
     /// <summary>
@@ -234,9 +265,9 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     private void InitializeSparseWeights()
     {
         Random random = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < _sparseWeights.Shape[0]; i++)
+        for (int i = 0; i < _sparseWeights.Rows; i++)
         {
-            for (int j = 0; j < _sparseWeights.Shape[1]; j++)
+            for (int j = 0; j < _sparseWeights.Columns; j++)
             {
                 // Small random initialization
                 double value = random.NextGaussian(0.0, 0.01);
@@ -277,8 +308,8 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public void PruneSparseWeights()
     {
-        int rows = _sparseWeights.Shape[0];
-        int cols = _sparseWeights.Shape[1];
+        int rows = _sparseWeights.Rows;
+        int cols = _sparseWeights.Columns;
         int totalWeights = rows * cols;
 
         // Collect magnitudes
@@ -344,13 +375,13 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public double GetSparsity()
     {
-        int totalWeights = _sparseWeights.Shape[0] * _sparseWeights.Shape[1];
+        int totalWeights = _sparseWeights.Rows * _sparseWeights.Columns;
         int zeroCount = 0;
         double epsilon = 1e-10;
 
-        for (int i = 0; i < _sparseWeights.Shape[0]; i++)
+        for (int i = 0; i < _sparseWeights.Rows; i++)
         {
-            for (int j = 0; j < _sparseWeights.Shape[1]; j++)
+            for (int j = 0; j < _sparseWeights.Columns; j++)
             {
                 double val = Math.Abs(Convert.ToDouble(_sparseWeights[i, j]));
                 if (val < epsilon)
@@ -417,7 +448,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         _cachedInputMatrix = inputMatrix.Clone();
 
         // Multiply by sparse weights: [batchSize, inputSize] @ [inputSize, outputSize]
-        Matrix<T> sparseOutputMatrix = inputMatrix.Multiply(_sparseWeights.ToMatrix().Transpose());
+        Matrix<T> sparseOutputMatrix = inputMatrix.Multiply(_sparseWeights.Transpose());
 
         // Convert to tensor
         Vector<T> sparseOutputData = new Vector<T>(batchSize * outputSize);
@@ -471,9 +502,9 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         // 2. Update sparse weights (always)
         if (_sparseGradients != null)
         {
-            for (int i = 0; i < _sparseWeights.Shape[0]; i++)
+            for (int i = 0; i < _sparseWeights.Rows; i++)
             {
-                for (int j = 0; j < _sparseWeights.Shape[1]; j++)
+                for (int j = 0; j < _sparseWeights.Columns; j++)
                 {
                     T update = NumOps.Multiply(_sparseGradients[i, j], learningRate);
                     _sparseWeights[i, j] = NumOps.Subtract(_sparseWeights[i, j], update);
@@ -490,6 +521,116 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
             _baseLayer.UpdateParameters(learningRate);
         }
 
+        // Update parameter vector
+        UpdateParametersFromComponents();
+    }
+
+    /// <summary>
+    /// Gets the current parameters as a vector.
+    /// </summary>
+    /// <returns>Vector containing all parameters (base if not frozen, LoRA, sparse).</returns>
+    public override Vector<T> GetParameters()
+    {
+        return Parameters.Clone();
+    }
+
+    /// <summary>
+    /// Sets the layer parameters from a vector.
+    /// </summary>
+    /// <param name="parameters">Vector containing all parameters.</param>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
+        }
+
+        Parameters = parameters.Clone();
+        UpdateComponentsFromParameters();
+    }
+
+    /// <summary>
+    /// Updates the parameter vector from the current component states.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method packs parameters from all components into a single vector:
+    /// [base_params (if not frozen) | lora_params | sparse_weights]
+    /// </para>
+    /// </remarks>
+    private void UpdateParametersFromComponents()
+    {
+        int idx = 0;
+
+        // Pack base layer parameters (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseParams = _baseLayer.GetParameters();
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                Parameters[idx++] = baseParams[i];
+            }
+        }
+
+        // Pack LoRA parameters
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        for (int i = 0; i < loraParams.Length; i++)
+        {
+            Parameters[idx++] = loraParams[i];
+        }
+
+        // Pack sparse weights (row-major order)
+        for (int i = 0; i < _sparseWeights.Rows; i++)
+        {
+            for (int j = 0; j < _sparseWeights.Columns; j++)
+            {
+                Parameters[idx++] = _sparseWeights[i, j];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Updates the components from the parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method unpacks the parameter vector and distributes values to all components:
+    /// [base_params (if not frozen) | lora_params | sparse_weights]
+    /// </para>
+    /// </remarks>
+    private void UpdateComponentsFromParameters()
+    {
+        int idx = 0;
+
+        // Unpack base layer parameters (if not frozen)
+        if (!_freezeBaseLayer)
+        {
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
+            Vector<T> baseParams = new Vector<T>(baseParamCount);
+            for (int i = 0; i < baseParamCount; i++)
+            {
+                baseParams[i] = Parameters[idx++];
+            }
+            _baseLayer.SetParameters(baseParams);
+        }
+
+        // Unpack LoRA parameters
+        int loraParamCount = checked((int)_loraLayer.ParameterCount);
+        Vector<T> loraParams = new Vector<T>(loraParamCount);
+        for (int i = 0; i < loraParamCount; i++)
+        {
+            loraParams[i] = Parameters[idx++];
+        }
+        _loraLayer.SetParameters(loraParams);
+
+        // Unpack sparse weights (row-major order)
+        for (int i = 0; i < _sparseWeights.Rows; i++)
+        {
+            for (int j = 0; j < _sparseWeights.Columns; j++)
+            {
+                _sparseWeights[i, j] = Parameters[idx++];
+            }
+        }
     }
 
     /// <summary>

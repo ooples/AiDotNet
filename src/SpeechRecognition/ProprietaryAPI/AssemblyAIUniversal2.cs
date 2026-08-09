@@ -41,18 +41,8 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AssemblyAI Universal-2", "https://www.assemblyai.com/research/universal-2")]
-public partial class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Traced through the graph, not read off a name: InitializeLayers builds
-    /// <c>LayerHelper.CreateDefaultProprietaryASRLayers(..., vocabSize: _options.VocabSize)</c>, whose
-    /// last emitted layer is <c>DenseLayer&lt;T&gt;(vocabSize)</c> - the CTC head. This class's
-    /// PredictCore delegates to <c>base.PredictCore</c> (the plain fold over Layers) once the ONNX
-    /// path is ruled out, and PostprocessOutput is the identity.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly AssemblyAIUniversal2Options _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -111,7 +101,7 @@ public partial class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeec
     }
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;

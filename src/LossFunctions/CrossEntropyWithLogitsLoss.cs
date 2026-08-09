@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -207,12 +207,23 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // gradient by the ignored fraction. PyTorch's reduction='mean' divides by the number of
         // non-ignored targets, which is the parity this class documents.
         //
-        // Each supervised row's target mass is 1 (one-hot) or sums to 1 (a distribution), and an
-        // ignored row's is 0, so summing the mass counts exactly the supervised slots. When
-        // nothing is ignored that count equals the slot count and this is identical to the plain
-        // mean, so existing callers are unaffected.
-        var targetMass = Engine.ReduceSum(target, new[] { classAxis }, keepDims: false);
-        var supervised = Engine.ReduceSum(targetMass, batchAxes, keepDims: false);
+        // COUNT THE ROWS, DO NOT SUM THEIR MASS. Summing mass counts correctly only while every
+        // supervised row carries mass exactly 1 -- one-hot, or a normalized distribution. A weighted
+        // or unnormalized soft target breaks that: scale a batch's targets by w and the numerator
+        // scales by w too, but so does this denominator, so the tape loss comes out divided by w
+        // while CalculateLoss (which does not divide at all) does not. Same inputs, two different
+        // objectives, and nothing in the type says the targets have to be normalized.
+        //
+        // Sign of the absolute mass is the indicator instead: any row with target mass counts once,
+        // whatever that mass is, and an ignored row -- an index outside [0, numClasses), the -1
+        // sentinel, which one-hot encodes to an all-zero row -- counts zero. Absolute value first so
+        // a row of signed weights cannot cancel to zero mass and be read as ignored. The target
+        // carries no gradient, so sign's kink at zero costs nothing here.
+        //
+        // For one-hot targets this is exactly the previous value, so existing callers are unaffected.
+        var targetMass = Engine.ReduceSum(Engine.TensorAbs(target), new[] { classAxis }, keepDims: false);
+        var supervisedRows = Engine.TensorSign(targetMass);
+        var supervised = Engine.ReduceSum(supervisedRows, batchAxes, keepDims: false);
 
         var total = Engine.ReduceSum(perSample, batchAxes, keepDims: false);
 
@@ -277,7 +288,7 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             if (explicitAxis < 0 || explicitAxis >= rank)
             {
                 throw new ArgumentOutOfRangeException(
-                    nameof(_classAxis),
+                    "classAxis",
                     _classAxis.Value,
                     $"Class axis {_classAxis.Value} is outside logits rank {rank}.");
             }
@@ -363,7 +374,7 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
     private double ProbabilityAxisScore(Tensor<T> target, int axis)
     {
-        int[] shape = target._shape;
+        int[] shape = target.Shape.ToArray();
         int axisSize = shape[axis];
         int inner = 1;
         for (int i = axis + 1; i < shape.Length; i++)

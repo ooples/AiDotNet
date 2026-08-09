@@ -33,13 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-// Born rule: |z|^2 per amplitude, then normalised to sum to 1. That rewrites VALUES only - the returned
-// tensor has the caller's exact shape at every rank, as the tail of ForwardTraced spells out (rank 1
-// reshapes back to [stateSize], rank > 2 reshapes back to _originalInputShape, rank 2 is returned as-is).
-// Rank-agnostic, so naming axes would invent meanings the layer does not have.
-[ElementWiseShape(Note = "Converts amplitudes to probabilities over the last axis; shape is untouched.")]
-[AutoParameters]
-public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
+public partial class MeasurementLayer<T> : LayerBase<T>
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
@@ -294,6 +288,56 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
+    /// <summary>
+    /// Updates the parameters of the measurement layer using the calculated gradients.
+    /// </summary>
+    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
+    /// <remarks>
+    /// <para>
+    /// This method is part of the training process, but since MeasurementLayer has no trainable parameters,
+    /// this method does nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
+    /// 
+    /// However, since MeasurementLayer just performs a fixed mathematical operation (quantum measurement)
+    /// and doesn't have any internal values that can be learned or adjusted, this method is empty.
+    /// 
+    /// The measurement process follows the fundamental rules of quantum mechanics, which are 
+    /// constant rather than learnable parameters.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(T learningRate)
+    {
+        // MeasurementLayer doesn't have trainable parameters
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters from the measurement layer as a single vector.
+    /// </summary>
+    /// <returns>An empty vector since MeasurementLayer has no trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters from the layer as a single vector. Since MeasurementLayer
+    /// has no trainable parameters, it returns an empty vector.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
+    /// 
+    /// Since MeasurementLayer:
+    /// - Only performs fixed mathematical operations based on quantum mechanics
+    /// - Has no weights, biases, or other learnable parameters
+    /// - The method returns an empty list
+    /// 
+    /// This is different from layers like Dense layers, which would return their weights and biases.
+    /// The measurement process is governed by the laws of quantum mechanics rather than by
+    /// parameters that can be optimized during training.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // MeasurementLayer has no trainable parameters
+        return Vector<T>.Empty();
+    }
+
     /// <summary>
     /// Resets the internal state of the measurement layer.
     /// </summary>

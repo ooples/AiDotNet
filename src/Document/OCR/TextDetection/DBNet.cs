@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -64,7 +64,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _backboneChannels;
     private readonly int _innerChannels;
     private readonly double _expandRatio;
@@ -132,7 +132,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double expandRatio = 1.5,
         double thresholdK = 50,
         int minTextArea = 16,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
@@ -190,7 +190,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double expandRatio = 1.5,
         double thresholdK = 50,
         int minTextArea = 16,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)

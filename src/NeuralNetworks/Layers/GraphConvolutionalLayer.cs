@@ -35,45 +35,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-// Rank 2 - [numNodes, inputFeatures] - is what the forward's own restore branch names ("Was 2D, return
-// [nodes, outputFeatures]") and the only form [LayerProperty(TestInputShape = "4, 8")] exercises. Higher
-// ranks ARE handled, but their node count must agree with the separately-installed adjacency matrix, so
-// declaring them would be a claim about a tensor this layer never sees alone; left undeclared on purpose.
-//
-// The node axis is TensorAxis.Other: graph nodes are neither a sequence nor a spatial extent, and naming
-// them Time or Length would licence a causal or convolutional layer downstream to read an ordering into
-// them that does not exist.
-[TensorLayout(TensorAxis.Other, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input,
-    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
-[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// HAND-WRITTEN because the emitted width is configuration, not anything readable off the input:
-    /// <c>_weights</c> is allocated as <c>[inputFeatures, outputFeatures]</c> from the same constructor
-    /// argument this property records, and the forward takes the width straight back off it
-    /// (<c>int outputFeatures = _weights.Shape[1];</c>) before restoring the original rank.
-    /// </para>
-    /// <para>
-    /// The node axis is Same: <c>A * X * W</c> mixes each node with its neighbours, but the adjacency is
-    /// square, so the node count out equals the node count in.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 2 || OutputFeatures <= 0) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputFeatures)),
-        };
-    }
-
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
     /// </summary>
@@ -365,6 +328,11 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in this layer.
+    /// </summary>
+    public override long ParameterCount => _weights.Length + _bias.Length;
 
     /// <summary>
     /// Gets whether this layer includes a trainable bias vector.
@@ -1264,7 +1232,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
             if (_useBias)
-                gpuEngine.SgdMomentumUpdateGpu(_bias, _biasGradient!, _biasVelocity!, lr, 0.0f, 0.0f);
+            {
+                // _useBias implies both were allocated alongside _bias. Stating it here means a
+                // future path that enables the bias without allocating them fails with a name.
+                if (_biasGradient is null || _biasVelocity is null)
+                    throw new InvalidOperationException("Bias updates were requested but the bias gradient/velocity buffers are missing.");
+                gpuEngine.SgdMomentumUpdateGpu(_bias, _biasGradient, _biasVelocity, lr, 0.0f, 0.0f);
+            }
         }
         else
         {
@@ -1274,7 +1248,9 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             if (_useBias)
             {
-                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
+                if (_biasGradient is null)
+                    throw new InvalidOperationException("Bias updates were requested but the bias gradient buffer is missing.");
+                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient, learningRate);
                 _bias = Engine.TensorSubtract(_bias, scaledBiasGrad);
             }
 
@@ -1283,6 +1259,95 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             if (_useBias)
                 Engine.InvalidatePersistentTensor(_bias);
         }
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters (weights and biases) and combines them into a single vector.
+    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading
+    /// model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
+    /// 
+    /// The parameters:
+    /// - Are the numbers that the neural network learns during training
+    /// - Include weights and biases
+    /// - Are combined into a single long list (vector)
+    /// 
+    /// This is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        if (!_useBias)
+            return new Vector<T>(_weights.ToArray());
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_bias.ToArray())
+        );
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the weights and biases of the layer from a single vector of parameters. The vector must
+    /// have the correct length to match the total number of parameters in the layer. This is useful for loading
+    /// saved model weights or for implementing optimization algorithms that operate on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with the correct length
+    /// - The first part of the vector is used for the weights
+    /// - The second part of the vector is used for the biases
+    /// 
+    /// This is useful for:
+    /// - Loading a previously saved model
+    /// - Transferring parameters from another model
+    /// - Testing different parameter values
+    /// 
+    /// An error is thrown if the input vector doesn't have the expected number of parameters.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int weightsSize = _weights.Shape[0] * _weights.Shape[1];
+        int biasSize = _bias.Length;
+        int totalParams = weightsSize + biasSize;
+
+        if (parameters.Length != totalParams)
+        {
+            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
+        }
+
+        int index = 0;
+
+        // Set weights using Tensor.FromVector
+        var weightsParams = parameters.SubVector(index, weightsSize);
+        _weights = Tensor<T>.FromVector(weightsParams).Reshape(_weights._shape);
+        index += weightsSize;
+
+        // Register trainable parameters for tape-based autodiff
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        if (_useBias)
+        {
+            var biasParams = parameters.SubVector(index, biasSize);
+            _bias = Tensor<T>.FromVector(biasParams);
+            RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+        }
+
     }
 
     /// <summary>
@@ -1298,9 +1363,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (!_useBias)
             return new Vector<T>(_weightsGradient.ToArray());
 
+        // Reached only when the bias is enabled, which is also what allocates this buffer.
+        if (_biasGradient is null)
+            throw new InvalidOperationException("Bias gradients were requested but the bias gradient buffer is missing.");
+
         return Vector<T>.Concatenate(
             new Vector<T>(_weightsGradient.ToArray()),
-            new Vector<T>(_biasGradient!.ToArray())
+            new Vector<T>(_biasGradient.ToArray())
         );
     }
 

@@ -469,7 +469,18 @@ public class ShortTimeFourierTransform<T>
             try
             {
                 Engine.STFT(signal, _nFft, _hopLength, _windowTensor, _center, out var magnitude, out _);
-                return magnitude;
+
+                // Only take the accelerated result if it agrees with this transform's declared bin
+                // count. That path may round the transform size up to a power of two — for Whisper's
+                // 25ms window at 16kHz, nFft 400 becomes 512 and the magnitude comes back with 257
+                // bins instead of 201. NumFrequencyBins (nFft/2+1) is the contract every caller sizes
+                // against, the mel filterbank above all, so a mismatch fails with "Power spectrogram
+                // has 257 frequency bins but filterbank expects 201". Fall through to the exact CPU
+                // transform when they disagree rather than returning a differently-binned spectrum.
+                if (magnitude.Shape.Length > 0 && magnitude.Shape[^1] == NumFrequencyBins)
+                {
+                    return magnitude;
+                }
             }
             catch
             {

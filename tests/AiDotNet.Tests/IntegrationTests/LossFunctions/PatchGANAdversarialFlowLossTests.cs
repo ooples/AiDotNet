@@ -231,18 +231,20 @@ public class PatchGANAdversarialFlowLossTests
         var loss = adv.ComputeTapeLoss(fake, fake);
         var grads = tape.ComputeGradients(loss, new[] { fake });
 
-        var g = grads[fake];
-        Assert.NotNull(g);
+        // THROUGH THE HELPER, so the failure produces the message below rather than a
+        // KeyNotFoundException. The remarks at the top of this file record that the tape omits
+        // tensors it found no gradient path to -- which is precisely the discriminator-off-the-tape
+        // case this assertion exists to explain -- so indexing grads[fake] directly threw before
+        // reaching the explanation.
+        double maxAbs = MaxAbsGradient(grads, fake);
 
-        double maxAbs = 0;
         int nonFinite = 0;
-        for (int i = 0; i < g!.Length; i++)
+        if (grads.TryGetValue(fake, out var g) && g is not null)
         {
-            if (!Fin(g[i])) nonFinite++;
-            else maxAbs = Math.Max(maxAbs, Math.Abs(g[i]));
+            for (int i = 0; i < g.Length; i++) if (!Fin(g[i])) nonFinite++;
         }
 
-        _out.WriteLine($"loss={loss[0]} grad max|.|={maxAbs} nonFinite={nonFinite}/{g.Length}");
+        _out.WriteLine($"loss={loss[0]} grad max|.|={maxAbs} nonFinite={nonFinite}");
         Assert.Equal(0, nonFinite);
         Assert.True(maxAbs > 0,
             "Adversarial gradient w.r.t. the generated image is identically zero — the discriminator " +
@@ -272,7 +274,16 @@ public class PatchGANAdversarialFlowLossTests
         double realMax = MaxAbsGradient(grads, real);
 
         _out.WriteLine($"discriminator step: grad max|.| fake={fakeMax} real={realMax}");
+
+        // BOTH HALVES OF THE CONTRACT. The discriminator step requires that gradient does NOT reach
+        // the generated branch AND that it DOES reach the real one. realMax was computed, printed,
+        // and never asserted, so a regression that severed BOTH branches -- the whole discriminator
+        // falling off the tape -- satisfied the only assertion here and passed.
         Assert.Equal(0.0, fakeMax);
+        Assert.True(realMax > 0,
+            "Gradient did not reach the real branch either (max|.| = 0), so the discriminator is not " +
+            "on the tape at all. fakeMax being 0 then says nothing about StopGradient severing the " +
+            "generated branch, which is what this test claims to verify.");
     }
 
     /// <summary>

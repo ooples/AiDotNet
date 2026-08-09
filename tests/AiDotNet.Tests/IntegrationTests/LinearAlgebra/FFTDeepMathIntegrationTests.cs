@@ -81,6 +81,7 @@ public class FFTDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FFT_Forward_NonPowerOfTwo_MatchesDirectDft()
     {
+        await Task.Yield();
         var x = new Vector<double>(new double[] { 1.5, -2.0, 0.25, 4.0, -1.0 });
         var actual = FFT.Forward(x);
 

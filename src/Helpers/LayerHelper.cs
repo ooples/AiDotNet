@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.VAE;
+﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
@@ -808,8 +808,21 @@ public static class LayerHelper<T>
             );
         }
 
-        // Output layer
-        yield return new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Output layer. Softmax is a CLASSIFICATION head — it normalizes the outputs to sum to one —
+        // so it must not be used for a regression stack. It was emitted unconditionally, which made
+        // every regression CNN produce a probability vector instead of values, and at outputSize 1 it
+        // is degenerate: softmax over a single element is exactly 1.0 for every input. That is what
+        // made WGAN-GP's critic score real and fake batches identically (1.000000E+000 either way),
+        // giving E[D(fake)] - E[D(real)] = 0, zero gradients and a critic that never moved.
+        bool classificationHead = architecture.TaskType
+            is NeuralNetworkTaskType.MultiClassClassification
+            or NeuralNetworkTaskType.MultiLabelClassification
+            or NeuralNetworkTaskType.SequenceClassification
+            or NeuralNetworkTaskType.ImageClassification;
+
+        yield return classificationHead
+            ? new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>)
+            : new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -15582,11 +15595,8 @@ public static class LayerHelper<T>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
     /// <param name="stateDim">The SSM state dimension (default: 256).</param>
-    /// <param name="numScales">Legacy branch-count setting; the paper graph always contains four Mambas.</param>
-    /// <param name="numLayers">Legacy per-scale depth setting retained for API compatibility.</param>
     /// <param name="expandFactor">Expansion factor for the Mamba inner dimension (default: 1).</param>
     /// <param name="convKernelSize">Mamba convolution kernel size (default: 2).</param>
-    /// <param name="useMultiScaleAttention">Legacy setting retained for API compatibility; the paper uses addition and concatenation.</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
     /// <param name="dropoutRate">Dropout applied after E1 and E2 (default: 0.05).</param>
     /// <returns>A collection of layers forming the TimeMachine architecture.</returns>
@@ -15610,11 +15620,8 @@ public static class LayerHelper<T>
         int forecastHorizon = 96,
         int modelDim = 256,
         int stateDim = 256,
-        int numScales = 4,
-        int numLayers = 2,
         int expandFactor = 1,
         int convKernelSize = 2,
-        bool useMultiScaleAttention = true,
         int numFeatures = 1,
         double dropoutRate = 0.05)
     {
@@ -23405,6 +23412,82 @@ public static class LayerHelper<T>
     #endregion
 
     #region ASR LayerHelper Methods
+
+    /// <summary>
+    /// Creates the RWKV-Transducer encoder: conv subsampling, N RWKV time-mixing blocks, and a CTC head.
+    /// </summary>
+    /// <param name="encoderDim">Model width of the RWKV blocks. Must divide evenly by <paramref name="numHeads"/>.</param>
+    /// <param name="numLayers">Number of stacked RWKV blocks.</param>
+    /// <param name="numHeads">Head count inside each block's time mixing.</param>
+    /// <param name="numMels">Mel filterbank channels of the acoustic front end.</param>
+    /// <param name="vocabSize">CTC output vocabulary size.</param>
+    /// <param name="dropoutRate">Dropout after subsampling and between blocks; 0 disables it.</param>
+    /// <param name="maxSequenceLength">Longest frame count a block is built for.</param>
+    /// <returns>The encoder layers, in order.</returns>
+    /// <remarks>
+    /// <para>
+    /// RWKV BLOCKS, NOT BRANCHFORMER BLOCKS. <c>RWKVTransducer</c> previously built its native encoder
+    /// from <see cref="CreateDefaultBranchformerLayers"/>, so the model named after RWKV contained no
+    /// RWKV at all: no time mixing ran, and the self-attention it used instead is the very thing the
+    /// architecture exists to remove. <see cref="RWKVLayer{T}"/> carries the real recurrence, with
+    /// trainable receptance/key/value/output projections, learned per-channel decay and bonus, and the
+    /// token-shift coefficients -- all registered as parameters, so they train.
+    /// </para>
+    /// <para>
+    /// The subsampling front end and CTC head match the Branchformer factory deliberately: the encoder
+    /// interior is the only thing that should differ between the two, so a comparison between them
+    /// measures the recurrence rather than the framing.
+    /// </para>
+    /// <para><b>For Beginners:</b> Attention re-reads the whole utterance for every frame, so it cannot
+    /// start until the speaker stops. These blocks keep a fixed-size running summary instead, updated
+    /// once per frame, which is what lets the model transcribe as the audio arrives.</para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKVTransducerLayers(
+        int encoderDim = 512,
+        int numLayers = 12,
+        int numHeads = 8,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        if (encoderDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(encoderDim), encoderDim, "Encoder dimension must be positive.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Layer count must be positive.");
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), numHeads, "Head count must be positive.");
+        if (encoderDim % numHeads != 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numHeads), numHeads,
+                $"numHeads must divide encoderDim ({encoderDim}); got {encoderDim} % {numHeads} != 0. " +
+                "RWKVLayer splits the width across heads, so an uneven split has no defined per-head size.");
+        }
+        if (maxSequenceLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxSequenceLength), maxSequenceLength, "Sequence length must be positive.");
+
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Conv subsampling (stride 4), same front end as the Branchformer encoder.
+        yield return new DenseLayer<T>(encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new DenseLayer<T>(encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>();
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // The encoder proper: stacked RWKV blocks, each one time mixing followed by channel mixing.
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new RWKVLayer<T>(maxSequenceLength, encoderDim, numHeads);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // CTC output head
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(vocabSize, identityActivation);
+    }
 
     /// <summary>
     /// Creates default layers for a Branchformer encoder with parallel attention + cgMLP branches.
@@ -37883,4 +37966,32 @@ public static class LayerHelper<T>
             numKvHeads, ropeTheta);
 
     #endregion
+
+    // RESTORED. This slice deleted both methods while QueryMeldNet still called them; the branch
+    // could not report it because LayerHelper<T> was an error type until the integration merge,
+    // and Roslyn suppresses member lookup on error types. Taken back from integration/1789.
+
+    /// <summary>
+    /// Creates the backbone encoder layers for QueryMeldNet.
+    /// </summary>
+    // QueryMeldNet uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
+
+    /// <summary>
+    /// Creates the query-meld decoder layers for QueryMeldNet.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+    }
 }

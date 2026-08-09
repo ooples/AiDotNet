@@ -1046,11 +1046,26 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     {
         int seqLen = sequence.Shape[0];
 
+        // The narrow below only goes one way. A sequence LONGER than the table would ask
+        // TensorNarrow for length > dim and fail with an engine-level error naming neither the
+        // positional table nor the patch count -- and the loop-based body this replaced clamped
+        // silently instead, so any architecture whose patch count exceeds numPatches + 1 changed
+        // behavior here. Name the cause.
+        int tableLen = posEmbeddings.Shape[0];
+        if (seqLen > tableLen)
+        {
+            throw new InvalidOperationException(
+                $"The sequence has {seqLen} positions but the positional table holds only {tableLen}. " +
+                "The table is sized for numPatches + 1 (one CLS token plus one row per patch), so this " +
+                $"means the vision encoder produced more patches than the configured image size and " +
+                "patch size allow. Increase the table's size or reduce the patch count.");
+        }
+
         // Add the registered trainable positional table DIRECTLY with a tape-aware op so the gradient
         // reaches _visionPositionalEmbeddings (updated by the tape optimizer via GetExtraTrainableTensors).
         // When the sequence is shorter than the table (fewer patches than the configured maximum), narrow
         // the table to the used rows first — still tape-connected — so shapes line up for the add.
-        var pos = posEmbeddings.Shape[0] == seqLen
+        var pos = tableLen == seqLen
             ? posEmbeddings
             : Engine.TensorNarrow(posEmbeddings, dim: 0, start: 0, length: seqLen);
 
@@ -1438,6 +1453,20 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         };
     }
 
+    /// <summary>
+    /// Version of the trailing, out-of-<c>Layers</c> section of this network's serialized payload.
+    /// </summary>
+    /// <remarks>
+    /// Version 1 added the CLS token and the two positional tables. The payload that shipped before it
+    /// carries no marker at all -- it simply ends after <c>_useNativeMode</c>. That is exactly what the
+    /// reader keys on: <see cref="SerializeNetworkSpecificData"/> is the last thing
+    /// <c>NeuralNetworkBase.Serialize</c> writes, so "nothing left in the stream" is an unambiguous
+    /// signal of a pre-version payload rather than a guess. Reading the version unconditionally is what
+    /// turned an old model into an <c>EndOfStreamException</c> out of <c>ReadTensor</c>, with nothing in
+    /// the message about compatibility.
+    /// </remarks>
+    private const int NetworkSpecificPayloadVersion = 1;
+
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
@@ -1455,6 +1484,11 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         writer.Write((int)_languageModelBackbone);
         writer.Write(_visionEncoderType);
         writer.Write(_useNativeMode);
+
+        // Everything from here on was added after the first shipped payload, which ended at
+        // _useNativeMode. The version marker is what lets the reader tell the two apart -- see
+        // NetworkSpecificPayloadVersion.
+        writer.Write(NetworkSpecificPayloadVersion);
 
         // Persist the TRAINABLE state that lives OUTSIDE Layers: the CLS token and the vision/text
         // positional tables. Clone() (all three paths — COW fallback, large layer-by-layer copy, and
@@ -1507,8 +1541,19 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             shape[i] = reader.ReadInt32();
         }
 
+        // The shape and the length are two independent reads, and the loop below trusts the length
+        // while the allocation trusts the shape. Disagreement therefore either overruns the tensor or
+        // silently leaves a partly-initialized one -- a trained model that loads as half seed noise.
+        // Reject it here, where the two values are both in hand.
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
+        if (length != tensor.Length)
+        {
+            throw new InvalidOperationException(
+                $"Serialized tensor declares {length} elements, but its shape [{string.Join(", ", shape)}] " +
+                $"holds {tensor.Length}. The payload is corrupt or was written by an incompatible version.");
+        }
+
         for (int i = 0; i < length; i++)
         {
             tensor[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -1586,6 +1631,28 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         // uncorrelated with the trained original (Clone_AfterTraining). This mirrors the same
         // distribution InitializeNativeLayers performs at construction.
         RewireNativeSubLayersFromLayers();
+
+        // A payload written before the out-of-Layers state existed ends here. Detecting that is not a
+        // heuristic: this method is the last read of NeuralNetworkBase.Deserialize, over a seekable
+        // MemoryStream, so an exhausted stream means precisely "nothing more was written".
+        var stream = reader.BaseStream;
+        if (stream.CanSeek && stream.Position >= stream.Length)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "AiDotNet.LLaVANeuralNetwork: this model was saved before the CLS token and positional " +
+                "tables were persisted, so they keep their freshly initialized values. Predictions will " +
+                "differ from the model as trained. Re-save the model to carry that state forward.");
+            return;
+        }
+
+        int payloadVersion = reader.ReadInt32();
+        if (payloadVersion != NetworkSpecificPayloadVersion)
+        {
+            throw new InvalidOperationException(
+                $"LLaVANeuralNetwork was saved with network-payload version {payloadVersion}, but this " +
+                $"build reads version {NetworkSpecificPayloadVersion}. Load this model with a matching " +
+                "version of AiDotNet, or re-save it from one.");
+        }
 
         // Restore the trained out-of-Layers state (CLS token + positional tables) written above,
         // overwriting the seed-initialised tensors that CreateNewInstance() produced. This is what

@@ -1,3 +1,4 @@
+﻿using System.Collections.Concurrent;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -47,7 +48,10 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
 
     // Per-resolution constants, built lazily and reused. They carry no gradient, and rebuilding a
     // [frame, bins] basis pair every training step would cost more than the loss itself.
-    private readonly Dictionary<int, (Tensor<T> Window, Tensor<T> Cos, Tensor<T> Sin)> _bases = new();
+    // CONCURRENT, because a loss instance is shared. Plain Dictionary with an unsynchronized
+    // read-then-insert corrupts its internal buckets when two threads miss and insert at once,
+    // which surfaces as an intermittent crash or an infinite loop rather than as a wrong number.
+    private readonly ConcurrentDictionary<int, (Tensor<T> Window, Tensor<T> Cos, Tensor<T> Sin)> _bases = new();
 
     // Every constant this loss feeds into the graph is cached and reused, never rebuilt per call.
     // The fused compiled training path TRACES the graph on the first step and REPLAYS it on every
@@ -56,9 +60,9 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
     // moved on from — and with pooled allocation that buffer can be recycled underneath the plan,
     // which is how the fused step ended up reading NaN while eager evaluation of the same loss
     // stayed finite in both precisions.
-    private readonly Dictionary<int, Tensor<T>[]> _cosColumns = new();
-    private readonly Dictionary<int, Tensor<T>[]> _sinColumns = new();
-    private readonly Dictionary<string, Tensor<T>> _constants = new();
+    private readonly ConcurrentDictionary<int, Tensor<T>[]> _cosColumns = new();
+    private readonly ConcurrentDictionary<int, Tensor<T>[]> _sinColumns = new();
+    private readonly ConcurrentDictionary<string, Tensor<T>> _constants = new();
 
     /// <summary>
     /// Creates the loss over the given STFT frame sizes.
@@ -227,34 +231,39 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
     {
         bool isCos = ReferenceEquals(basis, _bases[frameSize].Cos);
         var cache = isCos ? _cosColumns : _sinColumns;
-        if (!cache.TryGetValue(frameSize, out var columns))
+
+        // GetOrAdd rather than read-then-insert: exactly one built array wins, and every caller then
+        // sees the SAME tensor instances. That matters beyond thread safety here -- the fused
+        // compiled path captures the tensor references it traced, so two racing inserts handing out
+        // two different instances of the same constant is the hazard this cache exists to avoid.
+        var columns = cache.GetOrAdd(frameSize, _ =>
         {
             int bins = frameSize / 2 + 1;
-            columns = new Tensor<T>[bins];
+            var built = new Tensor<T>[bins];
             for (int b = 0; b < bins; b++)
             {
                 var column = new Tensor<T>([frameSize]);
                 for (int n = 0; n < frameSize; n++) column[n] = basis[n, b];
-                columns[b] = column;
+                built[b] = column;
             }
-            cache[frameSize] = columns;
-        }
+            return built;
+        });
+
         return columns[k];
     }
 
-    /// <summary>A constant shaped like <paramref name="like"/>, filled with <paramref name="value"/>.</summary>
     /// <summary>A cached constant shaped like <paramref name="like"/>, filled with <paramref name="value"/>.</summary>
     private Tensor<T> Constant(Tensor<T> like, double value)
     {
         string key = string.Join("x", like.Shape.ToArray()) + "@" + value.ToString("R");
-        if (_constants.TryGetValue(key, out var cached)) return cached;
-
-        var ops = MathHelper.GetNumericOperations<T>();
-        var t = new Tensor<T>(like.Shape.ToArray());
-        T v = ops.FromDouble(value);
-        for (int i = 0; i < t.Length; i++) t[i] = v;
-        _constants[key] = t;
-        return t;
+        return _constants.GetOrAdd(key, _ =>
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            var t = new Tensor<T>(like.Shape.ToArray());
+            T v = ops.FromDouble(value);
+            for (int i = 0; i < t.Length; i++) t[i] = v;
+            return t;
+        });
     }
 
     /// <summary>
@@ -270,13 +279,6 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
 
     private static int[] AllAxes(Tensor<T> x) => Enumerable.Range(0, x.Shape.Length).ToArray();
 
-    private Tensor<T> Scalar(double value)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = MathHelper.GetNumericOperations<T>().FromDouble(value);
-        return t;
-    }
-
     private static int LargestPowerOfTwoAtMost(int n)
     {
         int p = 1;
@@ -287,8 +289,13 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
     /// <summary>Hann window and the real/imaginary DFT bases for one frame size, built once.</summary>
     private (Tensor<T> Window, Tensor<T> Cos, Tensor<T> Sin) GetBasis(int frameSize)
     {
-        if (_bases.TryGetValue(frameSize, out var cached)) return cached;
+        // GetOrAdd, for the same reason as the column caches: one built basis wins and every caller
+        // sees the same tensor instances, which the fused compiled path depends on after it traces.
+        return _bases.GetOrAdd(frameSize, BuildBasis);
+    }
 
+    private static (Tensor<T> Window, Tensor<T> Cos, Tensor<T> Sin) BuildBasis(int frameSize)
+    {
         var ops = MathHelper.GetNumericOperations<T>();
         int bins = frameSize / 2 + 1;
 
@@ -313,9 +320,7 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
             }
         }
 
-        var basis = (window, cos, sin);
-        _bases[frameSize] = basis;
-        return basis;
+        return (window, cos, sin);
     }
 
     /// <inheritdoc />
@@ -339,14 +344,26 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
         var gradient = new Vector<T>(predicted.Length);
         const double step = 1e-4;
 
+        // PERTURB A COPY, NOT THE CALLER'S VECTOR. The probe used to write into `predicted` and
+        // restore it afterwards, which left two holes: if CalculateLoss threw between the write and
+        // the restore, the caller was handed back a vector still holding a perturbed element; and a
+        // vector shared with another thread was observably wrong for the duration of every probe.
+        // Copying once costs one allocation per call and removes both, and the method no longer has
+        // a side effect on its own input.
+        var probe = new Vector<T>(predicted.Length);
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            probe[i] = predicted[i];
+        }
+
         for (int i = 0; i < predicted.Length; i++)
         {
             T original = predicted[i];
-            predicted[i] = ops.Add(original, ops.FromDouble(step));
-            double plus = Convert.ToDouble(CalculateLoss(predicted, actual));
-            predicted[i] = ops.Subtract(original, ops.FromDouble(step));
-            double minus = Convert.ToDouble(CalculateLoss(predicted, actual));
-            predicted[i] = original;
+            probe[i] = ops.Add(original, ops.FromDouble(step));
+            double plus = Convert.ToDouble(CalculateLoss(probe, actual));
+            probe[i] = ops.Subtract(original, ops.FromDouble(step));
+            double minus = Convert.ToDouble(CalculateLoss(probe, actual));
+            probe[i] = original;
             gradient[i] = ops.FromDouble((plus - minus) / (2.0 * step));
         }
 

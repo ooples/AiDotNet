@@ -74,45 +74,6 @@ public class MMHCAlgorithm<T> : HybridBase<T>
     }
 
     /// <summary>
-    /// Returns a copy of <paramref name="data"/> with each column standardized to
-    /// zero mean and unit variance. Constant columns are centered to zero.
-    /// </summary>
-    private Matrix<T> StandardizeColumns(Matrix<T> data)
-    {
-        int n = data.Rows;
-        int d = data.Columns;
-        var result = new Matrix<T>(n, d);
-
-        for (int j = 0; j < d; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dev = NumOps.ToDouble(data[i, j]) - mean;
-                variance += dev * dev;
-            }
-            double std = Math.Sqrt(variance / n);
-
-            if (std < 1e-12)
-            {
-                // Constant (zero-variance) column: no information, center to zero.
-                for (int i = 0; i < n; i++) result[i, j] = NumOps.Zero;
-            }
-            else
-            {
-                for (int i = 0; i < n; i++)
-                    result[i, j] = NumOps.FromDouble((NumOps.ToDouble(data[i, j]) - mean) / std);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// MMPC phase: for each variable, identify candidate neighbors using Max-Min heuristic.
     /// </summary>
     private bool[,] MMPCPhase(Matrix<T> data)

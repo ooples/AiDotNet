@@ -147,6 +147,7 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
 
         var variances = new double[_l];
         _targetMean = 0.0;
+        int finiteTargets = 0;
         for (int row = 0; row < n; row++)
         {
             var window = Window(_l, c => Convert.ToDouble(x[row, c]), cols);
@@ -155,12 +156,22 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
                 double centered = window[j] - _inputMeans[j];
                 variances[j] += centered * centered;
             }
-            _targetMean += Convert.ToDouble(y[row]);
+            // Non-finite targets are EXCLUDED from the statistics, matching NLinearModel.FitScalers.
+            // Window already clamps non-finite inputs, so _inputMeans and _inputStds were protected;
+            // the target path was not. A single NaN label made _targetMean NaN, and while _targetStd
+            // rescues _targetStd back to 1.0, nothing rescued the mean -- every normalized target,
+            // every error and every gradient then went NaN, training completed without an exception,
+            // and every later prediction collapsed to 0 through the output guard. Silent and total.
+            double target = Convert.ToDouble(y[row]);
+            if (!IsFiniteValue(target)) continue;
+
+            _targetMean += target;
+            finiteTargets++;
         }
 
         if (n > 0)
         {
-            _targetMean /= n;
+            _targetMean = finiteTargets > 0 ? _targetMean / finiteTargets : 0.0;
             for (int j = 0; j < _l; j++)
             {
                 double std = Math.Sqrt(variances[j] / n);
@@ -171,10 +182,13 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
         double targetVariance = 0.0;
         for (int row = 0; row < n; row++)
         {
-            double centered = Convert.ToDouble(y[row]) - _targetMean;
+            double target = Convert.ToDouble(y[row]);
+            if (!IsFiniteValue(target)) continue;
+
+            double centered = target - _targetMean;
             targetVariance += centered * centered;
         }
-        double targetStd = n > 0 ? Math.Sqrt(targetVariance / n) : 1.0;
+        double targetStd = finiteTargets > 0 ? Math.Sqrt(targetVariance / finiteTargets) : 1.0;
         _targetStd = targetStd > 1e-8 && IsFiniteValue(targetStd) ? targetStd : 1.0;
     }
 
@@ -210,7 +224,13 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
                     int idx = order[bi];
                     var xv = NormalizeWindow(Window(_l, c => Convert.ToDouble(x[idx, c]), cols));
                     var (hidden, pred) = Forward(xv);
-                    double normalizedTarget = (Convert.ToDouble(y[idx]) - _targetMean) / _targetStd;
+                    // Filtering the statistics alone does not keep a NaN label out of the gradient:
+                    // this row's error would still be NaN and would poison every weight it touches.
+                    // Skip the row instead.
+                    double rawTarget = Convert.ToDouble(y[idx]);
+                    if (!IsFiniteValue(rawTarget)) continue;
+
+                    double normalizedTarget = (rawTarget - _targetMean) / _targetStd;
                     double err = pred - normalizedTarget; // dMSE/dpred
 
                     gB2 += err;
@@ -269,12 +289,12 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
         var xv = NormalizeWindow(Window(_l, j => Convert.ToDouble(input[j]), input.Length));
         var (_, normalizedPrediction) = Forward(xv);
         double pred = normalizedPrediction * _targetStd + _targetMean;
-        // Conversion can overflow even when the intermediate double is finite
-        // (for example, a large finite value converted to a float model). Route
-        // the converted value through the standard time-series output guard so
-        // NaN/Infinity cannot escape into recursive forecasts or public results.
-        var converted = NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
-        return GuardPrediction(converted);
+        // ToFiniteT, not NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0): the pre-conversion
+        // check is the insufficient one its own helper documents. Every double from about 3.4e38 up
+        // is finite yet overflows to Infinity once narrowed to float, so the pre-conversion form
+        // passed such a value straight through to a float model. GuardPrediction then still runs, as
+        // a second line of defence for the recursive-forecast path.
+        return GuardPrediction(ToFiniteT(pred));
     }
 
     public override long ParameterCount => (long)_h * _l + _h + _h + 1 + _l + 1;

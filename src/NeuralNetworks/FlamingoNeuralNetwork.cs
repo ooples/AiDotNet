@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -98,6 +98,19 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     private readonly int _embeddingDimension;
     private readonly int _maxSequenceLength;
     private readonly int _imageSize;
+
+    /// <summary>
+    /// The input channel count the native layers were built for.
+    /// </summary>
+    /// <remarks>
+    /// The constructor took this and forwarded it to InitializeNativeLayers without keeping it, so
+    /// two places in the clone path assumed 3. The shape probe built a 3-channel tensor, which
+    /// makes ResolveShapes throw for a 1- or 4-channel model and drops the copy into the fallback
+    /// -- copying from unresolved lazy projections, the exact failure that probe was added to
+    /// prevent -- and CreateNewInstance passed the literal 3, silently rebuilding the clone with an
+    /// RGB patch embedding whatever the original used.
+    /// </remarks>
+    private readonly int _channels;
     private readonly int _visionHiddenDim;
     private readonly int _lmHiddenDim;
     private readonly int _numVisionLayers;
@@ -187,6 +200,13 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _vocabularySize = 32000;
         _languageModelBackbone = LanguageModelBackbone.Chinchilla;
         _numPerceiverLayers = 6;
+        // 1e-3 is the CODEBASE Adam default, chosen deliberately rather than taken from the paper.
+        // Alayrac et al. 2022 specify their schedule in section 3 and Appendix B, and it is not a
+        // single constant: a linear warm-up to 1e-4 over the first 5000 steps, then cosine decay,
+        // over an accelerator budget this implementation does not assume. Pinning a number lifted
+        // from the middle of that schedule would look like a citation while reproducing none of it,
+        // so the framework default is used and the deviation is stated here instead. Callers
+        // reproducing the paper should pass their own optimizer with the published schedule.
         _learningRate = 1e-3;
 
         InferenceSession? visionEncoder = null;
@@ -239,6 +259,16 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         double learningRate = 1e-3)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
+        // Validated here, at the public entry point, rather than where it is first used. ConvertToTensor
+        // divides by the channel count, and InitializeNativeLayers sizes the patch embedding from it, so
+        // a zero or negative value surfaces as a DivideByZeroException or an invalid tensor shape from
+        // somewhere well downstream of the argument that caused it.
+        if (channels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(channels), channels, "The channel count must be positive.");
+        }
+
         _options = options ?? new FlamingoOptions();
         Options = _options;
         _useNativeMode = true;
@@ -269,6 +299,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             });
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
+        _channels = channels;
         InitializeNativeLayers(channels);
     }
 
@@ -327,10 +358,18 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         int gatedCrossAttnCount = _numLmLayers / 4;
         int requiredLayers = 1 + _numVisionLayers + (3 * _numPerceiverLayers)
             + gatedCrossAttnCount + 1 + _numLmLayers + 1;
-        if (Layers.Count < requiredLayers)
+        // EXACTLY requiredLayers, NOT "at least". The distribution loop below consumes exactly
+        // requiredLayers entries, so a surplus passed this guard and was then bound to nothing --
+        // yet stayed in the canonical Layers collection, so it was still serialized, still counted
+        // toward ParameterCount, and still updated by training, while contributing nothing to any
+        // forward path. A caller who supplied one layer too many got a model that trained weights
+        // it never used and reported a parameter count it could not explain.
+        if (Layers.Count != requiredLayers)
         {
             throw new InvalidOperationException(
-                $"Flamingo layer graph contains {Layers.Count} layers but {requiredLayers} are required.");
+                $"Flamingo layer graph contains {Layers.Count} layers but exactly {requiredLayers} are "
+                + "required; every layer is bound to a named execution branch, so a surplus would be "
+                + "trained and serialized without ever being used.");
         }
 
         // Distribute canonical layers to the private execution branches.
@@ -1062,6 +1101,78 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     #region NeuralNetworkBase Overrides
 
     /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var layer in _visionEncoderLayers)
+                count += (int)layer.ParameterCount;
+            foreach (var layer in _perceiverLayers)
+                count += (int)layer.ParameterCount;
+            foreach (var layer in _gatedCrossAttentionLayers)
+                count += (int)layer.ParameterCount;
+            foreach (var layer in _languageModelLayers)
+                count += (int)layer.ParameterCount;
+            if (_patchEmbedding is not null)
+                count += (int)_patchEmbedding.ParameterCount;
+            if (_textTokenEmbedding is not null)
+                count += (int)_textTokenEmbedding.ParameterCount;
+            if (_outputProjection is not null)
+                count += (int)_outputProjection.ParameterCount;
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+
+        foreach (var layer in _visionEncoderLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+                allParams.Add(layerParams[i]);
+        }
+
+        foreach (var layer in _perceiverLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                allParams.Add(layerParams[i]);
+            }
+        }
+
+        foreach (var layer in _gatedCrossAttentionLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                allParams.Add(layerParams[i]);
+            }
+        }
+
+        foreach (var layer in _languageModelLayers)
+        {
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+                allParams.Add(layerParams[i]);
+        }
+
+        foreach (var layer in new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection })
+        {
+            if (layer is null) continue;
+            var layerParams = layer.GetParameters();
+            for (int i = 0; i < layerParams.Length; i++)
+                allParams.Add(layerParams[i]);
+        }
+
+        return new Vector<T>([.. allParams]);
+    }
+
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -1092,9 +1203,20 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // try/finally: SetTrainingMode(false) used to run only on the success path, so any throw from
+        // TrainWithTape -- a shape mismatch, a non-finite gradient, an OOM -- escaped with the model
+        // still in training mode. Dropout then stayed stochastic and BatchNorm kept updating its
+        // running statistics on every later Predict, making inference silently non-deterministic long
+        // after the error that caused it was handled.
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -1108,11 +1230,17 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         {
             try
             {
-                ResolveShapes(new Tensor<T>(new[] { 3, _imageSize, _imageSize }));
+                ResolveShapes(new Tensor<T>(new[] { _channels, _imageSize, _imageSize }));
             }
-            catch (ArgumentException)
+            catch (ArgumentException ex)
             {
-                // Preserve the base fallback for callers supplying a custom architecture.
+                // Preserve the base fallback for callers supplying a custom architecture. The
+                // exception is expected on that path, but swallowing it silently meant a genuinely
+                // malformed architecture looked identical to a deliberately custom one -- the shape
+                // resolution just never happened and nothing said why.
+                System.Diagnostics.Debug.WriteLine(
+                    $"{nameof(FlamingoNeuralNetwork<T>)}: native-mode shape resolution declined a "
+                    + $"{_imageSize}x{_imageSize} probe, falling back to the base architecture. {ex.Message}");
             }
         }
 
@@ -1250,15 +1378,27 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 textEmbeddingDim: Architecture.TextEmbeddingDim,
                 inputFrames: Architecture.InputFrames)
             {
-                RandomSeed = Architecture.RandomSeed
+                RandomSeed = Architecture.RandomSeed,
+
+                // Carried explicitly, because it is settable rather than a constructor parameter and so
+                // is not covered by the rebuild above. Left off, the clone silently reverted to the
+                // architecture default (false) and trained its gradients through a different code path
+                // than the original -- a divergence with no error attached to it.
+                UseAutodiff = Architecture.UseAutodiff
             };
+
+            // Layers is deliberately NOT carried over, and that is not the same omission: the source's
+            // Layers holds this instance's LIVE layer objects. Copying the list would have the clone
+            // share them, which is what the COW clone path then rebinds tensor-by-tensor. The clone
+            // rebuilds its own layer instances from the blueprint above and the caller re-binds the
+            // shared weights, so the layer graph is reproduced without aliasing the originals.
 
             return new FlamingoNeuralNetwork<T>(
                 freshArchitecture,
                 _embeddingDimension,
                 _maxSequenceLength,
                 _imageSize,
-                3,
+                _channels,
                 _numPerceiverTokens,
                 _maxImagesInContext,
                 _visionHiddenDim,
@@ -1272,6 +1412,9 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 _tokenizer,
                 freshOptimizer,
                 _lossFunction,
+                // Same class of drop as UseAutodiff: skipping this optional parameter handed the clone a
+                // default FlamingoOptions() rather than the one the original was configured with.
+                _options,
                 learningRate: _learningRate);
         }
         else
@@ -1376,7 +1519,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             throw new ArgumentException("Image data cannot be null or empty.", nameof(imageData));
         }
 
-        int channels = 3;
+        int channels = _channels;
         if (imageData.Length % channels != 0)
         {
             throw new ArgumentException($"Image data length ({imageData.Length}) must be divisible by {channels} channels.", nameof(imageData));

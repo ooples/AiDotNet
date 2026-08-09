@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -181,7 +181,18 @@ public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
     {
         Guard.NotNull(returnPanel);
 
-        int assets = returnPanel.Shape.Length == 2 ? returnPanel.Shape[1] : _options.NumAssets;
+        // Rank is validated once, here. The old form fell back to _options.NumAssets for a
+        // non-rank-2 panel, but BuildGraph -> Graph.VolatilitySeries throws ArgumentException for
+        // exactly that input, so the fallback could never be reached and documented a contract the
+        // method does not support.
+        if (returnPanel.Shape.Length != 2)
+        {
+            throw new ArgumentException(
+                $"Expected a rank-2 [steps, assets] return panel; got rank {returnPanel.Shape.Length}.",
+                nameof(returnPanel));
+        }
+
+        int assets = returnPanel.Shape[1];
         return Graph.AdjacencyMask(BuildGraph(returnPanel), assets);
     }
 
@@ -205,6 +216,17 @@ public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
         // always matches the universe rather than whatever shape came back.
         if (scores.Length > _options.NumAssets)
             scores = scores.Slice(0, _options.NumAssets);
+
+        // A SHORT vector was previously passed through unchanged, producing an allocation with fewer
+        // entries than the asset universe. Callers index weights by asset, so those weights silently
+        // referred to the wrong assets from the first missing entry onward.
+        if (scores.Length < _options.NumAssets)
+        {
+            throw new InvalidOperationException(
+                $"The network produced {scores.Length} scores for a universe of "
+                + $"{_options.NumAssets} assets. An allocation cannot be built from fewer scores than "
+                + "assets; check that the architecture's output head matches NumAssets.");
+        }
 
         return Objective.Allocate(scores);
     }
@@ -236,12 +258,30 @@ public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
     {
         Guard.NotNull(parameters);
 
+        // The whole length is checked BEFORE any layer is mutated. Slicing sequentially meant a
+        // short vector threw partway through, leaving the earlier layers updated and the rest on
+        // their old values -- a model in a state that was neither the old one nor the new one -- and
+        // a long vector left its tail silently unused.
+        // long, because ParameterCount is long: accumulating into an int would overflow silently on a
+        // large model and then report a mismatch against a negative expectation.
+        long expected = 0;
+        foreach (var layer in Layers) expected += layer.ParameterCount;
+
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters for {Layers.Count} layers; got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
         foreach (var layer in Layers)
         {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
+            // checked: a single layer with more than int.MaxValue parameters cannot be sliced by this
+            // API anyway, so overflow should throw here rather than wrap into a wrong slice length.
+            int count = checked((int)layer.ParameterCount);
+            layer.SetParameters(parameters.Slice(offset, count));
+            offset += count;
         }
     }
 
@@ -263,6 +303,20 @@ public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
             MaxEpochs = _options.MaxEpochs,
         };
 
-        return new GraphAttentionPortfolio<T>(copy);
+        // LossFunction always carries across; calling the single-argument constructor took the
+        // implicit default and a model built with a custom loss cloned into a different one.
+        //
+        // Architecture carries across ONLY when it holds no layers. InitializeLayers adds
+        // Architecture.Layers into Layers BY REFERENCE when that collection is non-empty, and
+        // ILayer<T> has no Clone, so handing a layer-carrying architecture to the clone would give
+        // both models the SAME layer objects -- training or UpdateParameters on either would mutate
+        // both. A clone that silently shares state is a worse defect than one that rebuilds default
+        // layers, so the layer-carrying case falls back to the default build until layers can be
+        // deep-copied.
+        bool architectureCarriesLayers = Architecture.Layers is not null && Architecture.Layers.Count > 0;
+
+        return architectureCarriesLayers
+            ? new GraphAttentionPortfolio<T>(copy, null, LossFunction)
+            : new GraphAttentionPortfolio<T>(copy, Architecture, LossFunction);
     }
 }

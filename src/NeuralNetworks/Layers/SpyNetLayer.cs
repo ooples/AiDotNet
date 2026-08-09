@@ -37,66 +37,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "2")]
-// NCHW, per OnFirstForward's own guard - "requires rank-3 [2C,H,W] or rank-4 [B,2C,H,W]". The channel
-// axis carries TWO STACKED FRAMES on the way in and a TWO-COMPONENT FLOW FIELD on the way out; those
-// are different quantities that happen to share an axis, which is exactly why the output channel width
-// is not a function of the input channel width.
-//
-// _numLevels shapes the internal pyramid, not the result: BuildPyramid halves each level and
-// EstimateFlow upsamples back, so the flow returned is always at full input resolution.
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input,
-    Note = "Two frames stacked along the channel axis; the count must be even.")]
-[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
+public partial class SpyNetLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Straight from <c>OnFirstForward</c>:
-    /// <c>ResolveShapes(new[] { totalChannels, inH, inW }, new[] { 2, inH, inW })</c>. The spatial axes
-    /// are carried through untouched and the channel axis becomes 2.
-    /// </para>
-    /// <para>
-    /// THE LITERAL 2 IS DELIBERATE AND IS NOT AN OBSERVED CONSTANT - the usual objection to a hardcoded
-    /// size does not apply. It is the (dx, dy) component count of an optical flow field, stated in
-    /// <c>EstimateFlow</c>'s own return doc ("[2, H, W] representing (dx, dy) per pixel") and written
-    /// literally into <c>ResolveShapes</c>. No constructor argument can change it: <c>_numLevels</c>
-    /// drives the pyramid depth and the input channel count is discovered per input, but neither
-    /// reaches this axis. A field would be a rename of the number, not a source for it.
-    /// </para>
-    /// <para>
-    /// Note the input channel count is DIVIDED by two internally (<c>_inputChannels = totalChannels /
-    /// 2</c>) to recover the per-frame width, but that value never reaches the output either - the flow
-    /// field is two-wide regardless of how many channels each frame carries.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        var flow = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(2));
-        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height));
-        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width));
-
-        return inputRank switch
-        {
-            3 => new[] { flow, height, width },
-            4 => new[]
-            {
-                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
-                flow,
-                height,
-                width,
-            },
-            _ => null,
-        };
-    }
-
     #region Fields
 
     private readonly int _numLevels;
@@ -1382,6 +1324,49 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region Parameter Management
+
+    /// <inheritdoc/>
+    public override long ParameterCount => (int)_basicModules.Sum(m => m.ParameterCount);
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var module in _basicModules)
+        {
+            var moduleParams = module.GetParameters();
+            for (int i = 0; i < moduleParams.Length; i++)
+            {
+                allParams.Add(moduleParams[i]);
+            }
+        }
+        return new Vector<T>([.. allParams]);
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Pre-Forward: per-pyramid-level conv shapes are unresolved.
+        // Buffer and replay from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
+        int offset = 0;
+        foreach (var module in _basicModules)
+        {
+            var moduleParams = module.GetParameters();
+            var newParams = new T[moduleParams.Length];
+            for (int i = 0; i < moduleParams.Length; i++)
+            {
+                newParams[i] = parameters[offset + i];
+            }
+            module.SetParameters(new Vector<T>(newParams));
+            offset += moduleParams.Length;
+        }
+    }
 
     private Vector<T>? _pendingParameters;
 

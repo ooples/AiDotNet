@@ -46,21 +46,8 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
-public partial class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Traced through the graph, not read off a name: InitializeLayers builds
-    /// <c>LayerHelper.CreateDefaultConformerTransducerLayers(..., vocabSize: _options.VocabSize)</c>.
-    /// The stack is emitted as one flat sequence and its LAST layer is the joint network's output
-    /// projection <c>DenseLayer&lt;T&gt;(vocabSize)</c>; PredictionDim and JointDim size the two layers
-    /// before it, so neither is the exposed width. The TDT duration prediction has no layer of its own
-    /// in the built graph - MaxDurationTokens appears only in this class's documentation and in
-    /// decoding, never as an emitted head - so it does not widen the tensor. PostprocessOutput is the
-    /// identity.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.VocabSize;
-
     private readonly ParakeetTDTOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }

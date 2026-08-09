@@ -60,15 +60,6 @@ namespace AiDotNet.Diffusion.StyleTransfer;
     Authors = "Quanjian Song, Mingbao Lin, Wengyi Zhan, Shuicheng Yan, Liujuan Cao, Rongrong Ji")]
 public class UniVSTModel<T> : LatentDiffusionModelBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>Registration order is serialization order, and matches the
-    /// concatenation the previous hand-written GetParameters performed.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(_predictor);
-        RegisterParameterComponent(_vae);
-    }
-
     /// <summary>
     /// Stable Diffusion v1.5's latent depth, used when neither a VAE nor
     /// <see cref="DiffusionModelOptions{T}.LatentChannels"/> says otherwise. A default, never a
@@ -95,6 +86,7 @@ public class UniVSTModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => _latentChannels;
 
     /// <inheritdoc />
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>Gets the UniVST-specific settings (schedules and mask hyperparameters).</summary>
     public UniVSTOptions UniVSTOptions => _univstOptions;
@@ -153,9 +145,31 @@ public class UniVSTModel<T> : LatentDiffusionModelBase<T>
         _univstOptions.Validate();
         _conditioner = conditioner;
 
-        // A supplied VAE is authoritative: its latent depth is a property of trained weights, so it
-        // wins over a requested value that would silently disagree with them.
+        // THE OVERRIDE IS NOW REFUSED RATHER THAN SWALLOWED. DiffusionModelOptions.LatentChannels
+        // documents that a model which cannot honour an override should say so instead of silently
+        // ignoring it, and this constructor was the one place that ignored it: a caller who set the
+        // option AND supplied a VAE had their value discarded without a word. TLoRAModel already
+        // enforced both halves of that contract; these are the same two guards.
         int requested = options?.LatentChannels ?? DEFAULT_LATENT_CHANNELS;
+        if (requested <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), requested,
+                "DiffusionModelOptions.LatentChannels must be positive when specified.");
+        }
+
+        // An injected VAE has already fixed the latent width, so an override that disagrees with it
+        // cannot be honoured. Say so here rather than letting it surface as a shape mismatch deep
+        // inside the denoising loop, where the connection back to this option is not obvious.
+        if (vae is not null && options?.LatentChannels is int overridden && vae.LatentChannels != overridden)
+        {
+            throw new ArgumentException(
+                $"DiffusionModelOptions.LatentChannels was set to {overridden}, but the supplied VAE " +
+                $"produces {vae.LatentChannels} latent channels. Either omit the override or supply a " +
+                "VAE built for the same width.", nameof(options));
+        }
+
+        // A supplied VAE wins when no explicit override was given: it is the authority on the width
+        // the rest of the pipeline has to agree with.
         _latentChannels = vae?.LatentChannels ?? requested;
 
         InitializeLayers(predictor, vae, seed);
@@ -310,6 +324,34 @@ public class UniVSTModel<T> : LatentDiffusionModelBase<T>
         return m;
     }
 
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
 
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null) throw new ArgumentNullException(nameof(parameters));
 
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
+
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
 }

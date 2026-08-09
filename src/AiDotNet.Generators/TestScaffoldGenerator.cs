@@ -395,28 +395,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor ModelInputContradictsInterfaceDescriptor = new DiagnosticDescriptor(
-        id: "ADNGEN002",
-        title: "[ModelInput] contradicts the IFullModel<T,TIn,TOut> the model actually implements",
-        messageFormat: "Model '{0}' declares [ModelInput({1}, {2})] but implements "
-                       + "IFullModel<T, {3}, {4}>. The attribute and the type system disagree about "
-                       + "the model's own I/O, and the ATTRIBUTE wins when the test family is chosen "
-                       + "- so the model is routed to a family whose fixture it cannot satisfy, and "
-                       + "is then silently dropped with NO test at all. Correct the attribute to "
-                       + "match the implemented interface; the type system is the ground truth.",
-        category: "AiDotNet.TestScaffold",
-        // WARNING FOR NOW, ERROR ONCE THE BACKLOG IS CLEARED - same ladder as ADNGEN001, and for the
-        // same reason: the real count is not yet known, and erroring on an unmeasured backlog would
-        // redden the build and block everything else. The flip to Error is the point of the rule.
-        //
-        // This is a CONTRADICTION, not a preference: two statements about one model that cannot both
-        // be true. It is worth its own diagnostic because of how it failed - not loudly, but by
-        // making a model look like a near-miss ("resolves to family NeuralNetwork, missing an
-        // interface") when the truth was that its own declaration was wrong. Six RL policies and
-        // eleven Safety modules sat uncovered behind that misreading.
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
-
     private static readonly DiagnosticDescriptor ArchitectureFixtureSizeMismatchDescriptor = new DiagnosticDescriptor(
         id: "ADNTEST002",
         title: "Generated scaffold architecture size disagrees with its InputShape",
@@ -473,24 +451,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
         "GraphWaveNet",
-    };
-
-    /// <summary>
-    /// Causal-discovery test classes that get <c>[Collection("FoundationScaleSerial")]</c> — dedicated
-    /// cores — WITHOUT the HeavyTimeout trait that would relegate them to the nightly lane. Keyed by
-    /// generated TEST CLASS name (the algorithm emit path works in those, not model class names).
-    /// Membership means "measured fast alone, starved in a wide shard"; see the emission site in
-    /// EmitAlgorithmTestClass for the per-class numbers. A genuinely slow algorithm belongs on the
-    /// options-capping ladder or in the nightly lane instead, not here.
-    /// </summary>
-    private static readonly System.Collections.Generic.HashSet<string> CausalContentionSerialClassNames =
-        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
-    {
-        "CGNNAlgorithmTests",
-        "DAGMANonlinearTests",
-        "GraNDAGAlgorithmTests",
-        "OrderMCMCAlgorithmTests",
-        "PartitionMCMCAlgorithmTests",
     };
 
     // Foundation-scale models whose CORRECT forward/backward is simply too slow for the 120s default
@@ -648,28 +608,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
         // siblings (MIAVSR / MGLDVSR), keeping it off the default per-test-timeout gate.
         "DOVE",
-        // VoiceCraft: the ladder is exhausted, every rung MEASURED rather than assumed.
-        //   rung 1 (float)  — already applied; it is in Fp32TestClassNames and emits as <float>.
-        //   rung 2 (cap)    — already applied and already TIGHTER than the standard smoke cap:
-        //                     TrainingIterations 2, MoreData 1/2, MemorizationTaskIterations 2,
-        //                     MoreDataTolerance 0.5. Only two optimizer steps are left to remove.
-        //   rung 3 (shrink) — already applied; its constructorExpr builds a bounded 64x32x1 CI fixture
-        //                     rather than the paper audio length.
-        // Measured ALONE (serialized, whole machine, Release):
-        //   OutputDimension_ShouldMatchExpectedShape   15 s      FiniteSpectralEnergy        15 s
-        //   ScaledInput_ShouldChangeOutput             24 s      Training_ShouldChangeParams 1 m 46 s
-        //   ForwardPass_ShouldBeFinite_AfterTraining / Training_ShouldReduceLoss /
-        //   LossStrictlyDecreasesOnMemorizationTask    all TIMED OUT
-        // A single FORWARD of this already-shrunken fixture costs ~15 s, and the cheapest training
-        // invariant needs 1 m 46 s of a 120 s gate — 1.13x headroom, which is a coin flip, not a pass.
-        // That is per-STEP cost: dividing the step count cannot help when two steps is already the
-        // floor, and shrinking further would stop exercising the architecture. So this one is a
-        // genuine nightly-lane deferral rather than a contention casualty — note the contrast with
-        // its neighbours in the serialization list, whose single-forward probes cost 1-2 s.
-        // (VoiceCraft is ALSO in the serialization list: dedicated cores are what took its three
-        // single-forward probes back from timeouts to 15-24 s passes. The nightly lane runs wide too,
-        // so it needs both.)
-        "VoiceCraft",
     };
 
     /// <summary>
@@ -1563,6 +1501,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // continuous mel targets — a family-wide objective change to evaluate separately, not here.)
         "BioBERTNER", "BiaffineNER", "BSRoFormer", "AnomalyTransformerDetector",
         "AVID", "ABINet", "APNet", "APNet2", "AzureSpeechSTT", "AWSTranscribe",
+        // XTTSv2Clone (voice-cloning TTS) had no mitigation at all: its training probes ran the
+        // container out of memory at double precision.
+        "XTTSv2Clone",
+        // W-Z lane memory: that lane crashed its test host outright — "the host process exited
+        // unexpectedly" — after peaking at 16383 MB, i.e. exactly the 16 GB runner cap, so it could
+        // not report a trustworthy result at all. These four are the vocoder / voice-cloning models in
+        // the lane still running at double precision with no other mitigation; float halves their
+        // activation and tape footprint.
+        "XTTSv2",
+        "WaveGlow",
+        "WaveRNN",
+        "YourTTS",
+        // WhisperModel emits [3001, 51865] -- 155.6M logits, one vocab distribution per mel frame --
+        // so a single output tensor is 1.24 GB at double precision, and the tape holds several. This
+        // class alone accounted for the W-Z lane's 16 GB host crash.
+        "WhisperModel",
+        // TTVSR timed out at 120s/180s. Float first per the mitigation order, before any shrinking,
+        // so the fixture keeps as much of the real trajectory-aware architecture as it can.
+        "TTVSR",
         // ConvTasNet (Luo & Mesgarani 2019) separates at waveform resolution, so its
         // MoreData probe exhausted the 120 s gate outright. Start at the bottom of the
         // ladder: FP32 also enrols it in the audio family's smoke-iteration caps, which is
@@ -2032,20 +1989,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         //
         // Cap repetition only; the published topology and the real training path are untouched.
         "METER",
-        // Timeout ladder, rung 2. SECBERT had rung 1 only (it is in Fp32TestClassNames). Serializing
-        // it onto dedicated cores fixed most of its shard failures, but two probes still overran
-        // their gates with the whole machine to themselves — Training_ShouldReduceLoss (120 s) and
-        // LossStrictlyDecreasesOnMemorizationTask (180 s). Those are the two highest-repetition
-        // invariants in the suite (30 and 100 optimizer steps at the defaults), and the measured
-        // per-step cost of this BERT-scale financial encoder explains both: its SINGLE-pass training
-        // probes, serialized, cost Training_ShouldChangeParameters 34 s, DifferentInputs_AfterTraining
-        // 36 s, ForwardPass_ShouldBeFinite_AfterTraining 43 s and Clone_AfterTraining 44 s. At that
-        // rate 30+ steps cannot fit, and no amount of extra serialization changes it — this is
-        // repetition count, which is exactly what this set trims.
-        // CS0102-safe: its generated scaffold (FinancialNLPTestBase) emits NO iteration or tolerance
-        // overrides of its own — verified by reading the emitted SECBERTTests.g.cs — so this branch
-        // is the only writer of those five members.
-        "SECBERT",
     };
     // Fixtures whose MoreData probe lands INSIDE the optimizer warm-up hump at the
     // 1-vs-2 window, so the invariant measures a transient rather than a training
@@ -2084,6 +2027,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "DeCLIP", "DEVA", "DocGCN", "FlowLens", "LLM2CLIP", "Mamba2LanguageModel",
         "GLALanguageModel", "GatedDeltaNetLanguageModel",
         "ZambaLanguageModel", "Zamba2LanguageModel",
+        // xLSTM (Beck et al. 2024) is a peer of the recurrent language models above and was simply
+        // missing here: with no bound at all its MoreData probe ran the full 50/200-iteration pair
+        // and blew the 120s per-test timeout.
+        "XLSTMLanguageModel",
+        // VinVL carries ~86M parameters over 36x2048 region features and had no bound either, so its
+        // MoreData probe timed out at 120s once training actually ran.
+        "VinVL",
+        // VideoCLIP runs its spatial encoder per frame at 768 hidden channels and had no bound, so
+        // Training_ShouldReduceLoss hit the 120s timeout even at the fixture's small 4x3x32x32 clip.
+        "VideoCLIP",
+        // Upscale4KAgent had no bound either and ran its MoreData probe past 120s and its
+        // memorization probe past 180s.
+        "Upscale4KAgent",
+        // VideoLISA had no bound and ran its training probes out of memory outright.
+        "VideoLISA",
+        // UNITER only started training its encoder once its mean-pool stopped detaching the tape, and
+        // a real backward pass over a BERT-scale stack costs enough that the unbounded probe overran
+        // the 120s gate. Oscar and ViLBERT share that fix but are already capped by their own family
+        // branch, so listing them here would declare the overrides twice.
+        "UNITER",
+        // VRT is a video restoration transformer with no bound at all; its MoreData and
+        // Training probes both overran the 120s gate.
+        "VRT",
+        // VideoGigaGAN's training probes overran the 120s gate with no bound in place.
+        "VideoGigaGAN",
+        // UNINEXT's training probes overran the 120s gate with no bound in place.
+        "UNINEXT",
+        // Zipformer's training probes overran the 120s gate with no bound in place.
+        "Zipformer",
+        // ViTAdapter is listed in HeavyTimeoutTestClassNames, but the Category trait is not reaching
+        // its generated class, so it still runs here and times out. Bound it directly rather than
+        // depending on a tag that is not being applied.
+        "ViTAdapter",
         // RemoteCLIP is a CLIP dual-encoder at the same scaffold scale as its already-listed
         // siblings DeCLIP / LLM2CLIP (VisionLanguageTestBase<float>, InputShape [3, 128, 128])
         // and had no repetition bound, so it inherited the base 50+200-step MoreData probe and
@@ -2639,22 +2615,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                // ADNGEN002 — report BEFORE the family is resolved, because a contradicting
-                // attribute is what corrupts that resolution. Reported whether or not the model
-                // ends up generatable: a model that declares one I/O shape and implements another
-                // is wrong even when it happens to land in a workable family by luck.
-                if (model.DeclaredInputTypeName is not null && model.InterfaceInputTypeName is not null &&
-                    (!string.Equals(model.DeclaredInputTypeName, model.InterfaceInputTypeName, System.StringComparison.Ordinal) ||
-                     (model.DeclaredOutputTypeName is not null && model.InterfaceOutputTypeName is not null &&
-                      !string.Equals(model.DeclaredOutputTypeName, model.InterfaceOutputTypeName, System.StringComparison.Ordinal))))
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        ModelInputContradictsInterfaceDescriptor, Location.None,
-                        model.FullyQualifiedName,
-                        model.DeclaredInputTypeName, model.DeclaredOutputTypeName ?? "?",
-                        model.InterfaceInputTypeName, model.InterfaceOutputTypeName ?? "?"));
-                }
-
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                 {
@@ -2819,15 +2779,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool usesMatrixInput = false;
         bool usesVectorOutput = false;
 
-        // ADNGEN002 evidence. The four flags above are written from TWO independent sources — the
-        // [ModelInput] attribute and the implemented IFullModel<T,TIn,TOut> — and a model whose
-        // attribute disagrees with its own type system therefore looks identical to one where both
-        // agree. These four strings keep the two claims apart so the disagreement can be reported.
-        string? declaredInputTypeName = null;
-        string? declaredOutputTypeName = null;
-        string? interfaceInputTypeName = null;
-        string? interfaceOutputTypeName = null;
-
         foreach (var attr in modelClass.GetAttributes())
         {
             if (attr.AttributeClass is null)
@@ -2871,11 +2822,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 if (inputTypeSym is not null)
                 {
                     var inputName = inputTypeSym.Name;
-                    // Keep the DECLARED shape separately from the flags. The flags below are also
-                    // set from the implemented IFullModel<T,TIn,TOut>, and merging both sources
-                    // into one bool is what made a contradiction between them invisible — see
-                    // ADNGEN002.
-                    declaredInputTypeName = inputName;
                     if (inputName.Contains("Tensor"))
                         usesTensorInput = true;
                     else if (inputName.Contains("Matrix"))
@@ -2883,7 +2829,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 if (outputTypeSym is not null)
                 {
-                    declaredOutputTypeName = outputTypeSym.Name;
                     if (outputTypeSym.Name.Contains("Vector"))
                         usesVectorOutput = true;
                 }
@@ -2939,11 +2884,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 var inputTypeDisplay = iface.TypeArguments[1].ToDisplayString();
                 var outputTypeDisplay = iface.TypeArguments[2].ToDisplayString();
-                // The IMPLEMENTED shape, kept apart from the DECLARED one (see ADNGEN002). Reduced
-                // to the bare type name so it compares against the attribute's typeof(Tensor<>)
-                // form: "AiDotNet.Tensors.LinearAlgebra.Vector<T>" -> "Vector".
-                interfaceInputTypeName = SimpleTypeName(inputTypeDisplay);
-                interfaceOutputTypeName = SimpleTypeName(outputTypeDisplay);
                 if (inputTypeDisplay.Contains("Matrix"))
                     usesMatrixInput = true;
                 else if (inputTypeDisplay.Contains("Tensor"))
@@ -3184,10 +3124,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
-            DeclaredInputTypeName = declaredInputTypeName,
-            DeclaredOutputTypeName = declaredOutputTypeName,
-            InterfaceInputTypeName = interfaceInputTypeName,
-            InterfaceOutputTypeName = interfaceOutputTypeName,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
@@ -3542,37 +3478,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static TestFamily? ResolveTestBaseClass(ModelTestInfo model)
     {
         // === TIER 1: Specialized families (check first — most specific) ===
-        //
-        // A CATEGORY describes a model's MECHANISM; a BASE CLASS describes its test CONTRACT, and
-        // those are not the same claim. AnoGANDetector carries CategoryGAN because it detects
-        // anomalies WITH a GAN, but it derives from AnomalyDetectorBase<T> (ModelBase<T, Matrix<T>,
-        // Vector<T>>) and so has an anomaly detector's Train/Predict shape, not a generator's.
-        // MatchaTTS carries CategoryDiffusion for its flow-matching decoder while deriving from
-        // AudioNeuralNetworkBase<T>.
-        //
-        // Taking the mechanism claim UNCONDITIONALLY is what silently cost these models every test
-        // they had: Tier 1 resolved a family whose fixture requires an interface the model does not
-        // implement, IsCompatibleWithFamily then rejected it, and the model was dropped — no
-        // fixture, no failure, no coverage. The contract-based tiers below would have classified it
-        // correctly, but the chain had already returned.
-        //
-        // So a category shortcut is a PROPOSAL that must satisfy the family's own contract to be
-        // taken. When it does not, fall through to the base-class tiers, which is where the real
-        // I/O contract is expressed. Note this can only ever ADD coverage: any model whose
-        // classification changes here is one that resolves to an incompatible family today and
-        // therefore has no generated test at all.
-        //
-        // The Extends* checks below stay unconditional — a base class IS the contract, so if one of
-        // those is incompatible that is a genuine defect to report, not something to route around.
 
         // Priority 1: GaussianProcess
-        if ((model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess) &&
-            IsCompatibleWithFamily(model, TestFamily.GaussianProcess))
+        if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
             return TestFamily.GaussianProcess;
 
         // Priority 2: TimeSeriesModel
-        if (model.Categories.Contains(CategoryTimeSeriesModel) &&
-            IsCompatibleWithFamily(model, TestFamily.TimeSeries))
+        if (model.Categories.Contains(CategoryTimeSeriesModel))
             return TestFamily.TimeSeries;
 
         // Priority 2a: 3D Diffusion (most specific diffusion subtype)
@@ -3592,18 +3504,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.LatentDiffusion;
 
         // Priority 4: Diffusion (plain, non-latent)
-        if ((model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel) &&
-            IsCompatibleWithFamily(model, TestFamily.Diffusion))
+        if (model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel)
             return TestFamily.Diffusion;
 
         // Priority 5: GAN
-        if (model.Categories.Contains(CategoryGAN) &&
-            IsCompatibleWithFamily(model, TestFamily.GAN))
+        if (model.Categories.Contains(CategoryGAN))
             return TestFamily.GAN;
 
         // Priority 6: EmbeddingModel
-        if (model.Categories.Contains(CategoryEmbeddingModel) &&
-            IsCompatibleWithFamily(model, TestFamily.Embedding))
+        if (model.Categories.Contains(CategoryEmbeddingModel))
             return TestFamily.Embedding;
 
         // Priority 7: GraphNetwork
@@ -3615,8 +3524,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // sequence dimension, which the generic GraphNN [nodes, features] test input
         // can't supply. Let those fall through to the Forecasting family; only pure
         // (non-forecasting) graph networks are classified as GraphNN here.
-        if (model.Categories.Contains(CategoryGraphNetwork) && !model.ExtendsForecastingModelBase &&
-            IsCompatibleWithFamily(model, TestFamily.GraphNN))
+        if (model.Categories.Contains(CategoryGraphNetwork) && !model.ExtendsForecastingModelBase)
             return TestFamily.GraphNN;
 
         // === TIER 2: Mid-level NN hierarchy (base class chain detection) ===
@@ -4278,6 +4186,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "EmbeddingDim = 32, NumLayers = 1, NumHeads = 4, NumDecoderLayers = 1, " +
                     "DecoderEmbeddingDim = 32, NumDecoderHeads = 4, VocabSize = 64, MaxOutputTokens = 16, " +
                     "UseDaViT = false, LearningRate = 1e-5 })";
+            }
+            else if (model.ClassName == "WhisperModel" && model.TypeParameterCount == 1)
+            {
+                // Whisper's layer chain keeps the ENCODER's sequence length all the way to the vocab
+                // projection, so at the paper-scale 30 s default the model emits one 51865-wide logit
+                // row per mel frame: [3001, 51865] = 155.6M values, 622 MB per tensor in float with
+                // several live on the tape. That is what OOM'd the lane. Bind a 2 s clip through the
+                // public ctor -- (16000 * 2) / 160 = 200 frames instead of 3000 -- which exercises the
+                // identical code path at 1/15th the footprint. Every assertion still runs in full;
+                // only the clip length changes, and the library's own 30 s paper default is untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceClassification, " +
+                    "inputSize: 32000, outputSize: 32), " +
+                    "modelSize: AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, " +
+                    "maxAudioLengthSeconds: 2, maxTokens: 16)";
             }
             else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
@@ -5142,6 +5066,162 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "TabPFNNetwork" && model.TypeParameterCount == 1)
+            {
+                // TabPFN's 1e-4 (Hollmann et al., ICLR 2023) drives the loss to a ~1e-4 floor within
+                // 50 iterations; past that it oscillates around the floor rather than settling, so
+                // MoreData_ShouldNotDegrade saw 200 iterations (5.87e-4) come out above 50
+                // (7.72e-5). Both values are already near zero -- this is float noise around a
+                // converged minimum, not divergence -- so bind a gentler rate that stays monotone
+                // over the longer run. Mirrors the parameterless ctor's architecture exactly; the
+                // library default stays at the published 1e-4.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 10, outputSize: 10), " +
+                    "new AiDotNet.Models.Options.TabPFNOptions<double> { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "TimeBridge" && model.TypeParameterCount == 1)
+            {
+                // TimeBridge's optimizer now reads TimeBridgeOptions.LearningRate, whose 1e-3 default
+                // matches Adam's own. At fixture scale that overshoots hard -- the loss rose from
+                // 0.2908 to 7.9099 in one step and two iterations landed at 306.76 against one
+                // iteration's 11.39. Bind a gentler rate through the public option.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 512, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.TimeBridgeOptions<double> { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "TTVSR" && model.TypeParameterCount == 1)
+            {
+                // TTVSROptions carries the paper's 2e-4 (Liu et al., CVPR 2022), tuned for the full
+                // trajectory-aware transformer on real video sequences. Now that the optimizer
+                // actually reads it, that rate overshoots at fixture scale -- the class passed in
+                // isolation but failed LossStrictlyDecreases and MoreData inside the full lane. Bind
+                // a gentler rate through the public option; the library default is unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.TTVSROptions { LearningRate = 1e-4, " +
+                    "NumFeatures = 32, NumTransformerBlocks = 2, NumResBlocks = 4, " +
+                    "NumScales = 2, TrajectoryLength = 3, NumHeads = 4 })";
+            }
+            else if (model.ClassName == "UDVD" && model.TypeParameterCount == 1)
+            {
+                // UDVDOptions defaults to the paper's 1e-4 (Sheth et al., ICCV 2021). That rate is
+                // tuned for the full blind-spot network on real video; at fixture scale it overshoots
+                // -- the loss rose from 0.2480 to 2.6160 on Training_ShouldReduceLoss and 200
+                // iterations came out worse than 50. Bind a gentler rate through the public option;
+                // the library default stays at the published value.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.UDVDOptions { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "XLSR" && model.TypeParameterCount == 1)
+            {
+                // XLS-R's fixture passed no options, so it built the published encoder: 1024-wide,
+                // 24 layers, 16 heads over a 30 s window. Clone_AfterTraining holds the trained model
+                // AND its clone live at once, which doubles that footprint and threw
+                // OutOfMemoryException. Keep the fixture's architecture exactly as the default path
+                // emits it and bound only the public options.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.XLSROptions { MaxAudioLengthSeconds = 2, " +
+                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, VocabSize = 64, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName == "XLMRoBERTaNER" || model.ClassName == "TemplateNER")
+                     && model.TypeParameterCount == 1)
+            {
+                // TransformerNEROptions defaults to 5e-5, the standard fine-tuning rate for a
+                // PRE-TRAINED checkpoint (Conneau et al., ACL 2020 for XLM-R). The generated fixtures
+                // build randomly-initialised weights instead, where that rate overshoots: both models
+                // reported the SAME two-iteration loss ABOVE their one-iteration loss (3.4570 vs
+                // 2.8475) on MoreData_ShouldNotDegrade, which is the shared TransformerNERBase
+                // training path rather than anything model-specific. Bind a gentler rate through the
+                // public option; the library default stays at the published fine-tuning value.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 768, outputSize: 4), " +
+                    "new AiDotNet.NER.Options.TransformerNEROptions { LearningRate = 5e-6 })";
+            }
+            else if (model.ClassName == "XLSTMLanguageModel" && model.TypeParameterCount == 1)
+            {
+                // The fixture took the constructor defaults, which are paper scale: a 50277-token
+                // vocabulary (the Pile vocabulary from Beck et al., 2024) behind a 256-wide 4-layer
+                // stack over a 512-token context. That output projection is why the memorization
+                // loss sits at 272127 rather than a language-model-scale value, why 15 steps moved it
+                // only 0.75%, and why the class costs 55 s. Bound the vocabulary and context through
+                // the public constructor parameters; production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    "vocabSize: 64, modelDimension: 32, numLayers: 1, numHeads: 4, maxSeqLength: 128, " +
+                    "options: new AiDotNet.NeuralNetworks.Options.XLSTMOptions { LearningRate = 3e-4 })";
+            }
+            else if (model.ClassName == "XTTSv2Clone" && model.TypeParameterCount == 1)
+            {
+                // XTTSv2Clone's fixture passed no options, so it built the production stack: a
+                // 1024-wide 12-layer codec LM over 8x1024 codebooks with MaxCodecFrames = 3000.
+                // MoreData_ShouldNotDegrade runs two full training passes over that graph and threw
+                // OutOfMemoryException. Keep the fixture's architecture exactly as the default path
+                // emits it and bound only the public options, preserving the same
+                // text-encoder -> codec-LM -> speaker-conditioning topology at smoke scale.
+                // Dropout stays disabled so the voice-cloning determinism assertions stay meaningful.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions { NumCodebooks = 1, " +
+                    "CodebookSize = 16, LLMDim = 32, NumLLMLayers = 1, TextEncoderDim = 32, " +
+                    "SpeakerEmbeddingDim = 32, MaxCodecFrames = 8, NumEncoderLayers = 1, " +
+                    "NumHeads = 4, DropoutRate = 0.0, LearningRate = 1e-3 })";
+            }
+            else if (model.ClassName == "WaveGrad" && model.TypeParameterCount == 1)
+            {
+                // WaveGrad's paper learning rate (2e-4, Chen et al. 2021 S3.2) is tuned for the full
+                // U-Net trained on large batches of full-length audio. On Adam's first step every
+                // parameter moves by exactly +/- lr, and at this fixture's smoke scale that single
+                // step tripled the memorization loss (0.7074 -> 2.2224). Bind a proportionally
+                // smaller rate through the public option; the library default stays at the paper's
+                // 2e-4 and every assertion still runs unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.WaveGradOptions { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "YuE" && model.TypeParameterCount == 1)
+            {
+                // YuE's generated fixture passed NO options, so it built at full paper scale: a
+                // 2048-wide 24-layer semantic stack over a 32000-token lyrics vocabulary, plus a
+                // 1024-wide 12-layer acoustic stack, with MaxDurationSeconds = 300 at 44.1 kHz --
+                // 13.2M samples of context. Individual invariants took 35-80 s and the class threw
+                // both OutOfMemoryException and the 120 s per-test timeout, making it the single
+                // slowest class in the X-Z lane. Keep the fixture's architecture EXACTLY as the
+                // default path emits it and bound only the public options, so the same
+                // semantic -> acoustic -> codec topology is exercised at smoke scale. Production
+                // defaults and inference behaviour are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Generation.YuEOptions { SampleRate = 16000, " +
+                    "MaxDurationSeconds = 0.05, SemanticDim = 32, NumSemanticLayers = 1, " +
+                    "NumSemanticHeads = 4, AcousticDim = 32, NumAcousticLayers = 1, " +
+                    "NumAcousticHeads = 4, LyricsVocabSize = 64, SemanticVocabSize = 64, " +
+                    "AcousticCodebookSize = 32, NumAcousticQuantizers = 2, NumStyleTags = 8, " +
+                    "StyleEmbeddingDim = 32, DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS"
                       || model.ClassName == "SPEARTTS")
@@ -8827,7 +8907,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ContextLength = 64, ForecastHorizon = 16, " +
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, " +
                     "CodebookSize = 64, CodebookDimension = 16, NumCodebooks = 1, " +
-                    "DropoutRate = 0.0 })";
+                    "DropoutRate = 0.0, LearningRate = 1e-3 })";
+            }
+            else if (model.ClassName == "Tacotron2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Classic.", System.StringComparison.Ordinal))
+            {
+                // The model's own default is the paper's 10^-3 (Shen et al. 2018), stated for
+                // full-scale training at batch 64. At this fixture's single-sample smoke scale that
+                // step diverges, so bind a smaller one -- through OPTIONS, not the optimizer
+                // parameter. CreateNewInstance forwards _options but NOT the injected optimizer, so
+                // an injected rate applied to the original and silently reverted to 10^-3 in every
+                // clone: MoreData_ShouldNotDegrade's two-iteration clone loss sat at 23.1915 while
+                // the one-iteration original managed 5.1901. Going through options makes the rate
+                // survive cloning. The library default stays at the published value.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 640), " +
+                    "new AiDotNet.TextToSpeech.Classic.Tacotron2Options { LearningRate = 1e-6 })";
             }
             else if (model.ClassName == "Tacotron2Model" && model.TypeParameterCount == 1)
             {
@@ -8917,10 +9014,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // generator/critic pair, both ConvolutionalNeuralNetwork, so the architecture must be
                 // 2-D or 3-D. outputSize is the full 8x8 image the generator has to project, which the
                 // model then presents to the critic in image layout.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                // Generator and critic need DIFFERENT output widths. The single-architecture
+                // constructor hands the same one to both, so the critic was emitting 64 values like
+                // the generator instead of a single score — and with its softmax head every input
+                // scored a uniform 1/64. meanReal and meanFake came out identical to the digit
+                // (1.5625e-2), so E[D(fake)] - E[D(real)] was exactly 0, the gradients were genuinely
+                // zero and neither network could move. A WGAN critic emits ONE score per sample.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "generatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 64))";
+                    "inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 64), " +
+                    "criticArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 1), " +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional)";
             }
             else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1)
             {
@@ -8929,9 +9038,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // alone is ~38M entries — about 300 MB in double before any activation — which is what
                 // OOM-killed Metadata_ShouldExist. numFrames=4 and a 32x32 clip match the InputShape
                 // the video family emits, and a 512-token vocabulary keeps the same text pathway while
-                // cutting that table by two orders of magnitude. hiddenDim is a constructor parameter
-                // now as well (paper default 768), but the layer factory does not build a usable stack
-                // at smaller widths — "Index 1 is out of range" — so the fixture leaves it at 768.
+                // cutting that table by two orders of magnitude. The transformer DEPTHS are constructor
+                // parameters now too (paper defaults 12/4/12, BERT-base scale), but the fixture keeps
+                // every one of them at the paper value: the model's layer-index bookkeeping assumes
+                // those depths, so a shallower stack stops gradients reaching the encoder and breaks
+                // cloning. Reducing the model's scale needs that bookkeeping fixed first.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
@@ -10919,45 +11030,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // measure 57 s, 57 s and 58 s against 120/120/180 s gates - real work at only ~2.1x, which
         // will not survive sixteen-wide execution. It stays in the PR gate (no HeavyTimeout) because
         // it passes comfortably given dedicated cores.
-        //
-        // NOTE on PartitionMCMCAlgorithm: it is a CAUSAL-DISCOVERY algorithm, and those are emitted by
-        // EmitAlgorithmTestClass, not by this method — so listing it HERE never had any effect. The
-        // entry is kept for the record but the working one now lives in EmitAlgorithmTestClass, which
-        // grew the same serialize-without-relegating branch (see CausalContentionSerialClassNames).
-        //
-        // OptimizerStep_ParamL2_DoesNotExplode additions (VALLE2 / YingLong / SambaLanguageModel /
-        // MGLDVSR). That invariant performs exactly ONE Train call plus two whole-parameter L2 sweeps,
-        // so the float / iteration-cap rungs of the ladder cannot reach it — there is no iteration
-        // count to trim, and VALLE2, SambaLanguageModel and MGLDVSR had ALREADY been through rungs 1-2
-        // (all four are <float>; VALLE2 also carries TrainingIterations => 2 and MoreData 1/2, and
-        // MGLDVSR is additionally on the nightly HeavyTimeout lane). Measured ALONE on the CI-matched
-        // Release build, each against its 120 s gate:
-        //   VALLE2              11 s     SambaLanguageModel   7 s
-        //   MGLDVSR             10 s     YingLong             8 s
-        // Eleven to seventeen times of headroom, which is the innocent-bystander profile above and
-        // NOT a slow test: shrinking these fixtures would cost paper fidelity to fix a queueing
-        // problem. Serialize them instead so the one training step gets the machine.
-        //
-        // METER / RealESRGANVideo / SECBERT / VoiceCraft join for the same measured reason. All four
-        // are already deep in the ladder — every one is <float>, METER and RealESRGANVideo also carry
-        // the HeavyTrainingTimeout iteration caps, and METER is on the nightly HeavyTimeout lane — yet
-        // they still failed. A 16-class run of this whole group at full xUnit width produced 41
-        // failures and EVERY ONE reported "[1 ms]", i.e. all 41 were xUnit timeout aborts and not one
-        // was a real assertion failure. The tests that fell over include VoiceCraft's
-        // OutputDimension_ShouldMatchExpectedShape and FiniteSpectralEnergy — single-forward shape
-        // checks that cannot plausibly need 120 s of CPU and had passed seconds earlier when run
-        // alone. That is starvation, not compute.
-        //
-        // The same run also contained the control that settles which lever is the right one:
-        // CycleGANTurboModel was in the batch, is foundation-scale, and finished with ZERO failures —
-        // it is the one member already in FoundationScaleSerial. METER and MGLDVSR were also in the
-        // batch, are also tagged HeavyTimeout, and still failed 3 and 4 tests. So the HeavyTimeout
-        // trait does NOT protect a class from contention (it only chooses a lane, and the nightly lane
-        // is just as wide); DisableParallelization does. Adding more rungs of float/cap/shrink here
-        // would have degraded paper fidelity without touching the cause.
-        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former"
-            or "VALLE2" or "YingLong" or "SambaLanguageModel" or "MGLDVSR"
-            or "METER" or "RealESRGANVideo" or "SECBERT" or "VoiceCraft")
+        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former")
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
         if (IsHeavyTimeoutGeneratedModel(model.ClassName))
         {
@@ -14186,6 +14259,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
 
+        if (model.ClassName == "VideoLISA")
+        {
+            // VideoLISA's encoder (CreateVideoLISAEncoderLayers) begins with normalization layers, so a
+            // spatially CONSTANT probe carries no information that survives them: 0.1-everywhere and
+            // 0.9-everywhere normalize to the same tensor and the model necessarily returns the same
+            // mask. That is the normalization behaving correctly, not a collapsed network, but it
+            // fails DifferentInputs_ShouldProduceDifferentOutputs as written. Give each value its own
+            // spatial PATTERN rather than a flat fill — the same approach the audio base already uses
+            // for scale-normalizing front ends — so the two probes stay distinguishable after
+            // normalization and the invariant still catches a genuinely dead network.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+            sb.AppendLine("        if (value == 0.0) return tensor;");
+            sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
+            sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}System.Math.Sin((i + 1) * (value + 0.5) * 2.0);");
+            sb.AppendLine("        return tensor;");
+            sb.AppendLine("    }");
+        }
+
         if (model.ClassName == "FloRNN")
         {
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
@@ -16221,32 +16315,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return backtick >= 0 ? name.Substring(0, backtick) : name;
     }
 
-    /// <summary>
-    /// Reduces a fully-qualified generic display string to its bare type name so an IMPLEMENTED
-    /// type argument can be compared against a DECLARED <c>typeof(X&lt;&gt;)</c> attribute argument.
-    /// </summary>
-    /// <remarks>
-    /// The two sources spell the same type differently — the interface walk yields
-    /// <c>AiDotNet.Tensors.LinearAlgebra.Vector&lt;T&gt;</c> while
-    /// <c>attr.ConstructorArguments[0].Value.Name</c> yields <c>Vector</c> — so they must be
-    /// normalised before ADNGEN002 can decide whether they actually disagree. Comparing the raw
-    /// forms would report every model as contradictory.
-    /// </remarks>
-    private static string SimpleTypeName(string displayString)
-    {
-        var name = displayString;
-
-        var angle = name.IndexOf('<');
-        if (angle >= 0)
-            name = name.Substring(0, angle);
-
-        var dot = name.LastIndexOf('.');
-        if (dot >= 0)
-            name = name.Substring(dot + 1);
-
-        return StripBacktick(name);
-    }
-
     private static string EscapeString(string value)
     {
         return value
@@ -16295,25 +16363,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>Whether the IFullModel output type is Vector (not Matrix or Tensor).</summary>
         public bool UsesVectorOutput { get; set; }
-
-        /// <summary>Input type named by the model's <c>[ModelInput]</c> attribute, if it has one.</summary>
-        /// <remarks>
-        /// Kept separate from <see cref="InterfaceInputTypeName"/> so ADNGEN002 can tell a DECLARED
-        /// shape from an IMPLEMENTED one. The <c>UsesTensorInput</c>/<c>UsesMatrixInput</c> flags
-        /// are written from both sources, so once they are set the two claims are indistinguishable
-        /// — which is why a model could declare Tensor→Tensor while implementing
-        /// <c>IFullModel&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt;</c> and nothing noticed.
-        /// </remarks>
-        public string? DeclaredInputTypeName { get; set; }
-
-        /// <summary>Output type named by the model's <c>[ModelInput]</c> attribute, if it has one.</summary>
-        public string? DeclaredOutputTypeName { get; set; }
-
-        /// <summary>Input type argument of the <c>IFullModel&lt;T,TIn,TOut&gt;</c> the model actually implements.</summary>
-        public string? InterfaceInputTypeName { get; set; }
-
-        /// <summary>Output type argument of the <c>IFullModel&lt;T,TIn,TOut&gt;</c> the model actually implements.</summary>
-        public string? InterfaceOutputTypeName { get; set; }
 
         /// <summary>Whether the model has an accessible parameterless constructor.</summary>
         public bool HasParameterlessConstructor { get; set; }
@@ -16725,6 +16774,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // constants, which the embedding rounded to the same handful of indices and which no
             // amount of training could separate.
             "MegaTTS" => true,
+            // Tacotron2 (TextToSpeech.Classic) is built on CreateDefaultAcousticModelLayers, whose
+            // first layer is an EmbeddingLayer over a 256-token vocabulary, so it consumes token IDs
+            // and predicts mel frames. It was being fed a continuous [8, 80] mel block straight into
+            // that embedding. ForwardTacotron, from the same family, is already routed here.
+            "Tacotron2" => true,
             // Proprietary-API TTS wrappers (text input, API does synthesis).
             "WellSaidLabs" => true,
             "ElevenLabsTTS" => true,
@@ -17652,27 +17706,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        // Core-contention casualties among the causal-discovery algorithms — the same
-        // serialize-without-relegating treatment EmitGeneratedTestClass applies to ISTFTNet /
-        // VFIMamba, and the path PartitionMCMCAlgorithm was always MEANT to take. (Its entry in
-        // that other method is dead code: causal algorithms are emitted here, never there, so the
-        // documented PartitionMCMCAlgorithm fix has never actually been applied to a build.)
-        //
-        // DiscoverStructure_MoreDataDoesNotDegradeQuality calls DiscoverStructure twice, at 100 and
-        // 400 samples, against a 60 s gate. Measured ALONE on the CI-matched Release build:
-        //   CGNNAlgorithm   4 s     GraNDAGAlgorithm   6 s
-        //   DAGMANonlinear  1 s     OrderMCMCAlgorithm 5 s
-        // Ten to sixty times of headroom — these are not slow, they are starved while queued, the
-        // exact profile (13 s / 60 s, 14 s / 60 s) recorded for PartitionMCMCAlgorithm. Capping
-        // their epoch/sample counts further would change the structure they recover and put the
-        // recovery invariants at risk to fix a scheduling problem, so serialize instead.
-        //
-        // DAGMANonlinear is included even though it measures 1 s: it already sits at rung 3 (an
-        // FP32 boundary adapter plus MaxIterations = 250 / HiddenUnits = 4), so there is no cheaper
-        // rung left for it, and it shares the failure with its three siblings here.
-        if (category == AlgorithmCategory.CausalDiscovery && CausalContentionSerialClassNames.Contains(testClassName))
-            sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
-
         // DECI has exhausted the generated-shard mitigation ladder: its fixture is FP32,
         // capped through public options, and narrowed to 16 hidden units. It passes all
         // invariants alone, but still holds a shard worker beyond the 60-second gate and

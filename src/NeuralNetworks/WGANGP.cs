@@ -55,12 +55,6 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Improved Training of Wasserstein GANs", "https://arxiv.org/abs/1704.00028", Year = 2017, Authors = "Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, Aaron Courville")]
 public class WGANGP<T> : NeuralNetworkBase<T>
 {
-
-    // ParameterCount was Generator.GetParameterCount() + Critic.GetParameterCount(), which the
-    // base already computes: this model puts BOTH sub-networks' layers in its own Layers, so the
-    // base walk covers them (measured 5,637, matching the override and the vector). Removing it
-    // also drops a dependence on GetParameterCount(), which several types in this hierarchy SHADOW
-    // with `public new`, so its result depends on the static type of the reference.
     private readonly WGANGPOptions _options;
 
     /// <inheritdoc/>
@@ -113,6 +107,11 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     /// Gets the critic network that evaluates data quality.
     /// </summary>
     public NeuralNetworkBase<T> Critic { get; private set; }
+
+    /// <summary>
+    /// Gets the total number of trainable parameters in the WGAN-GP.
+    /// </summary>
+    public override long ParameterCount => Generator.GetParameterCount() + Critic.GetParameterCount();
 
     private readonly ILossFunction<T> _lossFunction;
 

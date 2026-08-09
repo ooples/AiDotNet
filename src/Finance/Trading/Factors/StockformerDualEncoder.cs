@@ -178,6 +178,11 @@ public sealed class StockformerDualEncoder<T>
 
         if (low.Shape.Length != 3)
             throw new ArgumentException($"Expected [assets, time, features]; got rank {low.Shape.Length}.", nameof(low));
+        // high's rank is checked BEFORE its dimensions are read. The loop below indexes
+        // high.Shape[d] up to d = 2, so a rank-1 or rank-2 high threw IndexOutOfRangeException from
+        // the shape access -- a message that tells the caller nothing -- instead of this one.
+        if (high.Shape.Length != 3)
+            throw new ArgumentException($"Expected [assets, time, features]; got rank {high.Shape.Length}.", nameof(high));
         for (int d = 0; d < 3; d++)
         {
             if (high.Shape[d] != low.Shape[d])
@@ -254,9 +259,21 @@ public sealed class StockformerDualEncoder<T>
         return Engine.TensorAdd(x, bias);
     }
 
-    /// <summary>Causal local mean over the last <c>kernelWidth</c> steps, as a matmul so it stays on the tape.</summary>
-    private Tensor<T> CausalWindow(Tensor<T> x, int assets, int time)
+    /// <summary>
+    /// The causal local-mean operator for <paramref name="time"/> steps, built once per time length.
+    /// </summary>
+    /// <remarks>
+    /// The operator depends only on the position count and the kernel width, both fixed for an
+    /// encoder instance, but it was allocated and filled again for every asset, every layer and every
+    /// training step. Instance-scoped rather than static because _kernelWidth is per-encoder; the
+    /// tensor is never mutated after construction, so one instance serves every call at that length.
+    /// </remarks>
+    private readonly Dictionary<int, Tensor<T>> _causalWindowOperators = new();
+
+    private Tensor<T> CausalWindowOperator(int time)
     {
+        if (_causalWindowOperators.TryGetValue(time, out var cached)) return cached;
+
         var op = new Tensor<T>(new[] { time, time });
         for (int t = 0; t < time; t++)
         {
@@ -264,6 +281,16 @@ public sealed class StockformerDualEncoder<T>
             var weight = Ops.FromDouble(1.0 / (t - first + 1));
             for (int u = first; u <= t; u++) op[(t * time) + u] = weight;
         }
+
+        _causalWindowOperators[time] = op;
+        return op;
+    }
+
+    /// <summary>Causal local mean over the last <c>kernelWidth</c> steps, as a matmul so it stays on the tape.</summary>
+    private Tensor<T> CausalWindow(Tensor<T> x, int assets, int time)
+    {
+        var op = CausalWindowOperator(time);
+
 
         var timeFirst = Engine.Reshape(
             Engine.TensorPermute(x, new[] { 1, 0, 2 }), new[] { time, assets * _features });

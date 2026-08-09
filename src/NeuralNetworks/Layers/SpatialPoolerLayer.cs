@@ -37,46 +37,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "4, 0.02")]
-// THE OUTPUT IS RANK 1 WHATEVER THE INPUT RANK, and that asymmetry is the whole contract. ResolveShapes
-// declares "new[] { inputSize } -> new[] { ColumnCount }", and ForwardTraced honours it literally: it
-// flattens the entire tensor to [input.Length], multiplies by the connection matrix, and returns
-// Engine.Reshape(outputMask, [ColumnCount]). Nothing rebuilds a leading axis on the way out, so a
-// rank-2 input does NOT produce a rank-2 output - hence a single output layout against two input ones.
-//
-// The sparse-distributed-representation width is the only thing this layer fixes; SparsityThreshold
-// decides how many of those ColumnCount entries come back set, not how many exist, so it has no
-// bearing on the shape.
-[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output,
-    Note = "A fixed-width sparse distributed representation; any leading axis is consumed, not carried.")]
-[AutoParameters]
-public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
+public partial class SpatialPoolerLayer<T> : LayerBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// One relation at every accepted rank: <c>Fixed(ColumnCount)</c>, the constructor's column count,
-    /// which is also the width of the connection matrix <c>[inputSize, columnCount]</c> the forward
-    /// pass multiplies through. It is a genuine parameter of the layer rather than an observed size.
-    /// </para>
-    /// <para>
-    /// NO <c>Same(Batch)</c> APPEARS HERE EVEN FOR RANK-2 INPUT, and that is deliberate rather than an
-    /// omission. <c>ForwardTraced</c> reshapes to <c>[input.Length]</c> - the whole tensor, batch axis
-    /// included - so there is no per-sample axis left to carry through. Declaring the batch axis as
-    /// preserved would describe a tensor this layer never returns.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (ColumnCount <= 0 || inputRank < 1 || inputRank > 2) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(ColumnCount)),
-        };
-    }
-
     /// <summary>
     /// The size of the input vector.
     /// </summary>
@@ -226,6 +188,26 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private readonly double BoostFactor = 0.005;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training through backpropagation.
+    /// </summary>
+    /// <value>
+    /// Always returns <c>true</c> as spatial pooler layers have trainable parameters.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property indicates that the spatial pooler layer can be trained. The layer contains trainable parameters
+    /// (connection strengths) that are updated during the training process.
+    /// </para>
+    /// <para><b>For Beginners:</b> This property tells you that the layer can learn from data.
+    /// 
+    /// A value of true means:
+    /// - The layer contains numbers (parameters) that can be adjusted during training
+    /// - It will improve its performance as it sees more examples
+    /// - It participates in the learning process of the neural network
+    /// </para>
+    /// </remarks>
+    public override long ParameterCount => Connections.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -673,6 +655,84 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
         }
 
         NormalizeConnections();
+    }
+
+    /// <summary>
+    /// Gets all trainable parameters of the layer as a single vector.
+    /// </summary>
+    /// <returns>A vector containing all trainable parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method retrieves all trainable parameters of the layer (connection strengths) and combines them
+    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
+    /// or for saving and loading model weights.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
+    /// 
+    /// The parameters:
+    /// - Are the connection strengths between input elements and columns
+    /// - Are converted from a matrix to a single long list (vector)
+    /// - Can be used to save the state of the layer or apply optimization techniques
+    /// 
+    /// This method is useful for:
+    /// - Saving the model to disk
+    /// - Loading parameters from a previously trained model
+    /// - Advanced optimization techniques that need access to all parameters
+    /// </para>
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        // Use Tensor.ToArray() to efficiently convert to vector
+        var flatConnections = new Vector<T>(Connections.ToArray());
+        return flatConnections;
+    }
+
+    /// <summary>
+    /// Sets the trainable parameters of the layer from a single vector.
+    /// </summary>
+    /// <param name="parameters">A vector containing all parameters to set.</param>
+    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method sets the trainable parameters of the layer (connection strengths) from a single vector.
+    /// It expects the vector to contain the parameters in the same order as they are retrieved by GetParameters().
+    /// This is useful for loading saved model weights or for implementing optimization algorithms that operate
+    /// on all parameters at once.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method updates all the connections in the layer from a single list.
+    /// 
+    /// When setting parameters:
+    /// - The input must be a vector with exactly the right number of values
+    /// - The values are distributed back into the connection matrix
+    /// - The order must match how they were stored in GetParameters()
+    /// 
+    /// This method is useful for:
+    /// - Loading a previously saved model
+    /// - Transferring parameters from another model
+    /// - Testing different parameter values
+    /// 
+    /// An error is thrown if the input vector doesn't have the expected number of parameters.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Lazy ctor: InputSize stays at -1 until first Forward resolves it
+        // from the input tensor. If still unresolved at Deserialize time,
+        // infer InputSize from the param vector (parameters.Length must
+        // be a positive multiple of ColumnCount).
+        if (InputSize <= 0 && ColumnCount > 0 && parameters.Length > 0
+            && parameters.Length % ColumnCount == 0)
+        {
+            InputSize = parameters.Length / ColumnCount;
+        }
+
+        if (InputSize <= 0 || parameters.Length != InputSize * ColumnCount)
+        {
+            throw new ArgumentException($"Expected {InputSize * ColumnCount} parameters, but got {parameters.Length}");
+        }
+
+        // Restore connections without hot-path conversions
+        Connections = new Tensor<T>([InputSize, ColumnCount], parameters);
     }
 
     /// <summary>

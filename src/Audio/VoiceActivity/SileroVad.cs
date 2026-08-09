@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -74,19 +74,6 @@ namespace AiDotNet.Audio.VoiceActivity;
     [ResearchPaper("Silero VAD: Pre-Trained Enterprise-Grade Voice Activity Detector", "https://github.com/snakers4/silero-vad")]
 public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured from the output construction, which is a CUSTOM forward (conv frontend, axis permute,
-    /// LSTM, last-timestep slice, dense) rather than a fold over the flat <c>Layers</c> list.
-    /// <c>PredictCore</c> ends at <c>_outputLayer.Forward(lastTimestep)</c> and
-    /// <c>PostprocessOutput</c> is the identity. <c>ExtractLayerReferences</c> binds
-    /// <c>_outputLayer = Layers[3 + _numLstmLayers]</c>, which
-    /// <c>LayerHelper.CreateSileroVadLayers</c> emits as <c>new DenseLayer&lt;T&gt;(1, sigmoid)</c> -
-    /// one speech probability. Width 1, not <c>_lstmHiddenDim</c>: the last-timestep slice removes the
-    /// time axis and the dense head then reduces the feature axis to a single score.
-    /// </remarks>
-    protected override int OutputFeatureWidth => 1;
-
     private readonly SileroVadOptions _options;
 
     /// <inheritdoc/>
@@ -691,33 +678,6 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         return Forward(PreprocessAudio(input));
     }
 
-    /// <summary>
-    /// Extracts the last timestep from a sequence tensor.
-    /// </summary>
-    private Tensor<T> ExtractLastTimestep(Tensor<T> sequenceOutput)
-    {
-        var shape = sequenceOutput._shape;
-        if (shape.Length < 2) return sequenceOutput;
-
-        // Assuming shape [batch, seq, hidden] or [batch, hidden]
-        var data = sequenceOutput.ToVector().ToArray();
-        int lastDim = shape[^1];
-        int resultSize = shape[0] * lastDim;
-
-        // Extract last timestep values
-        // Write DIRECTLY into the tensor's storage. Tensor<T>.ToVector() materializes a COPY, not a
-        // view, so the previous `result.ToVector()[i] = ...` filled a throwaway vector and returned
-        // the freshly-allocated (all-zero) tensor — the extracted last timestep was always zeros.
-        var result = new Tensor<T>([shape[0], lastDim]);
-        var resultSpan = result.Data.Span;
-        int offset = data.Length - resultSize;
-        for (int i = 0; i < resultSize && offset + i < data.Length; i++)
-        {
-            resultSpan[i] = data[offset + i];
-        }
-
-        return result;
-    }
 
     /// <inheritdoc/>
     /// <remarks>

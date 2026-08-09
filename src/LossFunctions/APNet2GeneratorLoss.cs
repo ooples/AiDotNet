@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.LossFunctions;
@@ -59,6 +59,10 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     private Tensor<T>? _dftCos;
     private Tensor<T>? _dftSin;
     private Tensor<T>? _melTransposed;
+
+    /// <summary>Guards the paired publication of <see cref="_dftCos"/> and <see cref="_dftSin"/>.</summary>
+    private readonly object _dftBasisLock = new();
+
     private int _melTransposedBins = -1;
 
     /// <summary>Creates the generator objective.</summary>
@@ -126,6 +130,15 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
                 $"frequency bins; got {bins} and {BlockWidth(target, nameof(target))}.",
                 nameof(target));
         }
+
+        // A FLAT VECTOR IS ONE FRAME. Every term below is written against a [frames, bins] layout:
+        // the mel projection and the STFT reconstruction both right-multiply a constant matrix, which
+        // is a 2-D contraction and not a vector projection. CalculateLoss builds its tensors with
+        // Tensor<T>.FromVector, so it arrives here at rank 1 and BlockWidth accepts that -- the shape
+        // only fails later, inside a matmul, with a message about the wrong thing. Promote once, here,
+        // and the vector entry point computes the same objective as the tensor one.
+        if (predicted.Rank == 1) predicted = Engine.Reshape(predicted, new[] { 1, predicted.Shape[0] });
+        if (target.Rank == 1) target = Engine.Reshape(target, new[] { 1, target.Shape[0] });
 
         int last = predicted.Rank - 1;
 
@@ -322,9 +335,20 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>Builds the real and imaginary DFT bases once, shaped <c>[nFft, bins]</c>.</summary>
+    /// <remarks>
+    /// BOTH BASES ARE PUBLISHED TOGETHER, under a lock. The test read only <c>_dftCos</c> and the
+    /// assignments ran in order, so a second thread calling ComputeTapeLoss on the same instance
+    /// could observe <c>_dftCos</c> non-null with a matching bin count while <c>_dftSin</c> was
+    /// still null, and then dereference it. This is the only field pair here that can tear --
+    /// <c>_window</c> and <c>_melTransposed</c> share the unsynchronized-lazy pattern but each is a
+    /// single field, so a reader sees either the old value or the new one.
+    /// </remarks>
     private void EnsureDftBasis(int bins)
     {
-        if (_dftCos is not null && _dftCos.Shape[1] == bins) return;
+        lock (_dftBasisLock)
+        {
+            if (_dftCos is not null && _dftCos.Shape[1] == bins) return;
+        }
 
         var cos = new Tensor<T>(new[] { _fftSize, bins });
         var sin = new Tensor<T>(new[] { _fftSize, bins });
@@ -338,8 +362,13 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
             }
         }
 
-        _dftCos = cos;
-        _dftSin = sin;
+        lock (_dftBasisLock)
+        {
+            // Another thread may have finished the same size while this one was building. Either
+            // pair is equally valid; publishing both together is what matters.
+            _dftCos = cos;
+            _dftSin = sin;
+        }
     }
 
     /// <summary>
@@ -467,8 +496,10 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     /// the autodiff graph, so using it here would silently sever the gradient. This is the standard
     /// range-reduced minimax evaluation instead: fold the argument into <c>[0, 1]</c> using
     /// <c>atan(x) = pi/2 - atan(1/x)</c> for <c>|x| &gt; 1</c>, apply a degree-9 odd polynomial, and
-    /// restore the sign. Maximum error is about 1e-7, the same approach a libm implementation uses,
-    /// and every step is an <c>IEngine</c> op so the tape records the whole thing.
+    /// restore the sign. This is the classic Hastings degree-9 polynomial, whose maximum absolute
+    /// error on the reduced range is about 1.15e-5 -- NOT the 1e-7 previously claimed here. Raise the
+    /// degree if a run needs tighter phase precision than that. Every step is an <c>IEngine</c> op,
+    /// so the tape records the whole thing.
     /// </para>
     /// </remarks>
     private Tensor<T> Atan(Tensor<T> x)

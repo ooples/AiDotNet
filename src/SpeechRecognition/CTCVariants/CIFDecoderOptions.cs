@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.CTCVariants;
@@ -28,6 +28,7 @@ public class CIFDecoderOptions : ModelOptions
         NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
+        LearningRate = other.LearningRate;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
@@ -44,6 +45,16 @@ public class CIFDecoderOptions : ModelOptions
     public int MaxTextLength { get; set; } = 512;
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>
+    /// Gets or sets the AdamW learning rate used when no optimizer is injected. Default 2e-4.
+    /// </summary>
+    /// <remarks>
+    /// This value was a literal <c>0.0002</c> inside the model's constructor, so it was not configurable
+    /// at all: a caller who wanted a different rate had to build and inject an entire optimizer. The
+    /// default is unchanged -- only its reachability is.
+    /// </remarks>
+    public double LearningRate { get; set; } = 2e-4;
+
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
 }
