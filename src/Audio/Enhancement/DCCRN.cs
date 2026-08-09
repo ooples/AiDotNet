@@ -521,10 +521,6 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // SI-SNR or MSE loss on STFT
         var loss = _lossFunction.CalculateLoss(enhancedVector, cleanVector);
 
-        // Backward pass
-        var gradientVector = _lossFunction.CalculateDerivative(enhancedVector, cleanVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, enhancedStft._shape);
-
         // Update parameters via optimizer
         _optimizer?.UpdateParameters(Layers);
 

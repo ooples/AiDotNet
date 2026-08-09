@@ -1556,9 +1556,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         var targetEmbedding = TensorToVector(expectedOutput);
         LastLoss = LossFunction.CalculateLoss(predictedEmbedding, targetEmbedding);
 
-        // Compute gradient of loss w.r.t. output
-        var lossGradient = LossFunction.CalculateDerivative(predictedEmbedding, targetEmbedding);
-
         // Get parameter gradients and apply gradient descent update
         var paramGradients = GetGpt4VParameterGradients();
         UpdateParameters(paramGradients);

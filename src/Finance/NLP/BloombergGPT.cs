@@ -214,7 +214,6 @@ public class BloombergGPT<T> : FinancialNLPModelBase<T>
     protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
     {
         SetTrainingMode(true);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
