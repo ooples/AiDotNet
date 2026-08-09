@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+
+namespace AiDotNet.Models;
+
+/// <summary>
+/// Describes how to reproduce one type: which members are configuration, and how each is carried.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A plan is produced at compile time by the clone plan generator and stored in
+/// <see cref="CloneRegistry"/>. Nothing here is decided at clone time, so a clone cannot depend on
+/// the state of the object it is copying — which is what makes the result reviewable and testable
+/// rather than emergent.
+/// </para>
+/// <para>
+/// <b>Why a plan rather than generated copy code:</b> a Roslyn generator can only add members to a
+/// <c>partial</c> type, and none of the 594 options classes are partial. Emitting a plan instead
+/// keeps every one of them untouched while still deciding correctness at compile time, and means a
+/// class written by a user works without them declaring anything at all.
+/// </para>
+/// </remarks>
+public sealed class ClonePlan
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ClonePlan"/> class.
+    /// </summary>
+    /// <param name="type">The type this plan reproduces.</param>
+    /// <param name="entries">The configuration members, in a stable order.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
+    public ClonePlan(Type type, IReadOnlyList<ClonePlanEntry> entries)
+    {
+        Type = type ?? throw new ArgumentNullException(nameof(type));
+        Entries = entries ?? throw new ArgumentNullException(nameof(entries));
+    }
+
+    /// <summary>Gets the type this plan reproduces.</summary>
+    public Type Type { get; }
+
+    /// <summary>Gets the configuration members carried by a clone, in a stable order.</summary>
+    /// <remarks>
+    /// Includes members declared on base types. Missing an inherited member is precisely how 71
+    /// copy constructors came to drop <c>ModelOptions.Seed</c>, so the plan is built from the full
+    /// inheritance chain rather than from a single type's declarations.
+    /// </remarks>
+    public IReadOnlyList<ClonePlanEntry> Entries { get; }
+}
+
+/// <summary>
+/// One configuration member and the manner in which a clone carries it.
+/// </summary>
+public sealed class ClonePlanEntry
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ClonePlanEntry"/> class.
+    /// </summary>
+    /// <param name="property">The property to carry.</param>
+    /// <param name="copy">How to carry it.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="property"/> is null.</exception>
+    public ClonePlanEntry(PropertyInfo property, CloneCopyKind copy)
+    {
+        Property = property ?? throw new ArgumentNullException(nameof(property));
+        Copy = copy;
+    }
+
+    /// <summary>Gets the property carried by a clone.</summary>
+    public PropertyInfo Property { get; }
+
+    /// <summary>Gets the manner in which the value is carried.</summary>
+    public CloneCopyKind Copy { get; }
+}
+
+/// <summary>
+/// How a single configuration value is carried to a clone.
+/// </summary>
+public enum CloneCopyKind
+{
+    /// <summary>
+    /// Assign the same value. Correct for numbers, strings, enums, and for immutable or stateless
+    /// objects such as activation functions and kernels, where sharing one instance between the
+    /// original and the clone changes nothing observable.
+    /// </summary>
+    /// <remarks>
+    /// Activation functions, kernels and schedules are supplied by callers as delegates and
+    /// interfaces, and they <i>are</i> configuration: a clone that dropped them would behave
+    /// differently while looking correct. Carrying them by reference is both correct and cheap.
+    /// </remarks>
+    ByReference = 0,
+
+    /// <summary>
+    /// Duplicate the container so the two instances do not write through the same buffer.
+    /// </summary>
+    /// <remarks>
+    /// A bare assignment of a list or an array leaves the clone and the original sharing storage,
+    /// so mutating one silently reconfigures the other. That is invisible to a property-by-property
+    /// equality check and is why the round-trip tests also assert that mutating a clone cannot
+    /// affect its original.
+    /// </remarks>
+    Deep = 1,
+}
