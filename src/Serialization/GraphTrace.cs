@@ -176,7 +176,9 @@ public static class GraphTrace
         if (parts.Length < 2 || !int.TryParse(parts[^1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var outputId))
             throw Bad(layerName, key, "its recorded graph has no output node.");
 
-        var steps = parts[..^1].Where(p => p.Length > 0 && p != ">").ToArray();
+        // Take rather than a range: an array range needs RuntimeHelpers.GetSubArray, which net471
+        // does not have. String ranges below are fine -- those compile to Substring.
+        var steps = parts.Take(parts.Length - 1).Where(p => p.Length > 0 && p != ">").ToArray();
 
         return input =>
         {
