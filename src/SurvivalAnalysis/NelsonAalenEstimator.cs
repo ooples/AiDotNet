@@ -256,20 +256,7 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         return PredictMedianSurvivalTime(input);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (_cumulativeHazard is null)
-            return new Vector<T>(0);
 
-        return Vector<T>.Wrap(_cumulativeHazard.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _cumulativeHazard = new Vector<T>(parameters.ToArray());
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

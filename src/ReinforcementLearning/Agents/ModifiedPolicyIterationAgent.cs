@@ -301,7 +301,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => _valueTable.Count;
 
     public override int FeatureCount => _options.StateSize;
 
@@ -376,38 +375,7 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        // Flatten value table into vector
-        var paramsList = new List<T>();
-        foreach (var value in _valueTable.Values)
-        {
-            paramsList.Add(value);
-        }
 
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Reconstruct value table from vector
-        int index = 0;
-        foreach (var stateKey in _valueTable.Keys.ToList())
-        {
-            if (index < parameters.Length)
-            {
-                _valueTable[stateKey] = parameters[index];
-                index++;
-            }
-        }
-    }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
