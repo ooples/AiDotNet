@@ -88,6 +88,24 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                      "and therefore agree on a wrong answer. InformerModel reported 1,688 parameters " +
                      "against a real 167,640 this way: every Q/K/V/O projection, FFN weight and LayerNorm " +
                      "gain it owned was readonly, so nothing counted, saved or trained them.");
+    private static readonly DiagnosticDescriptor UndeclaredModelWeight = new(
+        id: "AIDN084",
+        title: "Model holds weights it never declares to the parameter walk",
+        messageFormat: "'{0}' holds '{1}' ({2}) outside Layers and declares no parameter components; "
+                     + "it reaches no ParameterCount, no checkpoint and no optimizer",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Declare it: yield it from GetExtraTrainableTensors (NeuralNetworkBase), or register "
+                   + "it in RegisterComponents (the registry-backed roots). [TrainableParameter] will NOT "
+                   + "help -- TrainableParameterGenerator only processes LayerBase subclasses, so on a "
+                   + "model the attribute is silently inert. If the field is not trainable, say so with "
+                   + "[Buffer] or [Scratch]. This is the defect the count-vs-vector contract test cannot "
+                   + "see, because an undeclared weight is missing from the count AND the vector, so the "
+                   + "two agree on a wrong answer: LLaVA counted 512 weights it never handed out, and "
+                   + "Flamingo's Perceiver Resampler latents -- the array the whole architecture is named "
+                   + "for -- were in neither surface and were lost on every save.");
+
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -104,9 +122,21 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             {
                 if (type is null || type.IsAbstract || type.TypeKind != TypeKind.Class) continue;
 
-                // Models whose base already derives the surface from a component registry.
+                // EVERY root whose base derives the parameter surface. This used to name only the two
+                // diffusion roots, so a hand-written surface on a NeuralNetworkBase, ModelBase,
+                // ClassifierBase, RegressionBase, ClusteringBase, RL or TimeSeries model was invisible
+                // to the compiler -- which is how ~330 of them survived. Naming all of them turns the
+                // remaining work into a build-time list instead of something found by sweeping.
                 if (ExtendsAny(type, "AiDotNet.Diffusion.DiffusionModelBase<",
-                                     "AiDotNet.Diffusion.VAE.VAEModelBase<"))
+                                     "AiDotNet.Diffusion.VAE.VAEModelBase<",
+                                     "AiDotNet.NeuralNetworks.NeuralNetworkBase<",
+                                     "AiDotNet.Models.ModelBase<",
+                                     "AiDotNet.Models.ModelWrapperBase<",
+                                     "AiDotNet.Regression.RegressionBase<",
+                                     "AiDotNet.Classification.ClassifierBase<",
+                                     "AiDotNet.Clustering.ClusteringBase<",
+                                     "AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningAgentBase<",
+                                     "AiDotNet.TimeSeries.TimeSeriesModelBase<"))
                 {
                     var modelLoc = type.Locations.FirstOrDefault(l => l.IsInSource);
                     if (modelLoc is not null && seen.Add(type.ToDisplayString()))
@@ -119,12 +149,39 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                 IPropertySymbol p2 when p2.Name == "ParameterCount" => "ParameterCount",
                                 IMethodSymbol m2 when m2.Name == "GetParameters" && m2.Parameters.Length == 0 => "GetParameters",
                                 IMethodSymbol m2 when m2.Name == "SetParameters" && m2.Parameters.Length == 1 => "SetParameters",
+                                IMethodSymbol m3 when m3.Name == "UpdateParameters" && m3.Parameters.Length == 1
+                                                      && m3.Parameters[0].Type.OriginalDefinition.ToDisplayString()
+                                                          .StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal)
+                                    => "UpdateParameters",
                                 _ => null,
                             };
                             if (ms is null) continue;
                             var mloc = member.Locations.FirstOrDefault(l => l.IsInSource);
                             if (mloc is not null)
                                 spc.ReportDiagnostic(Diagnostic.Create(RedundantModelSurface, mloc, type.Name, ms));
+                        }
+
+                        // AIDN084: weights the model owns but never declares. The count-vs-vector
+                        // contract test is blind to these -- an undeclared weight is missing from the
+                        // count AND the vector, so the two agree on a wrong answer. Only reported when
+                        // the model declares NOTHING, so a model that already uses the hook or the
+                        // registry is assumed to know what it owns.
+                        bool declares = type.GetMembers().Any(m =>
+                            m.Name is "GetExtraTrainableTensors" or "GetExtraTrainableLayers"
+                                   or "RegisterComponents" or "GetParameterChunks");
+                        if (!declares)
+                        {
+                            foreach (var f in type.GetMembers().OfType<IFieldSymbol>())
+                            {
+                                if (f.IsStatic || f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) continue;
+                                if (HasAnyAttribute(f, "BufferAttribute", "Buffer", "ScratchAttribute", "Scratch")) continue;
+                                if (!IsWeightCapableType(f.Type)) continue;
+
+                                var fl = f.Locations.FirstOrDefault(l => l.IsInSource);
+                                if (fl is not null)
+                                    spc.ReportDiagnostic(Diagnostic.Create(
+                                        UndeclaredModelWeight, fl, type.Name, f.Name, f.Type.ToDisplayString()));
+                            }
                         }
                     }
                     continue;
@@ -250,6 +307,52 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         return name.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal)
             || name.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
     }
+    /// <summary>
+    /// Numeric containers that can hold weights: <c>Tensor&lt;T&gt;</c>, <c>Matrix&lt;T&gt;</c> and
+    /// <c>Vector&lt;T&gt;</c>, including arrays and the common collections of them.
+    /// </summary>
+    /// <remarks>
+    /// A TYPE test, deliberately, with no inspection of the field's name. An earlier version of
+    /// AIDN084 guessed from names -- matching "weight", "bias", "gamma" and carving out plural
+    /// "betas" because the diffusion noise schedule is spelled that way. That is a taxonomy nobody
+    /// maintains: it misses a weight called <c>_theta</c>, claims a hyperparameter called
+    /// <c>_weightDecay</c>, and silently changes meaning when a field is renamed. A diagnostic that
+    /// is wrong in both directions gets suppressed, and then it protects nothing.
+    /// <para>
+    /// So the analyzer does not decide what a field IS. It asks the author to, once: declare it as a
+    /// parameter, or mark it <c>[Buffer]</c> or <c>[Scratch]</c>. The answer lives in the code,
+    /// survives renames, and the compiler enforces it from then on.
+    /// </para>
+    /// </remarks>
+    private static bool IsWeightCapableType(ITypeSymbol type)
+    {
+        var probe = type;
+        if (probe is IArrayTypeSymbol arr) probe = arr.ElementType;
+
+        // One level of List<...> / IReadOnlyList<...> / Dictionary<_, ...>, which is how the
+        // per-level and per-branch weight collections are held.
+        if (probe is INamedTypeSymbol named && named.IsGenericType && named.TypeArguments.Length > 0)
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal)
+                || open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal)
+                || open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal)
+                || open.StartsWith("System.Collections.Generic.Dictionary<", System.StringComparison.Ordinal))
+            {
+                probe = named.TypeArguments[named.TypeArguments.Length - 1];
+                if (probe is IArrayTypeSymbol inner) probe = inner.ElementType;
+                if (probe is INamedTypeSymbol n2 && n2.IsGenericType
+                    && n2.OriginalDefinition.ToDisplayString()
+                        .StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal))
+                {
+                    probe = n2.TypeArguments[0];
+                }
+            }
+        }
+
+        return IsTensorType(probe) || IsMatrixOrVectorType(probe);
+    }
+
 
     private static bool HasAnyAttribute(ISymbol symbol, params string[] names)
     {
