@@ -29,14 +29,39 @@ public sealed class ClonePlan
     /// <param name="type">The type this plan reproduces.</param>
     /// <param name="entries">The configuration members, in a stable order.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is null.</exception>
-    public ClonePlan(Type type, IReadOnlyList<ClonePlanEntry> entries)
+    public ClonePlan(
+        Type type,
+        IReadOnlyList<ClonePlanEntry> entries,
+        IReadOnlyList<string>? constructorParameters = null)
     {
         Type = type ?? throw new ArgumentNullException(nameof(type));
         Entries = entries ?? throw new ArgumentNullException(nameof(entries));
+        ConstructorParameters = constructorParameters ?? Array.Empty<string>();
     }
 
     /// <summary>Gets the type this plan reproduces.</summary>
     public Type Type { get; }
+
+    /// <summary>
+    /// Gets the configuration property names feeding this type's constructor, in parameter order.
+    /// </summary>
+    /// <value>Empty when the type is reconstructed without arguments, as options classes are.</value>
+    /// <remarks>
+    /// <para>
+    /// Layers and models take arguments, so reconstructing them means calling a real constructor
+    /// rather than allocating and assigning. Recording which carried property feeds each parameter
+    /// is what makes that automatic for the author: they write an ordinary constructor and store
+    /// its arguments in same-named properties, and nothing else.
+    /// </para>
+    /// <para>
+    /// The list is only ever populated when the generator proved that EVERY parameter maps to a
+    /// carried property. That proof is what makes reconstruction correct by construction rather
+    /// than by check: if every input to the constructor is carried, the constructor is a pure
+    /// function of carried configuration, so the rebuilt object is structurally identical. A
+    /// parameter it cannot map is a build error naming that parameter, not a silent omission.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> ConstructorParameters { get; }
 
     /// <summary>Gets the configuration members carried by a clone, in a stable order.</summary>
     /// <remarks>

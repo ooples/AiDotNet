@@ -40,10 +40,11 @@ public static class CloneEngine
         if (source is null) throw new ArgumentNullException(nameof(source));
 
         var type = source.GetType();
-        var clone = Construct(type);
+        var plan = CloneRegistry.GetPlan(type);
+        var clone = Construct(type, plan, source);
         var pending = new List<(ClonePlanEntry Entry, object? Value)>();
 
-        foreach (var entry in CloneRegistry.GetPlan(type).Entries)
+        foreach (var entry in plan.Entries)
         {
             object? value;
             try
@@ -146,8 +147,46 @@ public static class CloneEngine
     /// one private so that callers use a factory, and that is a statement about how the type should
     /// be *used*, not a reason a clone cannot reproduce it.
     /// </remarks>
-    private static object Construct(Type type)
+    private static object Construct(Type type, ClonePlan plan, object source)
     {
+        // A type with recorded constructor parameters is rebuilt by CALLING that constructor with
+        // its carried configuration, not by allocating and assigning. That matters because a
+        // constructor derives things from its arguments -- weight buffers sized from InputSize,
+        // sub-layers built from a depth setting -- and re-deriving them is what keeps a clone
+        // consistent. Copying those structures instead would carry a stale derived value forward.
+        //
+        // The generator only records parameters when it proved every one maps to a carried
+        // property, so this cannot be partially satisfied: either the constructor is a pure
+        // function of carried configuration, or the build already failed.
+        if (plan.ConstructorParameters.Count > 0)
+        {
+            var byName = new Dictionary<string, ClonePlanEntry>(StringComparer.Ordinal);
+            foreach (var entry in plan.Entries) byName[entry.Property.Name] = entry;
+
+            var arguments = new object?[plan.ConstructorParameters.Count];
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                if (!byName.TryGetValue(plan.ConstructorParameters[i], out var entry))
+                {
+                    throw new InvalidOperationException(
+                        $"{type.Name} records constructor parameter '{plan.ConstructorParameters[i]}' "
+                        + "but no carried property supplies it. The generated plan and the runtime "
+                        + "type disagree, which means the assembly was built against a different "
+                        + "version of this type.");
+                }
+
+                arguments[i] = entry.Property.GetValue(source);
+            }
+
+            var withArgs = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(c => c.GetParameters().Length == arguments.Length);
+
+            if (withArgs is not null)
+            {
+                return withArgs.Invoke(arguments);
+            }
+        }
+
         var constructor = type.GetConstructor(
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
             binder: null,
