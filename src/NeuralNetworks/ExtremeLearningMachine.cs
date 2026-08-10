@@ -253,6 +253,22 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// which is why ELMs can train thousands of times faster than traditional neural networks.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// This model has no parameter gradients: it is trained by a Moore-Penrose pseudoinverse solve,
+    /// not by gradient descent.
+    /// </summary>
+    /// <remarks>
+    /// Saying so explicitly is the honest answer, and the one the gradient-accessor contract asks
+    /// for -- populate the surface from the tape, or state that it cannot be populated. Returning
+    /// zeros here would claim every parameter had a vanishing gradient, which is a different and
+    /// false statement. Huang et al. 2006: hidden weights stay random and frozen; output weights are solved directly.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always, by design.</exception>
+    public override Vector<T> GetParameterGradients() =>
+        throw new NotSupportedException(
+            $"{nameof(ExtremeLearningMachine<T>)} is trained by a Moore-Penrose pseudoinverse solve, not gradient "
+            + "descent, so it has no parameter gradients to report.");
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Use regularized training (adds λI for numerical stability with small samples)

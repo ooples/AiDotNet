@@ -1285,6 +1285,22 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// ESNs learn by mathematically solving for the optimal output weights in one step.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// This model has no parameter gradients: it is trained by ridge regression on the linear readout,
+    /// not by gradient descent.
+    /// </summary>
+    /// <remarks>
+    /// Saying so explicitly is the honest answer, and the one the gradient-accessor contract asks
+    /// for -- populate the surface from the tape, or state that it cannot be populated. Returning
+    /// zeros here would claim every parameter had a vanishing gradient, which is a different and
+    /// false statement. Jaeger 2001: the reservoir is fixed and only the readout W_out is fitted, in closed form.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always, by design.</exception>
+    public override Vector<T> GetParameterGradients() =>
+        throw new NotSupportedException(
+            $"{nameof(EchoStateNetwork<T>)} is trained by ridge regression on the linear readout, not gradient "
+            + "descent, so it has no parameter gradients to report.");
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // ESN training per Jaeger 2001 "The 'echo state' approach" §3.4 /
