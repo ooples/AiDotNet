@@ -11193,6 +11193,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     private byte[] SerializeInternalUnchecked()
     {
+        // MATERIALIZE BEFORE WRITING, so the saved form is not a function of the source's
+        // materialization state.
+        //
+        // GetParameters deliberately reads the UNMATERIALIZED view, so that counting and reading always
+        // agree (LayerBase: "reading materialized a layer that counting had honestly reported as empty --
+        // TimeMoE answered 16,900 and then produced 17,972 values"). The consequence is that a model
+        // serialized before its weights exist writes a PARTIAL payload AND a partial shape manifest, and
+        // a restore then sizes the target from that partial manifest while ApplyParameterLayout has
+        // already materialized it in full - so the pour is rejected ("Expected 49792 parameters, but got
+        // 16452"). Clone reaches this through DeepCopy's serialize/deserialize roundtrip, which is how
+        // that surfaced as three clone failures rather than as a save/load bug.
+        //
+        // Materializing HERE and not on the read path keeps ParameterCount and GetParameters lazy, so
+        // nothing reintroduces the allocate-to-answer-a-question behaviour that threw
+        // OutOfMemoryException on a 774M-parameter model being torn down. A save legitimately needs the
+        // values it is about to write; a count does not.
+        MaterializeParameters();
+
         // Pre-size the MemoryStream to avoid ensureCapacity doubling near the
         // 2GB array cap on large models. ViLBERT (~174M params × 8 B = 1.4 GB)
         // hits OutOfMemoryException during serialize because at ~1 GB filled
