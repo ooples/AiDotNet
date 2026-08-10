@@ -261,6 +261,46 @@ public readonly struct LayerStateBag
 
         return Activator.CreateInstance(type) as TComponent;
     }
+    /// <summary>Reads a required component, failing legibly rather than returning null.</summary>
+    /// <typeparam name="TComponent">The interface the constructor takes.</typeparam>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The rebuilt component.</returns>
+    /// <remarks>
+    /// <see cref="Component{TComponent}"/> returns <c>null</c> both when nothing was saved and when
+    /// the saved type cannot be loaded, which is right for a parameter that accepts null. Handing
+    /// that null to a constructor that does not is how a layer ends up half-built and fails much
+    /// later somewhere unrelated, so a non-nullable parameter reads through here instead.
+    /// </remarks>
+    public TComponent ComponentRequired<TComponent>(string key) where TComponent : class
+        => Component<TComponent>(key)
+           ?? throw new InvalidOperationException(
+               $"Cannot rebuild {_layerName}: metadata key '{key}' should name a " +
+               $"{typeof(TComponent).Name} implementation, but " +
+               (Has(key)
+                   ? $"the saved type '{AsText(RawOrEmpty(key))}' could not be loaded."
+                   : $"no value was saved for it -- {Describe()}."));
+
+    private object RawOrEmpty(string key) => TryRaw(key, out var v) ? v : string.Empty;
+    /// <summary>Casts a restored activation to the interface a constructor requires.</summary>
+    /// <typeparam name="TActivation">The activation interface the parameter takes.</typeparam>
+    /// <param name="value">The activation restored alongside the layer, if any.</param>
+    /// <param name="parameterName">The constructor parameter, named in the failure.</param>
+    /// <param name="layerName">The layer being rebuilt, named in the failure.</param>
+    /// <returns>The activation, typed as the constructor wants it.</returns>
+    /// <remarks>
+    /// The restored activation arrives as <c>object?</c>, so <c>as</c> yields null both when none
+    /// was saved and when a scalar activation was saved for a vector parameter. A constructor that
+    /// does not accept null gets told which of those happened instead of a null argument.
+    /// </remarks>
+    public static TActivation RequireActivation<TActivation>(object? value, string parameterName, string layerName)
+        where TActivation : class
+        => value as TActivation
+           ?? throw new InvalidOperationException(
+               $"Cannot rebuild {layerName}: constructor parameter '{parameterName}' needs " +
+               $"a {typeof(TActivation).Name}, but the saved activation was " +
+               (value is null ? "not recorded." : $"a {value.GetType().Name}."));
+
+
 
     /// <summary>Records a component's concrete type so it can be rebuilt exactly.</summary>
     /// <param name="value">The component instance, or <c>null</c>.</param>
@@ -302,4 +342,17 @@ public readonly struct LayerStateBag
 
     /// <inheritdoc cref="Format(int)"/>
     public static string Format(int[]? value) => value is null ? string.Empty : string.Join(",", value);
+
+    /// <summary>Formats a nullable value whose constructor parameter is not itself nullable.</summary>
+    /// <typeparam name="TValue">The underlying value type.</typeparam>
+    /// <param name="value">The stored value, which may be unset.</param>
+    /// <returns>The formatted value, or empty when unset.</returns>
+    /// <remarks>
+    /// A layer may hold an <c>int</c> constructor argument in an <c>int?</c> field, so the writer
+    /// reads back a nullable where the parameter was not. Unset is written as empty rather than as
+    /// a stand-in value, so a rebuild reports the key as unparseable instead of quietly restoring
+    /// a zero the layer was never given.
+    /// </remarks>
+    public static string Format<TValue>(TValue? value) where TValue : struct
+        => value.HasValue ? Convert.ToString(value.Value, CultureInfo.InvariantCulture) ?? string.Empty : string.Empty;
 }

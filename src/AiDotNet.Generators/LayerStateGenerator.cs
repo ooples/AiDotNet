@@ -133,7 +133,13 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         foreach (var p in ctor.Parameters)
         {
-            var info = new ParamModel { Name = p.Name, TypeFqn = p.Type.ToDisplayString(FullyQualified) };
+            var info = new ParamModel
+            {
+                Name = p.Name,
+                TypeFqn = p.Type.ToDisplayString(FullyQualified),
+                AcceptsNull = p.Type.NullableAnnotation == NullableAnnotation.Annotated
+                              || p.NullableAnnotation == NullableAnnotation.Annotated,
+            };
 
             var isMarked = HasStateAttribute(p);
 
@@ -521,7 +527,7 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         foreach (var model in models.Where(m => m.TypeParameters.Count == 1 && m.FactoryAccessible))
         {
-            var args = string.Join(", ", model.Parameters.Select(p => Argument(p)));
+            var args = string.Join(", ", model.Parameters.Select(p => Argument(p, model.TypeName)));
             var closed = model.ClosedFqn;
             var required = model.Parameters
                 .Where(p => p.IsState)
@@ -552,7 +558,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static string Argument(ParamModel p)
+    private static string Argument(ParamModel p, string layerName)
     {
         if (p.IsActivation)
         {
@@ -560,7 +566,12 @@ public class LayerStateGenerator : IIncrementalGenerator
                 ? "global::AiDotNet.Interfaces.IVectorActivationFunction<T>"
                 : "global::AiDotNet.Interfaces.IActivationFunction<T>";
             var source = p.IsVectorActivation ? "vectorActivation" : "scalarActivation";
-            return $"{p.Name}: {source} as {iface}";
+            // `as` yields null both when no activation was saved and when the wrong kind was.
+            // A parameter that does not accept null is told which, rather than handed the null.
+            return p.AcceptsNull
+                ? $"{p.Name}: {source} as {iface}"
+                : $"{p.Name}: global::AiDotNet.Serialization.LayerStateBag.RequireActivation<{iface}>"
+                  + $"({source}, \"{p.Name}\", \"{layerName}\")";
         }
 
         // The parameter's OWN default, not default(T). `bool useBias = true` rebuilt through
@@ -578,7 +589,12 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
-            ValueKind.Component => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            // A parameter that does not accept null must not be handed one. Component() returns
+            // null both when nothing was saved and when the saved type will not load, so a
+            // non-nullable parameter reads through the variant that says so instead.
+            ValueKind.Component => p.AcceptsNull
+                ? $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")"
+                : $"state.ComponentRequired<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             _ => "default!",
         };
 
@@ -612,6 +628,10 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         public string Name = string.Empty;
         public string TypeFqn = string.Empty;
+
+        /// <summary>Whether the parameter itself accepts a null argument.</summary>
+        public bool AcceptsNull;
+
         public string Key = string.Empty;
         public string? BackingMember;
         public bool IsState;
