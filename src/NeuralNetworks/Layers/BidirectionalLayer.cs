@@ -176,6 +176,9 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _gpuLastBackwardOutput;
     #endregion
 
+    /// <summary>Construction state: the 'innerLayer' the layer was built with.</summary>
+    private readonly AiDotNet.NeuralNetworks.Layers.LayerBase<T> _innerLayer;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="BidirectionalLayer{T}"/> class with the specified inner layer
     /// and a ReLU activation function.
@@ -207,6 +210,7 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
         IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), activationFunction ?? new ReLUActivation<T>())
     {
+        _innerLayer = innerLayer;
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
@@ -260,6 +264,7 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
         IEngine? engine = null)
         : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        _innerLayer = innerLayer;
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;

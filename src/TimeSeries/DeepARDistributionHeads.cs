@@ -42,7 +42,7 @@ internal sealed class DeepARPredictiveDist<T>
 /// op is an <c>Engine.Tensor*</c> call so a <see cref="GradientTape{T}"/> differentiates the loss w.r.t. the
 /// projection weights (BPTT flows back through the shared LSTM stack).
 /// </summary>
-internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerBase<T>
+internal abstract partial class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly List<Tensor<T>> _params = new();
     protected readonly int Hidden;

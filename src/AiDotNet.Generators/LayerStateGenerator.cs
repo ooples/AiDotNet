@@ -180,6 +180,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                 .Select(r => r.GetSyntax())
                 .OfType<TypeDeclarationSyntax>()
                 .Any(d => d.Modifiers.Any(SyntaxKind.PartialKeyword)),
+            HasExplicitState = marked.Count > 0,
             HasHandWrittenMetadata = metadataOverrides.Count > 0
                 // SEMANTIC, NOT SUBSTRING. Scanning the method's full text for
                 // "base.GetMetadata" fired on the string appearing in a comment or a string
@@ -728,6 +729,13 @@ public class LayerStateGenerator : IIncrementalGenerator
             // path this generator was built to replace, which is the -1 bug it fixes.
             if (model.TypeParameters.Count != 1)
             {
+                // Only an EXPLICIT claim is reported. With state inferred, this also sees
+                // non-generic layers that never asked to participate; writing a writer they
+                // can never pair with a factory, then reporting it, is noise the author
+                // cannot act on. An inferred parameter on an unsupported arity is simply not
+                // construction state.
+                if (!model.HasExplicitState) continue;
+
                 spc.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedArity, model.Location.ToLocation(), model.TypeName, model.TypeParameters.Count));
             }
@@ -1443,6 +1451,9 @@ public class LayerStateGenerator : IIncrementalGenerator
         public SourceSpan Location = SourceSpan.None;
         public bool IsPartial;
         public bool HasHandWrittenMetadata;
+
+        /// <summary>Whether any parameter was EXPLICITLY marked [LayerState].</summary>
+        public bool HasExplicitState;
         public bool IsValid;
 
         /// <summary>Value equality, which is what lets Roslyn cache this pipeline step.</summary>
