@@ -272,6 +272,73 @@ public class LayerStateGenerator : IIncrementalGenerator
     private static bool HasStateAttribute(IParameterSymbol p)
         => p.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
 
+    /// <summary>The member named by <c>[LayerState(Member = "...")]</c>, if any.</summary>
+    private static string? StateMember(IParameterSymbol p)
+    {
+        var attr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
+        var named = attr?.NamedArguments.FirstOrDefault(n => n.Key == "Member").Value.Value as string;
+        return string.IsNullOrWhiteSpace(named) ? null : named;
+    }
+
+    /// <summary>
+    /// Whether the type is a layer, and if so its numeric type argument. Covers the base class,
+    /// the interface, and a concrete layer named directly.
+    /// </summary>
+    private static bool IsLayer(ITypeSymbol type, out ITypeSymbol? numeric)
+    {
+        numeric = null;
+        if (type is not INamedTypeSymbol named) return false;
+
+        if (named.ConstructedFrom.Name == "ILayer" && named.TypeArguments.Length == 1)
+        {
+            numeric = named.TypeArguments[0];
+            return true;
+        }
+
+        for (var b = named; b is not null; b = b.BaseType)
+        {
+            if (b.Name == "LayerBase" && b.TypeArguments.Length == 1)
+            {
+                numeric = b.TypeArguments[0];
+                return true;
+            }
+        }
+
+        foreach (var i in named.AllInterfaces)
+        {
+            if (i.Name == "ILayer" && i.TypeArguments.Length == 1)
+            {
+                numeric = i.TypeArguments[0];
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether the type is a sequence of layers, and if so their numeric type.</summary>
+    private static bool IsLayerSequence(ITypeSymbol type, out ITypeSymbol? numeric)
+    {
+        numeric = null;
+
+        if (type is IArrayTypeSymbol { Rank: 1 } arr) return IsLayer(arr.ElementType, out numeric);
+        if (type is not INamedTypeSymbol named) return false;
+
+        if (named.TypeArguments.Length == 1
+            && named.Name is "List" or "IList" or "IEnumerable" or "IReadOnlyList"
+                or "IReadOnlyCollection" or "ICollection")
+            return IsLayer(named.TypeArguments[0], out numeric);
+
+        return false;
+    }
+
+    /// <summary>Both types are layers over the same numeric type.</summary>
+    private static bool IsSameLayer(ITypeSymbol member, ITypeSymbol parameter)
+        => IsLayer(Unwrap(parameter), out var pn)
+           && IsLayer(Unwrap(member), out var mn)
+           && pn is not null && mn is not null
+           && SymbolEqualityComparer.Default.Equals(pn, mn);
+
     private static string? StateKey(IParameterSymbol p)
     {
         var attr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
@@ -288,8 +355,28 @@ public class LayerStateGenerator : IIncrementalGenerator
         // A pluggable strategy: record which implementation was used and rebuild that one.
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
 
-        if (type is IArrayTypeSymbol { Rank: 1 } arr && arr.ElementType.SpecialType == SpecialType.System_Int32)
-            return ValueKind.Int32Array;
+        if (type is IArrayTypeSymbol { Rank: 1 } arr)
+        {
+            // A shape list is as much construction state as a scalar dimension is, and rebuilding
+            // one from the declared input shape is exactly the inference this generator removes.
+            if (arr.ElementType.SpecialType == SpecialType.System_Int32) return ValueKind.Int32Array;
+            if (arr.ElementType.SpecialType == SpecialType.System_Double) return ValueKind.DoubleArray;
+            if (arr.ElementType.SpecialType == SpecialType.System_Boolean) return ValueKind.BooleanArray;
+            if (arr.ElementType.SpecialType == SpecialType.System_String) return ValueKind.StringArray;
+
+            // int[][]: the per-input shapes a merge layer (Add, Concatenate, Multiply) was built
+            // with, where the outer length is the number of inputs.
+            if (arr.ElementType is IArrayTypeSymbol { Rank: 1 } inner
+                && inner.ElementType.SpecialType == SpecialType.System_Int32)
+                return ValueKind.Int32Jagged;
+
+            return ValueKind.Unsupported;
+        }
+
+        // A graph layer's schema: which node and edge types it was built over. A layer built over
+        // different node types is a different layer, so this is construction state.
+        if (IsMap(type, SpecialType.System_Int32)) return ValueKind.StringInt32Map;
+        if (IsPairMap(type)) return ValueKind.StringPairMap;
 
         return type.SpecialType switch
         {
@@ -324,7 +411,13 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         needsConvert = false;
         memberIsNullable = false;
-        var candidates = new[] { p.Name, "_" + p.Name, "m_" + p.Name, Pascal(p.Name), "_" + Pascal(p.Name) };
+        // [LayerState(Member = "...")] wins outright. Without it the attribute could not rescue a
+        // layer that stored the argument under any other name, because ADN0051 applied the same
+        // five-name rule to marked parameters too.
+        var named = StateMember(p);
+        var candidates = named is not null
+            ? new[] { named }
+            : new[] { p.Name, "_" + p.Name, "m_" + p.Name, Pascal(p.Name), "_" + Pascal(p.Name) };
 
         for (var t = type; t is not null; t = t.BaseType)
         {
@@ -340,6 +433,15 @@ public class LayerStateGenerator : IIncrementalGenerator
 
                     switch (member)
                     {
+                        // A child layer is recorded by walking the object, so the member only has
+                        // to BE that layer, not to be declared as the same type. LoRAAdapterBase
+                        // keeps its child as ILayer<T> while a shape-resolving overload takes
+                        // LayerBase<T>; the stored object is the same one either way.
+                        case IFieldSymbol lf when IsSameLayer(lf.Type, p.Type):
+                            return lf.Name;
+                        case IPropertySymbol { GetMethod: not null } lp when IsSameLayer(lp.Type, p.Type):
+                            return lp.Name;
+
                         case IFieldSymbol f when SameType(f.Type, p.Type):
                             memberIsNullable = IsNullableValueType(f.Type);
                             return f.Name;
@@ -384,6 +486,20 @@ public class LayerStateGenerator : IIncrementalGenerator
             or SpecialType.System_Single
             or SpecialType.System_Int32;
     }
+
+    /// <summary>A <c>Dictionary&lt;string, TValue&gt;</c> over the given value type.</summary>
+    private static bool IsMap(ITypeSymbol type, SpecialType value)
+        => type is INamedTypeSymbol { Name: "Dictionary", TypeArguments.Length: 2 } map
+           && map.TypeArguments[0].SpecialType == SpecialType.System_String
+           && map.TypeArguments[1].SpecialType == value;
+
+    /// <summary>A <c>Dictionary&lt;string, (string, string)&gt;</c>, however the tuple is named.</summary>
+    private static bool IsPairMap(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "Dictionary", TypeArguments.Length: 2 } map
+           && map.TypeArguments[0].SpecialType == SpecialType.System_String
+           && map.TypeArguments[1] is INamedTypeSymbol { IsTupleType: true } tuple
+           && tuple.TupleElements.Length == 2
+           && tuple.TupleElements.All(e => e.Type.SpecialType == SpecialType.System_String);
 
     private static bool SameType(ITypeSymbol a, ITypeSymbol b)
         => Unwrap(a).ToDisplayString(FullyQualified) == Unwrap(b).ToDisplayString(FullyQualified);
@@ -630,6 +746,12 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.Boolean => $"state.Boolean(\"{p.Key}\")",
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
+            ValueKind.DoubleArray => $"state.DoubleArray(\"{p.Key}\")",
+            ValueKind.BooleanArray => $"state.BooleanArray(\"{p.Key}\")",
+            ValueKind.StringArray => $"state.StringArray(\"{p.Key}\")",
+            ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
+            ValueKind.StringInt32Map => $"state.StringInt32Map(\"{p.Key}\")",
+            ValueKind.StringPairMap => $"state.StringPairMap(\"{p.Key}\")",
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             ValueKind.Component => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             _ => "default!",
@@ -668,6 +790,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         String,
         Enum,
         Int32Array,
+        DoubleArray,
+        BooleanArray,
+        StringArray,
+        Int32Jagged,
+        StringInt32Map,
+        StringPairMap,
         Component,
     }
 
