@@ -175,6 +175,28 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeCo
     protected readonly List<ILayer<T>> TextEncoderLayers = new List<ILayer<T>>();
 
     /// <summary>
+    /// Surfaces <see cref="TextEncoderLayers"/> to the parameter walk for every audio model that
+    /// owns a text tower.
+    /// </summary>
+    /// <remarks>
+    /// TextEncoderLayers live outside <see cref="NeuralNetworkBase{T}.Layers"/>, so without this the
+    /// base folds only the audio stream and the text tower reaches no ParameterCount and no
+    /// checkpoint. Ten models compensated by hand-writing an UpdateParameters that walked both
+    /// lists -- which fixed the write path and left the count and the vector still describing the
+    /// audio stream alone. Yielding here fixes all three at once, in one place.
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        foreach (var l in base.GetExtraTrainableLayers())
+            yield return l;
+        foreach (var layer in TextEncoderLayers)
+        {
+            if (layer is LayerBase<T> lb)
+                yield return lb;
+        }
+    }
+
+    /// <summary>
     /// Gets the mel spectrogram extractor for preprocessing.
     /// </summary>
     protected MelSpectrogram<T>? MelSpec { get; set; }

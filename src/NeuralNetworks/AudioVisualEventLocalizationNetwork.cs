@@ -1356,27 +1356,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Gradient vector length ({gradients.Length}) must match parameter count ({ParameterCount}).",
-                nameof(gradients));
-        }
-
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent update: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(_options.LearningRate);
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        // Set the updated parameters
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

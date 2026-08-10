@@ -150,24 +150,7 @@ public class XLSTMLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        // This override previously treated its argument as GRADIENTS and applied a hardcoded
-        // SGD step (params - 0.001 * argument). The base contract is a SETTER: the optimizer has
-        // already produced the updated parameter vector. Subtracting a scaled copy of the new
-        // parameters from the old ones corrupted every update, which is why the memorization loss
-        // crawled from 272127.56 to only 270074.44 -- a 0.75% move against a 1% threshold -- rather
-        // than converging. The learning rate belongs to the optimizer, not here.
-        SetParameters(parameters);
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

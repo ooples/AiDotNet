@@ -1185,19 +1185,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         return _classificationHead.Forward(pooled);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // NeuralNetworkBase.UpdateParameters contract: the caller passes the
-        // NEW parameter values (post-optimizer-step), NOT raw gradients. The
-        // parameter name is `parameters` on the base abstract — the prior
-        // override here used `gradients` and treated them as the new params
-        // too (which happens to be correct), but I temporarily mis-read the
-        // contract as "raw gradients" and added an lr·gradients subtract that
-        // produced double-application when the optimizer ALSO did Adam math
-        // upstream. Forward unchanged to SetParameters, which is the
-        // documented contract.
-        SetParameters(parameters);
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

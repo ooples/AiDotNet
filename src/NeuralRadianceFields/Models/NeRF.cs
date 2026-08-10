@@ -1310,23 +1310,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
         }
     }
 
-    /// <summary>
-    /// Updates model parameters using gradient descent.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients == null)
-        {
-            throw new ArgumentNullException(nameof(gradients));
-        }
-
-        // Apply gradient descent: params = params - learning_rate * gradients
-        var currentParams = GetParameters();
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, _learningRate));
-
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Makes a prediction using the model.
     /// </summary>

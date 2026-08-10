@@ -565,34 +565,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         return totalForecast;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NBEATSFinance model, UpdateParameters updates internal parameters or state. This keeps the NBEATSFinance architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // The optimizer passes the post-update parameter values. The previous no-op made
-        // training loss changes come only from training-mode state/dropout while weights stayed
-        // frozen. Route values to layers directly, avoiding a full GetParameters/SetParameters
-        // materialization and preserving the layer-level COW/streaming update contract.
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
-
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

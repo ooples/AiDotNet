@@ -515,6 +515,26 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>, IShapeC
     }
 
     /// <summary>
+    /// Surfaces the text-encoder and auxiliary streams to the parameter walk for EVERY subclass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This used to be advice rather than behaviour: the helpers above existed and each subclass was
+    /// expected to override <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/> itself to call
+    /// one of them. Opt-in is the wrong default for this. A subclass that forgot kept working --
+    /// nothing threw, nothing failed -- while its Q-Former, decoder, fusion bridge and text encoder
+    /// were absent from ParameterCount, from GetParameters and from every checkpoint. That is the
+    /// invisible failure this whole surface exists to make impossible.
+    /// </para>
+    /// <para>
+    /// A subclass that already overrides this shadows it and is unaffected. One that needs a
+    /// different set still overrides; it just no longer has to in order to be correct.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateAllAuxiliaryTrainableLayers();
+
+    /// <summary>
     /// Disposes of resources used by this model.
     /// </summary>
     /// <param name="disposing">True if disposing managed resources.</param>
