@@ -93,6 +93,10 @@ public class FishSpeech<T> : TtsModelBase<T>, ICodecTts<T>
     public int MaxTextLength => _options.MaxTextLength;
     public int NumCodebooks => _options.NumCodebooks;
     public int CodebookSize => _options.CodebookSize;
+
+    /// <inheritdoc />
+    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
+    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. Fish Speech: text -> dual-AR transformer (semantic AR + acoustic GroupFSQ) -> FireflyGAN decoder.</summary>

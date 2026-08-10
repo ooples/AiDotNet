@@ -95,6 +95,10 @@ public class MinMo<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     public int MaxTextLength => _options.MaxTextLength;
     public int NumCodebooks => _options.NumCodebooks;
     public int CodebookSize => _options.CodebookSize;
+
+    /// <inheritdoc />
+    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
+    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
     public int CodecFrameRate => _options.CodecFrameRate;
     private int _streamPosition;
     private string _streamText = string.Empty;

@@ -1195,24 +1195,11 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             destination[i] = source[offset++];
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (IsOnnxMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // Get current parameters and apply gradient descent
-        var currentParams = GetParameters();
-        T learningRate = _numOps.FromDouble(0.001);
-        for (int i = 0; i < Math.Min(currentParams.Length, gradients.Length); i++)
-        {
-            currentParams[i] = _numOps.Subtract(currentParams[i], _numOps.Multiply(learningRate, gradients[i]));
-        }
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
+    // implementation is virtual now and distributes a flat vector over the same enumeration
+    // GetParameters folds, which this model already exposes correctly. The throw existed
+    // because the member was ABSTRACT and demanded an answer -- 572 models answered it the
+    // same way.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

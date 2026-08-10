@@ -188,3 +188,71 @@ public sealed class VariableLengthParameterSource<T> : IVariableLengthParameterS
         _set(parameters);
     }
 }
+
+/// <summary>
+/// One or more tensor lists exposed as a single parameter surface, concatenated in the order the
+/// lists are given and, within each list, in index order.
+/// </summary>
+/// <remarks>
+/// For models that hold weights as bare <c>List&lt;Tensor&lt;T&gt;&gt;</c> rather than layers -- a
+/// feature-pyramid neck keeps a lateral weight and bias per level, and an output pair per level.
+/// The tensors are written THROUGH, never replaced, so a restore reaches the same instances the
+/// forward pass reads.
+/// </remarks>
+public sealed class TensorListParameterSource<T> : IParameterSource<T>
+{
+    private readonly Func<IReadOnlyList<Tensor<T>>>[] _lists;
+
+    /// <summary>Creates a source over the given tensor lists, in order.</summary>
+    public TensorListParameterSource(params Func<IReadOnlyList<Tensor<T>>>[] lists)
+    {
+        _lists = lists ?? throw new ArgumentNullException(nameof(lists));
+    }
+
+    private IEnumerable<Tensor<T>> Tensors()
+    {
+        foreach (var list in _lists)
+        {
+            var items = list();
+            if (items is null) continue;
+            foreach (var t in items)
+            {
+                if (t is not null) yield return t;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var t in Tensors()) total += t.Length;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var result = new Vector<T>(checked((int)ParameterCount));
+        int idx = 0;
+        foreach (var t in Tensors())
+        {
+            for (int i = 0; i < t.Length; i++) result[idx++] = t[i];
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int idx = 0;
+        foreach (var t in Tensors())
+        {
+            for (int i = 0; i < t.Length && idx < parameters.Length; i++) t[i] = parameters[idx++];
+        }
+    }
+}

@@ -82,7 +82,11 @@ public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>, IShapeContr
     /// meaning worth stating.
     /// </para>
     /// </remarks>
-    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+    // OVERRIDE, not a new declaration: TtsModelBase now states the family's mel law, and a vocoder
+    // emits a waveform rather than a mel frame - so it must REPLACE that answer, not sit beside it.
+    // Hiding it with `new` would have left callers holding a TtsModelBase reference reading the mel
+    // law for a vocoder, which is the silent wrong answer this whole system exists to prevent.
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
 
     /// <summary>The family law, exposed so a vocoder with an extra axis can still reuse it.</summary>
     /// <remarks>
