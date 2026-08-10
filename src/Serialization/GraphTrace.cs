@@ -101,7 +101,10 @@ public static class GraphTrace
             sb.Append(encoded);
         }
 
-        sb.Append(">;").Append(ids[output]);
+        // Separated, not glued: appending ">;" straight onto the last node left it reading
+        // "2=Square(1)>". That parsed only because the stray ">" landed in the parameter tail,
+        // which is ignored -- the same shape in ExpressionState hit int.Parse and threw.
+        sb.Append(';').Append(ids[output]);
         return sb.ToString();
     }
 

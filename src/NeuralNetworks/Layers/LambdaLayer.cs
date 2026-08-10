@@ -96,6 +96,16 @@ public partial class LambdaLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private readonly Func<ComputationNode<T>, ComputationNode<T>>? _traceableExpression;
+    /// <summary>
+    /// The forward transformation as an expression tree, when the layer was given one.
+    /// </summary>
+    /// <remarks>
+    /// Kept alongside the compiled delegate because compiling discards the tree, and the tree is
+    /// what lets a closure survive a save without naming a method.
+    /// </remarks>
+    private readonly System.Linq.Expressions.Expression<Func<Tensor<T>, Tensor<T>>>? _forwardExpression;
+
+
 
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
@@ -252,6 +262,37 @@ public partial class LambdaLayer<T> : LayerBase<T>
         // Backward function is automatically derived from the computation graph
         _backwardFunction = null;
     }
+    /// <summary>
+    /// Creates a lambda layer from an expression tree, which survives a save.
+    /// </summary>
+    /// <param name="inputShape">The shape of the input tensor.</param>
+    /// <param name="outputShape">The shape of the output tensor.</param>
+    /// <param name="forwardExpression">The transformation, as an expression rather than a delegate.</param>
+    /// <param name="activationFunction">The activation applied after the transformation.</param>
+    /// <remarks>
+    /// <para>
+    /// The expression is kept as well as compiled. Compiling is one-way -- the tree cannot be
+    /// recovered from the resulting delegate -- so a layer built from a plain <c>Func</c> has
+    /// nothing to record but the function's name, and a lambda does not have one.
+    /// </para>
+    /// <para>
+    /// Prefer the <c>ComputationNode</c> overload where the transformation can be written in tensor
+    /// operations: a traced graph records what the function did, so it survives captured state as
+    /// well, and its replay can only ever call a tensor operation. This overload is for a
+    /// transformation that has to reach outside those operations and still be saveable.
+    /// </para>
+    /// </remarks>
+    public LambdaLayer(int[] inputShape, int[] outputShape,
+                       System.Linq.Expressions.Expression<Func<Tensor<T>, Tensor<T>>> forwardExpression,
+                       IActivationFunction<T>? activationFunction = null)
+        : base(inputShape, outputShape, activationFunction ?? new ReLUActivation<T>())
+    {
+        _forwardExpression = forwardExpression ?? throw new ArgumentNullException(nameof(forwardExpression));
+        _forwardFunction = forwardExpression.Compile();
+        _backwardFunction = null;
+    }
+
+
 
     /// <summary>
     /// Performs the forward pass of the lambda layer.

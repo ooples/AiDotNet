@@ -151,6 +151,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
 
             info.TraceableNumeric = TraceableNumericOf(Unwrap(p.Type))?.ToDisplayString(FullyQualified);
+            info.ExpressionDelegate = ExpressionDelegateOf(Unwrap(p.Type));
             info.Settings = SettingsOf(Unwrap(p.Type)) ?? new List<SettingModel>();
 
             var isMarked = HasStateAttribute(p);
@@ -324,6 +325,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         // it was built with.
         // Before the interface check: a delegate is a reference type with its own save path.
         if (type.TypeKind == TypeKind.Delegate) return ValueKind.Delegate;
+        if (ExpressionDelegateOf(type) is not null) return ValueKind.Expression;
         if (type is IArrayTypeSymbol { Rank: 1 } strings
             && strings.ElementType.SpecialType == SpecialType.System_String)
             return ValueKind.StringArray;
@@ -375,9 +377,19 @@ public class LayerStateGenerator : IIncrementalGenerator
         };
     }
     /// <summary>
+    /// For <c>Expression&lt;TDelegate&gt;</c>, returns TDelegate. Such a parameter is the function
+    /// as data, so it can be written down without naming a method or running anything.
+    /// </summary>
+    private static string? ExpressionDelegateOf(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "Expression", TypeArguments.Length: 1 } expression
+           && expression.TypeArguments[0].TypeKind == TypeKind.Delegate
+            ? expression.TypeArguments[0].ToDisplayString(FullyQualified)
+            : null;
+
+    /// <summary>
     /// For <c>Func&lt;ComputationNode&lt;X&gt;, ComputationNode&lt;X&gt;&gt;</c>, returns X. Such a
     /// delegate can be described by running it once and recording the operations it performed,
-    /// which is the only description that survives a closure.
+    /// which is the description that survives a closure without needing the tree.
     /// </summary>
     private static ITypeSymbol? TraceableNumericOf(ITypeSymbol type)
     {
@@ -560,7 +572,8 @@ public class LayerStateGenerator : IIncrementalGenerator
                 // LambdaLayer's two-opaque-delegate constructor over the traceable one, and an
                 // opaque delegate is the parameter LEAST likely to survive a save -- so the
                 // constructor with more of them scored higher while rebuilding worse.
-                .OrderByDescending(m => m.Parameters.Count(p => p.TraceableNumeric is not null))
+                .OrderByDescending(m => m.Parameters.Count(
+                    p => p.TraceableNumeric is not null || p.ExpressionDelegate is not null))
                 .ThenByDescending(m => m.Parameters.Count(p => p.IsState))
                 .First())
             .OrderBy(m => m.BaseFqn, System.StringComparer.Ordinal)
@@ -653,6 +666,15 @@ public class LayerStateGenerator : IIncrementalGenerator
                         + $"global::AiDotNet.Serialization.LayerStateBag.Format(this.{p.BackingMember}.{s.Name});");
                 }
                 sb.AppendLine("        }");
+                continue;
+            }
+
+            // An expression tree is the function as data, so it survives a closure without naming a
+            // method. Recorded as a tree, never compiled at save time and never as marshalled code.
+            if (p.Kind == ValueKind.Expression)
+            {
+                sb.AppendLine($"        __metadata[\"{p.Key}\"] = "
+                    + $"global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
                 continue;
             }
 
@@ -891,6 +913,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.BooleanArray => $"state.BooleanArray(\"{p.Key}\")",
             ValueKind.StringArray => $"state.StringArray(\"{p.Key}\")",
             ValueKind.Settings => SettingsArgument(p),
+            ValueKind.Expression => $"global::AiDotNet.Serialization.ExpressionState.Load<{p.ExpressionDelegate}>("
+                + $"state.String(\"{p.Key}\"), \"{layerName}\", \"{p.Key}\")",
             ValueKind.Delegate => $"global::AiDotNet.Serialization.DelegateState.Load<{p.TypeFqn.TrimEnd('?')}>("
                 + $"state.String(\"{p.Key}\"), \"{layerName}\", \"{p.Key}\")",
             ValueKind.DoubleArray => $"state.DoubleArray(\"{p.Key}\")",
@@ -1000,6 +1024,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         StringArray,
         StringInt32Map,
         StringPairMap,
+        Expression,
         Settings,
         Int32Jagged,
         Layer,
@@ -1059,6 +1084,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// description that survives a closure.
         /// </summary>
         public string? TraceableNumeric;
+
+        /// <summary>
+        /// For an <c>Expression&lt;TDelegate&gt;</c>, the TDelegate. The tree is saved as data and
+        /// rebuilt into the same closed expression type the constructor takes.
+        /// </summary>
+        public string? ExpressionDelegate;
 
         /// <summary>For a settings object, the properties that carry its state.</summary>
         public List<SettingModel> Settings = new();
