@@ -2083,6 +2083,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 if (LayerHasUninitializedParameters(layer)) return true;
             }
+
+            // The layers a model declares through GetExtraTrainableLayers count too. A model may
+            // hold every weight in sub-structures outside Layers -- a detection backbone owns no
+            // Layers at all -- and looking only at Layers reported "nothing pending" for a model
+            // whose entire parameter set was still unsized, so a zero count looked like a real
+            // zero rather than a deferred one.
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null && LayerHasUninitializedParameters(extra)) return true;
+            }
+
             return false;
         }
     }
