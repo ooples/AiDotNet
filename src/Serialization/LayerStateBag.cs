@@ -322,6 +322,27 @@ public readonly struct LayerStateBag
         return result;
     }
 
+    /// <summary>Reads a required array of booleans, such as a per-block flag.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored values.</returns>
+    public bool[] BooleanArray(string key)
+    {
+        const string wanted = "a comma-separated list of true/false";
+        if (!TryRaw(key, out var v)) throw Missing(key, wanted);
+        if (v is bool[] arr) return arr;
+
+        var text = AsText(v);
+        if (text.Length == 0) return [];
+
+        var parts = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var result = new bool[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!bool.TryParse(parts[i], out result[i])) throw Unparseable(key, v, wanted);
+        }
+        return result;
+    }
+
     /// <summary>Reads a required array of doubles.</summary>
     /// <param name="key">The metadata key.</param>
     /// <returns>The stored values.</returns>
@@ -504,6 +525,10 @@ public readonly struct LayerStateBag
 
     /// <inheritdoc cref="Format(int)"/>
     public static string Format(int[]? value) => value is null ? string.Empty : string.Join(",", value);
+
+    /// <inheritdoc cref="Format(int)"/>
+    public static string Format(bool[]? value) => value is null ? string.Empty : string.Join(",", value);
+
 
     /// <inheritdoc cref="Format(int)"/>
     public static string Format(double[]? value)

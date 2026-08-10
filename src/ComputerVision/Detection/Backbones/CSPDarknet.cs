@@ -330,10 +330,22 @@ internal partial class CSPBlock<T> : LayerBase<T>
     /// <summary>Construction state: the 'inChannels' the layer was built with.</summary>
     private readonly int _inChannels;
 
+    /// <summary>Construction state: the 'outChannels' the layer was built with.</summary>
+    private readonly int _outChannels;
+
+    /// <summary>Construction state: the 'numBlocks' the layer was built with.</summary>
+    private readonly int _numBlocks;
+
+    /// <summary>Construction state: the 'stride' the layer was built with.</summary>
+    private readonly int _stride;
+
     public CSPBlock(int inChannels, int outChannels, int numBlocks, int stride, IActivationFunction<T> activation)
         : base(new[] { inChannels, -1, -1 }, new[] { outChannels, -1, -1 },
                (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _stride = stride;
+        _numBlocks = numBlocks;
+        _outChannels = outChannels;
         _inChannels = inChannels;
         _activation = activation;
         int hiddenChannels = outChannels / 2;

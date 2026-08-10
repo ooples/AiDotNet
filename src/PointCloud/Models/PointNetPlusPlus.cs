@@ -1113,9 +1113,13 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
     // The two constructors take mlpDimensions as int[] and int[][], which cannot share one field,
     // so each names its own via [LayerState(Member = ...)].
     private readonly int[] _mlpDimensionsSingleScale = [];
+    private readonly int[] _neighborSamplesPerScale = [];
     private readonly int[][] _mlpDimensionsMultiScale = [];
     private readonly double[] _radii = [];
 
+
+    /// <summary>Construction state: the 'neighborSamples' the layer was built with.</summary>
+    private readonly int _neighborSamples;
 
     public SetAbstractionLayer(
         int numPoints,
@@ -1125,6 +1129,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
         int neighborSamples)
         : base([0, inputChannels], [0, mlpDimensions[^1]])
     {
+        _neighborSamples = neighborSamples;
         _searchRadius = searchRadius;
         _mlpDimensionsSingleScale = mlpDimensions;
         if (numPoints <= 0)
@@ -1149,9 +1154,10 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
         double[] radii,
         int inputChannels,
         [LayerState(Member = "_mlpDimensionsMultiScale")] int[][] mlpDimensions,
-        int[] neighborSamples)
+        [LayerState(Member = "_neighborSamplesPerScale")] int[] neighborSamples)
         : base([0, inputChannels], [0, CalculateOutputChannels(mlpDimensions)])
     {
+        _neighborSamplesPerScale = neighborSamples;
         _mlpDimensionsMultiScale = mlpDimensions;
         _radii = radii;
         if (numPoints <= 0)

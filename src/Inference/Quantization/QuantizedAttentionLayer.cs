@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
@@ -24,7 +25,7 @@ namespace AiDotNet.Inference.Quantization;
 /// time so you get faster prediction with less memory.
 /// </para>
 /// </remarks>
-internal sealed class QuantizedAttentionLayer : LayerBase<float>
+internal sealed partial class QuantizedAttentionLayer : LayerBase<float>
 {
     private readonly int _embeddingDimension;
     private readonly int _headCount;
@@ -47,6 +48,11 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     private readonly RotaryPositionalEncodingLayer<float>? _ropeLayer;
     private readonly ALiBiPositionalBiasLayer<float>? _alibiLayer;
 
+    /// <summary>Construction state: the 'source' the layer was built with.</summary>
+    private readonly AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<float> _source = null!;
+    // The two constructors take different source layer types, which cannot share one field.
+    private readonly AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<float> _sourceGrouped = null!;
+
     /// <summary>
     /// Creates a quantized attention layer from a trained <see cref="MultiHeadAttentionLayer{T}"/>.
     /// </summary>
@@ -59,6 +65,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
             inputShape: source.GetInputShape(),
             outputShape: source.GetOutputShape())
     {
+        _source = source;
         _headCount = source.HeadCount;
         _embeddingDimension = source.GetInputShape()[^1];
         _headDimension = _embeddingDimension / _headCount;
@@ -89,12 +96,13 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     /// <param name="source">The source GQA layer to quantize.</param>
     /// <param name="mode">The quantization format to use (default: INT8).</param>
     public QuantizedAttentionLayer(
-        GroupedQueryAttentionLayer<float> source,
+        [LayerState(Member = "_sourceGrouped")] GroupedQueryAttentionLayer<float> source,
         InferenceQuantizationMode mode = InferenceQuantizationMode.WeightOnlyInt8)
         : base(
             inputShape: source.GetInputShape(),
             outputShape: source.GetOutputShape())
     {
+        _sourceGrouped = source;
         _headCount = source.NumHeads;
         _numKVHeads = source.NumKVHeads;
         _headDimension = source.HeadDimension;

@@ -94,6 +94,12 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>
     /// <summary>Construction state: the 'streamBOutputSize' the layer was built with.</summary>
     private readonly int _streamBOutputSize;
 
+    /// <summary>Construction state: the 'streamALayers' the layer was built with.</summary>
+    private readonly System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>> _streamALayers;
+
+    /// <summary>Construction state: the 'streamBLayers' the layer was built with.</summary>
+    private readonly System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>> _streamBLayers;
+
     /// <summary>
     /// Creates a parallel streams layer that splits input features and processes each half independently.
     /// </summary>
@@ -127,6 +133,8 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>
         IEnumerable<ILayer<T>> streamBLayers)
         : base([inputSize], [streamAOutputSize + streamBOutputSize])
     {
+        _streamBLayers = streamBLayers;
+        _streamALayers = streamALayers;
         _streamBOutputSize = streamBOutputSize;
         _streamAOutputSize = streamAOutputSize;
         _inputSize = inputSize;

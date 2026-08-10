@@ -331,6 +331,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             // from the declared input shape is exactly the inference this generator removes.
             if (arr.ElementType.SpecialType == SpecialType.System_Int32) return ValueKind.Int32Array;
             if (arr.ElementType.SpecialType == SpecialType.System_Double) return ValueKind.DoubleArray;
+            if (arr.ElementType.SpecialType == SpecialType.System_Boolean) return ValueKind.BooleanArray;
+
 
             // int[][]: the per-input shapes a merge layer (Add, Concatenate, Multiply) was built
             // with, where the outer length is the number of inputs.
@@ -360,9 +362,17 @@ public class LayerStateGenerator : IIncrementalGenerator
         return vector || name == "IActivationFunction";
     }
 
+    /// <summary>Both types are layers over the same numeric type.</summary>
+    private static bool IsSameLayer(ITypeSymbol member, ITypeSymbol parameter)
+        => IsLayer(Unwrap(parameter), out var pn)
+           && IsLayer(Unwrap(member), out var mn)
+           && pn is not null && mn is not null
+           && SymbolEqualityComparer.Default.Equals(pn, mn);
+
     private static string? FindBackingMember(INamedTypeSymbol type, IParameterSymbol p, out bool needsConvert)
     {
         needsConvert = false;
+
         // [LayerState(Member = "...")] wins outright. Without it the attribute could not rescue a
         // layer that stored the argument under any other name, because ADN0051 applied the same
         // five-name rule to marked parameters too.
@@ -385,6 +395,15 @@ public class LayerStateGenerator : IIncrementalGenerator
 
                     switch (member)
                     {
+                        // A child layer is recorded by walking the object, so the member only has to
+                        // BE that layer -- not to be declared as the same type. LoRAAdapterBase keeps
+                        // its child as ILayer<T> while a convenience overload takes LayerBase<T>; the
+                        // stored object is the same one either way.
+                        case IFieldSymbol lf when IsSameLayer(lf.Type, p.Type):
+                            return lf.Name;
+                        case IPropertySymbol { GetMethod: not null } lp when IsSameLayer(lp.Type, p.Type):
+                            return lp.Name;
+
                         case IFieldSymbol f when SameType(f.Type, p.Type):
                             return f.Name;
                         case IPropertySymbol { GetMethod: not null } prop when SameType(prop.Type, p.Type):
@@ -786,6 +805,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.Boolean => $"state.Boolean(\"{p.Key}\")",
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
+            ValueKind.BooleanArray => $"state.BooleanArray(\"{p.Key}\")",
+
             ValueKind.DoubleArray => $"state.DoubleArray(\"{p.Key}\")",
             ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
             ValueKind.Layer => $"({p.TypeFqn.TrimEnd('?')})RebuildNested(state, \"{p.Key}\")!",
@@ -823,6 +844,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         Enum,
         Int32Array,
         DoubleArray,
+        BooleanArray,
+
         Int32Jagged,
         Layer,
         LayerList,

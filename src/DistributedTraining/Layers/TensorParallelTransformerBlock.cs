@@ -37,6 +37,9 @@ public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>
     /// <summary>Construction state: the 'backend' the layer was built with.</summary>
     private readonly AiDotNet.DistributedTraining.ICommunicationBackend<T> _backend;
 
+    /// <summary>Construction state: the 'numHeads' the layer was built with.</summary>
+    private readonly int _numHeads;
+
     /// <summary>Creates a tensor-parallel transformer block sharded across the ranks of <paramref name="backend"/>.</summary>
     /// <param name="backend">The tensor-parallel communication backend.</param>
     /// <param name="embedDim">Model embedding dimension (= numHeads * headDim).</param>
@@ -49,6 +52,7 @@ public sealed partial class TensorParallelTransformerBlock<T> : LayerBase<T>
         IActivationFunction<T>? activation = null, bool causal = false)
         : base([embedDim], [embedDim])
     {
+        _numHeads = numHeads;
         _backend = backend;
         if (backend is null) throw new ArgumentNullException(nameof(backend));
         if (ffnDim <= 0) throw new ArgumentOutOfRangeException(nameof(ffnDim));

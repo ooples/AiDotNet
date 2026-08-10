@@ -1375,7 +1375,7 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
 /// <summary>
 /// Tensor-based decoder layer for Informer with cross-attention.
 /// </summary>
-internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
 
     private readonly int _embeddingDim;
@@ -1451,9 +1451,13 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// <summary>Construction state: the 'sparsityFactor' the layer was built with.</summary>
     private readonly int _sparsityFactor;
 
+    /// <summary>Construction state: the 'dropoutRate' the layer was built with.</summary>
+    private readonly double _dropoutRate;
+
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim })
     {
+        _dropoutRate = dropoutRate;
         _sparsityFactor = sparsityFactor;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;

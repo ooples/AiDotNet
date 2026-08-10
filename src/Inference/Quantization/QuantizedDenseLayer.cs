@@ -10,12 +10,15 @@ namespace AiDotNet.Inference.Quantization;
 /// and NF4 (4-bit NormalFloat, per-group) via the shared <see cref="WeightOnlyProjection"/> engine, so a
 /// FFN/dense layer honors the same <see cref="InferenceQuantizationMode"/> the user selects for attention.
 /// </summary>
-internal sealed class QuantizedDenseLayer : LayerBase<float>
+internal sealed partial class QuantizedDenseLayer : LayerBase<float>
 {
     private readonly int _inputSize;
     private readonly int _outputSize;
     private readonly WeightOnlyProjection _proj;
     private readonly float[] _biases;
+
+    /// <summary>Construction state: the 'source' the layer was built with.</summary>
+    private readonly AiDotNet.NeuralNetworks.Layers.DenseLayer<float> _source;
 
     public QuantizedDenseLayer(DenseLayer<float> source, InferenceQuantizationMode mode = InferenceQuantizationMode.WeightOnlyInt8)
         : base(
@@ -23,6 +26,7 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
             outputShape: source.GetOutputShape(),
             scalarActivation: source.ScalarActivation ?? new AiDotNet.ActivationFunctions.IdentityActivation<float>())
     {
+        _source = source;
         _inputSize = source.GetInputShape()[0];
         _outputSize = source.GetOutputLayerShape().RequireConcrete("Sizing a quantized dense layer's weight block")[0];
 
@@ -46,6 +50,7 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
             outputShape: source.GetOutputShape(),
             vectorActivation: vectorActivation)
     {
+        _source = source;
         _inputSize = source.GetInputShape()[0];
         _outputSize = source.GetOutputLayerShape().RequireConcrete("Sizing a quantized dense layer's weight block")[0];
 
