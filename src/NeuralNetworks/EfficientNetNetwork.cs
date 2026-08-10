@@ -379,19 +379,8 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         return base.GetNamedLayerActivations(promoted);
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -480,7 +469,23 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
             _configuration.CustomWidthMultiplier,
             _configuration.CustomDepthMultiplier);
 
-        return new EfficientNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
+        // A FRESH OPTIMIZER, not this model's. Adam keeps per-parameter first and second moment
+        // state, so two models sharing one instance corrupt each other's moment estimates and the
+        // step count advances twice per logical step, doubling the bias correction. The rest of this
+        // method exists to make the clone faithful; a shared optimizer defeats that.
+        //
+        // Rebuilt with the same settings the constructor's default path uses, since a clone of a
+        // model that took the default should also take the default.
+        // FlamingoNeuralNetwork.CreateNewInstance does the same, for the same reason.
+        var freshOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                Epsilon = 1e-6,
+            });
+
+        return new EfficientNetNetwork<T>(Architecture, config, freshOptimizer, _lossFunction);
     }
 
     /// <inheritdoc />

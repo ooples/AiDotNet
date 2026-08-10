@@ -678,7 +678,6 @@ public class GMFlow<T> : OpticalFlowBase<T>
             }
         }
     }
-
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

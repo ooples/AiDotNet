@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Runtime;
 using System.Threading;
 using AiDotNet.Helpers;
@@ -613,9 +613,18 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
+        // EVERY ELEMENT AGAINST ITS OWN TOLERANCE. Tracking only the LARGEST difference and
+        // comparing it to THAT element's allowance let a genuine violation hide: the tolerance
+        // is relative to |expected|, so a small difference on a small-magnitude element can
+        // exceed its own tiny allowance while a bigger difference elsewhere stays inside a
+        // bigger one. The single comparison then passed on a Clone() that is demonstrably
+        // wrong at index i. Each element is checked where it is; the worst RATIO is kept only
+        // so the failure message points at the element that actually broke.
+        double worstRatio = 0.0;
         double maxDiff = 0.0;
         double maxAllowed = 0.0;
         int maxDiffIndex = 0;
+        bool sawAny = false;
         for (int i = 0; i < original.Length; i++)
         {
             double expected = ToDouble(original[i]);
@@ -623,13 +632,29 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
             double allowed = CloneOutputAbsoluteTolerance
                 + CloneOutputRelativeTolerance * Math.Abs(expected);
             double diff = Math.Abs(actual - expected);
-            if (i == 0 || diff > maxDiff)
+
+            // A non-finite clone output is a failure in its own right: NaN fails every
+            // comparison, so without this it slips through as "not greater than".
+            Assert.True((!double.IsNaN(actual) && !double.IsInfinity(actual)),
+                $"Clone() output[{i}] is {actual}; the original was {expected:E6}.");
+
+            Assert.True(diff <= allowed,
+                $"Clone() output[{i}] = {actual:E6} differs from {expected:E6} by {diff:E6}, " +
+                $"which exceeds its own tolerance {allowed:E6}.");
+
+            double ratio = allowed > 0 ? diff / allowed : (diff > 0 ? double.PositiveInfinity : 0.0);
+            if (!sawAny || ratio > worstRatio)
             {
+                sawAny = true;
+                worstRatio = ratio;
                 maxDiff = diff;
                 maxAllowed = allowed;
                 maxDiffIndex = i;
             }
         }
+
+        // Kept as a summary line: every element was already asserted individually above,
+        // so this reports WHICH element was worst relative to its own tolerance.
         Assert.True(maxDiff <= maxAllowed,
             $"Clone output differs for {model.GetType().FullName} at index {maxDiffIndex}: " +
             $"expected={ToDouble(original[maxDiffIndex])}, actual={ToDouble(clonedOutput[maxDiffIndex])}, " +

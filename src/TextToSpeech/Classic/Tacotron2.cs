@@ -105,11 +105,20 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new Tacotron2Options();
         _useNativeMode = true;
+        // Paper training configuration (Shen et al. 2018, sec. 3): "Adam optimizer with beta1 = 0.9,
+        // beta2 = 0.999, eps = 10^-6 and a learning rate of 10^-3 exponentially decaying to 10^-5",
+        // with L2 regularization of 10^-6. Built bare, the default step diverged as soon as the
+        // optimizer was actually connected — 8.332308 to 143.3 across two steps. The rate and the
+        // decay come from the options so callers can override the paper defaults.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
+                MinLearningRate = 1e-5,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-6,
                 WeightDecay = _options.WeightDecay,
                 UseAdaptiveLearningRate = false,
             });
@@ -285,6 +294,7 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
+            // Pass the configured optimizer through; the two-argument overload ignored it.
             TrainWithTape(input, expected, _optimizer);
         }
         finally
@@ -294,19 +304,10 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {

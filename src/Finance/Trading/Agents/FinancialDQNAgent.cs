@@ -49,8 +49,13 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
-public class FinancialDQNAgent<T> : TradingAgentBase<T>
+public class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The online Q-network. Its target copy is excluded, as it was before -- a target is refreshed FROM these weights, not trained alongside them.</remarks>
+    protected override void RegisterComponents()
+        => RegisterParameterComponent(_qNetwork);
     #region Fields
 
     private readonly FinancialDQNAgentOptions<T> _options;
@@ -68,9 +73,6 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _qNetwork.ParameterCount;
 
     #endregion
 
@@ -353,26 +355,6 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
         UpdateTargetNetwork();
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, GetParameters performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters() => _qNetwork.GetParameters();
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, SetParameters performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.SetParameters(parameters);
-        UpdateTargetNetwork();
-    }
-
     #endregion
 
     #region Model Metadata
@@ -414,7 +396,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return _qNetwork.ComputeGradients(Tensor<T>.FromVector(input), Tensor<T>.FromVector(target), lossFunction);
     }
@@ -425,7 +407,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _qNetwork.ApplyGradients(gradients, learningRate);
         UpdateTargetNetwork();

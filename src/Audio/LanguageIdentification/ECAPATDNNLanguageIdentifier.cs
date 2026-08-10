@@ -65,6 +65,17 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ResearchPaper("ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification", "https://arxiv.org/abs/2005.07143", Year = 2020, Authors = "Brecht Desplanques, Jenthe Thienpondt, Kris Demuynck")]
 public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore returns ForwardNative, whose last step is
+    /// <c>_classifierLayer.Forward(...)</c>. That layer is built in InitializeNativeLayers as
+    /// <c>new DenseLayer&lt;T&gt;(numLanguages)</c>, and numLanguages is the size of the language
+    /// mapping - the same count InitializeLayers passes as <c>numLanguages</c> to the LayerHelper
+    /// stack. A class count, not an embedding size: EmbeddingDimension is the pooling width one
+    /// layer earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _languageIdToCode.Count;
+
     #region Fields
 
     private readonly INumericOperations<T> _numOps;
@@ -430,15 +441,12 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
         var expectedVector = expectedOutput.ToVector();
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
-        var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
 
         _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -455,7 +463,6 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
             offset += layerParams.Length;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

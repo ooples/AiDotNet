@@ -44,6 +44,17 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("ACE-Step: A Step Towards Music Generation Foundation Model", "https://doi.org/10.48550/arXiv.2501.09263", Year = 2024, Authors = "Yushen Chen, Liwei Deng, Ziyang Ma, Kehan Chen, Yongqi Wang, Jianwei Yu, Dong Yu")]
 public class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultACEStepLayers</c> ends by projecting each latent-frame token back to the latent
+    /// channel dim, <c>DenseLayer&lt;T&gt;(latentDim)</c>, supplied from <c>_options.LatentDim</c> -
+    /// this is a score network operating in a COMPRESSED latent space, so the output axis is the
+    /// latent width, not <c>UNetDim</c> (the transformer width) or <c>NumChannels</c> (the raw audio
+    /// channels the Conv1D stem consumes).
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LatentDim;
+
     #region Fields
 
     private readonly ACEStepOptions _options;
@@ -212,12 +223,11 @@ public class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

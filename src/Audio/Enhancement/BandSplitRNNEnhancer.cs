@@ -46,6 +46,14 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://arxiv.org/abs/2209.15174", Year = 2023, Authors = "Yi Luo, Jianwei Yu")]
 public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: measured [1,8] -> [1,257], which is FFTSize (512) / 2 + 1 - the number of
+    /// one-sided spectrum bins. This is the case that rules out reading a width reflectively by
+    /// property name: 257 appears nowhere in the options.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.FFTSize / 2 + 1;
+
     #region Fields
 
     private readonly BandSplitRNNEnhancerOptions _options;
@@ -222,12 +230,11 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         _stft.MagnitudeAndPhase(rawAudio, out var magnitude, out var phase);

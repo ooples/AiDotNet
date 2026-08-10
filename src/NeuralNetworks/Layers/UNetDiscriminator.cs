@@ -3,7 +3,6 @@ using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -54,8 +53,68 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 2")]
-public partial class UNetDiscriminator<T> : LayerBase<T>
+// Both ranks are declared because OnFirstForward accepts both by name - "requires rank-3 [C,H,W] or
+// rank-4 [B,C,H,W] input" - and the layer's own [LayerProperty] claims one of each (ExpectedInputRank
+// = 3, TestInputShape rank 4). Written as two declarations rather than one BatchOptional layout so
+// that BOTH ranks appear literally, which is what the rank cross-check reads.
+//
+// OutputAxesFor below is HAND-WRITTEN: the channel axis is not carried through, so the generator's
+// Same(role)-per-axis derivation would be wrong for it.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// SPATIAL DIMENSIONS SURVIVE THE PYRAMID, which is the whole point of a U-Net discriminator: it
+    /// scores every pixel rather than the image as a whole. OnFirstForward states it directly -
+    /// <c>ResolveShapes(new[] { inC, inH, inW }, new[] { 1, inH, inW })</c> - and the encoder/decoder
+    /// walk in that same method shows why it is exact rather than approximate: each of the
+    /// <c>_numBlocks</c> encoder stages does <c>currentH = (currentH + 1) / 2</c> and each decoder
+    /// stage does <c>currentH *= 2</c>, and the guard above them rejects any input whose H or W is not
+    /// divisible by <c>2^numBlocks</c>. Under that guard halving and doubling cancel exactly, so
+    /// <c>Same</c> is the true relation and no <c>Window</c> is needed.
+    /// </para>
+    /// <para>
+    /// The channel count is read off this layer's OWN declared output shape rather than written as the
+    /// literal 1. The single channel is architectural - <c>_convLast</c> is built with
+    /// <c>outputDepth: 1</c> and the constructor declares <c>base([-1,-1,-1], [1,-1,-1])</c>
+    /// "Per-pixel output" - but reading it keeps the contract tied to the declaration instead of
+    /// duplicating it, so the two cannot drift apart.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        var declaredOutput = GetOutputShape();
+        if (declaredOutput is null || declaredOutput.Length != 3) return null;
+
+        int outChannels = declaredOutput[0];
+        if (outChannels <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(outChannels));
+        var height = new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height));
+        var width = new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width));
+
+        return inputRank switch
+        {
+            3 => new[] { channels, height, width },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            },
+            _ => null,
+        };
+    }
+
     #region Fields
 
     /// <summary>
@@ -379,50 +438,6 @@ public partial class UNetDiscriminator<T> : LayerBase<T>
         _convLast.UpdateParameters(learningRate);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        AddParamsToList(allParams, _convFirst.GetParameters());
-        foreach (var block in _encoderBlocks)
-        {
-            AddParamsToList(allParams, block.GetParameters());
-        }
-        foreach (var block in _decoderBlocks)
-        {
-            AddParamsToList(allParams, block.GetParameters());
-        }
-        AddParamsToList(allParams, _convLast.GetParameters());
-
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward: encoder/decoder block shapes are unresolved.
-        // Buffer and replay from OnFirstForward.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int offset = 0;
-
-        offset = SetLayerParams(_convFirst, parameters, offset);
-        foreach (var block in _encoderBlocks)
-        {
-            offset = SetLayerParams(block, parameters, offset);
-        }
-        foreach (var block in _decoderBlocks)
-        {
-            offset = SetLayerParams(block, parameters, offset);
-        }
-        SetLayerParams(_convLast, parameters, offset);
-    }
-
     private Vector<T>? _pendingParameters;
 
     private static void AddParamsToList(List<T> list, Vector<T> parameters)
@@ -468,8 +483,50 @@ public partial class UNetDiscriminator<T> : LayerBase<T>
 /// <summary>
 /// Convolutional block for U-Net encoder with optional downsampling.
 /// </summary>
-internal partial class UNetConvBlock<T> : LayerBase<T>
+// Rank 3 [C,H,W] or rank 4 [B,C,H,W] - the two forms OnFirstForward names explicitly, so one
+// BatchOptional layout covers both.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Restates <c>OnFirstForward</c>'s own arithmetic:
+    /// <c>ResolveShapes([inC, inH, inW], [_outChannels, outH, outW])</c> where
+    /// <c>outH = _downsample ? (inH + 1) / 2 : inH</c>. Channels become the configured width; the
+    /// spatial axes either halve or pass through, depending on how this block was constructed.
+    /// </para>
+    /// <para>
+    /// <c>(n + 1) / 2</c> in integer arithmetic is <c>ceil(n / 2)</c>, and that is exactly
+    /// <c>Window(kernel: 1, stride: 2, padding: 0)</c>: <c>floor((n - 1) / 2) + 1</c>. Reaching for
+    /// <see cref="AxisRelation.Scaled"/> would have been wrong - it refuses uneven division, so an
+    /// odd height would resolve to nothing even though the layer handles it fine.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 && inputRank != 4) return null;
+
+        AxisRelation Spatial(TensorAxis axis) => _downsample
+            ? AxisRelation.Window(axis, kernel: 1, stride: 2, padding: 0)
+            : AxisRelation.Same(axis);
+
+        var axes = new List<OutputAxisContract>(inputRank);
+        if (inputRank == 4)
+        {
+            axes.Add(new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)));
+        }
+
+        axes.Add(new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels)));
+        axes.Add(new OutputAxisContract(TensorAxis.Height, Spatial(TensorAxis.Height)));
+        axes.Add(new OutputAxisContract(TensorAxis.Width, Spatial(TensorAxis.Width)));
+        return axes;
+    }
+
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly ConvolutionalLayer<T> _conv2;
     private readonly LeakyReLUActivation<T> _leakyReLU;
@@ -593,29 +650,6 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
         _conv2.UpdateParameters(learningRate);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var params1 = _conv1.GetParameters();
-        var params2 = _conv2.GetParameters();
-        var result = new T[params1.Length + params2.Length];
-        for (int i = 0; i < params1.Length; i++) result[i] = params1[i];
-        for (int i = 0; i < params2.Length; i++) result[params1.Length + i] = params2[i];
-        return new Vector<T>(result);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int count1 = _conv1.GetParameters().Length;
-        _conv1.SetParameters(parameters.SubVector(0, count1));
-        _conv2.SetParameters(parameters.SubVector(count1, parameters.Length - count1));
-    }
-
     private Vector<T>? _pendingParameters;
 
     public override void ResetState()
@@ -634,8 +668,48 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
 /// <summary>
 /// Upsampling block for U-Net decoder with skip connection concatenation.
 /// </summary>
-internal partial class UNetUpBlock<T> : LayerBase<T>
+// Rank 3 [C,H,W] or rank 4 [B,C,H,W] - the two forms OnFirstForward names explicitly, so one
+// BatchOptional layout covers both.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Restates <c>OnFirstForward</c>: <c>ResolveShapes([inC, inH, inW], [_outChannels, upH, upW])</c>
+    /// with <c>upH = inH * 2</c>, the bilinear <c>UpsamplingLayer(scaleFactor: 2)</c>. Both convolutions
+    /// are 3x3 stride 1 padding 1, so they preserve the upsampled extent and only the channel count
+    /// changes.
+    /// </para>
+    /// <para>
+    /// <see cref="AxisRelation.Scaled"/> is correct here where it was wrong for the encoder block:
+    /// doubling is exact for every input, so there is no uneven division to refuse. The skip
+    /// connection affects the CHANNEL count feeding conv1 (<c>inC + _skipChannels</c>) but not the
+    /// output, which is pinned to <c>_outChannels</c> - so this stays a single-input contract.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 && inputRank != 4) return null;
+
+        var axes = new List<OutputAxisContract>(inputRank);
+        if (inputRank == 4)
+        {
+            axes.Add(new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)));
+        }
+
+        axes.Add(new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outChannels)));
+        axes.Add(new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Scaled(TensorAxis.Height, 2, 1)));
+        axes.Add(new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Scaled(TensorAxis.Width, 2, 1)));
+        return axes;
+    }
+
     private readonly UpsamplingLayer<T> _upsample;
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly ConvolutionalLayer<T> _conv2;
@@ -873,29 +947,6 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
     {
         _conv1.UpdateParameters(learningRate);
         _conv2.UpdateParameters(learningRate);
-    }
-
-    public override Vector<T> GetParameters()
-    {
-        var params1 = _conv1.GetParameters();
-        var params2 = _conv2.GetParameters();
-        var result = new T[params1.Length + params2.Length];
-        for (int i = 0; i < params1.Length; i++) result[i] = params1[i];
-        for (int i = 0; i < params2.Length; i++) result[params1.Length + i] = params2[i];
-        return new Vector<T>(result);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        int count1 = _conv1.GetParameters().Length;
-        _conv1.SetParameters(parameters.SubVector(0, count1));
-        _conv2.SetParameters(parameters.SubVector(count1, parameters.Length - count1));
     }
 
     private Vector<T>? _pendingParameters;

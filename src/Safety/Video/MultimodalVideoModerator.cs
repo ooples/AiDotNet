@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -73,12 +73,22 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         _imageClassifier = new CLIPImageSafetyClassifier<T>(nsfwThreshold, violenceThreshold);
     }
 
-    /// <inheritdoc />
     /// <summary>
     /// Number of image frames sampled per video, matching the paper's annotation budget: "14 image
     /// frames, 1 thumbnail, and text metadata" were fed to the model for each of 19,422 videos.
     /// </summary>
     public const int TaxonomyFrameBudget = 14;
+
+    /// <summary>
+    /// Number of distinct frames the last <see cref="EvaluateVideo"/> call actually sampled.
+    /// </summary>
+    /// <remarks>
+    /// THE COST PROPERTY, OBSERVABLE. The constant alone proves nothing: a moderator that reverted
+    /// to a per-frame rate would still expose TaxonomyFrameBudget == 14. This reports what was really
+    /// drawn -- the thumbnail stand-in plus the content frames, so
+    /// min(TaxonomyFrameBudget, frames.Count - 1), independent of video length.
+    /// </remarks>
+    public int LastSampledFrameCount { get; private set; }
 
     /// <inheritdoc />
     /// <remarks>
@@ -171,13 +181,44 @@ public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
         // The paper's fixed annotation budget: 14 image frames plus 1 thumbnail per video, however
         // long the video is. Index 0 stands in for the thumbnail, which on a video platform is a
         // separate asset this interface does not receive; the remaining budget is spread evenly.
+        // CHUNK CENTRES, SO THE BUDGET IS ACTUALLY 14 PLUS THE THUMBNAIL. The previous loop started
+        // at k = 0, which recomputes index 0 -- already in the seed list as the thumbnail stand-in --
+        // and the Contains check then discarded it. The set therefore held at most `budget` entries
+        // and the thumbnail consumed one of the 14, so the code and the documented budget disagreed.
+        //
+        // Sampling the CENTRE of each chunk fixes both halves: the centre of chunk 0 is never index 0
+        // for a video longer than one frame, so the thumbnail stays distinct and all 14 content
+        // frames are spent on content. A HashSet replaces List.Contains, which was O(budget^2) --
+        // trivial at 14, but the loop no longer needs a scan at all.
+        // THE CONTENT FRAMES ARE DRAWN FROM [1, Count-1], NOT [0, Count-1]. Chunk centres over the
+        // whole range still landed on index 0 for short videos -- index 0 is already seeded as the
+        // thumbnail stand-in -- so the Add was rejected and the video was analysed on fewer frames
+        // than the budget allows. Excluding the thumbnail's index from the content range removes the
+        // collision by construction rather than by luck.
+        //
+        // Verified by exhaustive count over frames.Count = 1..20000: this yields exactly
+        // min(TaxonomyFrameBudget + 1, Count) distinct indices at every length -- the most that can
+        // be drawn. The previous form fell one short at every length from 15 to 27, and a plain
+        // round-up still fell short at 15 to 18.
+        var seen = new HashSet<int> { 0 };
         var sampled = new List<int> { 0 };
-        int budget = Math.Min(TaxonomyFrameBudget, frames.Count);
-        for (int k = 0; k < budget; k++)
+        if (frames.Count > 1)
         {
-            int idx = (int)((long)k * frames.Count / budget);
-            if (!sampled.Contains(idx)) sampled.Add(idx);
+            int span = frames.Count - 1;
+            int budget = Math.Min(TaxonomyFrameBudget, span);
+            for (int k = 0; k < budget; k++)
+            {
+                int idx = 1 + (int)(((2L * k + 1) * span) / (2L * budget));
+                if (idx >= frames.Count) idx = frames.Count - 1;
+                if (seen.Add(idx)) sampled.Add(idx);
+            }
         }
+
+        // CONTENT FRAMES, EXCLUDING THE THUMBNAIL STAND-IN. The documented budget is "14 image frames
+        // plus 1 thumbnail", and index 0 is the thumbnail: counting it too would report 15 against a
+        // budget of 14 and make a correct sampler look rate-based. Recorded from the final set rather
+        // than from the constant, so a video shorter than the budget reports what was really drawn.
+        LastSampledFrameCount = Math.Max(0, sampled.Count - 1);
 
         foreach (int i in sampled)
         {

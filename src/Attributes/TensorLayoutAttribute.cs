@@ -85,7 +85,30 @@ public sealed class TensorLayoutAttribute : Attribute
     public bool AcceptsRank(int rank)
     {
         if (rank == Axes.Length) return true;
-        return BatchOptional && Axes.Length > 0 && Axes[0] == TensorAxis.Batch && rank == Axes.Length - 1;
+
+        // ONE RULE, AND THIS IS IT. The same decision was implemented a second
+        // time in ShapeDeclarationValidationGenerator.Layout, and the two copies
+        // had already drifted APART IN OPPOSITE DIRECTIONS: this one lacked the
+        // `Axes.Length > 1` guard, so a single-axis batch-optional layout accepted
+        // rank 0; the generator lacked the `Axes[0] == Batch` guard, so it
+        // reported a build error for a rank the runtime would have accepted. A
+        // rule duplicated in two places is a rule that will disagree with itself.
+        //
+        // THE GENERATOR CANNOT CALL THIS METHOD, so the duplication cannot be removed: it runs
+        // inside the compiler against SYMBOLS, and the attribute type is never loaded, so
+        // ShapeDeclarationValidationGenerator.Layout.AcceptedRanks has to restate the rule. That
+        // restatement is the second copy and MUST CHANGE WITH THIS ONE. What keeps them in step is
+        // TensorLayoutRankTests, which drives one shared table through this method and through a
+        // transcription of AcceptedRanks and requires identical verdicts -- including the two rows
+        // each copy historically got wrong.
+        //
+        // `Axes.Length > 1` rather than `> 0`: dropping the batch axis from a
+        // one-axis layout leaves a rank-0 tensor, which is a scalar, not an
+        // unbatched form of anything.
+        return BatchOptional
+            && Axes.Length > 1
+            && Axes[0] == TensorAxis.Batch
+            && rank == Axes.Length - 1;
     }
 
     /// <summary>

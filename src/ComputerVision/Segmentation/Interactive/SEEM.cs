@@ -57,40 +57,48 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Everything Everywhere All at Once", "https://arxiv.org/abs/2304.06718", Year = 2023, Authors = "Zou et al.")]
-public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
+public class SEEM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SEEMOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private int _height, _width, _channels, _numClasses;
+    // Only SEEM's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from PromptableSegmentationBase -> SegmentationModelBase, as do _imageEmbedding and
+    // _imageSet.
     private SEEMModelSize _modelSize;
     private int[] _channelDims;
     private int _decoderDim;
     private int[] _depths;
     private double _dropRate;
-    private bool _useNativeMode;
-    private string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
+    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
+    // SegmentationModelBase and say exactly the same thing.
+    internal bool UseNativeMode => _useNativeMode;
+    internal SEEMModelSize ModelSize => _modelSize;
+    #endregion
+
     /// <summary>
-    /// Gets whether this SEEM instance supports training.
+    /// Creates SEEM's default optimizer: AdamW configured from the model's own options.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
+    /// Overriding the base's CreateDefaultOptimizer is how SEEM's option-driven learning rate and
+    /// weight decay survive re-parenting. Resolution is lazy, so <c>_options</c> is already
+    /// assigned by the time this runs.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
-    internal bool UseNativeMode => _useNativeMode;
-    internal SEEMModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
-    #endregion
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
 
     #region Constructors
     /// <summary>
@@ -113,21 +121,16 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 133,
         SEEMModelSize modelSize = SEEMModelSize.Tiny, double dropRate = 0.0,
         SEEMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
+        // defaults the loss to CrossEntropyWithLogitsLoss - exactly what the deleted lines did by
+        // hand. `optimizer` is passed straight through INCLUDING null; the base defaults it lazily
+        // via CreateDefaultOptimizer(), overridden above to keep SEEM's option-driven AdamW. That
+        // default could never be written as a base-constructor argument, because `this` is not
+        // available in a constructor initializer.
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new SEEMOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _modelSize = modelSize; _dropRate = dropRate;
         var config = GetModelConfig(modelSize);
         _channelDims = _options.ChannelDimensions?.ToArray() ?? config.ChannelDims;
         _depths = _options.StageDepths?.ToArray() ?? config.Depths;
@@ -155,41 +158,24 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public SEEM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 133, SEEMModelSize modelSize = SEEMModelSize.Tiny,
         SEEMOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
+        // geometry and opens the InferenceSession - the same lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new SEEMOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"SEEM ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0.0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _modelSize = modelSize; _dropRate = 0.0;
         var config = GetModelConfig(modelSize);
         _channelDims = _options.ChannelDimensions?.ToArray() ?? config.ChannelDims;
         _depths = _options.StageDepths?.ToArray() ?? config.Depths;
         _decoderDim = _options.DecoderDimension ?? config.DecoderDim;
         ValidateTopology(options);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load SEEM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
 
     #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    // PredictCore is inherited from SegmentationModelBase and dispatches to Forward / PredictOnnx
+    // exactly as the deleted override did.
 
     /// <summary>
     /// Performs one training step.
@@ -212,7 +198,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -237,7 +223,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
             throw new ArgumentOutOfRangeException(nameof(options), "SEEM dimensions and stage depths must be positive.");
     }
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
@@ -246,7 +232,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -263,11 +249,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    // AddBatchDimension and RemoveBatchDimension are inherited from SegmentationModelBase.
     #endregion
 
     #region Abstract Implementation
@@ -298,15 +280,6 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int totalRequired = 0;
@@ -329,7 +302,6 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
             offset += count;
         }
     }
-
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -404,46 +376,52 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
             : new SEEM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, options);
     }
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
+    // SEEM owns no further unmanaged resources.
     #endregion
 
     #region IPromptableSegmentation Implementation
-    private Tensor<T>? _imageEmbedding;
+    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase.
+    // _imageEmbedding, _imageSet, SetImage and SupportsPoint/Box/MaskPrompts (all true) come from
+    // PromptableSegmentationBase; only the text-prompt capability and SEEM's cached class
+    // probabilities are model-specific.
     private Tensor<T>? _imageProbabilities;
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    bool IPromptableSegmentation<T>.SupportsPointPrompts => true;
-    bool IPromptableSegmentation<T>.SupportsBoxPrompts => true;
-    bool IPromptableSegmentation<T>.SupportsMaskPrompts => true;
-    bool IPromptableSegmentation<T>.SupportsTextPrompts => true;
 
-    void IPromptableSegmentation<T>.SetImage(Tensor<T> image)
+    /// <inheritdoc/>
+    public override bool SupportsTextPrompts => true;
+
+    /// <summary>
+    /// Encodes an image with SEEM's encoder stack, caching features for subsequent prompts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the body the explicit SetImage used to run inline. The base's SetImage stores the
+    /// return value in <c>_imageEmbedding</c> and marks the image set, so the observable behaviour
+    /// is unchanged; SetImage below only adds SEEM's extra probability cache.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> EncodeImage(Tensor<T> image)
     {
         var features = image;
         if (_useNativeMode && _encoderLayerEnd > 0)
         {
             for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
                 features = Layers[i].Forward(features);
-            _imageEmbedding = features;
+            return features;
         }
-        else
+
+        return Predict(image);
+    }
+
+    /// <inheritdoc/>
+    public override void SetImage(Tensor<T> image)
+    {
+        base.SetImage(image);
+        var embedding = _imageEmbedding;
+        if (embedding is not null)
         {
-            _imageEmbedding = Predict(image);
+            _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(embedding);
         }
-        _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(_imageEmbedding);
     }
 
     private Tensor<T> DecodeFromFeatures(Tensor<T> features)
@@ -455,7 +433,8 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return output;
     }
 
-    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
+    /// <inheritdoc/>
+    public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
     {
         var encoderFeatures = _imageEmbedding ?? throw new InvalidOperationException("Call SetImage before SegmentFromPoints.");
         int numC = encoderFeatures.Shape[0], h = encoderFeatures.Shape[1], w = encoderFeatures.Shape[2];
@@ -476,7 +455,8 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return BuildPromptMaskResult(ReduceChannelsToScoreMap(decoded), decoded.Shape[^2], decoded.Shape[^1]);
     }
 
-    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromBox(Tensor<T> box)
+    /// <inheritdoc/>
+    public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
     {
         var encoderFeatures = _imageEmbedding ?? throw new InvalidOperationException("Call SetImage before SegmentFromBox.");
         int numC = encoderFeatures.Shape[0], h = encoderFeatures.Shape[1], w = encoderFeatures.Shape[2];
@@ -488,7 +468,8 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return BuildPromptMaskResult(ReduceChannelsToScoreMap(decoded), decoded.Shape[^2], decoded.Shape[^1]);
     }
 
-    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromMask(Tensor<T> mask)
+    /// <inheritdoc/>
+    public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
     {
         var encoderFeatures = _imageEmbedding ?? throw new InvalidOperationException("Call SetImage before SegmentFromMask.");
         int numC = encoderFeatures.Shape[0], h = encoderFeatures.Shape[1], w = encoderFeatures.Shape[2];
@@ -498,7 +479,8 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         return BuildPromptMaskResult(ReduceChannelsToScoreMap(decoded), decoded.Shape[^2], decoded.Shape[^1]);
     }
 
-    List<PromptedSegmentationResult<T>> IPromptableSegmentation<T>.SegmentEverything()
+    /// <inheritdoc/>
+    public override List<PromptedSegmentationResult<T>> SegmentEverything()
     {
         var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);

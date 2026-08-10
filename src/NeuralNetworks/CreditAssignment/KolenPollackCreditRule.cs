@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
@@ -93,10 +93,23 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
     }
 
     /// <summary>
-    /// Returns immutable copies of the forward/feedback pairs used by the sequential KP rule.
-    /// Internal diagnostics keep the public credit-rule API small while allowing tests to verify
-    /// the defining same-update and shared-decay invariant directly.
+    /// Returns immutable copies of the forward/feedback pairs used by the sequential KP rule, for
+    /// inspecting how far feedback alignment has progressed.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kolen-Pollack works by driving the feedback matrices toward the transpose of the forward ones;
+    /// whether that is actually happening is invisible from the loss curve alone, and a rule that has
+    /// stopped aligning trains without ever failing. This is how a caller sees the two matrices and
+    /// measures the angle between them. Internal rather than public so the credit-rule surface stays
+    /// small.
+    /// </para>
+    /// <para>
+    /// DIAGNOSTIC ONLY, NOT PER-STEP. Every call clones two matrices per trainable layer, so calling
+    /// it inside a training loop adds an allocation pass proportional to the whole parameter set to
+    /// each step. Sample it, or use it from a test.
+    /// </para>
+    /// </remarks>
     internal IReadOnlyList<(Matrix<T> Forward, Matrix<T> Feedback)> GetAlignmentSnapshot()
     {
         var snapshot = new List<(Matrix<T> Forward, Matrix<T> Feedback)>();
@@ -132,14 +145,25 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
             Matrix<T>? previous = _previousForwardWeights[j];
 
             if (previous is not null &&
-                previous.Rows == current.Rows && previous.Columns == current.Columns)
+                previous.Rows == current.Rows && previous.Columns == current.Columns &&
+                b.Rows == current.Columns && b.Columns == current.Rows)
             {
+                // THE FORWARD MATRIX IS INDEXED TRANSPOSED, because B and W have opposite
+                // orientations. EnsureFeedback declares B_j as [outFeatures, inFeatures] -- confirmed
+                // by delta.Multiply(b) mapping [B, outFeatures] to [B, inFeatures] -- so W_j is
+                // [inFeatures, outFeatures]. Reading current[row, column] with B-shaped indices threw
+                // IndexOutOfRangeException whenever inFeatures != outFeatures, and when they were
+                // equal it raised nothing and accumulated the TRANSPOSE of the intended increment:
+                // Kolen-Pollack needs B to converge to W, so the rule quietly stopped aligning.
+                //
+                // The shape guard above previously compared previous against current only, never
+                // either against b, so it could not catch this. It does now.
                 for (int row = 0; row < b.Rows; row++)
                 {
                     for (int column = 0; column < b.Columns; column++)
                     {
-                        T forwardIncrement = ops.Subtract(current[row, column], previous[row, column]);
-                        T alignmentError = ops.Subtract(b[row, column], previous[row, column]);
+                        T forwardIncrement = ops.Subtract(current[column, row], previous[column, row]);
+                        T alignmentError = ops.Subtract(b[row, column], previous[column, row]);
                         b[row, column] = ops.Subtract(
                             ops.Add(b[row, column], ops.Multiply(updateScale, forwardIncrement)),
                             ops.Multiply(decay, alignmentError));

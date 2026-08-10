@@ -469,20 +469,8 @@ public class Hippo<T> : ForecastingModelBase<T>
     /// </summary>
     protected override bool SupportsFusedCompiledTraining => false;
 
-    /// <summary>
-    /// Updates the model parameters using the optimizer (required override).
-    /// </summary>
-    /// <param name="gradients">Gradient vector (not used - layers handle gradients internally).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This override is required by the base class.
-    /// Actual parameter updates happen through the optimizer in the Train method.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the HiPPO model.
     /// </summary>

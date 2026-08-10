@@ -46,8 +46,60 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "8")]
-public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
+// MobileNetV2 inverted residual: expand -> depthwise -> project. Only the depthwise stage is strided,
+// and only the projection changes the channel count, so the shape rule is a channel replacement plus a
+// single 3x3/stride/padding-1 window on each spatial axis. OutputAxesFor below is HAND-WRITTEN because
+// both halves depend on constructor arguments the roles cannot express.
+// BatchOptional covers rank 3 as well as rank 4, and both are genuinely accepted - OnFirstForward
+// branches on exactly those two and throws for anything else ("requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input"). Rank 4 is the tested form.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Derived from the two lines <see cref="OnFirstForward"/> uses to size its own output, not from
+    /// the block's structure:
+    /// <code>
+    /// int dwOutH = (inputHeight + 2 - 3) / Stride + 1; // padding=1, kernel=3
+    /// ResolveShapes(new[] { inChannels, inputHeight, inputWidth },
+    ///               new[] { OutChannels, dwOutH, dwOutW });
+    /// </code>
+    /// <c>Window(axis, kernel: 3, stride: Stride, padding: 1)</c> expands to
+    /// <c>floor((in + 2*1 - (3-1) - 1) / Stride) + 1</c>, which is that expression exactly.
+    /// </para>
+    /// <para>
+    /// The residual path does NOT make this shape-preserving, and that is the trap worth naming. It is
+    /// conditional — <c>_useResidual = Stride == 1 &amp;&amp; inChannels == OutChannels</c> — so a probe
+    /// run at stride 1 with matching channels would fit every axis as <c>Same</c> and declare a
+    /// downsampling block shape-preserving. The relations below stay correct at stride 2 because they
+    /// read <see cref="Stride"/> and <see cref="OutChannels"/> rather than an observed size.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank is not (3 or 4) || OutChannels <= 0 || Stride <= 0) return null;
+
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutChannels));
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, kernel: 3, stride: Stride, padding: 1));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, kernel: 3, stride: Stride, padding: 1));
+
+        return inputRank == 3
+            ? new[] { channels, height, width }
+            : new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                channels, height, width,
+            };
+    }
+
     // Non-readonly: lazy ctor leaves these null until OnFirstForward
     // observes input.Shape and allocates each against the resolved
     // hiddenDim = inChannels × expansionRatio.
@@ -81,19 +133,6 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     private Tensor<T>? _lastSeOut;
     private Tensor<T>? _lastProjectOut;
     private Tensor<T>? _lastProjectBnOut;
-
-    /// <summary>
-    /// Sum of trainable parameters across all sub-layers. The non-optional
-    /// <c>_dwConv</c>, <c>_dwBn</c>, <c>_projectConv</c>, <c>_projectBn</c>
-    /// stay null until <see cref="OnFirstForward"/> resolves the input
-    /// channel count and allocates them — null-guard each so this property
-    /// returns 0 in the pre-Forward state instead of throwing.
-    /// </summary>
-    public override long ParameterCount =>
-        (_expandConv?.ParameterCount ?? 0) + (_expandBn?.ParameterCount ?? 0) +
-        (_dwConv?.ParameterCount ?? 0) + (_dwBn?.ParameterCount ?? 0) +
-        (_se?.ParameterCount ?? 0) +
-        (_projectConv?.ParameterCount ?? 0) + (_projectBn?.ParameterCount ?? 0);
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -570,54 +609,6 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         _se?.UpdateParameters(learningRate);
         _projectConv?.UpdateParameters(learningRate);
         _projectBn?.UpdateParameters(learningRate);
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the block.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        if (_expandConv is not null)
-            parameters.AddRange(_expandConv.GetParameters().ToArray());
-        if (_expandBn is not null)
-            parameters.AddRange(_expandBn.GetParameters().ToArray());
-
-        if (_dwConv is not null)
-            parameters.AddRange(_dwConv.GetParameters().ToArray());
-        if (_dwBn is not null)
-            parameters.AddRange(_dwBn.GetParameters().ToArray());
-
-        if (_se is not null)
-            parameters.AddRange(_se.GetParameters().ToArray());
-
-        if (_projectConv is not null)
-            parameters.AddRange(_projectConv.GetParameters().ToArray());
-        if (_projectBn is not null)
-            parameters.AddRange(_projectBn.GetParameters().ToArray());
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from the given parameter vector.
-    /// </summary>
-    /// <param name="parameters">The parameter vector containing all layer parameters.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Pre-Forward path: sub-layers are still null because their
-        // channel-count layout depends on the input we haven't seen
-        // yet. Buffer the vector and replay it from OnFirstForward,
-        // after sub-layers exist with their resolved shapes.
-        if (!IsShapeResolved)
-        {
-            _pendingParameters = parameters;
-            return;
-        }
-
-        ApplyParameters(parameters);
     }
 
     // --- ILayerSerializationExtras: serialize internal BN running stats ---

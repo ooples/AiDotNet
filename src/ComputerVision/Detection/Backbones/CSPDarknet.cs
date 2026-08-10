@@ -11,6 +11,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
 /// <summary>
@@ -35,6 +37,14 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     Authors = "Alexey Bochkovskiy, Chien-Yao Wang, Hong-Yuan Mark Liao")]
 public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
+
+
+    // No GetExtraTrainableLayers here, deliberately. CSPDarknet ALREADY puts its stem and every
+    // stage into Layers, so the base walk reaches them; declaring them again listed every weight
+    // twice and the vector came back at exactly 2x the count (13,570,304 against 6,785,152).
+    // The refusals are still removed -- the automation was always going to work for this one, the
+    // model simply had nothing extra to declare.
+
     private readonly List<CSPBlock<T>> _stages;
     private readonly ConvolutionalLayer<T> _stem;
     private readonly int _depth;
@@ -163,20 +173,11 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return activations;
     }
 
-    /// <summary>
-    /// Sum across stem + every CSP stage. Inherited
-    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> delegates to this
-    /// virtual property, satisfying the <see cref="IDetectionBackbone{T}"/> contract.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _stem.ParameterCount;
-            for (int i = 0; i < _stages.Count; i++) count += _stages[i].GetParameterCount();
-            return count;
-        }
-    }
+    // ParameterCount is NOT overridden. It folds the same enumeration GetParameters
+    // does -- Layers, then GetExtraTrainableLayers() -- so the two cannot disagree. The
+    // override that was here summed the stem and blocks through GetParameterCount(),
+    // a SEPARATE source, and once the vector started folding the base enumeration the
+    // two drifted apart immediately.
 
     public void WriteParameters(BinaryWriter writer)
     {
@@ -264,17 +265,8 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: detection backbones train as part of a parent detector.");
 
-    public override Vector<T> GetParameters() =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not expose a flat parameter vector. Use WriteParameters/ReadParameters.");
 
-    public override void SetParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters.");
 
-    public override void UpdateParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter update vector.");
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
@@ -318,8 +310,35 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 // ctor is expressible as literal TestConstructorArgs (both require an IActivationFunction).
 // TrainableParameterGenerator keys on LayerBase inheritance, not the attribute, so the
 // generated EnsureSubLayersRegistered() for this CSP stage is emitted regardless.
-internal partial class CSPBlock<T> : LayerBase<T>
+//
+// RANK 4 ONLY, and that is a real restriction rather than a conservative one: ForwardTraced
+// concatenates the two branches with `axis: 1`, which is the channel axis only when a batch axis
+// leads. Declaring [C,H,W] as well (as the inner ConvolutionalLayer does, via BatchOptional) would
+// claim a form on which this block would concatenate along HEIGHT.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "CSP stage input: a batched spatial feature map.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Channels become _cv3's output depth; H/W follow the leading strided downsample.")]
+[AutoParameters]
+public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        if (_downsample is not null) yield return _downsample;
+        yield return _cv1;
+        yield return _cv2;
+        yield return _cv3;
+        foreach (var b in _bottlenecks)
+        {
+            foreach (var l in b.EnumerateLayers()) yield return l;
+        }
+    }
+
     private readonly ConvolutionalLayer<T> _downsample;
     private readonly ConvolutionalLayer<T> _cv1;
     private readonly ConvolutionalLayer<T> _cv2;
@@ -327,26 +346,10 @@ internal partial class CSPBlock<T> : LayerBase<T>
     private readonly List<CSPBottleneckBlock<T>> _bottlenecks;
     private readonly IActivationFunction<T> _activation;
 
-    /// <summary>Construction state: the 'inChannels' the layer was built with.</summary>
-    private readonly int _inChannels;
-
-    /// <summary>Construction state: the 'outChannels' the layer was built with.</summary>
-    private readonly int _outChannels;
-
-    /// <summary>Construction state: the 'numBlocks' the layer was built with.</summary>
-    private readonly int _numBlocks;
-
-    /// <summary>Construction state: the 'stride' the layer was built with.</summary>
-    private readonly int _stride;
-
     public CSPBlock(int inChannels, int outChannels, int numBlocks, int stride, IActivationFunction<T> activation)
         : base(new[] { inChannels, -1, -1 }, new[] { outChannels, -1, -1 },
                (IActivationFunction<T>)new IdentityActivation<T>())
     {
-        _stride = stride;
-        _numBlocks = numBlocks;
-        _outChannels = outChannels;
-        _inChannels = inChannels;
         _activation = activation;
         int hiddenChannels = outChannels / 2;
 
@@ -363,6 +366,44 @@ internal partial class CSPBlock<T> : LayerBase<T>
 
     /// <summary>Channel width is the block's own; spatial extent follows the stride-3x3 downsample.</summary>
     protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Convolutional;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written because the relation is the COMPOSITION of this block's children, which no probe
+    /// can see. Read straight off <c>ForwardTraced</c>: only <c>_downsample</c> moves the spatial axes
+    /// (3x3, stride from the constructor, padding 1); <c>_cv1</c>/<c>_cv2</c>/<c>_cv3</c> are 1x1
+    /// stride-1 pad-0 and the bottlenecks are 3x3 stride-1 pad-1, all of which leave H and W alone. So
+    /// the whole stage's spatial rule is exactly <c>_downsample</c>'s single window.
+    /// </para>
+    /// <para>
+    /// Channels are whatever <c>_cv3</c> emits — it is the last operation in the forward, so the
+    /// hidden-width split and the concatenate that doubles it are both consumed before the output.
+    /// The terms are read off the child layers rather than off the <c>outChannels</c>/<c>stride</c>
+    /// constructor arguments because those are not retained as fields; the children are the surviving
+    /// record of them.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // A lazily-built child has no output depth yet, and AxisRelation.Fixed rejects a
+        // non-positive size. Declining beats declaring zero.
+        if (inputRank != 4 || _cv3.OutputDepth <= 0 || _downsample.Stride <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_cv3.OutputDepth)),
+            new OutputAxisContract(
+                TensorAxis.Height,
+                AxisRelation.Window(
+                    TensorAxis.Height, _downsample.KernelSize, _downsample.Stride, _downsample.Padding)),
+            new OutputAxisContract(
+                TensorAxis.Width,
+                AxisRelation.Window(
+                    TensorAxis.Width, _downsample.KernelSize, _downsample.Stride, _downsample.Padding)),
+        };
+    }
 
     public override bool SupportsTraining => true;
 
@@ -397,27 +438,6 @@ internal partial class CSPBlock<T> : LayerBase<T>
         foreach (var l in InnerLayers()) l.UpdateParameters(learningRate);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> all = Vector<T>.Empty();
-        foreach (var l in InnerLayers()) all = Vector<T>.Concatenate(all, l.GetParameters());
-        return all;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var l in InnerLayers())
-        {
-            int len = (int)l.ParameterCount;
-            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, len).ToArray());
-            l.SetParameters(slice);
-            offset += len;
-        }
-        if (offset != parameters.Length)
-            throw new ArgumentException($"Expected {offset} parameters for CSPBlock, but got {parameters.Length}.");
-    }
-
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -428,8 +448,6 @@ internal partial class CSPBlock<T> : LayerBase<T>
     {
         foreach (var l in InnerLayers()) l.ResetState();
     }
-
-    public override long ParameterCount => GetParameterCount();
 
     public long GetParameterCount()
     {
@@ -472,21 +490,47 @@ internal partial class CSPBlock<T> : LayerBase<T>
 // ctor is expressible as literal TestConstructorArgs (both require an IActivationFunction).
 // TrainableParameterGenerator keys on LayerBase inheritance, not the attribute, so the
 // generated EnsureSubLayersRegistered() for this bottleneck is emitted regardless.
-internal partial class CSPBottleneckBlock<T> : LayerBase<T>
+//
+// SHAPE-PRESERVING, and derived rather than assumed. Both children are
+// ConvolutionalLayer(channels, kernelSize: 3, stride: 1, padding: 1), whose window
+// floor((n + 2 - 3)/1) + 1 == n leaves H and W untouched; both emit `channels`, which is also this
+// block's declared input width, so the channel axis carries through too. The residual add is only
+// reachable under that equality — BackboneOps.AddResidual throws on any axis mismatch.
+//
+// Not [ElementWiseShape]: that shorthand claims identity at EVERY rank, and this block is only
+// shape-preserving at the ranks its convolutions accept. Both spatial forms are declared for the
+// same reason ConvolutionalLayer marks batch optional — the unbatched [C,H,W] form is what the
+// constructor hands to LayerBase, and the batched form is what CSPBlock actually feeds it. The axis
+// roles are identical on both sides, so OutputAxesFor is generated as Same across the board.
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class CSPBottleneckBlock<T> : LayerBase<T>, IShapeContract
 {
+
+
+    /// <summary>The trainable layers this type owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _cv1;
+        yield return _cv2;
+    }
+
     private readonly ConvolutionalLayer<T> _cv1;
     private readonly ConvolutionalLayer<T> _cv2;
     private readonly bool _add;
     private readonly IActivationFunction<T> _activation;
 
-    /// <summary>Construction state: the 'channels' the layer was built with.</summary>
-    private readonly int _channels;
-
     public CSPBottleneckBlock(int channels, IActivationFunction<T> activation, bool add = true)
         : base(new[] { channels, -1, -1 }, new[] { channels, -1, -1 },
                (IActivationFunction<T>)new IdentityActivation<T>())
     {
-        _channels = channels;
         _add = add;
         _activation = activation;
         _cv1 = new ConvolutionalLayer<T>(channels, kernelSize: 3, stride: 1, padding: 1);
@@ -518,19 +562,6 @@ internal partial class CSPBottleneckBlock<T> : LayerBase<T>
         _cv2.UpdateParameters(learningRate);
     }
 
-    public override Vector<T> GetParameters()
-        => Vector<T>.Concatenate(_cv1.GetParameters(), _cv2.GetParameters());
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int len1 = (int)_cv1.ParameterCount;
-        int len2 = (int)_cv2.ParameterCount;
-        if (parameters.Length != len1 + len2)
-            throw new ArgumentException($"Expected {len1 + len2} parameters for CSPBottleneckBlock, but got {parameters.Length}.");
-        _cv1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(0, len1).ToArray()));
-        _cv2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(len1, len2).ToArray()));
-    }
-
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -543,8 +574,6 @@ internal partial class CSPBottleneckBlock<T> : LayerBase<T>
         _cv1.ResetState();
         _cv2.ResetState();
     }
-
-    public override long ParameterCount => GetParameterCount();
 
     public long GetParameterCount() => _cv1.ParameterCount + _cv2.ParameterCount;
 

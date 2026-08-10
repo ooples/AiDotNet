@@ -177,7 +177,6 @@ public class FlowLens<T> : VideoInpaintingBase<T>
         }
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
@@ -195,7 +194,6 @@ public class FlowLens<T> : VideoInpaintingBase<T>
             offset += p.Length;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -34,8 +34,80 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
-public partial class PatchEmbeddingLayer<T> : LayerBase<T>
+// NCHW with an optional batch, per OnFirstForward's guard - "requires rank-3 [C,H,W] or rank-4
+// [B,C,H,W] input" - and its reads of Shape[rank-3]/[rank-2]/[rank-1] as channels/H/W either way.
+// One BatchOptional declaration covers both ranks, which is also what ExpectedInputRank = 3 and
+// TestInputShape = "1, 3, 8, 8" (rank 4) between them require.
+//
+// The output is a TOKEN SEQUENCE, not an image: ForwardTraced returns [B, N, embeddingDim] for a
+// rank-4 input and reshapes to [N, embeddingDim] for a rank-3 one. The 2D patch grid has already been
+// flattened into one axis by then, so it is Time - the same reading SwinPatchMergingLayer uses for its
+// seqLen - and the embedding is Features.
+//
+// Rank 5+ is deliberately NOT declared. ForwardTraced does handle it, rebuilding outShape from
+// _originalInputShape's leading dims, but those leading axes have no roles this vocabulary can name.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Read off <c>OnFirstForward</c>:
+    /// <c>ResolveShapes(new[] { _channels, _imageHeight, _imageWidth }, new[] { _numPatches,
+    /// _embeddingDim })</c>, where <c>_numPatchesHeight = _imageHeight / _patchSize</c>,
+    /// <c>_numPatchesWidth = _imageWidth / _patchSize</c> and
+    /// <c>_numPatches = _numPatchesHeight * _numPatchesWidth</c>.
+    /// </para>
+    /// <para>
+    /// NOT <c>Fixed(_numPatches)</c>, even though that field exists. This layer is deliberately
+    /// resolution-independent: <c>RefreshLivePatchGrid</c> RECOMPUTES the grid from every live input's
+    /// spatial dims, so <c>_numPatches</c> caches the last image seen rather than stating a
+    /// configuration constant. Freezing it would describe one resolution and be wrong for the next.
+    /// </para>
+    /// <para>
+    /// The integer-floor division is a <see cref="AxisRelation.Window"/> at kernel = stride =
+    /// <c>_patchSize</c> with no padding - exactly the "use only COMPLETE patches, drop the
+    /// partial-patch remainder" crop that <c>OnFirstForward</c> documents and <c>ForwardTraced</c>
+    /// performs. The token axis is then the PRODUCT of the two windowed axes, which is what
+    /// <see cref="AxisRelation.ProductOf"/> exists for: <see cref="AxisRelation.Product"/> multiplies
+    /// RAW input axes and so cannot say "divide each side first".
+    /// </para>
+    /// <para>
+    /// A window that does not fit declines, which matches the layer throwing when H or W is smaller
+    /// than one patch.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_patchSize <= 0 || _embeddingDim <= 0) return null;
+
+        // numPatches = (H / _patchSize) * (W / _patchSize), floor on each side.
+        var tokens = new OutputAxisContract(
+            TensorAxis.Time,
+            AxisRelation.ProductOf(
+                AxisRelation.Window(TensorAxis.Height, kernel: _patchSize, stride: _patchSize, padding: 0),
+                AxisRelation.Window(TensorAxis.Width, kernel: _patchSize, stride: _patchSize, padding: 0)));
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_embeddingDim));
+
+        return inputRank switch
+        {
+            // [C,H,W] -> [N, embeddingDim]: the unbatched branch reshapes to exactly these two axes.
+            3 => new[] { tokens, features },
+            // [B,C,H,W] -> [B, N, embeddingDim], the shape the projection reshape produces directly.
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                tokens,
+                features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The size of each square patch (both width and height).
     /// </summary>
@@ -167,14 +239,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Gets the total number of parameters in this layer.
-    /// </summary>
-    /// <value>
-    /// The total number of trainable parameters (projection weights + projection bias).
-    /// </value>
-    public override long ParameterCount => _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Length;
 
     /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
@@ -596,135 +660,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_projectionWeights);
         Engine.InvalidatePersistentTensor(_projectionBias);
-    }
-
-    /// <summary>
-    /// Gets all parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method collects all the layer's learnable values into one list.
-    /// This is useful for saving the model or for optimization algorithms.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
-            {
-                parameters[index++] = _projectionWeights[i, j];
-            }
-        }
-
-        for (int i = 0; i < _projectionBias.Shape[0]; i++)
-        {
-            parameters[index++] = _projectionBias[i];
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets all parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all weights and biases to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameter vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method loads saved parameter values back into the layer.
-    /// This is used when loading a previously trained model.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: if weights aren't allocated yet (placeholder Length 0),
-        // infer the input channel count from the parameter vector.
-        // Layout: projectionWeights [channels*patchSize², embeddingDim] +
-        // projectionBias [embeddingDim]. Total = embeddingDim *
-        // (channels*patchSize² + 1). We allocate the projection tensors
-        // directly with the inferred channels, but leave image H/W
-        // unresolved so OnFirstForward picks them up from the actual
-        // input on first Forward — this is what makes
-        // Serialize_Deserialize_ShouldPreserveBehavior work even when
-        // the test re-runs Forward with a different image size.
-        if (_projectionWeights.Shape[0] == 0)
-        {
-            int patchArea = _patchSize * _patchSize;
-            int divisor = _embeddingDim * patchArea;
-            // Special case: param vector is just bias-sized (placeholder
-            // round-trip — fresh lazy layer's GetParameters returned only
-            // the bias values since weights are 0×embeddingDim). Skip
-            // channel inference and let the bias-only update fall through
-            // to the regular write path below.
-            if (parameters.Length == _embeddingDim)
-            {
-                // weights stay at [0, embeddingDim], biases get the new vector.
-                // Falls through to the totalParams check which will see
-                // 0*embeddingDim + embeddingDim == parameters.Length and pass.
-            }
-            else
-            {
-                int candidateChannels = (parameters.Length - _embeddingDim) / divisor;
-                if (candidateChannels <= 0
-                    || _embeddingDim * (candidateChannels * patchArea + 1) != parameters.Length)
-                {
-                    throw new ArgumentException(
-                        $"Cannot infer channel count for PatchEmbeddingLayer from {parameters.Length} parameters " +
-                        $"(patchSize={_patchSize}, embeddingDim={_embeddingDim}).");
-                }
-                _channels = candidateChannels;
-                // Route allocation through AllocateLazyWeight so that when
-                // streaming is engaged on the parent network, the new weight
-                // tensor lands in the streaming pool (with LRU eviction
-                // pre-empting the GC byte[] arrival) instead of bypassing
-                // it via plain `new Tensor<T>(...)`. This keeps the PR's
-                // peak-managed-memory invariant intact for deserialize /
-                // SetParameters paths on large models.
-                _projectionWeights = AllocateLazyWeight([candidateChannels * patchArea, _embeddingDim]);
-                _projectionBias = AllocateLazyWeight([_embeddingDim]);
-                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
-                RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
-            }
-        }
-
-        int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        int index = 0;
-
-        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
-            {
-                _projectionWeights[i, j] = parameters[index++];
-            }
-        }
-
-        for (int i = 0; i < _projectionBias.Shape[0]; i++)
-        {
-            _projectionBias[i] = parameters[index++];
-        }
-
-        // Invalidate GPU cache after parameter updates
-        Engine.InvalidatePersistentTensor(_projectionWeights);
-        Engine.InvalidatePersistentTensor(_projectionBias);
-
-        // Mark that caller-provided values are now in flight so OnFirstForward
-        // doesn't overwrite them with fresh Xavier init. Set unconditionally
-        // (not gated on parameters.Length) so any SetParameters call that
-        // makes it past the totalParams check is treated as a real load,
-        // not just the bias-only special case.
-        _paramsLoadedViaSetParameters = true;
     }
 
     /// <summary>

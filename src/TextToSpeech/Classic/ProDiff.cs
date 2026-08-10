@@ -270,7 +270,6 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
             idx += c;
         }
     }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

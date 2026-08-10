@@ -394,7 +394,6 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -733,29 +732,6 @@ public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
     {
         // Simplified implementation - in production, would quantize scales to 8-bit
         // For this implementation, we keep scales in full precision
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from both layers.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
     }
 
     /// <summary>

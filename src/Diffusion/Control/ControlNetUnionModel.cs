@@ -93,6 +93,16 @@ namespace AiDotNet.Diffusion.Control;
     [ResearchPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987")]
 public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_controlNet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 1024;
@@ -124,7 +134,6 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _controlNet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>Gets the unified control network.</summary>
     public UNetNoisePredictor<T> ControlNet => _controlNet;
@@ -195,44 +204,7 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _unet.GetParameters();
-        var ctrlParams = _controlNet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var combined = new Vector<T>(unetParams.Length + ctrlParams.Length + vaeParams.Length);
-        int offset = 0;
-        for (int i = 0; i < unetParams.Length; i++) combined[offset + i] = unetParams[i];
-        offset += unetParams.Length;
-        for (int i = 0; i < ctrlParams.Length; i++) combined[offset + i] = ctrlParams[i];
-        offset += ctrlParams.Length;
-        for (int i = 0; i < vaeParams.Length; i++) combined[offset + i] = vaeParams[i];
-        return combined;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Use ParameterCount directly — materializing GetParameters() just
-        // to read .Length walks the entire flat U-Net buffer for sizing
-        // purposes only, defeating the long-safe migration.
-        int unetCount = checked((int)_unet.ParameterCount);
-        int ctrlCount = checked((int)_controlNet.ParameterCount);
-        int vaeCount = checked((int)_vae.ParameterCount);
-        long expectedTotal = (long)unetCount + ctrlCount + vaeCount;
-        if (parameters.Length != expectedTotal)
-            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
-        var unetParams = new Vector<T>(unetCount);
-        var ctrlParams = new Vector<T>(ctrlCount);
-        var vaeParams = new Vector<T>(vaeCount);
-        for (int i = 0; i < unetCount; i++) unetParams[i] = parameters[i];
-        for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[unetCount + i];
-        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[unetCount + ctrlCount + i];
-        _unet.SetParameters(unetParams);
-        _controlNet.SetParameters(ctrlParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

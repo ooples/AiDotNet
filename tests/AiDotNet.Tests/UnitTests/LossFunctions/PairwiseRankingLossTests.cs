@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Metrics;
@@ -67,7 +68,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var predicted = new Vector<double>(new double[] { 0.0, 2.0 });
             var actual = new Vector<double>(new double[] { 1.0, 0.0 });
 
-            var grad = loss.CalculateDerivative(predicted, actual);
+            var grad = loss.ComputeGradient(predicted, actual);
 
             // To DECREASE loss we must raise s0 and lower s1. Gradient descent steps along
             // -grad, so grad[0] must be negative (push s0 up) and grad[1] positive (push s1 down).
@@ -85,7 +86,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var predicted = new Vector<double>(new double[] { 0.3, -0.1, 1.2, 0.7 });
             var actual = new Vector<double>(new double[] { 0.05, -0.02, 0.10, -0.08 });
 
-            var analytic = loss.CalculateDerivative(predicted, actual);
+            var analytic = loss.ComputeGradient(predicted, actual);
 
             double eps = 1e-6;
             for (int k = 0; k < predicted.Length; k++)
@@ -170,7 +171,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 5.0, 5.0, 5.0 });
 
             Assert.Equal(0.0, loss.CalculateLoss(predicted, actual), 12);
-            var grad = loss.CalculateDerivative(predicted, actual);
+            var grad = loss.ComputeGradient(predicted, actual);
             for (int i = 0; i < grad.Length; i++) Assert.Equal(0.0, grad[i], 12);
         }
 

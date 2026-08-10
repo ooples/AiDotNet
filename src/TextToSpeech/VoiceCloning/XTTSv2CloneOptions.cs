@@ -28,6 +28,9 @@ public class XTTSv2CloneOptions : VoiceCloningOptions
         NumLLMLayers = 30;
         NumHeads = 16;
         SpeakerEmbeddingDim = 512;
+        // XTTS v2's reference fine-tuning recipe (Casanova et al., "XTTS: a Massively Multilingual
+        // Zero-Shot Text-to-Speech Model", 2024) trains the GPT conditioning stack at 5e-6, far below
+        // the generic TTS default. Inherited from TtsModelOptions, so callers can still override it.
         LearningRate = 5e-6;
         WeightDecay = 1e-2;
         DropoutRate = 0.1;

@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.LossFunctions;
@@ -114,18 +114,103 @@ public sealed class ABINetMultiTaskLoss<T> : LossFunctionBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>
+    /// The multi-task objective on the flat-vector surface:
+    /// <c>lambda_v*L_v + lambda_l*L_l + L_f</c>.
+    /// </summary>
     /// <remarks>
-    /// Delegates to the per-branch character loss. The non-tape path has no branch structure to
-    /// split, so it grades the supplied prediction directly.
+    /// THE SPLIT IS AVAILABLE HERE, contrary to what this remark used to claim. ComputeTapeLoss
+    /// splits along axis 0, and axis-0 blocks are contiguous in the row-major buffer, so thirds of
+    /// the flattened vector ARE those same three blocks. Forwarding the whole concatenated vector to
+    /// the character loss instead computed a different objective from the tape path -- and every
+    /// caller on this surface (optimizer evaluation, fitness scoring, reported training loss) got
+    /// that different number with no error and no warning.
     /// </remarks>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
-        => _characterLoss.CalculateLoss(predicted, actual);
+    {
+        var (visionP, languageP, fusionP) = SplitThirds(predicted, nameof(predicted));
+        var (visionA, languageA, fusionA) = SplitThirds(actual, nameof(actual));
+
+        T lossV = _characterLoss.CalculateLoss(visionP, visionA);
+        T lossL = _characterLoss.CalculateLoss(languageP, languageA);
+        T lossF = _characterLoss.CalculateLoss(fusionP, fusionA);
+
+        return NumOps.Add(
+            NumOps.Add(
+                NumOps.Multiply(NumOps.FromDouble(_visionLossWeight), lossV),
+                NumOps.Multiply(NumOps.FromDouble(_languageLossWeight), lossL)),
+            lossF);
+    }
+
 
     /// <inheritdoc/>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-        => _characterLoss.CalculateDerivative(predicted, actual);
-
-    /// <inheritdoc/>
+    /// <remarks>
+    /// Reuses <see cref="ComputeTapeLoss"/>'s split directly: this surface receives tensors, so the
+    /// same axis-0 narrowing applies and there is no reason for it to compute a different objective
+    /// from the tape path.
+    /// </remarks>
     public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
-        => _characterLoss.CalculateLossAndGradientGpu(predicted, actual);
+    {
+        int predBlock = SplitLength(predicted, nameof(predicted));
+        int targetBlock = SplitLength(actual, nameof(actual));
+
+        var (lossV, gradV) = _characterLoss.CalculateLossAndGradientGpu(
+            Engine.TensorNarrow(predicted, dim: 0, start: 0, length: predBlock),
+            Engine.TensorNarrow(actual, dim: 0, start: 0, length: targetBlock));
+        var (lossL, gradL) = _characterLoss.CalculateLossAndGradientGpu(
+            Engine.TensorNarrow(predicted, dim: 0, start: predBlock, length: predBlock),
+            Engine.TensorNarrow(actual, dim: 0, start: targetBlock, length: targetBlock));
+        var (lossF, gradF) = _characterLoss.CalculateLossAndGradientGpu(
+            Engine.TensorNarrow(predicted, dim: 0, start: 2 * predBlock, length: predBlock),
+            Engine.TensorNarrow(actual, dim: 0, start: 2 * targetBlock, length: targetBlock));
+
+        T loss = NumOps.Add(
+            NumOps.Add(
+                NumOps.Multiply(NumOps.FromDouble(_visionLossWeight), lossV),
+                NumOps.Multiply(NumOps.FromDouble(_languageLossWeight), lossL)),
+            lossF);
+
+        var gradient = Engine.Concat(
+            new[]
+            {
+                Engine.TensorMultiplyScalar(gradV, NumOps.FromDouble(_visionLossWeight)),
+                Engine.TensorMultiplyScalar(gradL, NumOps.FromDouble(_languageLossWeight)),
+                gradF,
+            },
+            0);
+
+        return (loss, gradient);
+    }
+
+    /// <summary>
+    /// Splits a flat vector into its vision, language and fusion thirds.
+    /// </summary>
+    /// <remarks>
+    /// Axis-0 blocks are contiguous in the row-major buffer, so the tape path's narrowing and this
+    /// slicing select the same elements. That equivalence is the whole reason this surface can
+    /// compute the real objective.
+    /// </remarks>
+    private static (Vector<T> Vision, Vector<T> Language, Vector<T> Fusion) SplitThirds(
+        Vector<T> value, string parameterName)
+    {
+        if (value.Length % 3 != 0)
+        {
+            throw new ArgumentException(
+                $"ABINet concatenates three equal branches, so the length must be a multiple of 3; "
+                + $"got {value.Length}.", parameterName);
+        }
+
+        int block = value.Length / 3;
+        var vision = new Vector<T>(block);
+        var language = new Vector<T>(block);
+        var fusion = new Vector<T>(block);
+        for (int i = 0; i < block; i++)
+        {
+            vision[i] = value[i];
+            language[i] = value[block + i];
+            fusion[i] = value[(2 * block) + i];
+        }
+
+        return (vision, language, fusion);
+    }
 }

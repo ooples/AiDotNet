@@ -1173,7 +1173,6 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         if (_noisePredictor is not null) Layers.Add(_noisePredictor);
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -1193,7 +1192,6 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
             }
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

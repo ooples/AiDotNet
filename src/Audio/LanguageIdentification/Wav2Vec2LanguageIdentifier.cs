@@ -59,6 +59,16 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, Michael Auli")]
 public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore returns ForwardNative, whose last step is
+    /// <c>_classifierLayer.Forward(...)</c>, built in InitializeNativeLayers as
+    /// <c>new DenseLayer&lt;T&gt;(numLanguages)</c> from the supported-language list. InitializeLayers
+    /// passes the same <c>_languageIdToCode.Count</c> to the LayerHelper stack. A class count -
+    /// HiddenSize is the pooling-projection width one layer earlier, not the output width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _languageIdToCode.Count;
+
     #region Fields
 
     private readonly INumericOperations<T> _numOps;
@@ -412,15 +422,12 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         var expectedVector = expectedOutput.ToVector();
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
-        var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
 
         _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -437,7 +444,6 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
             offset += layerParams.Length;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

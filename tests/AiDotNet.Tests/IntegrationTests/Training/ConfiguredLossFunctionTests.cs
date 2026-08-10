@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.Engines;
 using System.Threading.Tasks;
 using AiDotNet;
 using AiDotNet.Data.Loaders;
@@ -59,11 +60,12 @@ public class ConfiguredLossFunctionTests
     {
         var model = new NBeatsProbe(new NBEATSModelOptions<double> { LookbackWindow = 4, ForecastHorizon = 1 });
 
-        // Tape training needs ComputeTapeLoss, which lives on LossFunctionBase<T>. Rejecting here
-        // turns a failure deep in the first backward pass into an immediate, legible error.
-        var ex = Assert.Throws<ArgumentException>(
-            () => ((ISupportsLossFunction<double>)model).SetLossFunction(new NotATapeLoss()));
-        Assert.Contains("LossFunctionBase", ex.Message);
+        // ComputeTapeLoss is declared on ILossFunction<double> itself, so implementing the
+        // interface is sufficient for tape training and there is nothing left to reject. This
+        // previously asserted an ArgumentException naming LossFunctionBase.
+        var custom = new CustomTapeLoss();
+        ((ISupportsLossFunction<double>)model).SetLossFunction(custom);
+        Assert.Same(custom, model.DefaultLossFunction);
         await Task.CompletedTask;
     }
 
@@ -129,19 +131,25 @@ public class ConfiguredLossFunctionTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Facade_InvalidNonTapeLoss_IsRejected()
+    public async Task Facade_CustomInterfaceOnlyLoss_TrainsThroughTheTape()
     {
         var (x, y) = BuildSeries();
         var model = new NBeatsProbe(new NBEATSModelOptions<double> { LookbackWindow = 4, ForecastHorizon = 1, Epochs = 2 });
 
-        // A non-tape loss must be rejected through the facade up front, not accepted and then failing deep
-        // in the first backward pass.
-        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-            .ConfigureModel(model)
-            .ConfigureLossFunction(new NotATapeLoss())
-            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(x, y));
+        // This previously asserted the OPPOSITE: a loss implementing ILossFunction<double> without
+        // deriving from LossFunctionBase<double> was rejected up front, because ComputeTapeLoss was
+        // declared on the base class and the tape path could not reach it. The interface declares it
+        // now, so a custom loss that implements the interface is trainable by construction and there
+        // is no "non-tape loss" left to reject.
+        var custom = new CustomTapeLoss();
 
-        await Assert.ThrowsAsync<ArgumentException>(() => builder.BuildAsync());
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureModel(model)
+            .ConfigureLossFunction(custom)
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(x, y))
+            .BuildAsync();
+
+        Assert.Same(custom, model.DefaultLossFunction);
     }
 
     /// <summary>Exposes the protected default loss for assertions.</summary>
@@ -150,14 +158,43 @@ public class ConfiguredLossFunctionTests
         public NBeatsProbe(NBEATSModelOptions<double> options) : base(options) { }
     }
 
-    /// <summary>An ILossFunction that is deliberately NOT a LossFunctionBase.</summary>
-    private sealed class NotATapeLoss : ILossFunction<double>
+    /// <summary>
+    /// A mean-squared-error loss implementing ILossFunction&lt;double&gt; directly, without deriving
+    /// from LossFunctionBase&lt;double&gt;.
+    /// </summary>
+    /// <remarks>
+    /// It defines its math once, in ComputeTapeLoss, and supplies no derivative of its own -- the
+    /// tape differentiates the forward. That is the whole contract a custom loss has to meet.
+    /// </remarks>
+    private sealed class CustomTapeLoss : ILossFunction<double>
     {
-        public double CalculateLoss(Vector<double> predicted, Vector<double> actual) => 0;
+        private static IEngine Engine => AiDotNetEngine.Current;
 
-        public Vector<double> CalculateDerivative(Vector<double> predicted, Vector<double> actual) => predicted;
+        public double CalculateLoss(Vector<double> predicted, Vector<double> actual)
+        {
+            double sum = 0;
+            for (int i = 0; i < predicted.Length; i++)
+            {
+                double d = predicted[i] - actual[i];
+                sum += d * d;
+            }
 
-        public (double Loss, Tensor<double> Gradient) CalculateLossAndGradientGpu(Tensor<double> predicted, Tensor<double> actual)
-            => (0, predicted);
+            return predicted.Length == 0 ? 0 : sum / predicted.Length;
+        }
+
+        public Tensor<double> ComputeTapeLoss(Tensor<double> predicted, Tensor<double> target)
+        {
+            var diff = Engine.TensorSubtract(predicted, target);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var axes = new int[squared.Shape.Length];
+            for (int i = 0; i < axes.Length; i++) axes[i] = i;
+
+            var summed = Engine.ReduceSum(squared, axes, keepDims: false);
+            return Engine.TensorDivideScalar(summed, (double)Math.Max(1, squared.Length));
+        }
+
+        public (double Loss, Tensor<double> Gradient) CalculateLossAndGradientGpu(
+            Tensor<double> predicted, Tensor<double> actual)
+            => this.ComputeLossAndGradient(predicted, actual);
     }
 }

@@ -30,7 +30,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class DecoderLayer<T> : LayerBase<T>
+// Transformer decoder block over a sequence: shape-preserving at rank 3 [Batch, Time, Features].
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
 {
 
     /// <summary>
@@ -192,43 +196,6 @@ public partial class DecoderLayer<T> : LayerBase<T>
             $"state-reset entry points.");
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // _feedForward2 is created lazily in OnFirstForward. SetParameters
-        // dereferences it when slicing the parameter vector — a null
-        // reference would silently advance idx for the trailing norms as
-        // if ff2 had consumed zero bytes, misaligning the slice and
-        // corrupting the loaded state. Throw via the shared helper.
-        var ff2 = RequireResolvedFeedForward2(nameof(SetParameters));
-
-        // Validate parameters length up front so a malformed vector throws
-        // BEFORE we partially mutate any sublayer. Use ParameterCountHelper
-        // so the int-narrowing failure mode (>int.MaxValue) gets the same
-        // actionable message used elsewhere in the codebase rather than
-        // a silent OverflowException at the (int) cast.
-        long expectedTotal =
-            _selfAttention.ParameterCount + _crossAttention.ParameterCount +
-            _feedForward1.ParameterCount + ff2.ParameterCount +
-            _norm1.ParameterCount + _norm2.ParameterCount + _norm3.ParameterCount;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"DecoderLayer expected {expectedTotal} parameters across sublayers, " +
-                $"got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int idx = 0;
-        void Set(ILayer<T> layer)
-        {
-            int c = ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount);
-            layer.SetParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        Set(_selfAttention); Set(_crossAttention); Set(_feedForward1); Set(ff2);
-        Set(_norm1); Set(_norm2); Set(_norm3);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         var ff2 = RequireResolvedFeedForward2(nameof(GetParameterGradients));
@@ -252,12 +219,6 @@ public partial class DecoderLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>Construction state: the 'attentionSize' the layer was built with.</summary>
-    private readonly int _attentionSize;
-
-    /// <summary>Construction state: the 'feedForwardSize' the layer was built with.</summary>
-    private readonly int _feedForwardSize;
-
     /// <summary>
     /// Initializes a new instance of the DecoderLayer class with scalar activation.
     /// </summary>
@@ -269,8 +230,6 @@ public partial class DecoderLayer<T> : LayerBase<T>
     public DecoderLayer(int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
-        _feedForwardSize = feedForwardSize;
-        _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 
@@ -394,8 +353,6 @@ public partial class DecoderLayer<T> : LayerBase<T>
     public DecoderLayer(int attentionSize, int feedForwardSize, IVectorActivationFunction<T> activation)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
-        _feedForwardSize = feedForwardSize;
-        _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 
@@ -430,7 +387,7 @@ public partial class DecoderLayer<T> : LayerBase<T>
     /// The method combines these inputs, processes them through the layer, and returns the final output.
     /// The attention mask, if provided, helps control which parts of the input sequence the layer should focus on.</para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2 || inputs.Length > 3)
             throw new ArgumentException("DecoderLayer requires two or three input tensors: decoder input, encoder output, and optionally an attention mask.");
@@ -683,37 +640,6 @@ public partial class DecoderLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Retrieves the current parameters of the layer.
-    /// </summary>
-    /// <returns>A vector containing all the parameters of the layer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method collects all the parameters from the various components
-    /// of the decoder layer (self-attention, cross-attention, feed-forward network, and layer normalizations)
-    /// and combines them into a single vector. This is useful for operations that need to work with all
-    /// parameters at once, such as optimization algorithms.</para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var ff2 = RequireResolvedFeedForward2(nameof(GetParameters));
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var selfAttnParams = _selfAttention.GetParameters();
-        var crossAttnParams = _crossAttention.GetParameters();
-        var ff1Params = _feedForward1.GetParameters();
-        var ff2Params = ff2.GetParameters();
-        var norm1Params = _norm1.GetParameters();
-        var norm2Params = _norm2.GetParameters();
-        var norm3Params = _norm3.GetParameters();
-
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(
-                    Vector<T>.Concatenate(selfAttnParams, crossAttnParams),
-                    Vector<T>.Concatenate(ff1Params, ff2Params)),
-                norm1Params),
-            Vector<T>.Concatenate(norm2Params, norm3Params));
-    }
-
-    /// <summary>
     /// Updates the layer's parameters with the provided values.
     /// </summary>
     /// <param name="parameters">A vector containing new parameter values.</param>
@@ -809,7 +735,7 @@ public partial class DecoderLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)
@@ -835,27 +761,5 @@ public partial class DecoderLayer<T> : LayerBase<T>
         return Forward(input, input);
     }
 
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This property calculates and returns the total number of parameters
-    /// in the decoder layer by summing the parameter counts of all its components. This is useful for
-    /// understanding the complexity of the layer and for certain optimization techniques.</para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            var ff2 = RequireResolvedFeedForward2(nameof(ParameterCount));
-            return _selfAttention.ParameterCount +
-                _crossAttention.ParameterCount +
-                _feedForward1.ParameterCount + ff2.ParameterCount +
-                _norm1.ParameterCount +
-                _norm2.ParameterCount +
-                _norm3.ParameterCount;
-        }
-    }
 
 }

@@ -43,6 +43,16 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("FRCRN: Boosting Feature Representation Using Frequency Recurrence for Monaural Speech Enhancement", "https://arxiv.org/abs/2206.07293", Year = 2022, Authors = "Shengkui Zhao, Bin Ma, Karn N. Watcharasupat, Woon-Seng Gan")]
 public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured on <c>PredictCore</c>, which folds <c>Layers</c> and returns the last activation -
+    /// note it does NOT call <c>PostprocessOutput</c> (the inverse STFT runs only inside
+    /// <c>Enhance</c>). The final layer of <c>CreateDefaultFRCRNLayers</c> is the complex-mask head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * 2)</c>, real and imaginary per bin, fed from
+    /// <c>_options.NumFreqBins</c>. Hence 2x, not <c>NumFreqBins</c>.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly FRCRNOptions _options;
@@ -182,12 +192,11 @@ public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         _stft.MagnitudeAndPhase(rawAudio, out var magnitude, out var phase);

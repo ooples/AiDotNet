@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -619,6 +619,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // for a fully-architecturally-defined model. Idempotent: chain
         // resolution only happens once per network instance, guarded by
         // each layer's IsShapeResolved short-circuit.
+        //
+        // EnsureParametersReady first, for the same reason ParameterCount calls it first: a model
+        // that builds its layers lazily has nothing to walk until it has run its own initializer.
+        EnsureParametersReady();
         ResolveLazyLayerShapes();
 
         // Size the flat buffer from the SAME quantity that fills it — each
@@ -656,6 +660,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             perLayerParameters.Add(layerParameters);
             totalParameterCountLong += layerParameters.Length;
         }
+
+        // Then the network-level extras, in the same order ParameterCount sums them.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            var extraParameters = extra.GetParameters();
+            perLayerParameters.Add(extraParameters);
+            totalParameterCountLong += extraParameters.Length;
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null) continue;
+            var flat = new Vector<T>(tensor.Length);
+            tensor.AsSpan().CopyTo(flat.AsWritableSpan());
+            perLayerParameters.Add(flat);
+            totalParameterCountLong += flat.Length;
+        }
         int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
         var parameters = new Vector<T>(totalParameterCount);
@@ -690,19 +711,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         ResolveLazyLayerShapes();
 
-        // SCOPE CONTRACT: chunks must match exactly the parameter set
-        // that ParameterCount / GetParameters / SetParameters operate on.
-        // Those flat APIs walk only `Layers`; widening this enumeration
-        // to include GetExtraTrainableLayers / GetExtraTrainableTensors
-        // would make `sum(chunk.Length) > ParameterCount` for models
-        // with network-level extras (ViT cls/pos, Conformer subsamplers),
-        // causing callers that mix the flat and chunked APIs to mis-size
-        // buffers or skip parameters on round-trip.
+        // SCOPE CONTRACT: chunks must match exactly the parameter set that
+        // ParameterCount / GetParameters / SetParameters operate on, or a caller mixing the flat
+        // and chunked APIs mis-sizes buffers or skips parameters on round-trip.
         //
-        // Extras still flow through TrainWithTape via the separate extra-
-        // trainable handling path — they're just not surfaced in the
-        // chunked enumeration here. If a future PR widens the flat APIs
-        // to include extras, this enumeration can match in lockstep.
+        // Those flat APIs used to walk only `Layers`, so this enumeration did too, and the
+        // network-level extras (ViT cls/pos, Conformer subsamplers, PaLM-E's patch embed) were
+        // absent from both — trained through the separate extra-trainable path while the flat
+        // surface reported a count that excluded them. The flat APIs now include extras, so this
+        // matches in lockstep, which is what the note here always said should happen.
         //
         // The recursive CollectTrainableLayers walk DOES descend into
         // composite-layer sublayers (DenseBlock BN/Conv, MoE experts) —
@@ -717,6 +734,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (t is null || t.Length == 0) continue;
                 yield return t;
             }
+        }
+
+        // Same order the flat APIs use: layers, then extra layers, then extra tensors.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            foreach (var t in extra.GetTrainableParameters())
+            {
+                if (t is null || t.Length == 0) continue;
+                yield return t;
+            }
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            yield return tensor;
         }
     }
 
@@ -1982,6 +2015,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // per-layer ParameterCount. Lazy DenseLayer / ConvolutionalLayer / FullyConnectedLayer
             // / FeedForwardLayer return 0 from ParameterCount when InputShape[0] is still the -1
             // sentinel (issue #1209's lazy-shape-inference migration).
+            //
+            // EnsureParametersReady comes FIRST: resolving shapes over Layers is meaningless for a
+            // model whose layers are not built yet. Models used to solve that by overriding this
+            // property to call their own initializer and delegate to base -- see the hook's remarks.
+            EnsureParametersReady();
             ResolveLazyLayerShapes();
 
             // Sum per-layer counts FRESH on every access. The previous cached
@@ -2006,6 +2044,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 total += Layers[i].ParameterCount;
             }
+
+            // Network-level weights that live OUTSIDE Layers -- a ViT's class and position
+            // embeddings, a Conformer's subsampler, PaLM-E's patch-embed conv. They were trained
+            // and serialized through a separate path while the flat surface pretended they did not
+            // exist, so a model holding them reported a count that its own GetParameters
+            // contradicted. Walked here, in GetParameters, in SetParameters and in
+            // GetParameterChunks in the SAME order, so all four describe one parameter set.
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) total += extra.ParameterCount;
+            }
+            foreach (var tensor in GetExtraTrainableTensors())
+            {
+                if (tensor is not null) total += tensor.Length;
+            }
+
             return total;
         }
     }
@@ -2038,13 +2092,42 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 if (LayerHasUninitializedParameters(layer)) return true;
             }
+
+            // The layers a model declares through GetExtraTrainableLayers count too. A model may
+            // hold every weight in sub-structures outside Layers -- a detection backbone owns no
+            // Layers at all -- and looking only at Layers reported "nothing pending" for a model
+            // whose entire parameter set was still unsized, so a zero count looked like a real
+            // zero rather than a deferred one.
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null && LayerHasUninitializedParameters(extra)) return true;
+            }
+
             return false;
         }
     }
 
     private static bool LayerHasUninitializedParameters(ILayer<T> layer)
     {
-        if (layer is Layers.LayerBase<T> lb && lb.HasUninitializedParameters) return true;
+        if (layer is Layers.LayerBase<T> lb)
+        {
+            if (lb.HasUninitializedParameters) return true;
+
+            // A layer can be deferred in a SECOND way that the property above does not cover.
+            // HasUninitializedParameters answers "am I still waiting to learn my shape"; a layer
+            // that already knows its shape but has not allocated storage answers no -- and yet its
+            // weights do not exist either. That is exactly the state EnsureParametersMaterialized
+            // acts on (!IsInitialized && IsShapeResolved), and it is the state a freshly
+            // constructed ConvolutionalNeuralNetwork, LSTM, GRU or RNN sits in: fully sized, zero
+            // allocated, 110,634 parameters the instant anything asks for them.
+            //
+            // Reporting "nothing pending" there made a healthy model indistinguishable from a
+            // genuinely parameter-free one, which is what the Parameters_ShouldBeNonEmpty invariant
+            // trips over. Both forms are "deferred until first forward", so both belong here. This
+            // stays allocation-free -- it reads two flags and never materializes -- which is the
+            // whole reason that invariant avoids GetParameters() at VGG16BN / DiT scale.
+            if (lb.IsShapeResolved && !lb.IsInitialized) return true;
+        }
 
         // Composite layers hold their children out of the top-level list, so the walk has to
         // descend the same way parameter collection does.
@@ -2978,6 +3061,179 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Think of gradients as a recipe for improvement: "increase this weight by 0.01, decrease that one by 0.03," etc.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// What this network accepts in its INPUT tensor: continuous values, or integer token
+    /// indices in a bounded range.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only the FIRST layer consumes the network's input, so only its declaration can constrain
+    /// what a caller may feed. An embedding sitting deeper in the stack receives another layer's
+    /// output, not the caller's tensor, and must not be reported here.
+    /// </para>
+    /// <para>
+    /// This exists so a caller can build conforming input without knowing the architecture. Before
+    /// it, feeding a token model meant hand-writing a per-model override that hard-coded the
+    /// vocabulary size -- the same hand-maintained surface the parameter automation removes
+    /// everywhere else. The layer already knows; this just asks it.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputShape">
+    /// The shape the caller intends to feed. A layer's own InputShape can still be an unresolved
+    /// placeholder, so the domain is resolved against the real shape instead -- which keeps this
+    /// answer identical to what the forward pass will decide for that same tensor.
+    /// </param>
+    public virtual LayerInputDomain GetInputDomain(int[]? inputShape)
+    {
+        var layers = Layers;
+        if (layers is null || layers.Count == 0)
+        {
+            return LayerInputDomain.Continuous;
+        }
+
+        // Walk past identity pass-throughs. Most architectures open with an InputLayer placeholder,
+        // so stopping at Layers[0] would always read the placeholder's continuous default and never
+        // the embedding immediately behind it -- which is exactly how the fixture kept feeding token
+        // models float noise. A layer that TRANSFORMS values ends the walk, because from there on
+        // the tensor is no longer the caller's.
+        //
+        // Pattern-matched rather than declared on ILayer<T>: net471 has no default interface
+        // members, so adding it there would force an implementation onto every direct implementor
+        // -- the opposite of the goal. A layer outside the LayerBase hierarchy expresses no opinion
+        // and ends the walk with the continuous default.
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is not LayerBase<T> layer)
+            {
+                break;
+            }
+
+            if (!layer.PropagatesInputDomain)
+            {
+                return layer.GetInputDomain(inputShape);
+            }
+        }
+
+        return LayerInputDomain.Continuous;
+    }
+
+    /// <summary>
+    /// Publishes tape-computed gradients onto every layer's gradient surface.
+    /// </summary>
+    /// <param name="grads">Tape gradients, keyed by parameter tensor reference.</param>
+    /// <returns>The number of scalars filled from a real gradient, across all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// THE MISSING HALF OF THE AUTOMATION. Parameters are derived from registered components, but
+    /// gradients never were: training moved to the tape, which hands a tensor-keyed dictionary
+    /// straight to the optimizer, and only 1 of ~200 layers still wrote the per-layer field the
+    /// public accessor reads. Every other model reported manufactured zeros.
+    /// </para>
+    /// <para>
+    /// Each layer scatters its own slice by walking the SAME structure its parameter fill walks, so
+    /// gradients line up with parameters by construction rather than by a second ordering that
+    /// merely intends to agree. Layer authors write nothing.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Largest parameter count for which the streaming trainer will RETAIN gradients so the public
+    /// gradient surface can be populated. Above this, gradients are applied and released as
+    /// streaming intends, and <see cref="GetParameterGradients"/> reports that it cannot answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE POINT OF STREAMING IS NOT TO MATERIALISE THE FULL GRADIENT SET. ComputeGradientsStreaming
+    /// hands back one (source, gradient) pair at a time so a foundation-scale model never holds a
+    /// second copy of its weights; retaining every gradient unconditionally would reintroduce
+    /// exactly the allocation the streaming path exists to avoid, on models already close to their
+    /// memory envelope.
+    /// </para>
+    /// <para>
+    /// So retention is bounded rather than unconditional: small and mid-size models -- which is
+    /// nearly every model the invariant covers -- pay a copy that is negligible for them, and the
+    /// genuinely large ones keep streaming's guarantee. Raise it on a model that wants gradient
+    /// inspection and can afford the copy.
+    /// </para>
+    /// </remarks>
+    protected virtual long MaxRetainedGradientScalars => 10_000_000;
+
+    /// <summary>Gradients retained during a streaming step, or null when retention is off.</summary>
+    private Dictionary<Tensor<T>, Tensor<T>>? _retainedStreamingGrads;
+
+    /// <summary>True once a training step deliberately declined to retain gradients.</summary>
+    private bool _gradientSurfaceUnavailable;
+
+    /// <summary>
+    /// Opens gradient retention for one streaming step, if this model is small enough to afford it.
+    /// </summary>
+    private void BeginStreamingGradientRetention()
+    {
+        bool affordable = ParameterCount <= MaxRetainedGradientScalars;
+        _retainedStreamingGrads = affordable
+            ? new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance)
+            : null;
+        _gradientSurfaceUnavailable = !affordable;
+    }
+
+    /// <summary>
+    /// Copies one streaming gradient aside. The streaming optimizer applies and then reuses or
+    /// releases the buffer it was handed, so keeping the reference would leave the surface pointing
+    /// at whatever that memory became.
+    /// </summary>
+    private void RetainStreamingGradient(Tensor<T> source, Tensor<T> grad)
+    {
+        var bag = _retainedStreamingGrads;
+        if (bag is null || source is null || grad is null) return;
+
+        var copy = new Tensor<T>(grad.Shape.ToArray());
+        grad.Data.Span.CopyTo(copy.Data.Span);
+        bag[source] = copy;
+    }
+
+    /// <summary>Publishes anything retained during the step, then drops it.</summary>
+    private void EndStreamingGradientRetention()
+    {
+        var bag = _retainedStreamingGrads;
+        _retainedStreamingGrads = null;
+        if (bag is null || bag.Count == 0) return;
+
+        ScatterParameterGradientsToLayers(bag);
+        bag.Clear();
+    }
+
+    /// <summary>
+    /// Receives the fused kernel's gradients and publishes them to the layer surface.
+    /// </summary>
+    /// <remarks>
+    /// No copy is taken here on purpose. The plan hands over its pre-allocated buffers by reference
+    /// and overwrites them on the next step, but the scatter READS the scalars into each layer's own
+    /// vector rather than retaining the tensors, so the published surface is already independent of
+    /// the plan's buffers by the time this returns.
+    /// </remarks>
+    private void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        ScatterParameterGradientsToLayers(grads);
+    }
+
+    protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        if (grads is null || grads.Count == 0) return 0;
+
+        var layers = Layers;
+        if (layers is null || layers.Count == 0) return 0;
+
+        int matched = 0;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is LayerBase<T> layer)
+            {
+                matched += layer.ScatterParameterGradients(grads);
+            }
+        }
+
+        return matched;
+    }
+
     public virtual Vector<T> GetParameterGradients()
     {
         // Collect gradients from all layers
@@ -2985,7 +3241,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
-            allGradients.Add(layer.GetParameterGradients());
+            // PREFER THE TAPE-SCATTERED SLICE over the layer's own accessor. 170 files override
+            // GetParameterGradients, and most of those overrides pre-date the autodiff tape and
+            // hand back a freshly allocated zero vector, so asking them returns manufactured zeros
+            // however good the tape's gradients were. Reading the scattered field first bypasses
+            // all of them; a layer the scatter never reached still falls back to its own accessor,
+            // so nothing that works today regresses.
+            var scattered = (layer as LayerBase<T>)?.ScatteredParameterGradients;
+            allGradients.Add(scattered ?? layer.GetParameterGradients());
         }
 
         // Concatenate all gradients into a single vector
@@ -3100,6 +3363,121 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// flag on both of its exit paths.
     /// </remarks>
     protected void MarkLayerShapesResolved() => _layerShapesResolved = true;
+    /// <summary>
+    /// Brings this network's weights into existence now, for a network whose architecture already
+    /// determines every shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ResolveLazyLayerShapes"/> pins each lazy layer's input and output shape from the
+    /// architecture, but it stops there: the weight tensors are still unallocated, so
+    /// <see cref="ParameterCount"/> and <see cref="GetParameters"/> both answer zero. That is the
+    /// correct answer for a layer whose input width is genuinely unknown -- reading a size must not
+    /// allocate, which is why the parameter surface never materializes on its own -- but it is the
+    /// WRONG answer for a network that was handed a concrete inputSize at construction and simply
+    /// has not been forwarded yet. QMIXAgent is the canonical case: its agent and mixing networks
+    /// resolve to [10]->[32]->[1] and still reported 0 parameters forever, because the only thing
+    /// that would have materialized them was a forward pass its replay-buffer training never ran.
+    /// </para>
+    /// <para>
+    /// A model that knows its own architecture is complete calls this to close that gap. It is the
+    /// deliberate, CALLER-DRIVEN allocation the read path refuses to perform implicitly: the cost is
+    /// paid where someone asked for it, never inside a bare count query. Dispose and
+    /// ComputeTopologyFingerprint both read <see cref="ParameterCount"/>, and allocating there threw
+    /// OutOfMemoryException on a 774M-parameter model that was being torn down.
+    /// </para>
+    /// <para>
+    /// Idempotent, and a no-op for any layer still carrying the -1 shape sentinel -- those have
+    /// nothing to allocate until a real input arrives.
+    /// </para>
+    /// </remarks>
+    public void MaterializeParameters()
+    {
+        EnsureParametersReady();
+        ResolveLazyLayerShapes();
+
+        if (Layers is not null)
+        {
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                if (Layers[i] is LayerBase<T> layer) layer.MaterializeParameters();
+            }
+        }
+
+        // The network-level extras GetParameters also folds, so count and vector stay in step.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is LayerBase<T> extraLayer) extraLayer.MaterializeParameters();
+        }
+    }
+
+    /// <summary>
+    /// Hook for a model that builds its own weights lazily, called before every parameter surface
+    /// reads them. Override it to finish construction; the default does nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ResolveLazyLayerShapes"/> handles the shapes of layers the base can already see.
+    /// It cannot help a model whose LAYERS do not exist yet -- one that defers building its encoder
+    /// and decoder until a native-mode initializer runs. Those models used to override ParameterCount,
+    /// GetParameters and SetParameters identically, each doing nothing but calling their initializer
+    /// and then delegating straight back to base. Three overrides per model to express one fact:
+    /// "materialize me first".
+    /// </para>
+    /// <para>
+    /// This is that one fact, in one member. The base calls it from every surface that reads
+    /// parameters, so a model states its lazy construction ONCE and the count, the vector, the
+    /// restore and the chunks all observe it. Overriding a parameter surface to add an initializer
+    /// call is now never necessary, and an override that forgets one surface -- which is how a count
+    /// and a vector come to disagree -- is no longer possible to write.
+    /// </para>
+    /// <para>
+    /// Implementations MUST be idempotent: this runs on every parameter read.
+    /// </para>
+    /// </remarks>
+    protected virtual void EnsureParametersReady()
+    {
+    }
+
+    /// <summary>
+    /// Whether this network's weights can be written. Override and return <c>false</c> for a model
+    /// running a loaded graph it does not own; the default is <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A model wrapping an ONNX session cannot honour a restore: the weights belong to the loaded
+    /// graph, and writing the native-side tensors would leave it reporting new parameters while
+    /// still computing with the old graph. Hundreds of models expressed that by overriding the
+    /// parameter surfaces with <c>if (!_useNativeMode) throw new NotSupportedException(...)</c> and
+    /// hand-rolling the rest of the method around the guard -- the same refusal written out
+    /// hundreds of times, each free to word it differently, and each free to guard one surface and
+    /// forget another.
+    /// </para>
+    /// <para>
+    /// Stating it once means a model declares the fact and inherits the behaviour:
+    /// <c>protected override bool SupportsParameterMutation =&gt; _useNativeMode;</c>. Read-only
+    /// access -- <see cref="ParameterCount"/> and <see cref="GetParameters"/> -- is deliberately
+    /// NOT gated: an ONNX-mode model can still be counted and inspected, it just cannot be written.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsParameterMutation => true;
+
+    /// <summary>
+    /// Throws the standard refusal when <see cref="SupportsParameterMutation"/> is <c>false</c>.
+    /// </summary>
+    protected void GuardParameterMutation()
+    {
+        if (!SupportsParameterMutation)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} is not in a mode where its parameters can be written: its weights "
+                + "belong to a loaded graph rather than to this model. Construct it in native mode "
+                + "to train, restore or otherwise mutate parameters. Reading them -- ParameterCount "
+                + "and GetParameters -- is still supported.");
+        }
+    }
+
+
 
 
     /// <summary>
@@ -3132,7 +3510,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual void ResolveLazyLayerShapes()
     {
         if (_layerShapesResolved) return;
-        if (Layers is null || Layers.Count == 0) return;
+        // An EMPTY Layers is not the same as nothing to resolve. A model may hold every weight
+        // in sub-structures it declares through GetExtraTrainableLayers -- a detection backbone
+        // keeps its convolutions in stage objects and owns no Layers at all -- and bailing here
+        // left those at the -1 shape sentinel, so they materialized nothing and the model
+        // reported ZERO parameters. Stop only when there is nothing on either list.
+        bool hasOwnLayers = Layers is not null && Layers.Count > 0;
+        bool hasExtraLayers = false;
+        foreach (var probe in GetExtraTrainableLayers())
+        {
+            if (probe is not null) { hasExtraLayers = true; break; }
+        }
+        if (!hasOwnLayers && !hasExtraLayers) return;
 
         int[]? currentShape = TryGetArchitectureInputShape();
         if (currentShape is null)
@@ -3160,7 +3549,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // across ALL model families, not just whichever layer breaks first.
         int[] lastGoodShape = currentShape;
 
-        for (int i = 0; i < Layers.Count; i++)
+        for (int i = 0; hasOwnLayers && i < Layers!.Count; i++)
         {
             var layer = Layers[i];
             if (layer is null) continue;
@@ -3189,6 +3578,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 break;
             }
         }
+
+            // Continue the same shape chain through the layers a model declares via
+            // GetExtraTrainableLayers. Without this they are counted and serialized but never
+            // SIZED, so they stay at their -1 sentinel, materialize nothing and report zero -- a
+            // detection backbone holds every convolution in stage objects outside Layers and read
+            // 0 parameters for exactly this reason. A model should not have to resolve its own
+            // shapes: it declares WHAT it owns and the base sizes it.
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is null) continue;
+                TryAdvanceLayerShape(extra, ref currentShape, ref lastGoodShape);
+            }
 
         _layerShapesResolved = true;
     }
@@ -3417,6 +3818,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             // Validation is a diagnostic. It must never be the reason a model fails to construct.
             return;
+        }
+
+        // SHADOW COMPARISON - reporting only, and deliberately separate from the layout mismatches
+        // above. The layouts check axis ROLES; this checks the SIZES the shape contracts predict
+        // against the sizes the imperative resolution concluded. It is the parallel run that has to
+        // come back clean before InferOutputShape can be made authoritative in TryAdvanceLayerShape
+        // and LayerGraph.ResolveShapes, because until now nothing in production consulted a contract
+        // at all and there was no evidence either way.
+        try
+        {
+            var shadow = LayerContractValidator.CompareContractsToResolvedShapes(Layers);
+            if (shadow.Disagreements.Count > 0
+                && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                var shadowReport = new System.Text.StringBuilder();
+                shadowReport.Append(GetType().Name)
+                    .Append(": shape CONTRACT disagrees with resolved shape (agreed=")
+                    .Append(shadow.Agreed)
+                    .Append(", declined=").Append(shadow.Declined)
+                    .Append(", unresolved=").Append(shadow.Unresolved)
+                    .Append(')');
+
+                foreach (var d in shadow.Disagreements)
+                {
+                    shadowReport.AppendLine().Append("  ").Append(d);
+                }
+
+                System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + shadowReport);
+            }
+        }
+        catch
+        {
+            // A diagnostic must never be the reason a model fails to construct.
         }
 
         if (mismatches.Count == 0) return;
@@ -5525,7 +5959,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// training data.
     /// </para>
     /// </remarks>
-    public abstract void UpdateParameters(Vector<T> parameters);
+    /// <remarks>
+    /// <para>
+    /// Virtual, and equivalent to <see cref="SetParameters"/>: both distribute a flat vector back
+    /// over the SAME enumeration -- Layers, then GetExtraTrainableLayers(), then
+    /// GetExtraTrainableTensors() -- that ParameterCount and GetParameters fold.
+    /// </para>
+    /// <para>
+    /// It was abstract, and that is why 974 models hand-wrote it and 572 of those simply THREW.
+    /// An abstract member does not ask a model whether it has parameters; it demands an answer,
+    /// and "throw" is the answer that gets written when the weights are not reachable from the
+    /// base walk. Making it virtual removes the demand: a model whose weights ARE reachable now
+    /// gets a correct implementation for free, and one whose weights are not is a plumbing gap to
+    /// close rather than a refusal to document.
+    /// </para>
+    /// </remarks>
+    public virtual void UpdateParameters(Vector<T> parameters) => SetParameters(parameters);
 
     /// <summary>
     /// Sets the neural network to either training or inference mode.
@@ -6443,6 +6892,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
+
+    // NOTE for whoever converges the model-side parameter mechanisms (there are currently three:
+    // [AutoParameters] on LayerBase, RegisterComponents duplicated in DiffusionModelBase and
+    // VAEModelBase, and the GetExtraTrainable* hooks here).
+    //
+    // Hoisting RegisterComponents to this class LOOKS like the convergence, and it is not sufficient.
+    // IParameterSource<T> is flat-vector only - ParameterCount / GetParameters / SetParameters - so a
+    // registered component can be counted, saved and loaded, but CANNOT flow through the six sites
+    // here that need Tensor<T> to register gradients and streaming handles.
+    //
+    // MEASURED, and it corrects an earlier note that guessed the diffusion side had the same gap:
+    // it does not, because it does not use these hooks at all. DiffusionModelBase is NOT a
+    // NeuralNetworkBase (it implements IDiffusionModel directly) and its tape training calls
+    // CollectTrainableParameters, a cached reflective walk of the whole object graph that gathers
+    // every ITrainableLayer<T>'s tensors. A registered component therefore DOES train there, so long
+    // as its parameters live inside layers.
+    //
+    // The real hole in that walk is a BARE Tensor<T>: it returns early on `obj is Tensor<T>` and skips
+    // fields declared as Tensor<T>, so a raw learned scalar or embedding held directly by a component
+    // is saved and never trained. On this side that is exactly what GetExtraTrainableTensors exists to
+    // carry - see CLAPModel's _logTemperature.
+    //
+    // So the convergence still needs a decision, but a narrower one than first stated: either
+    // IParameterSource gains a tensor-level view, or components are explicitly save/load-only and the
+    // training paths keep using GetExtraTrainable* plus the diffusion walk. Until that is settled,
+    // adding the registry here would be a mechanism nothing on this side consumes.
 
     /// <summary>
     /// Returns the registered module roots used by copy-on-write cloning.
@@ -7410,6 +7885,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
         bool useStreamingDefaults)
     {
+        // Decide up front whether this model can afford to keep its gradients, so every branch
+        // below (each of the streaming callbacks, and the non-streaming fallback) agrees.
+        BeginStreamingGradientRetention();
+
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
@@ -7499,6 +7978,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    RetainStreamingGradient(source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -7522,6 +8002,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
+                    if (grad is not null && grad.Length > 0) RetainStreamingGradient(source, grad);
                     if (grad is null || grad.Length == 0 || !clipSet.Contains(source)) return;
                     var span = grad.Data.Span;
                     int len = grad.Length;
@@ -7548,6 +8029,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    RetainStreamingGradient(source, grad);
                     if (scaleDown && clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -7582,6 +8064,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    RetainStreamingGradient(source, grad);
                     if (clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -7608,6 +8091,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // per-parameter gradients above and performs its global two-loop update + parameter
         // write-back now that the whole gradient is available.
         streamingOptimizer.EndStep();
+
+        // Publish the retained gradients now the step is complete.
+        EndStreamingGradientRetention();
 
         // GPU weight-cache coherence after the in-place parameter mutation. The
         // 8-bit StreamingAdam state already updated source tensors in place; without
@@ -8114,6 +8600,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (allGrads.TryGetValue(param, out var grad))
                     grads[param] = grad;
             }
+
+            // Publish the tape's gradients onto the per-layer surface BEFORE the optimizer runs.
+            // The optimizer consumes `grads` directly and never writes them back, so without this
+            // GetParameterGradients() had nothing to report and manufactured zeros instead --
+            // 24% of every CI failure in run 31356312540. Scattering off the same dictionary the
+            // optimizer is about to use means the reported gradients are exactly the ones actually
+            // applied, rather than a second, separately-derived answer that could disagree.
+            ScatterParameterGradientsToLayers(allGrads);
 
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
@@ -9131,7 +9625,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
-                eagerOptimizer: resolvedOptimizer);
+                eagerOptimizer: resolvedOptimizer,
+                // Publish the fused kernel's gradients onto the layer surface. The fused path
+                // updates parameters in-replay and returns without ever passing through the eager
+                // gradient code below, which is why the surface stayed empty for every model that
+                // engages fusion -- the largest single cause of the all-zero gradient reports.
+                onGradients: ScatterFusedGradients);
         }
         finally
         {
@@ -10418,7 +10917,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     private const int SerializationMagic = 0x4E444941; // "AIDN" (little-endian int)
-    private const int SerializationVersion = 4;
+    // v5 records each layer's parameter SHAPES alongside the flat values. Restore then allocates
+    // exactly what was saved instead of inferring arity from vector length -- inference that was
+    // impossible for a layer whose parameter set depends on the data it saw (EmbeddingLayer's
+    // input projection). Reading v1-v4 still works and restores exactly as it did before; those
+    // payloads simply carry no layout, so nothing can be mis-applied from one.
+    private const int SerializationVersion = 5;
 
     // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
     // here so the check still compiles on net471, where Array.MaxLength
@@ -10525,6 +11029,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Write parameters (do not rely on ParameterCount: some layers keep trainable state outside LayerBase.Parameters).
             var parameters = layer.GetParameters();
+
+            // v5 layout manifest, written before the values and in the same fold order.
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layoutLayer)
+            {
+                writer.Write(true);
+                layoutLayer.WriteParameterLayout(writer);
+            }
+            else
+            {
+                writer.Write(false);
+            }
+
             writer.Write(parameters.Length);
             foreach (var param in parameters)
             {
@@ -10634,7 +11150,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            // Read parameters
+            // Read parameters. v5 precedes them with a shape manifest; apply it first so the
+            // layer is materialized to exactly the saved layout before values are poured in.
+            AiDotNet.NeuralNetworks.Layers.ParameterLayoutNode? parameterLayout = null;
+            if (version >= 5 && reader.ReadBoolean())
+            {
+                parameterLayout = AiDotNet.NeuralNetworks.Layers.ParameterLayoutNode.Read(reader);
+            }
+
             int paramCount = reader.ReadInt32();
             Vector<T>? parametersVector = null;
             if (paramCount > 0)
@@ -10690,8 +11213,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // are still unmaterialised, and skipping it here left SetParameters below with nowhere
             // to put them -- the restored model came back at its initialisation values with no
             // error raised, which is the eager half of the same defect fixed in the COW path.
+            // Measure SCALARS, not the number of tensors. An unmaterialized layer still returns
+            // its placeholder tensors, so a lazy EmbeddingLayer reported Count == 1 against a
+            // [0]-length tensor, this branch concluded it was already resolved, and SetParameters
+            // below was then handed 3072 values for a layer that believed it had none. ParameterCount
+            // folds tensors, buffers and sub-layers, so it is zero exactly when nothing is sized yet.
             if (layer is LayerBase<T> lb
-                && (!lb.IsShapeResolved || lb.GetTrainableParameters().Count == 0))
+                && (!lb.IsShapeResolved || lb.ParameterCount == 0))
             {
                 int[]? candidate = inputShape is { Length: > 0 } && inputShape.All(d => d > 0)
                     ? inputShape
@@ -10707,6 +11235,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     try { lb.ResolveFromShape(candidate); }
                     catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
                 }
+            }
+
+            // Size the layer to exactly what was saved before pouring values in. Without this a
+            // layer whose parameter set depends on the data it saw -- EmbeddingLayer's input
+            // projection -- comes back one tensor short and the restore is rejected.
+            if (parameterLayout is not null && layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layoutTarget)
+            {
+                layoutTarget.ApplyParameterLayout(parameterLayout);
             }
 
             // Apply parameters if any
@@ -12217,6 +12753,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(parameters));
         }
 
+        GuardParameterMutation();
+
+        // Restore must see the same model the count and the vector saw.
+        EnsureParametersReady();
+
         // ParameterCount is long; SetParameters takes a flat Vector<T> whose
         // Length is int. Guard at this boundary: if the model's true
         // parameter count exceeds int.MaxValue the caller can't even
@@ -12258,6 +12799,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             currentIndex += layerParameterCount;
         }
 
+        // Restore the network-level extras from the tail of the vector, in the order
+        // ParameterCount summed and GetParameters wrote them.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null || extra.ParameterCount <= 0) continue;
+            int extraCount = checked((int)extra.ParameterCount);
+            var extraParameters = new Vector<T>(extraCount);
+            srcSpan.Slice(currentIndex, extraCount).CopyTo(extraParameters.AsWritableSpan());
+            extra.SetParameters(extraParameters);
+            currentIndex += extraCount;
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
+            currentIndex += tensor.Length;
+        }
+
         // Some ITrainableLayer implementations swap their parameter tensors
         // wholesale during SetParameters rather than mutating in place. When
         // they do, any compiled plan captured against the prior tensor
@@ -12274,6 +12833,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // forms keyed by exactly that identity. Single source of truth:
         // see InvalidateWeightCachesAfterSuccessfulWeightUpdate.
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+
+        // Last, so a model that derives state from its weights can rebuild it.
+        OnParametersRestored();
+    }
+
+    /// <summary>
+    /// Hook called after <see cref="SetParameters"/> has written every weight. Override it to
+    /// rebuild anything derived from those weights; the default does nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Some models cache an object built FROM their parameters rather than reading the parameters
+    /// directly on each use -- InverseProblemPINN holds a parameterized PDE it constructs from the
+    /// coefficients it is solving for. Restoring the coefficients without rebuilding that object
+    /// leaves the model computing with the old physics while reporting the new weights.
+    /// </para>
+    /// <para>
+    /// Models used to handle this by overriding UpdateParameters with a full reimplementation of
+    /// restore -- re-slicing the vector per layer, writing their own tensors, then rebuilding.
+    /// That is how the two restore paths came to disagree: SetParameters, the one serialization
+    /// actually calls, silently did less. Declare the weights through GetExtraTrainableTensors and
+    /// put ONLY the rebuild here, and both paths do the same thing because there is only one.
+    /// </para>
+    /// </remarks>
+    protected virtual void OnParametersRestored()
+    {
     }
 
     /// <summary>
@@ -12630,14 +13215,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         else
         {
-            // Fallback for custom ILossFunction: use CalculateDerivative to get
-            // the loss gradient w.r.t. predictions, then backpropagate manually.
-            // This preserves the IGradientComputable contract without silently
-            // producing zero gradients from a disconnected scalar tensor.
-            var predVec = prediction.ToVector();
-            var targetVec = target.ToVector();
-            var derivVec = resolved.CalculateDerivative(predVec, targetVec);
-            lossTensor = new Tensor<T>(prediction._shape, derivVec);
+            // Fallback for a custom ILossFunction: record the loss on the tape and let
+            // reverse-mode AD produce the gradient. This used to call CalculateDerivative and
+            // hand-build a gradient tensor, but #1994 removed that member from the interface --
+            // the tape is now the only source of gradients, which is also what stops a custom
+            // loss from silently disagreeing with the autodiff path it is scored against.
+            lossTensor = resolved.ComputeTapeLoss(prediction, target);
         }
 
         // Reverse-mode AD: compute gradients across the FULL tape, then

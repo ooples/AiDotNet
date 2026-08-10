@@ -281,9 +281,7 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         // the whole pipeline back into _inputProjection, the residual
         // stack, and _outputProjection.
 
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                "LossFunction must derive from LossFunctionBase<T> for CSDI tape-based training.");
+        var loss = LossFunction;
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
@@ -595,11 +593,8 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         return (eps, epsilonTrue);
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

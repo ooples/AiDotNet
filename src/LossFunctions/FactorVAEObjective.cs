@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.LinearAlgebra;
+﻿using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.LossFunctions;
 
@@ -64,31 +64,56 @@ public class FactorVAEObjective<T> : LossFunctionBase<T>
         var kl = _klProvider();
         if (kl is null || _klWeight == 0.0)
         {
-            return recon;
+            // REDUCED ON THIS PATH TOO, so the returned rank does not depend on runtime state. The
+            // branch is chosen by _klProvider(), which returns null during inference and on any step
+            // with no posterior pass, so an unnormalized return here made the loss rank flip between
+            // steps of one run: a backward seed built for a scalar met whatever rank the
+            // reconstruction loss happened to produce, and a fused compiled path that traces the
+            // graph once and replays it had its traced plan invalidated.
+            return ToRank0(recon);
         }
 
-        var weighted = Engine.TensorMultiplyScalar(AsScalar(kl), NumOps.FromDouble(_klWeight));
-        return Engine.TensorAdd(AsScalar(recon), weighted);
+        var weighted = Engine.TensorMultiplyScalar(ToRank0(kl), NumOps.FromDouble(_klWeight));
+        return Engine.TensorAdd(ToRank0(recon), weighted);
     }
 
     /// <summary>
-    /// Reduces a tensor to a rank-1 single-element scalar so the two terms are addable regardless of
-    /// how each was reduced.
+    /// Fully reduces a term to the rank-0 scalar the <c>ComputeTapeLoss</c> contract requires.
     /// </summary>
-    private Tensor<T> AsScalar(Tensor<T> value)
+    /// <remarks>
+    /// This previously reshaped a fully-reduced term UP to rank-1 <c>[1]</c>, which is the opposite
+    /// of the contract: a <c>[1]</c> tape root leaves the backward pass with no scalar to seed from.
+    /// The KL term arrives from a caller-supplied provider rather than from a sibling loss, so the
+    /// reduction itself is still needed -- only its target rank changes.
+    /// </remarks>
+    private Tensor<T> ToRank0(Tensor<T> value)
     {
-        if (value.Shape.Length == 1 && value.Shape[0] == 1) return value;
+        if (value.Shape.Length == 0) return value;
 
         var axes = Enumerable.Range(0, value.Shape.Length).ToArray();
-        var reduced = Engine.ReduceSum(value, axes, keepDims: false);
-        return reduced.Shape.Length == 0 ? Engine.Reshape(reduced, [1]) : reduced;
+        return Engine.ReduceSum(value, axes, keepDims: false);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Not supported. FactorVAE's objective cannot be computed on the flat-vector surface.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Always.</exception>
+    /// <remarks>
+    /// DELEGATING TO THE RECONSTRUCTION LOSS WOULD DROP THE KL TERM AND THE gamma WEIGHT, silently.
+    /// That is precisely the failure this class's own remarks warn about: a detached KL value
+    /// "would leave the prior untrained and silently reduce this to plain reconstruction". A caller
+    /// on this surface would receive a plausible loss number while the objective they configured was
+    /// not the objective being computed, with no exception and no diagnostic.
+    ///
+    /// FlowLoss and AdversarialLoss handle their own unsupported paths this way. If the
+    /// reconstruction-only value is genuinely wanted, call the reconstruction loss directly, where
+    /// the omission is visible at the call site.
+    /// </remarks>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
-        => _reconstruction.CalculateLoss(predicted, actual);
+        => throw new NotSupportedException(
+            $"{nameof(FactorVAEObjective<T>)} cannot be evaluated on the flat-vector surface: the KL "
+            + "divergence needs the posterior tensors, which a vector does not carry. Train through "
+            + "ComputeTapeLoss (TrainWithTape), or call the reconstruction loss directly if only that "
+            + "term is wanted.");
 
-    /// <inheritdoc/>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-        => _reconstruction.CalculateDerivative(predicted, actual);
 }

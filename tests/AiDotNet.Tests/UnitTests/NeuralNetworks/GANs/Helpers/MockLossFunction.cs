@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Interfaces;
 
 namespace AiDotNetTests.UnitTests.NeuralNetworks.GANs.Helpers;
@@ -39,13 +40,6 @@ public class MockLossFunction<T> : ILossFunction<T>
         return _lossFunc(predicted, actual);
     }
 
-    public Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        CalculateDerivativeCallCount++;
-        LastPredicted = predicted;
-        LastActual = actual;
-        return _derivativeFunc(predicted, actual);
-    }
 
     public void Reset()
     {
@@ -61,5 +55,28 @@ public class MockLossFunction<T> : ILossFunction<T>
     public (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         throw new NotSupportedException("GPU operations are not supported in MockLossFunction.");
+    }
+
+    /// <summary>
+    /// Computes the loss as a tape-differentiable scalar tensor.
+    /// </summary>
+    /// <param name="predicted">The predicted tensor.</param>
+    /// <param name="target">The target tensor.</param>
+    /// <returns>A rank-0 scalar tensor holding the mean squared error.</returns>
+    /// <remarks>
+    /// Built from engine operations rather than an element-wise loop so the gradient tape can
+    /// differentiate it. The mock supplies no derivative of its own, exactly like a real loss.
+    /// </remarks>
+    public Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.TensorSubtract(predicted, target);
+        var squared = engine.TensorMultiply(diff, diff);
+
+        var axes = new int[squared.Shape.Length];
+        for (int i = 0; i < axes.Length; i++) axes[i] = i;
+
+        var summed = engine.ReduceSum(squared, axes, keepDims: false);
+        return engine.TensorDivideScalar(summed, MathHelper.GetNumericOperations<T>().FromDouble(Math.Max(1, squared.Length)));
     }
 }

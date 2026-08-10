@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
 
 /// <summary>
@@ -52,8 +54,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
     "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
     Year = 1989,
     Authors = "Watkins, C. J. C. H.")]
-public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table, padded to ActionSize per state and clamped to one row -- the same
+    /// flattening this agent used to write by hand.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableParameterSource<T>(_qTable, _options.ActionSize));
+    }
     private TabularQLearningOptions<T> _options;
 
     /// <inheritdoc/>
@@ -223,11 +233,6 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    // Min one row × actionSize so a freshly-constructed agent reports a positive
-    // ParameterCount before any state has been visited (Parameters_ShouldBeNonEmpty
-    // contract).
-    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
-
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -260,45 +265,6 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        // Flatten Q-table into vector. Clamp to one empty row so the result
-        // matches ParameterCount and never returns an empty vector.
-        int stateCount = Math.Max(_qTable.Count, 1);
-        var parameters = new Vector<T>(stateCount * _options.ActionSize);
-
-        int idx = 0;
-        foreach (var stateQValues in _qTable.Values)
-        {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Get state keys BEFORE clearing to preserve them
-        var stateKeys = _qTable.Keys.ToList();
-        int maxStates = parameters.Length / _options.ActionSize;
-
-        // Update Q-values for existing states
-        for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
-        {
-            if (_qTable.ContainsKey(stateKeys[i]))
-            {
-                for (int action = 0; action < _options.ActionSize; action++)
-                {
-                    int idx = i * _options.ActionSize + action;
-                    _qTable[stateKeys[i]][action] = parameters[idx];
-                }
-            }
-        }
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new TabularQLearningAgent<T>(_options);
@@ -319,7 +285,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -328,7 +294,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tabular methods don't use gradients
     }

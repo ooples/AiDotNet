@@ -650,16 +650,8 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates parameters.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, UpdateParameters updates internal parameters or state. This keeps the GraphWaveNet architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients) { }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets model metadata.
     /// </summary>

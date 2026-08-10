@@ -6,6 +6,8 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
 /// <summary>
@@ -41,6 +43,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The linear weight matrix, row-major, which is what the hand-written loop over
+    /// [action, feature] produced. Registered through an accessor because this agent can
+    /// REPLACE the matrix rather than mutate it.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new MatrixParameterSource<T>(() => _weights));
+    }
     private LinearQLearningOptions<T> _options;
 
     /// <inheritdoc/>
@@ -195,7 +206,6 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
     public override byte[] Serialize()
     {
@@ -295,65 +305,7 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int paramCount = _options.ActionSize * _options.FeatureSize;
-        var vector = new Vector<T>(paramCount);
-        int idx = 0;
-
-        for (int a = 0; a < _options.ActionSize; a++)
-            for (int f = 0; f < _options.FeatureSize; f++)
-                vector[idx++] = _weights[a, f];
-
-        return vector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int a = 0; a < _options.ActionSize; a++)
-            for (int f = 0; f < _options.FeatureSize; f++)
-                if (idx < parameters.Length)
-                    _weights[a, f] = parameters[idx++];
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearQLearningAgent<T>(_options);
-
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        var pred = Predict(input);
-        var lf = lossFunction ?? LossFunction;
-        var loss = lf.CalculateLoss(pred, target);
-        var gradients = lf.CalculateDerivative(pred, target);
-        return gradients;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        if (gradients == null)
-        {
-            throw new ArgumentNullException(nameof(gradients));
-        }
-
-        // Gradients should be flattened from weight matrix [ActionSize x FeatureSize]
-        int expectedSize = _options.ActionSize * _options.FeatureSize;
-        if (gradients.Length != expectedSize)
-        {
-            throw new ArgumentException($"Gradient vector length {gradients.Length} does not match expected size {expectedSize}");
-        }
-
-        // Apply gradients to weight matrix
-        int index = 0;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                T update = NumOps.Multiply(learningRate, gradients[index]);
-                _weights[a, f] = NumOps.Subtract(_weights[a, f], update);  // Gradient descent
-                index++;
-            }
-        }
-    }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

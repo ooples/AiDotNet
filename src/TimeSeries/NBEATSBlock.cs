@@ -30,7 +30,25 @@ namespace AiDotNet.TimeSeries;
 /// Multiple blocks work together, with each one focusing on different aspects of the data.
 /// </para>
 /// </remarks>
-internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1 only, and that is this block's own declaration rather than a simplification: the base
+// constructor is handed CreateInputShape(lookbackWindow) => new[] { lookbackWindow } and
+// CreateOutputShape(...) => new[] { lookbackWindow + forecastHorizon }, both one-dimensional.
+// ForwardTraced backs that up - its first statement is Engine.Reshape(input, [_lookbackWindow, 1]),
+// which only succeeds for an input holding exactly _lookbackWindow elements.
+//
+// The axis is Time on both sides because both ARE time: the input is a lookback window of history, and
+// the output is the concatenation [backcast(lookbackWindow) | forecast(forecastHorizon)] documented on
+// ForwardTraced. Naming it Features would suggest the two ends are unrelated quantities when the whole
+// doubly-residual scheme depends on their being the same series.
+//
+// ForwardTape also accepts rank-2 [B, L], but it is a separate public entry point used by NBEATSModel,
+// NOT the LayerBase forward path this contract describes - so no rank-2 layout is declared here.
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input,
+    Note = "A lookback window of exactly lookbackWindow steps.")]
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Output,
+    Note = "Backcast and forecast concatenated: [lookbackWindow | forecastHorizon].")]
+[AutoParameters]
+internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
     private readonly int _lookbackWindow;
     private readonly int _forecastHorizon;
@@ -70,34 +88,6 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Precomputed basis matrix for forecast expansion: [forecastHorizon, thetaSizeForecast].
     /// </summary>
     private Tensor<T> _basisForecast;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the block.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var weight in _fcWeights)
-            {
-                count += weight.Length;
-            }
-            foreach (var bias in _fcBiases)
-            {
-                count += bias.Length;
-            }
-            // Generic blocks: V_b and V_f bases are learnable per Oreshkin et al.
-            // 2020 Section 3.2. Interpretable blocks use fixed polynomial bases
-            // that aren't trainable, so don't include them in the parameter count.
-            if (!_useInterpretableBasis)
-            {
-                count += _basisBackcast.Length;
-                count += _basisForecast.Length;
-            }
-            return count;
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of the NBEATSBlock class.
@@ -341,6 +331,37 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         // reshape node was ~1% of driver wall). Same contiguous data as [size],
         // so gradient flow / optimizer moments are bit-identical.
         return new Tensor<T>(new[] { size, 1 }, new Vector<T>(data));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written rather than generated, because input and output share a rank AND an axis role while
+    /// differing in SIZE - exactly the case a generated <c>Same(Time)</c> would get wrong. The block
+    /// emits a longer series than it consumes: <c>CreateOutputShape</c> returns
+    /// <c>new[] { lookbackWindow + forecastHorizon }</c>, and <c>ForwardTraced</c> produces it by
+    /// concatenating a <c>[lookbackWindow]</c> backcast with a <c>[forecastHorizon]</c> forecast along
+    /// axis 0.
+    /// </para>
+    /// <para>
+    /// <c>Fixed</c> rather than a window or a scale, because the output length is set by construction and
+    /// not by the input. Both basis matrices are precomputed at their configured extents
+    /// (<c>_basisBackcast</c> is <c>[lookbackWindow, thetaSizeBackcast]</c>, <c>_basisForecast</c> is
+    /// <c>[forecastHorizon, thetaSizeForecast]</c>), so the two halves come out at those sizes whatever
+    /// is fed in - and the reshape at the top of <c>ForwardTraced</c> already refuses any input that is
+    /// not exactly <c>_lookbackWindow</c> long.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // Rank 1 is the only form the LayerBase path accepts; see the layout note on the class.
+        if (inputRank != 1 || _lookbackWindow <= 0 || _forecastHorizon <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Time, AxisRelation.Fixed(_lookbackWindow + _forecastHorizon)),
+        };
     }
 
     /// <summary>
@@ -684,105 +705,6 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Gets all parameters (weights and biases) as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        foreach (var weight in _fcWeights)
-        {
-            var vec = weight.ToVector();
-            parameters.AddRange(vec);
-        }
-
-        foreach (var bias in _fcBiases)
-        {
-            var vec = bias.ToVector();
-            parameters.AddRange(vec);
-        }
-
-        // Generic blocks: include trainable V_b / V_f bases so export round-trips
-        // don't drop learned basis state. Ordering (fc weights, fc biases, then
-        // bases) must match SetParameters.
-        if (!_useInterpretableBasis)
-        {
-            parameters.AddRange(_basisBackcast.ToVector());
-            parameters.AddRange(_basisForecast.ToVector());
-        }
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Sets all parameters (weights and biases) from a single vector.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int idx = 0;
-
-        for (int w = 0; w < _fcWeights.Count; w++)
-        {
-            var weight = _fcWeights[w];
-            int len = weight.Length;
-            var data = new T[len];
-            for (int i = 0; i < len; i++)
-            {
-                data[i] = parameters[idx++];
-            }
-            int rows = weight.Shape[0];
-            int cols = weight.Shape[1];
-            _fcWeights[w] = new Tensor<T>(new[] { rows, cols }, new Vector<T>(data));
-        }
-
-        for (int b = 0; b < _fcBiases.Count; b++)
-        {
-            var bias = _fcBiases[b];
-            int len = bias.Length;
-            var data = new T[len];
-            for (int i = 0; i < len; i++)
-            {
-                data[i] = parameters[idx++];
-            }
-            // Preserve the column-shaped [len, 1] layout CreateBiasTensor establishes
-            // so ForwardTape's reshape-free TensorBroadcastAdd keeps working after a
-            // SetParameters round-trip. Same data order; Length is unchanged.
-            _fcBiases[b] = new Tensor<T>(new[] { len, 1 }, new Vector<T>(data));
-        }
-
-        // Generic blocks: restore trainable V_b / V_f bases. Must match the
-        // order GetParameters produced them in.
-        if (!_useInterpretableBasis)
-        {
-            int backcastLen = _basisBackcast.Length;
-            var backcastData = new T[backcastLen];
-            for (int i = 0; i < backcastLen; i++)
-            {
-                backcastData[i] = parameters[idx++];
-            }
-            _basisBackcast = new Tensor<T>(_basisBackcast.Shape.ToArray(), new Vector<T>(backcastData));
-
-            int forecastLen = _basisForecast.Length;
-            var forecastData = new T[forecastLen];
-            for (int i = 0; i < forecastLen; i++)
-            {
-                forecastData[i] = parameters[idx++];
-            }
-            _basisForecast = new Tensor<T>(_basisForecast.Shape.ToArray(), new Vector<T>(forecastData));
-        }
-
-        // Re-register trainable parameters after replacing tensors
-        ReRegisterParameters();
     }
 
     /// <summary>

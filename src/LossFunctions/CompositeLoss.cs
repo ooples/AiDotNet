@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.LossFunctions;
@@ -44,10 +44,13 @@ public class CompositeLoss<T> : LossFunctionBase<T>
     /// Creates a composite loss from (loss, weight) pairs.
     /// </summary>
     /// <param name="terms">The loss terms and their absolute coefficients. Terms are <see cref="LossFunctionBase{T}"/> rather than <see cref="ILossFunction{T}"/> because the composite must forward <c>ComputeTapeLoss</c>, which the interface does not declare.</param>
-    /// <exception cref="ArgumentNullException">If <paramref name="terms"/> is null.</exception>
-    /// <exception cref="ArgumentException">
-    /// If no terms are supplied, or any individual loss is null.
-    /// </exception>
+    /// <exception cref="ArgumentException">If any individual loss is null.</exception>
+    /// <remarks>
+    /// A NULL OR EMPTY <paramref name="terms"/> IS NOT AN ERROR: it selects SAM's published mask
+    /// objective, focal + dice in a 20:1 ratio, so a parameterless construction stays meaningful and
+    /// consistent with the Segmentation category this class declares. A caller passing an empty array
+    /// therefore trains against that segmentation objective; no exception is thrown for it.
+    /// </remarks>
     public CompositeLoss(params (LossFunctionBase<T> Loss, double Weight)[] terms)
     {
         if (terms is null || terms.Length == 0)
@@ -86,36 +89,6 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         return total;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The derivative of a weighted sum is the weighted sum of the derivatives, so each term's
-    /// gradient is scaled by its own coefficient and accumulated.
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        Vector<T>? accumulated = null;
-        for (int i = 0; i < _losses.Length; i++)
-        {
-            var term = _losses[i].CalculateDerivative(predicted, actual);
-            if (accumulated is null)
-            {
-                accumulated = new Vector<T>(term.Length);
-                for (int j = 0; j < term.Length; j++)
-                    accumulated[j] = NumOps.Multiply(_weights[i], term[j]);
-                continue;
-            }
-
-            if (term.Length != accumulated.Length)
-                throw new InvalidOperationException(
-                    $"Composite loss term {i} produced a gradient of length {term.Length}, " +
-                    $"but term 0 produced {accumulated.Length}. All terms must score the same prediction.");
-
-            for (int j = 0; j < term.Length; j++)
-                accumulated[j] = NumOps.Add(accumulated[j], NumOps.Multiply(_weights[i], term[j]));
-        }
-
-        return accumulated!;
-    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -129,17 +102,13 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         {
             var term = _losses[i].ComputeTapeLoss(predicted, target);
 
-            // Loss implementations disagree on the SHAPE of their scalar result: some return a rank-1
-            // [1] tensor and others a rank-0 scalar []. Adding those directly throws
-            // "Tensor shapes must match. Got [1] and []", which aborts the training step and shows up
-            // as the misleading "no parameters changed after training" -- measured with focal ([1])
-            // plus dice ([]) on SAM2. Normalise every term to [1] first; the reshape is an Engine op,
-            // so the tape is preserved.
-            if (term.Length == 1 && term.Shape.Length != 1)
-            {
-                term = Engine.Reshape(term, new[] { 1 });
-            }
-
+            // NO SHAPE NORMALIZATION HERE ANY MORE. This used to reshape every term to rank-1 [1]
+            // because implementations disagreed -- the focal([1]) + dice([]) combination on SAM2
+            // threw "Tensor shapes must match. Got [1] and []", aborting the step and surfacing as
+            // the misleading "no parameters changed after training". ComputeTapeLoss now documents
+            // rank-0 [] as its contract and every implementation honours it, so absorbing a wrong
+            // shape here would hide a real contract violation instead of reporting it. The
+            // sameShape check below is the loud failure that replaces it.
             var scaled = Engine.TensorMultiplyScalar(term, _weights[i]);
 
             if (accumulated is null)

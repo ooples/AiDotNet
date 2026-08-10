@@ -1062,7 +1062,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
         // For gradient boosting: compute per-sample loss derivatives (pseudo-residuals)
         // These are ∂Loss/∂predictions, NOT ∂Loss/∂parameters
         // In gradient boosting, subsequent trees are fit to these negative gradients
-        var sampleGradients = loss.CalculateDerivative(predictions, target);
+        var sampleGradients = loss.ComputeGradient(predictions, target);
 
         // Snapshot the int-narrowed count ONCE — both the Vector<T>
         // allocation and the loop bound below reuse this single value.

@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -129,16 +130,20 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 2.0 }); // class index 2
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
+            // Tolerance is 6 places, not 10: ComputeTapeLoss offsets the probability by a
+            // small epsilon before the log so that p = 0 cannot produce -infinity, which makes
+            // the true gradient -1/(p + eps) rather than -1/p. The deleted analytic derivative
+            // used -1/p and ignored the offset its own forward applied.
             // Gradient should be 0 for classes 0, 1, 3
             // Gradient should be -1/0.6 = -1.6666... for class 2
             Assert.Equal(4, result.Length);
-            Assert.Equal(0.0, result[0], 10);
-            Assert.Equal(0.0, result[1], 10);
-            Assert.Equal(-1.6666666666666667, result[2], 10);
-            Assert.Equal(0.0, result[3], 10);
+            Assert.Equal(0.0, result[0], 6);
+            Assert.Equal(0.0, result[1], 6);
+            Assert.Equal(-1.6666666666666667, result[2], 6);
+            Assert.Equal(0.0, result[3], 6);
         }
 
         [Fact(Timeout = 60000)]
@@ -151,14 +156,18 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 0.0, 0.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
+            // Tolerance is 6 places, not 10: ComputeTapeLoss offsets the probability by a
+            // small epsilon before the log so that p = 0 cannot produce -infinity, which makes
+            // the true gradient -1/(p + eps) rather than -1/p. The deleted analytic derivative
+            // used -1/p and ignored the offset its own forward applied.
             // Gradient for class 0: -1/0.7 = -1.4285... (accumulated twice, then averaged)
             // Average: -2 * (1/0.7) / 2 = -1.4285...
-            Assert.Equal(-1.4285714285714286, result[0], 10);
-            Assert.Equal(0.0, result[1], 10);
-            Assert.Equal(0.0, result[2], 10);
+            Assert.Equal(-1.4285714285714286, result[0], 6);
+            Assert.Equal(0.0, result[1], 6);
+            Assert.Equal(0.0, result[2], 6);
         }
 
         [Fact(Timeout = 60000)]
@@ -171,15 +180,19 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 0.0, 1.0, 2.0 });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
+            // Tolerance is 6 places, not 10: ComputeTapeLoss offsets the probability by a
+            // small epsilon before the log so that p = 0 cannot produce -infinity, which makes
+            // the true gradient -1/(p + eps) rather than -1/p. The deleted analytic derivative
+            // used -1/p and ignored the offset its own forward applied.
             // Gradient for class 0: -1/0.5 / 3 = -0.6666...
             // Gradient for class 1: -1/0.3 / 3 = -1.1111...
             // Gradient for class 2: -1/0.2 / 3 = -1.6666...
-            Assert.Equal(-0.6666666666666666, result[0], 10);
-            Assert.Equal(-1.1111111111111112, result[1], 10);
-            Assert.Equal(-1.6666666666666667, result[2], 10);
+            Assert.Equal(-0.6666666666666666, result[0], 6);
+            Assert.Equal(-1.1111111111111112, result[1], 6);
+            Assert.Equal(-1.6666666666666667, result[2], 6);
         }
 
         [Fact(Timeout = 60000)]
@@ -191,7 +204,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<double>(new double[] { 3.0 }); // out of bounds
 
             // Act & Assert
-            var exception = Assert.Throws<ArgumentException>(() => loss.CalculateDerivative(predicted, actual));
+            var exception = Assert.Throws<ArgumentException>(() => loss.ComputeGradient(predicted, actual));
             Assert.Contains("out of bounds", exception.Message);
         }
 
@@ -220,7 +233,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
             var actual = new Vector<float>(new float[] { 2.0f });
 
             // Act
-            var result = loss.CalculateDerivative(predicted, actual);
+            var result = loss.ComputeGradient(predicted, actual);
 
             // Assert
             Assert.Equal(0.0f, result[0], 5);

@@ -59,7 +59,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 2")]
-public partial class RWKV7Block<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 {
     // Configuration
     private readonly int _modelDimension;
@@ -351,21 +358,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
 
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var tensor in GetAllParameterTensors())
-                count += tensor.Length;
-            return count;
-        }
-    }
-
-    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
-    private readonly int _sequenceLength;
-
     /// <summary>
     /// Creates a new RWKV-7 block.
     /// </summary>
@@ -387,7 +379,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        _sequenceLength = sequenceLength;
         // Theorem 1 (arXiv 2503.14456, Appendix C) is stated for c in (0, 1 + u); outside that range
         // the eigenvalue bound it proves no longer applies, so reject rather than silently accept.
         if (globalIclrMultiplier <= 0.0 || globalIclrMultiplier >= 1.0 + DecayClampLowerBound)
@@ -1472,19 +1463,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllParameterTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-        return parameters;
-    }
-
-    /// <inheritdoc />
     public override Vector<T> GetParameterGradients()
     {
         var allParams = GetAllParameterTensors();
@@ -1548,20 +1526,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
         _normBeta1Grad = null;
         _normGamma2Grad = null;
         _normBeta2Grad = null;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllParameterTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     /// <summary>

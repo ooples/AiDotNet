@@ -60,8 +60,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
     "https://arxiv.org/abs/1710.02298",
     Year = 2018,
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
-public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
+public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_onlineNetwork);
+        RegisterParameterComponent(_targetNetwork);
+    }
     private RainbowDQNOptions<T> _options;
 
     /// <inheritdoc/>
@@ -684,43 +693,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         _targetNetwork.Deserialize(targetNetworkBytes);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var onlineParams = _onlineNetwork.GetParameters();
-        var targetParams = _targetNetwork.GetParameters();
-
-        var combinedParams = new Vector<T>(onlineParams.Length + targetParams.Length);
-        for (int i = 0; i < onlineParams.Length; i++)
-        {
-            combinedParams[i] = onlineParams[i];
-        }
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            combinedParams[onlineParams.Length + i] = targetParams[i];
-        }
-
-        return combinedParams;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int onlineParamCount = checked((int)_onlineNetwork.ParameterCount);
-        var onlineParams = new Vector<T>(onlineParamCount);
-        var targetParams = new Vector<T>(parameters.Length - onlineParamCount);
-
-        for (int i = 0; i < onlineParamCount; i++)
-        {
-            onlineParams[i] = parameters[i];
-        }
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            targetParams[i] = parameters[onlineParamCount + i];
-        }
-
-        _onlineNetwork.UpdateParameters(onlineParams);
-        _targetNetwork.UpdateParameters(targetParams);
-    }
-
     public override int FeatureCount => _options.StateSize;
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
@@ -731,32 +703,51 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
+    /// <summary>
+    /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
+    /// </summary>
+    /// <param name="input">The input state.</param>
+    /// <param name="target">The target output.</param>
+    /// <param name="lossFunction">The loss to differentiate, or null to use the agent's own.</param>
+    /// <returns>A gradient vector the same length as <c>GetParameters()</c>.</returns>
+    /// <remarks>
+    /// Returns PARAMETER-space gradients, as <c>IGradientComputable</c> documents and as
+    /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
+    /// derivative is written by hand here.
+    /// </remarks>
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        var loss = lossFunction ?? LossFunction;
-        var inputTensor = Tensor<T>.FromVector(input);
-        var outputTensor = _onlineNetwork.Predict(inputTensor);
-        var output = outputTensor.ToVector();
-        var lossValue = loss.CalculateLoss(output, target);
-        var gradient = loss.CalculateDerivative(output, target);
-
-        var gradientTensor = Tensor<T>.FromVector(gradient);
-
-        return gradient;
+        return ComputeGradientsForNetwork(
+            _onlineNetwork,
+            new[] { _onlineNetwork, _targetNetwork },
+            input,
+            target,
+            lossFunction);
     }
 
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var currentParams = GetParameters();
-        var newParams = new Vector<T>(currentParams.Length);
 
+        // ComputeGradients returns a parameter-space vector laid out exactly like GetParameters(),
+        // so this is a straight element-wise step. It previously indexed gradients[i % length],
+        // cycling a short OUTPUT-space vector across the whole parameter vector -- which applied
+        // output neuron (i mod n)'s gradient to parameter i, an arbitrary pairing.
+        if (gradients.Length != currentParams.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter vector length "
+                + $"({currentParams.Length}).",
+                nameof(gradients));
+        }
+
+        var newParams = new Vector<T>(currentParams.Length);
         for (int i = 0; i < currentParams.Length; i++)
         {
-            var update = NumOps.Multiply(learningRate, gradients[i % gradients.Length]);
-            newParams[i] = NumOps.Subtract(currentParams[i], update);
+            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
         }
 
         SetParameters(newParams);

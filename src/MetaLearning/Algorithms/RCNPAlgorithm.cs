@@ -21,7 +21,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Recurrent Neural Processes",
     "https://arxiv.org/abs/1906.05915",
-    Year = 2022,
+    Year = 2019,
     Authors = "Timon Willi, Jonathan Masci, Juergen Schmidhuber, Christian Osendorfer")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]

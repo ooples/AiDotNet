@@ -105,6 +105,15 @@ namespace AiDotNet.Diffusion.TextToImage;
     [ResearchPaper("FLUX.1 Technical Report", "https://blackforestlabs.ai/announcing-black-forest-labs/")]
 public class Flux1Model<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_mmdit);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     /// <summary>
@@ -152,7 +161,6 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => FLUX_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _mmdit.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant.
@@ -298,47 +306,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var mmditParams = _mmdit.GetParameters();
-        var vaeParams = _vae.GetParameters();
 
-        var totalLength = mmditParams.Length + vaeParams.Length;
-        var combined = new Vector<T>(totalLength);
-
-        for (int i = 0; i < mmditParams.Length; i++)
-            combined[i] = mmditParams[i];
-        for (int i = 0; i < vaeParams.Length; i++)
-            combined[mmditParams.Length + i] = vaeParams[i];
-
-        return combined;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int mmditCount = checked((int)_mmdit.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-
-        if (parameters.Length != mmditCount + vaeCount)
-        {
-            throw new ArgumentException(
-                $"Expected {mmditCount + vaeCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var mmditParams = new Vector<T>(mmditCount);
-        var vaeParams = new Vector<T>(vaeCount);
-
-        for (int i = 0; i < mmditCount; i++)
-            mmditParams[i] = parameters[i];
-        for (int i = 0; i < vaeCount; i++)
-            vaeParams[i] = parameters[mmditCount + i];
-
-        _mmdit.SetParameters(mmditParams);
-        _vae.SetParameters(vaeParams);
-    }
 
     #endregion
 

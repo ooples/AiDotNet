@@ -318,7 +318,6 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

@@ -292,7 +292,6 @@ public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

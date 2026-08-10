@@ -253,7 +253,6 @@ public class MetaCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
@@ -126,6 +126,16 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         if (x.Rows != y.Length)
         {
             throw new ArgumentException("Number of samples in X must match length of y.");
+        }
+
+        // A FEATURELESS MATRIX CANNOT TRAIN A TREE. With NumFeatures = 0 every rule in
+        // CalculateMaxFeatures returns 0 or 1 -- Sqrt and Log2 of 0, and All -- so the forest was
+        // built on a feature count no split can use, and the failure appeared far from its cause.
+        if (x.Columns == 0)
+        {
+            throw new ArgumentException(
+                "Training matrix has no feature columns; a decision tree cannot split on zero "
+                + "features.", nameof(x));
         }
 
         NumFeatures = x.Columns;
@@ -258,7 +268,10 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         return Options.MaxFeatures switch
         {
             MaxFeatureSelection.Sqrt => (int)Math.Ceiling(Math.Sqrt(NumFeatures)),
-            MaxFeatureSelection.Log2 => (int)Math.Ceiling(Math.Log(NumFeatures, 2)),
+            // Math.Max(1, ...): Log2(1) is 0, and a tree cannot split on zero features. The
+            // explicit-count path above already rejects a non-positive value; the rule path
+            // needs the same floor rather than passing 0 down to every tree.
+            MaxFeatureSelection.Log2 => Math.Max(1, (int)Math.Ceiling(Math.Log(NumFeatures, 2))),
             MaxFeatureSelection.All => NumFeatures,
             _ => throw new InvalidOperationException(
                 $"Unhandled {nameof(MaxFeatureSelection)} value '{Options.MaxFeatures}'.")
@@ -382,6 +395,9 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             MinSamplesSplit = Options.MinSamplesSplit,
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
+            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
+            // silently retrained the clone by the rule instead of the caller's explicit count.
+            MaxFeatureCount = Options.MaxFeatureCount,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             OobScore = Options.OobScore,
@@ -401,6 +417,9 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             MinSamplesSplit = Options.MinSamplesSplit,
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
+            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
+            // silently retrained the clone by the rule instead of the caller's explicit count.
+            MaxFeatureCount = Options.MaxFeatureCount,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
             OobScore = Options.OobScore,
@@ -435,10 +454,11 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         // Clone all estimators
         foreach (var estimator in Estimators)
         {
-            if (estimator is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                clone.Estimators.Add((IClassifier<T>)fullModel.Clone());
-            }
+            // No type test: IClassifier<T> derives from IFullModel<T, Matrix<T>, Vector<T>>, so the
+            // check was always true and its else-branch unreachable. Testing it suggested some
+            // estimator might not be cloneable and be skipped -- which would drop trees from the
+            // forest silently. Every estimator is cloned.
+            clone.Estimators.Add((IClassifier<T>)estimator.Clone());
         }
 
         return clone;

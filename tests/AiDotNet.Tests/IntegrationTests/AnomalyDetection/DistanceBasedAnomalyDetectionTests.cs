@@ -159,6 +159,15 @@ public class DistanceBasedAnomalyDetectionTests
             Assert.True(!double.IsNaN(scores[i]) && !double.IsInfinity(scores[i]),
                 $"COF score {i} was {scores[i]}.");
 
+        // THE ORDERING IS THE BEHAVIOUR. Count and finiteness are satisfied by a detector that
+        // returns the same constant for every row, which is the degenerate this test is meant to
+        // catch. Rows 0 and 1 sit inside the training cluster and row 2 is at (90, 90), far
+        // outside it, so the outlier must score strictly higher than both.
+        Assert.True(scores[2] > scores[0] && scores[2] > scores[1],
+            $"COF ranked the far-outlier row (90, 90) at {scores[2]} against in-cluster rows at " +
+            $"{scores[0]} and {scores[1]}. An outlier must score strictly higher than points drawn " +
+            "from the training distribution.");
+
         return Task.CompletedTask;
     }
 

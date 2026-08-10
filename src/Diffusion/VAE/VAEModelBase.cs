@@ -162,8 +162,57 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public abstract double LatentScaleFactor { get; }
 
+    /// <summary>Components whose parameters belong to this VAE, in registration order.</summary>
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
+
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declare this VAE's components here with <see cref="RegisterParameterComponent"/>.
+    /// </summary>
+    /// <remarks>
+    /// Same contract as <c>DiffusionModelBase.RegisterComponents</c>: a hook rather than
+    /// constructor code, so a component created late is still seen and field-initialisation order
+    /// stops being something the author has to reason about.
+    /// </remarks>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    private void EnsureComponentsRegistered()
+    {
+        if (_componentsRegistered) return;
+        _componentsRegistered = true;
+        RegisterComponents();
+    }
+
+    /// <summary>Declares a child component as part of this VAE's parameter surface.</summary>
+    /// <remarks>Identity-based and idempotent; null is ignored.</remarks>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+    }
+
     /// <inheritdoc />
-    public abstract long ParameterCount { get; }
+    /// <remarks>
+    /// Derived from the registered components in the order <see cref="GetParameters"/> emits them,
+    /// so the count cannot disagree with the vector it describes.
+    /// </remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            EnsureComponentsRegistered();
+            long total = 0;
+            for (int i = 0; i < _parameterComponents.Count; i++) total += _parameterComponents[i].ParameterCount;
+            return total;
+        }
+    }
 
     /// <summary>
     /// Streams the VAE's trainable weight tensors per-tensor without
@@ -351,10 +400,69 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     #region IParameterizable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
-    public abstract Vector<T> GetParameters();
+    /// <remarks>Concatenates the registered components in registration order.</remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        EnsureComponentsRegistered();
+        if (_parameterComponents.Count == 0) return new Vector<T>(0);
+
+        // Sized from the components' own vectors, never from the virtual ParameterCount: a
+        // subclass overriding the count inconsistently would otherwise overflow this buffer.
+        var parts = new Vector<T>[_parameterComponents.Count];
+        int total = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            parts[i] = _parameterComponents[i].GetParameters();
+            total += parts[i].Length;
+        }
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            for (int j = 0; j < parts[i].Length; j++) result[offset++] = parts[i][j];
+        }
+        return result;
+    }
 
     /// <inheritdoc />
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <remarks>The exact inverse of <see cref="GetParameters"/>, slicing by each component's own
+    /// vector length rather than by its count.</remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureComponentsRegistered();
+        if (_parameterComponents.Count == 0)
+        {
+            if (parameters.Length == 0) return;
+            throw new ArgumentException(
+                $"{GetType().Name} has no registered parameter components, but was given " +
+                $"{parameters.Length} parameters.", nameof(parameters));
+        }
+
+        var widths = new int[_parameterComponents.Count];
+        int expected = 0;
+        for (int i = 0; i < widths.Length; i++)
+        {
+            widths[i] = _parameterComponents[i].GetParameters().Length;
+            expected += widths[i];
+        }
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, but got {parameters.Length} " +
+                $"(model {GetType().Name}, {_parameterComponents.Count} components).",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+        for (int i = 0; i < widths.Length; i++)
+        {
+            if (widths[i] == 0) continue;
+            var slice = new Vector<T>(widths[i]);
+            for (int j = 0; j < widths[i]; j++) slice[j] = parameters[offset++];
+            _parameterComponents[i].SetParameters(slice);
+        }
+    }
 
     /// <summary>
     /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
@@ -632,7 +740,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         {
             var predicted = ForwardForTraining(input);
 
-            var lossGrad = effectiveLossFunction.CalculateDerivative(
+            var lossGrad = effectiveLossFunction.ComputeGradient(
                 predicted.ToVector(), target.ToVector());
             var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 

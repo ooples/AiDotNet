@@ -45,6 +45,13 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation", "https://arxiv.org/abs/2203.09893", Year = 2022, Authors = "Rachel M. Bittner, Juan Jose Bosch, David Rubinstein, Gabriel Meseguer-Brocal, Sebastian Ewert")]
 public class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: a [1,8] input returns [1,264], this model's harmonic bin count - a different quantity
+    /// from a vocabulary, which is why no single field on the base could serve the whole family.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumHarmonicBins;
+
     #region Fields
 
     private readonly BasicPitchOptions _options;
@@ -232,12 +239,11 @@ public class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

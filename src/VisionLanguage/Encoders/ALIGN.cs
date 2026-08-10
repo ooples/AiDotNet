@@ -72,6 +72,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 )]
 public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// MEASURED: one pooled embedding per sample, and only the batch axis tracks the input -
+    /// <c>[1,3,8,8] -&gt; [1,640]</c>, <c>[3,3,8,8] -&gt; [3,640]</c>, and moving either spatial axis
+    /// (<c>[1,3,12,8]</c>, <c>[1,3,8,12]</c>) leaves the 640 unchanged. 640 is this model's
+    /// EmbeddingDim, so the width is parameterised rather than a literal.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => PooledEmbeddingContract(inputRank);
+
     private readonly ALIGNOptions _options;
 
     public override ModelOptions GetOptions() => _options;
@@ -269,19 +279,11 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

@@ -60,6 +60,16 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("CMGAN: Conformer-based Metric GAN for Speech Enhancement", "https://arxiv.org/abs/2203.15149", Year = 2022, Authors = "Ruizhe Cao, Sherif Abdulatif, Bin Yang")]
 public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the
+    /// identity, so the width is the final <c>DenseLayer&lt;T&gt;(numFreqBins * 3)</c> of
+    /// <c>CreateDefaultCMGANLayers</c>. The 3x is the paper's DECOUPLED head packed into one
+    /// projection - bins [0, F) are the magnitude mask and [F, 3F) the interleaved real/imaginary
+    /// pair - so the width is three times <c>_options.NumFreqBins</c>, not <c>NumFreqBins</c> itself.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 3;
+
     #region Fields
 
     private const double ExponentComparisonTolerance = 1e-12;
@@ -268,13 +278,11 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

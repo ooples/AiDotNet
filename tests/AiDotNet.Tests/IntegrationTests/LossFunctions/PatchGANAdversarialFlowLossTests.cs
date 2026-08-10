@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
@@ -231,18 +231,20 @@ public class PatchGANAdversarialFlowLossTests
         var loss = adv.ComputeTapeLoss(fake, fake);
         var grads = tape.ComputeGradients(loss, new[] { fake });
 
-        var g = grads[fake];
-        Assert.NotNull(g);
+        // THROUGH THE HELPER, so the failure produces the message below rather than a
+        // KeyNotFoundException. The remarks at the top of this file record that the tape omits
+        // tensors it found no gradient path to -- which is precisely the discriminator-off-the-tape
+        // case this assertion exists to explain -- so indexing grads[fake] directly threw before
+        // reaching the explanation.
+        double maxAbs = MaxAbsGradient(grads, fake);
 
-        double maxAbs = 0;
         int nonFinite = 0;
-        for (int i = 0; i < g!.Length; i++)
+        if (grads.TryGetValue(fake, out var g) && g is not null)
         {
-            if (!Fin(g[i])) nonFinite++;
-            else maxAbs = Math.Max(maxAbs, Math.Abs(g[i]));
+            for (int i = 0; i < g.Length; i++) if (!Fin(g[i])) nonFinite++;
         }
 
-        _out.WriteLine($"loss={loss[0]} grad max|.|={maxAbs} nonFinite={nonFinite}/{g.Length}");
+        _out.WriteLine($"loss={loss[0]} grad max|.|={maxAbs} nonFinite={nonFinite}");
         Assert.Equal(0, nonFinite);
         Assert.True(maxAbs > 0,
             "Adversarial gradient w.r.t. the generated image is identically zero — the discriminator " +
@@ -272,7 +274,16 @@ public class PatchGANAdversarialFlowLossTests
         double realMax = MaxAbsGradient(grads, real);
 
         _out.WriteLine($"discriminator step: grad max|.| fake={fakeMax} real={realMax}");
+
+        // BOTH HALVES OF THE CONTRACT. The discriminator step requires that gradient does NOT reach
+        // the generated branch AND that it DOES reach the real one. realMax was computed, printed,
+        // and never asserted, so a regression that severed BOTH branches -- the whole discriminator
+        // falling off the tape -- satisfied the only assertion here and passed.
         Assert.Equal(0.0, fakeMax);
+        Assert.True(realMax > 0,
+            "Gradient did not reach the real branch either (max|.| = 0), so the discriminator is not " +
+            "on the tape at all. fakeMax being 0 then says nothing about StopGradient severing the " +
+            "generated branch, which is what this test claims to verify.");
     }
 
     /// <summary>
@@ -419,11 +430,48 @@ public class PatchGANAdversarialFlowLossTests
     /// different samples' motion quietly averaged together.
     /// </summary>
     [Fact]
-    public void MultiSampleBatch_Throws()
+    public void MultiSampleBatch_IsAveragedPerSample()
     {
+        // ASSERTS THE REAL CONTRACT, WHICH IS NOT "throws". This used to be MultiSampleBatch_Throws,
+        // written when a rank-5 batch was rejected. ComputeTapeLoss now walks the batch --
+        // "one sample at a time, then average", because optical flow is defined per sample and the
+        // batch cannot be folded into another axis -- so the throw it asserted no longer happens.
+        // The NotSupportedException it was catching is still there, but it guards an INTERNAL
+        // invariant inside ClipLoss that the narrowing loop is precisely what stops being reached.
+        //
+        // Averaging is the property worth pinning, and "does not throw" would not pin it: a batch of
+        // two IDENTICAL samples must score exactly what that sample scores alone. A sum instead of a
+        // mean would double it; scoring only the first sample would pass this but fail the second
+        // assertion below, where the two samples differ and the batch must land between them.
         var loss = new FlowLoss<double>();
-        var clip = Ramp([2, 2, 3, 16, 16]);
-        Assert.Throws<NotSupportedException>(() => loss.ComputeTapeLoss(clip, clip));
+
+        var single = Ramp([1, 2, 3, 16, 16]);
+        var duplicated = new Tensor<double>([2, 2, 3, 16, 16]);
+        for (int i = 0; i < single.Length; i++)
+        {
+            duplicated[i] = single[i];
+            duplicated[single.Length + i] = single[i];
+        }
+
+        double singleLoss = loss.ComputeTapeLoss(single, single.Clone())[0];
+        double duplicatedLoss = loss.ComputeTapeLoss(duplicated, duplicated.Clone())[0];
+        Assert.Equal(singleLoss, duplicatedLoss, 10);
+
+        // Two DIFFERENT samples: the mean must sit between the two individual scores, which a
+        // first-sample-only implementation could not satisfy.
+        var sampleA = Ramp([1, 2, 3, 16, 16]);
+        var sampleB = Ramp([1, 2, 3, 16, 16], scale: 2.0, seed: 5);
+        var mixed = new Tensor<double>([2, 2, 3, 16, 16]);
+        for (int i = 0; i < sampleA.Length; i++)
+        {
+            mixed[i] = sampleA[i];
+            mixed[sampleA.Length + i] = sampleB[i];
+        }
+
+        double lossA = loss.ComputeTapeLoss(sampleA, sampleA.Clone())[0];
+        double lossB = loss.ComputeTapeLoss(sampleB, sampleB.Clone())[0];
+        double mixedLoss = loss.ComputeTapeLoss(mixed, mixed.Clone())[0];
+        Assert.Equal((lossA + lossB) / 2.0, mixedLoss, 10);
     }
 
     /// <summary>A rank-5 clip with a single sample is the normal batched form and must work.</summary>
@@ -449,7 +497,10 @@ public class PatchGANAdversarialFlowLossTests
         var loss = new FlowLoss<double>();
         var v = new Vector<double>(8);
         Assert.Throws<NotSupportedException>(() => loss.CalculateLoss(v, v));
-        Assert.Throws<NotSupportedException>(() => loss.CalculateDerivative(v, v));
+
+        // CalculateDerivative is no longer asserted to throw because #1994 removed it from
+        // ILossFunction<T> outright -- the tape is the only source of gradients now. A member that
+        // does not exist is a stronger guarantee than one that throws, and the compiler enforces it.
     }
 
     #endregion

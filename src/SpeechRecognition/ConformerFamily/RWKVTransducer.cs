@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -63,16 +63,30 @@ public class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Gets the RWKV recurrence, whose state size is constant in the utterance length.
     /// </summary>
-    public RwkvTimeMixing<T> TimeMixing => _timeMixing ??= new RwkvTimeMixing<T>(
+    /// <remarks>
+    /// Internal: the recurrence is implementation plumbing, not something a model user configures or
+    /// drives. Exposing it publicly invited callers to depend on the shape of the recurrence, which
+    /// would freeze an internal detail into the API before it is even paper-faithful.
+    /// </remarks>
+    internal RwkvTimeMixing<T> TimeMixing => _timeMixing ??= new RwkvTimeMixing<T>(
         _options.EncoderDim, _options.TimeDecay, _options.CurrentTokenBonus, _options.TokenShiftMix);
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
-    public bool SupportsWordTimestamps => true;
+    /// <summary>Always false: this model has no word alignment.</summary>
+    /// <remarks>
+    /// It returned true while ExtractSegments produced ONE segment spanning 0.0 to the full duration
+    /// -- an utterance boundary, not word timestamps. A caller checking this flag before asking for
+    /// timestamps got told yes and handed the whole utterance as a single "word". Producing real word
+    /// timestamps needs CTC forced alignment converting token spans to word spans, which this model
+    /// does not implement; until it does, saying no is the only honest answer, and
+    /// <c>Transcribe</c> rejects includeTimestamps rather than returning the degenerate segment.
+    /// </remarks>
+    public bool SupportsWordTimestamps => false;
 
-    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, string modelPath, RWKVTransducerOptions? options = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
-    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, RWKVTransducerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, string modelPath, RWKVTransducerOptions? options = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); _options.Validate(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, RWKVTransducerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); _options.Validate(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate }); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using RWKVTransducer's RWKV-enhanced parallel branches.
@@ -84,39 +98,186 @@ public class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
         var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        if (includeTimestamps)
+            throw new NotSupportedException(
+                "RWKVTransducer does not produce word timestamps; SupportsWordTimestamps is false. " +
+                "Word alignment needs CTC forced alignment, which this model does not implement.");
+
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits); var text = TokensToText(tokens);
         double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-        return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>() };
+        return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = Array.Empty<TranscriptionSegment<T>>() };
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    /// <summary>Not supported: this model has no language-identification head.</summary>
+    /// <remarks>
+    /// This ran a full forward pass and then classified by counting CJK versus Latin CODE POINTS in
+    /// the token ids -- ids that index a vocabulary and are not code points at all. With
+    /// <c>SupportedLanguages</c> holding only the configured language, the result was that language
+    /// whatever the audio contained. See <see cref="DetectLanguageProbabilities"/>.
+    /// </remarks>
+    public string DetectLanguage(Tensor<T> audio)
+        => throw new NotSupportedException(
+            "RWKVTransducer has no language-identification head, so it cannot detect the spoken " +
+            "language. Set it with RWKVTransducerOptions.Language.");
+    /// <summary>Not supported: this model has no language-identification head.</summary>
+    /// <remarks>
+    /// Both constructors set <c>SupportedLanguages</c> to the single configured language, so
+    /// <c>DetectLanguage</c> could only ever return that one value -- there was nothing to detect
+    /// between. This then reported it with a hardcoded 0.85, a distribution over one outcome that does
+    /// not sum to 1. A confident-looking wrong number is worse than a refusal, because a caller can
+    /// act on it. Configure the language directly through <c>RWKVTransducerOptions.Language</c>.
+    /// </remarks>
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
+        => throw new NotSupportedException(
+            "RWKVTransducer has no language-identification head, so it cannot produce language " +
+            "probabilities. Set the language with RWKVTransducerOptions.Language.");
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new RWKVStreamingSession(this, language ?? _options.Language);
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultBranchformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, cgmlpDim: _options.CgmlpDim, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
+    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultRWKVTransducerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, maxSequenceLength: _options.MaxEncoderFrames)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+
+        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
+        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
+        // training mode when it did. The next Predict then runs with dropout live and stochastic
+        // batch-norm statistics, so it silently returns a different answer for the same input, and
+        // nothing about that failure points back at the exception that caused it.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <b>Native mode requires the mel front-end rather than falling through.</b> The default layers are
+    /// built against <c>_options.NumMels</c>, so the first layer expects feature frames. Returning the
+    /// raw waveform when <c>MelSpec</c> is null hands it audio samples instead -- a different rank and a
+    /// different meaning for the last dimension. ONNX mode keeps the passthrough: those graphs commonly
+    /// include their own front-end, so the raw waveform is what they are supposed to receive.
+    /// </remarks>
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (MelSpec is not null) return MelSpec.Forward(rawAudio);
+
+        if (_useNativeMode)
+        {
+            throw new InvalidOperationException(
+                "RWKVTransducer native mode has no log-mel front-end, but its encoder layers are built " +
+                $"for {_options.NumMels} mel bands. Passing the raw waveform through would feed audio " +
+                "samples to a layer expecting feature frames.");
+        }
+
+        return rawAudio;
+    }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "RWKVTransducer-Native" : "RWKVTransducer-ONNX", Description = "RWKVTransducer: RWKV-Enhanced E-Branchformer (Song et al., 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.CgmlpDim); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.CgmlpDim = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
+    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.CgmlpDim); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.TimeDecay); w.Write(_options.CurrentTokenBonus); w.Write(_options.TokenShiftMix); w.Write(_options.BoundaryAware); w.Write(_options.LearningRate); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.CgmlpDim = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); if (r.BaseStream.Position < r.BaseStream.Length) _options.TimeDecay = r.ReadDouble(); if (r.BaseStream.Position < r.BaseStream.Length) _options.CurrentTokenBonus = r.ReadDouble(); if (r.BaseStream.Position < r.BaseStream.Length) _options.TokenShiftMix = r.ReadDouble(); if (r.BaseStream.Position < r.BaseStream.Length) _options.BoundaryAware = r.ReadBoolean(); if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble(); _timeMixing = null; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new RWKVTransducer<T>(Architecture, mp, _options); return new RWKVTransducer<T>(Architecture, _options); }
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
+    /// <summary>Renders CTC token ids as text using the configured vocabulary.</summary>
+    /// <remarks>
+    /// THROUGH THE VOCABULARY, not as Unicode code points. Casting each id to a char ignored
+    /// <c>RWKVTransducerOptions.Vocabulary</c> entirely, so token 6 rendered as the control character
+    /// U+0006 rather than "a" -- every native transcript was mojibake, and nothing threw. Index 0 is
+    /// the CTC blank and is skipped, "|" is the word separator, and an id outside the vocabulary is
+    /// skipped rather than guessed at.
+    /// </remarks>
+    private string TokensToText(List<int> tokens)
+    {
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (var t in tokens)
+        {
+            if (t <= 0 || t >= vocabulary.Length) continue;
+
+            string piece = vocabulary[t];
+            if (piece == "|") { sb.Append(' '); continue; }
+            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
+
+            sb.Append(piece);
+        }
+
+        return sb.ToString().Trim();
+    }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(RWKVTransducer<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     private sealed class RWKVStreamingSession : IStreamingTranscriptionSession<T>
     {
-        private readonly RWKVTransducer<T> _model; private readonly string _language; private readonly List<Tensor<T>> _chunks = new(); private bool _disposed;
+        // EACH CHUNK IS TRANSCRIBED ONCE, AS IT ARRIVES, AND ITS WAVEFORM IS THEN RELEASED.
+        //
+        // This used to retain every chunk for the session's lifetime, and GetPartialResult allocated a
+        // combined waveform and re-transcribed the ENTIRE stream on every call. Memory grew with
+        // session duration and the inference cost of the Nth partial was O(N) in the stream length, so
+        // a long session got steadily slower and larger -- the opposite of what streaming is for.
+        //
+        // What this does NOT do is carry encoder state across chunks. The native encoder here is a
+        // Branchformer, which is attention-based rather than recurrent, so there is no recurrent state
+        // to carry; that arrives with the RWKV time-mixing encoder. The consequence is that a word
+        // straddling a chunk boundary can be split, which is the accuracy cost of streaming a
+        // non-streaming encoder and is stated rather than hidden. Feed overlapping chunks if that
+        // matters for your audio.
+        private readonly RWKVTransducer<T> _model;
+        private readonly string _language;
+        private readonly System.Text.StringBuilder _text = new();
+        private double _totalDurationSeconds;
+        private double _confidenceSum;
+        private int _confidenceCount;
+        private bool _disposed;
+
         public RWKVStreamingSession(RWKVTransducer<T> model, string language) { _model = model; _language = language; }
-        public void FeedAudio(Tensor<T> audioChunk) { if (_disposed) throw new ObjectDisposedException(nameof(RWKVStreamingSession)); _chunks.Add(audioChunk); }
-        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(RWKVStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; int totalLen = 0; foreach (var ch in _chunks) totalLen += ch.Length; var combined = new Tensor<T>(new[] { totalLen }); int offset = 0; foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; } return _model.Transcribe(combined, _language); }
+
+        public void FeedAudio(Tensor<T> audioChunk)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(RWKVStreamingSession));
+            if (audioChunk is null) throw new ArgumentNullException(nameof(audioChunk));
+            if (audioChunk.Length == 0) return;
+
+            var chunkResult = _model.Transcribe(audioChunk, _language);
+
+            string chunkText = chunkResult.Text;
+            if (!string.IsNullOrEmpty(chunkText))
+            {
+                if (_text.Length > 0) _text.Append(' ');
+                _text.Append(chunkText);
+            }
+
+            _totalDurationSeconds += chunkResult.DurationSeconds;
+            _confidenceSum += _model.NumOps.ToDouble(chunkResult.Confidence);
+            _confidenceCount++;
+
+            // The chunk's tensor goes out of scope here: nothing retains it past this call.
+        }
+
+        public TranscriptionResult<T> GetPartialResult()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(RWKVStreamingSession));
+            if (_confidenceCount == 0) return new TranscriptionResult<T> { Language = _language };
+
+            return new TranscriptionResult<T>
+            {
+                Text = _text.ToString(),
+                Language = _language,
+                Confidence = _model.NumOps.FromDouble(_confidenceSum / _confidenceCount),
+                DurationSeconds = _totalDurationSeconds,
+                Segments = Array.Empty<TranscriptionSegment<T>>()
+            };
+        }
+
         public TranscriptionResult<T> Finalize() { if (_disposed) throw new ObjectDisposedException(nameof(RWKVStreamingSession)); var result = GetPartialResult(); _disposed = true; return result; }
         public void Dispose() { _disposed = true; }
     }

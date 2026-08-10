@@ -1,4 +1,5 @@
-﻿using AiDotNet.Interfaces;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -50,6 +51,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Any layer implementing IGraphConvolutionLayer
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGraphConvolutionLayer<T>
 {
     /// <summary>

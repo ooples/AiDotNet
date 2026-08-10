@@ -173,7 +173,7 @@ public readonly struct FastFourierTransform<T>
 
         for (int i = 0; i < n; i++)
         {
-            double phase = direction * Math.PI * ((double)i * i / n);
+            double phase = direction * Math.PI * ChirpExponent(i, n);
             var inputChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(phase));
             var convolutionChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(-phase));
 
@@ -194,7 +194,7 @@ public readonly struct FastFourierTransform<T>
         var output = new Vector<Complex<T>>(n);
         for (int i = 0; i < n; i++)
         {
-            double phase = direction * Math.PI * ((double)i * i / n);
+            double phase = direction * Math.PI * ChirpExponent(i, n);
             var outputChirp = Complex<T>.FromPolarCoordinates(_numOps.One, _numOps.FromDouble(phase));
             var normalized = complexOps.Divide(convolution[i], scale);
             output[i] = complexOps.Multiply(normalized, outputChirp);
@@ -202,6 +202,39 @@ public readonly struct FastFourierTransform<T>
 
         return output;
     }
+    /// <summary>
+    /// The Bluestein chirp exponent <c>i^2 / n</c>, with <c>i^2</c> reduced modulo <c>2n</c> first.
+    /// </summary>
+    /// <remarks>
+    /// The reduction is what keeps a large transform accurate. Computing <c>(double)i * i / n</c>
+    /// directly overflows double's 53-bit exact integer range once <c>i^2</c> passes about 9.0e15
+    /// (i above roughly 9.5e7), and relative error grows well before that. Only the FRACTIONAL part
+    /// of <c>i^2 / n</c> matters here -- the chirp is periodic, and the integer part is discarded by
+    /// the multiply against Math.PI -- so the leading bits are thrown away anyway and every bit of
+    /// error they carried lands directly in the phase. Reducing <c>i^2</c> into <c>[0, 2n)</c> before
+    /// the division keeps the whole product exact for every representable n.
+    ///
+    /// Modulo 2n rather than n because the chirp has period 2n in this exponent: exp(i*pi*k/n)
+    /// repeats every 2n, not every n.
+    ///
+    /// Both chirp loops call this, which is also why it is a method: the two must stay identical,
+    /// and they previously repeated the expression.
+    /// </remarks>
+    private static double ChirpExponent(int i, int n)
+    {
+        // long is exact for i^2 at every int i (max ~4.6e18, well inside long's range).
+        long squared = (long)i * i;
+        long reduced = squared % (2L * n);
+        return (double)reduced / n;
+    }
 
-    private static bool IsPowerOfTwo(int value) => (value & (value - 1)) == 0;
+    /// <summary>
+    /// True when <paramref name="value"/> is a positive power of two.
+    /// </summary>
+    /// <remarks>
+    /// The positivity test is not redundant: <c>(0 &amp; -1) == 0</c>, so a bare bit-trick reports
+    /// zero as a power of two. The current call site is safe only because FFTInternal returns early
+    /// for <c>n &lt;= 1</c>, which makes this a trap for the next caller rather than a live bug.
+    /// </remarks>
+    private static bool IsPowerOfTwo(int value) => value > 0 && (value & (value - 1)) == 0;
 }

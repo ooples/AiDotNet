@@ -285,9 +285,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
-            ?? throw new InvalidOperationException(
-                "LossFunction must derive from LossFunctionBase<T> for TFC tape-based training.");
+        var loss = LossFunction;
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
@@ -550,12 +548,8 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         return NumOps.FromDouble(loss);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -954,9 +948,9 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         bool reshaped = !(input.Rank == 2 && input.Shape[0] == numSamples && input.Shape[1] == n);
         var flat = reshaped ? Engine.Reshape(input, new[] { numSamples, n }) : input;
 
-        EnsureDftBases(n);
-        var real = Engine.TensorMatMul(flat, _dftRealBasis!);
-        var imaginary = Engine.TensorMatMul(flat, _dftImaginaryBasis!);
+        var (dftReal, dftImaginary) = EnsureDftBases(n);
+        var real = Engine.TensorMatMul(flat, dftReal);
+        var imaginary = Engine.TensorMatMul(flat, dftImaginary);
         var realSquared = Engine.TensorMultiply(real, real);
         var imaginarySquared = Engine.TensorMultiply(imaginary, imaginary);
         var magnitude = Engine.TensorSqrt(Engine.TensorAdd(realSquared, imaginarySquared));
@@ -971,12 +965,17 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// Matrix row <c>j</c>, column <c>k</c> contains the contribution from input
     /// sample <c>j</c> to frequency bin <c>k</c>.
     /// </summary>
-    private void EnsureDftBases(int n)
+    /// <returns>
+    /// The real and imaginary basis matrices. Returned rather than left for the caller to read off
+    /// the nullable fields, so the postcondition "both are non-null after this call" is expressed in
+    /// the signature instead of asserted with a suppression at every use.
+    /// </returns>
+    private (Tensor<T> Real, Tensor<T> Imaginary) EnsureDftBases(int n)
     {
         if (_dftRealBasis is not null && _dftImaginaryBasis is not null &&
             _dftRealBasis.Shape[0] == n && _dftRealBasis.Shape[1] == n)
         {
-            return;
+            return (_dftRealBasis, _dftImaginaryBasis);
         }
 
         var real = new Tensor<T>(new[] { n, n });
@@ -994,6 +993,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         _dftRealBasis = real;
         _dftImaginaryBasis = imaginary;
+        return (real, imaginary);
     }
 
     #endregion

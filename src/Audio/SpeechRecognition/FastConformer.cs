@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -198,12 +198,11 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);
@@ -255,9 +254,17 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (!_useNativeMode && _options.ModelPath is { } modelPath && !string.IsNullOrEmpty(modelPath))
             return new FastConformer<T>(Architecture, modelPath, new FastConformerOptions(_options));
 
+        // A NON-ADAMW OPTIMIZER IS FORWARDED RATHER THAN DROPPED. The pattern-match rebuilds an AdamW
+        // from its options, which is the right thing when it matches -- the clone gets an independent
+        // optimizer with the same configuration. But the null on the other branch silently discarded a
+        // caller-supplied optimizer of any other type, so cloning an SGD- or Lion-trained model handed
+        // back one that had quietly reverted to the default. There is no generic way to deep-copy an
+        // arbitrary IGradientBasedOptimizer, so the instance is passed through: shared optimizer state
+        // between clone and original is a real limitation, and it is a smaller one than losing the
+        // caller's choice of algorithm without saying so.
         var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
             ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : null;
+            : _optimizer;
         return new FastConformer<T>(Architecture, new FastConformerOptions(_options), cloneOptimizer);
     }
 

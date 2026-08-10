@@ -19,11 +19,18 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
     public TimeBridgeOptions() { }
 
     public TimeBridgeOptions(TimeBridgeOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
+        // written from the local declarations alone misses it. Losing it on a clone silently
+        // changes deterministic initialization.
+        Seed = other.Seed;
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
         PatchLength = other.PatchLength;
@@ -62,5 +69,9 @@ public class TimeBridgeOptions<T> : TimeSeriesRegressionOptions<T>
 
     /// <summary>Gets or sets the Adam learning rate used for native training.</summary>
     /// <value>Defaults to 0.0001.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
+    /// the loss rises instead of falling.</para>
+    /// </remarks>
     public double LearningRate { get; set; } = 1e-4;
 }

@@ -45,6 +45,15 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ResearchPaper("An Industrial-Strength Audio Search Algorithm", "https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf", Year = 2003, Authors = "Avery Li-Chun Wang")]
 public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultPeakNetFPLayers</c> ends with the embedding projection
+    /// <c>FullyConnectedLayer&lt;T&gt;(embeddingDim)</c>, supplied from <c>_options.EmbeddingDim</c>.
+    /// The encoder's filter progression (<c>BaseFilters</c>, doubling and clamped at 512) is interior.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.EmbeddingDim;
+
     #region Fields
 
     private readonly PeakNetFPOptions _options;
@@ -231,12 +240,11 @@ public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (_melSpectrogram is not null) return _melSpectrogram.Forward(rawAudio);

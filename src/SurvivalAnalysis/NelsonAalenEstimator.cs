@@ -256,20 +256,7 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         return PredictMedianSurvivalTime(input);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (_cumulativeHazard is null)
-            return new Vector<T>(0);
 
-        return Vector<T>.Wrap(_cumulativeHazard.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _cumulativeHazard = new Vector<T>(parameters.ToArray());
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
@@ -296,24 +283,23 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     /// clone whose <see cref="Predict"/> (via median survival time) sees a null event-time grid and
     /// returns zeros, diverging from the original (Clone_ShouldProduceSamePredictions). Nelson-Aalen
     /// is non-parametric: its "model" is the step function defined by the event times and the
-    /// cumulative hazard accumulated at each. Carry all fitted state onto the clone. Sharing the
-    /// (immutable-after-fit) vectors is safe because Fit reassigns these fields to fresh vectors
-    /// rather than mutating them in place.
+    /// cumulative hazard accumulated at each. Carry all fitted state onto the clone as INDEPENDENT
+    /// vectors. The previous version shared the references, arguing that Fit reassigns rather than
+    /// mutates -- but EventTimes, BaselineSurvival, CumulativeHazard and Variance are all public and
+    /// mutable, so any caller writing through one of them on either estimator changed both.
     /// </remarks>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         var copy = base.DeepCopy();
         if (copy is NelsonAalenEstimator<T> na)
         {
-            na.TrainedEventTimes = TrainedEventTimes;
-            na._cumulativeHazard = _cumulativeHazard;
-            na._variance = _variance;
-            na.BaselineSurvivalFunction = BaselineSurvivalFunction;
+            na.TrainedEventTimes = TrainedEventTimes?.Clone();
+            na._cumulativeHazard = _cumulativeHazard?.Clone();
+            na._variance = _variance?.Clone();
+            na.BaselineSurvivalFunction = BaselineSurvivalFunction?.Clone();
         }
         return copy;
     }
-
-    /// <inheritdoc />
 
     /// <inheritdoc />
     public override byte[] Serialize()

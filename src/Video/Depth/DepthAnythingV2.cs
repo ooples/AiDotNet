@@ -618,21 +618,8 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(offset, layerParamCount));
-            offset += layerParamCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
 
@@ -7,6 +7,37 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// </summary>
 public class GraphNeuralNetworkOptions : NeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public GraphNeuralNetworkOptions() { }
+
+    /// <summary>Initializes a new instance by copying every property from another instance.</summary>
+    /// <param name="other">The instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    /// <remarks>
+    /// This lives here, next to the properties, so a property added below is added a line away from
+    /// the place that has to copy it. GraphNeuralNetwork used to enumerate the list by hand in a
+    /// private CopyOptions, where a new property was simply dropped from every clone -- the clone
+    /// silently reverting to the default while the original kept the configured value.
+    /// Seed comes from the base and is copied for the same reason: it is not declared in this file.
+    /// </remarks>
+    public GraphNeuralNetworkOptions(GraphNeuralNetworkOptions other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+        NodeFeatureSize = other.NodeFeatureSize;
+        NumClasses = other.NumClasses;
+        HiddenSize = other.HiddenSize;
+        NumLayers = other.NumLayers;
+        DropoutRate = other.DropoutRate;
+        LearningRate = other.LearningRate;
+        L2Regularization = other.L2Regularization;
+        UseBias = other.UseBias;
+        UseAuxiliaryLoss = other.UseAuxiliaryLoss;
+        AuxiliaryLossWeight = other.AuxiliaryLossWeight;
+    }
+
     /// <summary>Gets or sets the number of input features per node.</summary>
     /// <remarks>The default of 1433 matches the paper's Cora configuration.</remarks>
     public int NodeFeatureSize { get; set; } = 1433;

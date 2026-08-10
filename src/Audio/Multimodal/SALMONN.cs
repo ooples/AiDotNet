@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +49,16 @@ namespace AiDotNet.Audio.Multimodal;
 [ResearchPaper("SALMONN: Towards Generic Hearing Abilities for Large Language Models", "https://arxiv.org/abs/2310.13289", Year = 2024, Authors = "Changli Tang, Wenyi Yu, Guangzhi Sun, Xianzhao Chen, Tian Tan, Wei Li, Lu Lu, Zejun Ma, Chao Zhang")]
 public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultSALMONNLayers emits is the output projection
+    /// <c>FullyConnectedLayer&lt;T&gt;(lmHiddenDim)</c>, wired from <c>_options.LMHiddenDim</c>
+    /// (4096). Explicitly NOT VocabSize (32000): the Q-Former stack ends in LM input space with no
+    /// unembedding head. QFormerDim (768) is the width one projection earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LMHiddenDim;
+
     #region Fields
 
     private readonly SALMONNOptions _options;
@@ -104,7 +114,14 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
     {
         _options = options ?? new SALMONNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // READS THE CONFIGURED RATE. The bare AdamWOptimizer(this) ran at Adam's own 1e-3 default while
+        // SALMONNOptions.LearningRate sat at 1e-5 -- the property existed and was documented, and setting
+        // it did nothing. Two orders of magnitude matters especially here: the paper fine-tunes LoRA
+        // adapters and a Q-Former on top of a frozen backbone, which is exactly the regime a large rate
+        // destabilizes.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.Vicuna);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
@@ -211,12 +228,11 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

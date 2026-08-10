@@ -65,6 +65,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
     Authors = "Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M.")]
 public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Every network this agent owns, in the order Networks yields them, which is the
+    /// order the hand-written concatenation used.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var network in Networks) RegisterParameterComponent(network);
+    }
     private DreamerOptions<T> _options;
 
     /// <inheritdoc/>
@@ -472,45 +480,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             "or load individual network weights separately.");
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        foreach (var network in Networks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        var paramVector = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            paramVector[i] = allParams[i];
-        }
-
-        return paramVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        foreach (var network in Networks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         // FIX ISSUE 7: Clone should copy learned network parameters
@@ -521,41 +490,6 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         clone.SetParameters(parameters);
 
         return clone;
-    }
-
-    /// <summary>
-    /// Computes gradients for supervised learning scenarios.
-    /// </summary>
-    /// <remarks>
-    /// FIX ISSUE 9: This method uses simple supervised loss for compatibility with base class API.
-    /// It does NOT match the agent's internal training procedure which uses:
-    /// - World model losses (dynamics, reward, continue prediction)
-    /// - Imagination-based policy gradients
-    /// - Value function TD errors
-    ///
-    /// For actual agent training, use Train() which implements the full Dreamer algorithm.
-    /// This method is provided only for API compatibility and simple supervised fine-tuning scenarios.
-    /// </remarks>
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        throw new NotSupportedException(
-            "Dreamer agent requires per-network gradient distribution for six networks " +
-            "(VAE encoder/decoder, RNN world model, reward/continue/value predictors). " +
-            "The current signature cannot distribute gradients appropriately. " +
-            "Use the internal Train() method for training, which handles multi-network updates correctly.");
     }
 
     public override void SaveModel(string filepath)

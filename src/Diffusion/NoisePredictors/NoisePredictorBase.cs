@@ -381,7 +381,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// Measured before this fix: ReferenceEquals(PredictNoise(a, t), PredictNoise(b, t)) was true and
     /// the two results differed by exactly 0 for clearly different latents. That is the same defect
     /// found in the VAE Encode/Decode path, where it silently defeated every test that predicted twice
-    /// and compared — such a test measures no difference because it holds one buffer twice.
+    /// and compared ï¿½ such a test measures no difference because it holds one buffer twice.
     /// </para>
     /// <para>
     /// The copy is a per-denoising-step allocation of one latent (small next to the UNet forward that
@@ -389,7 +389,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// owns. BOTH paths are detached, not just the compiled one: the eager fallback aliases as well,
     /// because layers reuse preallocated output buffers on the inference fast path (see
     /// ConvolutionalLayer's _preAllocatedOutput), so the final layer's output tensor is the same object
-    /// on every call. That was verified by measurement rather than assumed — detaching only the
+    /// on every call. That was verified by measurement rather than assumed ï¿½ detaching only the
     /// compiled path left ReferenceEquals(PredictNoise(a), PredictNoise(b)) still true.
     /// </para>
     /// </remarks>
@@ -503,7 +503,117 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     public abstract int TimeEmbeddingDim { get; }
 
     /// <inheritdoc />
-    public abstract long ParameterCount { get; }
+    /// <remarks>
+    /// <para>
+    /// Derived from the predictor's own weight tensors, in the order
+    /// <see cref="ReflectInstanceLayers"/> yields them -- the SAME walk that
+    /// <see cref="GetParameters"/>, <see cref="SetParameters"/> and
+    /// <see cref="GetParameterChunks"/> use, so none of them can disagree with another.
+    /// </para>
+    /// <para>
+    /// This was abstract, which forced all six predictors to hand-write it, and they were badly
+    /// wrong: MMDiTNoisePredictor declared 384 against a real 60,304 across 66 tensors, and
+    /// SiTPredictor declared 0 against 49,328 across 46. Being wrong was not even the worst of it.
+    /// GetParameterChunks gates its per-tensor path on the reflected total EQUALLING this count, so
+    /// a wrong count silently collapsed chunking to a single flat blob -- which is what the
+    /// Chunks_IndexIdentical and SetChunks_RoundTrips tests were failing on.
+    /// </para>
+    /// </remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            EnsureParametersReadyGuarded();
+            long total = 0;
+            foreach (var tensor in EnumerateParameterTensors())
+            {
+                total += tensor.Length;
+            }
+            return total;
+        }
+    }
+
+    /// <summary>
+    /// Every trainable weight tensor this predictor owns, in one stable order: the single source
+    /// the count, the flat vector, the restore and the chunk stream all read.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> EnumerateParameterTensors()
+    {
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Length == 0) continue;
+                yield return tensor;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Brings lazily-built layers into existence before their parameters are read or written.
+    /// Does nothing by default, which is correct for the predictors that build eagerly.
+    /// </summary>
+    /// <remarks>
+    /// A predictor with lazy weights overrides this, and must use the SAME resolution on every
+    /// path. UNetNoisePredictor is the cautionary case: it resolved shape-only when read and for
+    /// real when written, so the count described one model and the restore built another, and
+    /// restoring grew it from 3,146,496 to 5,006,595.
+    /// </remarks>
+    protected virtual void EnsureParametersReady()
+    {
+    }
+
+    /// <summary>
+    /// The instance whose <see cref="EnsureParametersReady"/> is currently running on this thread,
+    /// or null. Per-thread so concurrent predictors never suppress each other's resolution, and
+    /// saved/restored around each call so a nested resolution on a DIFFERENT predictor still runs.
+    /// </summary>
+    [ThreadStatic]
+    private static object? _resolvingParametersFor;
+
+    /// <summary>
+    /// Calls <see cref="EnsureParametersReady"/>, but returns immediately if this same predictor is
+    /// already resolving on this thread.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lazy predictors resolve their shapes by running a real forward pass, and the forward path
+    /// consults the weight-streaming heuristic, which reads <see cref="ParameterCount"/> -- which
+    /// resolves. That closes a cycle with no base case:
+    /// </para>
+    /// <para>
+    /// ParameterCount -&gt; EnsureParametersReady -&gt; TriggerLazyShapeResolution -&gt; PredictNoise
+    /// -&gt; BeginWeightStreamingForward -&gt; MaybeEngageWeightStreaming -&gt; ParameterCount.
+    /// </para>
+    /// <para>
+    /// It overflowed the stack rather than failing a test, so it killed the whole test host: the
+    /// parameter sweeps reported "Test Run Aborted" with empty logs and no artifacts instead of
+    /// naming a failing model. The <c>_streamingEngaged</c> flag cannot break the cycle because the
+    /// re-entry happens at the ParameterCount READ, before anything has engaged.
+    /// </para>
+    /// <para>
+    /// Returning early is correct, not just a stack guard: the outer call is already resolving, so
+    /// the inner read sees whatever is materialized so far. The streaming heuristic that triggers
+    /// the re-entry only needs a count to compare against a threshold, and a predictor mid-resolve
+    /// is by definition not yet finished building.
+    /// </para>
+    /// </remarks>
+    private protected void EnsureParametersReadyGuarded()
+    {
+        if (ReferenceEquals(_resolvingParametersFor, this)) return;
+
+        object? previous = _resolvingParametersFor;
+        _resolvingParametersFor = this;
+        try
+        {
+            EnsureParametersReady();
+        }
+        finally
+        {
+            _resolvingParametersFor = previous;
+        }
+    }
 
     /// <summary>
     /// Streams the predictor's trainable weight tensors per-tensor without
@@ -1394,10 +1504,60 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     #region IParameterizable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
-    public abstract Vector<T> GetParameters();
+    /// <remarks>Concatenates <see cref="EnumerateParameterTensors"/> in order, so its length is
+    /// <see cref="ParameterCount"/> by construction rather than by agreement.</remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        EnsureParametersReadyGuarded();
+
+        long total = 0;
+        foreach (var tensor in EnumerateParameterTensors())
+        {
+            total += tensor.Length;
+        }
+
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(total));
+        int offset = 0;
+        foreach (var tensor in EnumerateParameterTensors())
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                result[offset++] = tensor[i];
+            }
+        }
+
+        return result;
+    }
 
     /// <inheritdoc />
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <remarks>The exact inverse of <see cref="GetParameters"/>: same walk, same order, each
+    /// tensor taking back the slice it contributed.</remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureParametersReadyGuarded();
+
+        long expected = 0;
+        foreach (var tensor in EnumerateParameterTensors())
+        {
+            expected += tensor.Length;
+        }
+
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        }
+
+        int offset = 0;
+        foreach (var tensor in EnumerateParameterTensors())
+        {
+            for (int i = 0; i < tensor.Length; i++)
+            {
+                tensor[i] = parameters[offset++];
+            }
+        }
+    }
 
     /// <summary>
     /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>

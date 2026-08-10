@@ -8,6 +8,7 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.SemiSupervised;
 
 /// <summary>
@@ -67,6 +68,20 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ResearchPaper("Learning from Labeled and Unlabeled Data with Label Propagation", "https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=8a6a114d699824b678325766be195b0e7b564f87", Year = 2002, Authors = "Xiaojin Zhu, Zoubin Ghahramani")]
 public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The propagated label distributions this transductive learner fits. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     #region Fields
 
     /// <summary>
@@ -1051,7 +1066,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// prediction time, so there are no "learned" parameters in the traditional sense.
     /// </para>
     /// </remarks>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // Label Propagation is non-parametric - it stores training data, not learned weights
         return new Vector<T>(0);
@@ -1083,45 +1098,9 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// this method does nothing.
     /// </para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // Non-parametric model - no parameters to set
-    }
-
-    /// <summary>
-    /// Computes gradients for gradient-based optimization.
-    /// </summary>
-    /// <param name="input">The input features.</param>
-    /// <param name="target">The target labels.</param>
-    /// <param name="lossFunction">The loss function (optional).</param>
-    /// <returns>An empty gradient vector as Label Propagation doesn't use gradients.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Label Propagation is not trained with gradient descent like neural
-    /// networks. Instead, it uses graph-based iterative label spreading. Therefore, there are
-    /// no gradients to compute.
-    /// </para>
-    /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Label Propagation is not gradient-based
-        return new Vector<T>(0);
-    }
-
-    /// <summary>
-    /// Applies gradients to update model parameters.
-    /// </summary>
-    /// <param name="gradients">The gradients to apply (ignored).</param>
-    /// <param name="learningRate">The learning rate (ignored).</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Since Label Propagation doesn't use gradient-based learning,
-    /// this method does nothing.
-    /// </para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Non-parametric model - no gradients to apply
     }
 
     /// <summary>

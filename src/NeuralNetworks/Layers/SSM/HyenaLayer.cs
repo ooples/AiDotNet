@@ -68,7 +68,14 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class HyenaLayer<T> : LayerBase<T>
+// Shape-preserving. Relations discovered by probing; roles read from the forward - this folder's
+// convention is seqLen = Shape[rank-2], modelDim = Shape[rank-1], so rank 2 is [Time, Features].
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _sequenceLength;
     private readonly int _modelDimension;
@@ -145,43 +152,6 @@ public partial class HyenaLayer<T> : LayerBase<T>
     /// Gets the hidden dimension of the implicit filter network.
     /// </summary>
     public int FilterDim => _filterDim;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Accumulate in long: a high-order Hyena (order >= 2) over a
-            // long sequence has filter networks whose weight tensors
-            // individually approach int.MaxValue; summing in int can wrap
-            // before ToFlatVectorSize sees the value.
-            long count = 0;
-
-            // Input projections: (order + 1) x (weights + bias)
-            for (int i = 0; i <= _order; i++)
-            {
-                count += _inputProjectionWeights[i].Length;
-                count += _inputProjectionBiases[i].Length;
-            }
-
-            // Filter networks: order x (W1 + b1 + W2 + b2)
-            for (int i = 0; i < _order; i++)
-            {
-                count += _filterWeights1[i].Length;
-                count += _filterBiases1[i].Length;
-                count += _filterWeights2[i].Length;
-                count += _filterBiases2[i].Length;
-            }
-
-            // Output projection
-            count += _outputProjectionWeights.Length;
-            count += _outputProjectionBias.Length;
-
-            return count;
-        }
-    }
 
     /// <summary>
     /// Creates a new Hyena layer.
@@ -547,17 +517,6 @@ public partial class HyenaLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
     public override Vector<T> GetParameterGradients()
     {
         var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
@@ -633,17 +592,6 @@ public partial class HyenaLayer<T> : LayerBase<T>
         _filterBiases2Gradients = null;
         _outputProjectionWeightsGradient = null;
         _outputProjectionBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors()

@@ -109,24 +109,50 @@ public class LFTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <inheritdoc cref="IMetaLearnerOptions{T}.OuterLearningRate"/>
     public double OuterLearningRate { get; set; } = 0.001;
 
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.AdaptationSteps"/>
     public int AdaptationSteps { get; set; } = 5;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaBatchSize"/>
     public int MetaBatchSize { get; set; } = 4;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.NumMetaIterations"/>
     public int NumMetaIterations { get; set; } = 1000;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.GradientClipThreshold"/>
     public double? GradientClipThreshold { get; set; } = 10.0;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.RandomSeed"/>
     public int? RandomSeed { get => Seed; set => Seed = value; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EvaluationTasks"/>
     public int EvaluationTasks { get; set; } = 100;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EvaluationFrequency"/>
     public int EvaluationFrequency { get; set; } = 100;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.EnableCheckpointing"/>
     public bool EnableCheckpointing { get; set; } = false;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.CheckpointFrequency"/>
     public int CheckpointFrequency { get; set; } = 500;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
     public ILossFunction<T>? LossFunction { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
+    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance configured to meta-train the supplied model.
+    /// </summary>
+    /// <param name="metaModel">The model whose parameters the outer loop updates.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="metaModel"/> is null.</exception>
     public LFTOptions(IFullModel<T, TInput, TOutput> metaModel)
     { Guard.NotNull(metaModel); MetaModel = metaModel; }
 
+    /// <summary>
+    /// Returns whether every option holds a value the algorithm can run with.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> when a meta-model is present and every dimension, rate and count is within
+    /// its valid range; otherwise <c>false</c>.
+    /// </returns>
     public bool IsValid() =>
         MetaModel != null &&
         FeatureDimension > 0 &&

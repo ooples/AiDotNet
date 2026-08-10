@@ -296,7 +296,6 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

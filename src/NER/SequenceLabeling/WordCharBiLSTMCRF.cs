@@ -352,7 +352,6 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
 
     #region NeuralNetworkBase plumbing
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // Validate the FULL vector length up front: slicing per layer would otherwise silently ignore
@@ -375,7 +374,6 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
             idx += count;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

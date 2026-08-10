@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
@@ -46,6 +46,11 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ResearchPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2111.09395", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
 public class FinRLAgent<T> : TradingAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The wrapped agent this one delegates to. All three hand-written surfaces forwarded straight to it.</remarks>
+    protected override void RegisterComponents()
+        => RegisterParameterComponent(_innerAgent);
     #region Fields
 
     private readonly FinRLAgentOptions<T> _options;
@@ -63,9 +68,6 @@ public class FinRLAgent<T> : TradingAgentBase<T>
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _innerAgent.ParameterCount;
 
     /// <summary>
     /// Gets the RL algorithm being used.
@@ -262,28 +264,6 @@ public class FinRLAgent<T> : TradingAgentBase<T>
         _innerAgent.Deserialize(innerData);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, GetParameters performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        return _innerAgent.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, SetParameters performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _innerAgent.SetParameters(parameters);
-    }
-
     #endregion
 
     #region Model Metadata
@@ -315,27 +295,7 @@ public class FinRLAgent<T> : TradingAgentBase<T>
         return clone;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        return _innerAgent.ComputeGradients(input, target, lossFunction);
-    }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        _innerAgent.ApplyGradients(gradients, learningRate);
-    }
 
     #endregion
 }

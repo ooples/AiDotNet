@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2020,
     Authors = "Yamamoto et al."
 )]
-public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
+public class ParallelWaveGAN<T> : VocoderBase<T>
 {
     private readonly ParallelWaveGANOptions _options;
 
@@ -87,9 +87,8 @@ public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using Parallel WaveGAN's non-autoregressive generator.
@@ -99,7 +98,7 @@ public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
     /// (3) Multi-resolution STFT loss: spectral convergence + log STFT magnitude at 3 resolutions,
     /// (4) GAN adversarial loss with gradient penalty for waveform discriminator.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
@@ -161,19 +160,11 @@ public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

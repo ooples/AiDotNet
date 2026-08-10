@@ -96,46 +96,6 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
         return NumOps.Negate(NumOps.Divide(loss, NumOps.FromDouble(predicted.Length)));
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Weighted Cross Entropy loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values (probabilities between 0 and 1).</param>
-    /// <param name="actual">The actual (target) values (typically 0 or 1).</param>
-    /// <returns>A vector containing the derivatives of the weighted cross entropy loss with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // If weights are not provided, use uniform weights
-        Vector<T> weights = _weights;
-        if (weights == null || weights.Length != predicted.Length)
-        {
-            weights = new Vector<T>(predicted.Length);
-            for (int i = 0; i < predicted.Length; i++)
-            {
-                weights[i] = NumOps.One;
-            }
-        }
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // weight * [(p - y)/(p*(1-p))]
-            T denominator = NumOps.Multiply(predicted[i], NumOps.Subtract(NumOps.One, predicted[i]));
-            derivative[i] = NumOps.Multiply(
-                weights[i],
-                NumericalStabilityHelper.SafeDiv(
-                    NumOps.Subtract(predicted[i], actual[i]),
-                    denominator,
-                    NumericalStabilityHelper.SmallEpsilon
-                )
-            );
-        }
-
-        // Return the average derivative (consistent with BinaryCrossEntropyLoss)
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {

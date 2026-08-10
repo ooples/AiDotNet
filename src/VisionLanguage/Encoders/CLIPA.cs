@@ -65,6 +65,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
 )]
 public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    // NO SHAPE CONTRACT, for the same measured reason as BiomedCLIP.
+    //
+    // Probing gave [1,3,8,8] -> [1,64,1024] and [1,3,12,8] -> [1,96,1024], which Product(Height,Width)
+    // fits. The sweep at extent 64 refuted it: contract [1,4096,1280] against a real [1,256,1024]. The
+    // token axis is a patch grid whose size does not track H*W, and 1280 vs 1024 shows the width is
+    // not EmbeddingDim.
+
     private readonly CLIPAOptions _options;
 
     public override ModelOptions GetOptions() => _options;
@@ -288,7 +295,6 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

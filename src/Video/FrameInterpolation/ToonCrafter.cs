@@ -172,7 +172,6 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
         }
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int required = (int)(int)Layers.Sum(l => l.ParameterCount);
@@ -190,7 +189,6 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
             offset += p.Length;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

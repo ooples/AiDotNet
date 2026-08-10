@@ -414,7 +414,6 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
     // updates feed straight back into the encoder / refinement / decoder
     // weights without a separate Train override.
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int expectedLength = 0;
@@ -441,7 +440,6 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
             offset += p.Length;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

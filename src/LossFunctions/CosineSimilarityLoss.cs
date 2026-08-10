@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -39,6 +39,24 @@ namespace AiDotNet.LossFunctions;
 [LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, ExpectedOutput = OutputType.Continuous)]
 public class CosineSimilarityLoss<T> : LossFunctionBase<T>
 {
+    /// <summary>Epsilon added INSIDE each squared-norm square root.</summary>
+    /// <remarks>
+    /// One constant, because the three sites that use it are required to agree and a comment saying
+    /// so is not a mechanism. The vector path, the derivative and the tape path each compute the same
+    /// norm; if one of them drifts to a different epsilon the tape loss and the value it is supposed
+    /// to be the gradient of stop describing the same function, which is the kind of disagreement
+    /// that shows up as a wrong gradient rather than as an error.
+    /// </remarks>
+    private const double SquaredNormEpsilon = 1e-12;
+
+    /// <summary>Epsilon added to the PRODUCT of the two norms, guarding only the division.</summary>
+    /// <remarks>
+    /// Deliberately larger and deliberately separate: this one keeps the quotient finite, while
+    /// <see cref="SquaredNormEpsilon"/> keeps the square root's own backward pass finite. Collapsing
+    /// them into one value would silently change one of the two guarantees.
+    /// </remarks>
+    private const double NormProductEpsilon = 1e-8;
+
     /// <summary>
     /// Initializes a new instance of the CosineSimilarityLoss class.
     /// </summary>
@@ -61,7 +79,7 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         // ComputeTapeLoss. A bare sqrt(sum(x^2)) has an unbounded gradient as the norm -> 0; adding
         // eps before the sqrt bounds it to 1/(2*sqrt(eps)) and keeps this vector API numerically
         // consistent with the tape path (same loss definition on both surfaces).
-        T sqEps = NumOps.FromDouble(1e-12);
+        T sqEps = NumOps.FromDouble(SquaredNormEpsilon);
         T normPredicted = NumOps.Add(Engine.DotProduct(predicted, predicted), sqEps);
         T normActual = NumOps.Add(Engine.DotProduct(actual, actual), sqEps);
 
@@ -75,48 +93,6 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         return NumOps.Subtract(NumOps.One, cosineSimilarity);
     }
 
-    /// <summary>
-    /// Calculates the derivative of the Cosine Similarity Loss with respect to the predicted values.
-    /// </summary>
-    /// <param name="predicted">The predicted vector from the model.</param>
-    /// <param name="actual">The actual (target) vector.</param>
-    /// <returns>A vector containing the gradient of the loss with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        T dotProduct = Engine.DotProduct(predicted, actual);
-        // Same eps-inside-sqrt regularization as CalculateLoss/ComputeTapeLoss. The gradient below is
-        // exact for cos = dot / (||p||*||a||) with ||p|| = sqrt(sum(p^2) + eps): the regularized
-        // squared norm flows through both the numerator's ||p||^2 term and the ||p||^3*||a|| denominator.
-        T sqEps = NumOps.FromDouble(1e-12);
-        T normPredicted = NumOps.Add(Engine.DotProduct(predicted, predicted), sqEps);
-        T normActual = NumOps.Add(Engine.DotProduct(actual, actual), sqEps);
-
-        T normPredSqrt = NumOps.Sqrt(normPredicted);
-        T normProduct = NumOps.Multiply(normPredSqrt, NumOps.Sqrt(normActual));
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(p·a)) / (||p||^3 * ||a||)
-            T numerator = NumOps.Subtract(
-                NumOps.Multiply(actual[i], normPredicted),
-                NumOps.Multiply(predicted[i], dotProduct)
-            );
-
-            // ||p||^3 * ||a|| = ||p|| * ||p||^2 * ||a|| / ||p|| ...
-            // normPredSqrt = ||p||, normPredicted = ||p||^2
-            // normPredSqrt * normPredicted = ||p||^3
-            T normPredCubed = NumOps.Multiply(normPredSqrt, normPredicted);
-            T denominator = NumOps.Multiply(normPredCubed, NumOps.Sqrt(normActual));
-
-            // Derivative of the loss is negative of the derivative of cosine similarity
-            derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon));
-        }
-
-        return derivative;
-    }
 
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
@@ -141,11 +117,11 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         // blow-up (and it only surfaces on the runner whose FMA/SIMD trajectory drives the norm that
         // low). Adding eps before the sqrt bounds the gradient to 1/(2*sqrt(eps)); the earlier +1e-8 on
         // the PRODUCT below only guarded the division, not these sqrt backward passes.
-        var sqEps = NumOps.FromDouble(1e-12);
+        var sqEps = NumOps.FromDouble(SquaredNormEpsilon);
         var predNorm = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.ReduceSum(predSq, allAxes, keepDims: false), sqEps));
         var targNorm = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.ReduceSum(targSq, allAxes, keepDims: false), sqEps));
         var normProduct = Engine.TensorMultiply(predNorm, targNorm);
-        var safeNorm = Engine.TensorAddScalar(normProduct, NumOps.FromDouble(1e-8));
+        var safeNorm = Engine.TensorAddScalar(normProduct, NumOps.FromDouble(NormProductEpsilon));
         var similarity = Engine.TensorDivide(dot, safeNorm);
         return Engine.ScalarMinusTensor(NumOps.One, similarity);
     }

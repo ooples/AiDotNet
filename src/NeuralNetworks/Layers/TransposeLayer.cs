@@ -32,8 +32,66 @@ namespace AiDotNet.NeuralNetworks.Layers;
     ChangesShape = true,
     TestInputShape = "1, 2, 3",
     TestConstructorArgs = "new[] { 1, 0 }")]
-public partial class TransposeLayer<T> : LayerBase<T>
+// Rank is _permutation.Length + 1 - one batch axis plus the permuted logical axes - and it is EXACT,
+// not a minimum. OnFirstForward's guard reads ">= 1 + _permutation.Length", but ForwardTraced then
+// calls Engine.TensorPermute(input, _fullPermutation) with a permutation of exactly that length, so a
+// higher rank would fail there. Only the rank-3 form is declared, which is the layer's own documented
+// example ("[B, numPatches, hiddenDim] -> [B, hiddenDim, numPatches]") and its TestInputShape.
+//
+// The roles come from that example: numPatches is the token axis (Time) and hiddenDim the feature axis.
+//
+// THE OUTPUT LAYOUT IS THE SWAP, because the permutation is a CONSTRUCTOR ARGUMENT and a C# attribute
+// takes compile-time constants only - so one static ordering has to be chosen for a type whose whole
+// job is to reorder. At rank 3 there are exactly two permutations: the swap (what TestConstructorArgs
+// builds, what the class docs demonstrate, and the only one that does anything) and the identity, which
+// makes this layer a no-op. OutputAxesFor below does NOT hardcode either: it reads _permutation and
+// emits the real order, so an identity-permutation instance is caught by
+// ShapeInference.ContractMatchesLayout as a reported disagreement rather than resolving to a wrong
+// shape - inference itself never consults the output layout.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output,
+    Note = "The permutation is a constructor argument; this declares the swap that TestConstructorArgs builds.")]
+[AutoParameters]
+public partial class TransposeLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Every axis is carried through unchanged - only the ORDER moves. That is
+    /// <c>OnFirstForward</c>'s own statement of the output shape,
+    /// <c>for (int i = 0; i &lt; rank; i++) outShape[i] = logical[_permutation[i]];</c>, and
+    /// <c>ForwardTraced</c>'s <c>Engine.TensorPermute(input, _fullPermutation)</c>, which moves data
+    /// without resizing anything. So every relation is <see cref="AxisRelation.Same"/>; the contract's
+    /// content is which ROLE sits at which position.
+    /// </para>
+    /// <para>
+    /// This is the pattern the addendum calls out: a permutation stored by the constructor means the
+    /// output axes are the input roles REORDERED, and <c>OutputAxesFor</c> is an instance method, so it
+    /// can simply index the declared input roles by <c>_permutation</c>. <c>_fullPermutation</c> is the
+    /// same array with the batch axis pinned at position 0, which is why Batch leads the result here.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // TensorPermute needs the ranks to agree exactly, and only rank 3 has declared roles to permute.
+        if (inputRank != _permutation.Length + 1 || inputRank != 3) return null;
+
+        // The declared input layout with its batch axis removed - the logical axes _permutation indexes.
+        var logicalRoles = new[] { TensorAxis.Time, TensorAxis.Features };
+
+        var axes = new OutputAxisContract[inputRank];
+        axes[0] = new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch));
+        for (int i = 0; i < _permutation.Length; i++)
+        {
+            var role = logicalRoles[_permutation[i]];
+            axes[i + 1] = new OutputAxisContract(role, AxisRelation.Same(role));
+        }
+
+        return axes;
+    }
+
     private int[] _logicalInputShape;
     private readonly int[] _permutation;
     private readonly int[] _fullPermutation;
@@ -119,18 +177,6 @@ public partial class TransposeLayer<T> : LayerBase<T>
     {
         EnsureInitializedFromInput(input);
         return Engine.TensorPermute(input, _fullPermutation);
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No trainable parameters.
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Empty();
     }
 
     /// <inheritdoc/>

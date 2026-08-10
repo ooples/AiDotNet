@@ -111,47 +111,6 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Elastic Net Loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values vector.</param>
-    /// <param name="actual">The actual (ground truth) values vector.</param>
-    /// <returns>A vector containing the derivatives of the elastic net loss with respect to each predicted value.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // MSE gradient component: 2*(predicted - actual)/n
-            T mseGradient = NumOps.Multiply(
-                NumOps.FromDouble(2),
-                NumOps.Divide(
-                    NumOps.Subtract(predicted[i], actual[i]),
-                    NumOps.FromDouble(predicted.Length)
-                )
-            );
-
-            // L1 gradient component: a * l1Ratio * sign(predicted)
-            T l1Gradient = NumOps.Multiply(
-                NumOps.Multiply(_alpha, _l1Ratio),
-                SignOf(predicted[i])
-            );
-
-            // L2 gradient component: a * (1-l1Ratio) * predicted
-            T l2Gradient = NumOps.Multiply(
-                NumOps.Multiply(_alpha, NumOps.Subtract(NumOps.One, _l1Ratio)),
-                predicted[i]
-            );
-
-            // Combine all gradient components
-            derivative[i] = NumOps.Add(NumOps.Add(mseGradient, l1Gradient), l2Gradient);
-        }
-
-        return derivative;
-    }
-
-    /// <summary>
     /// Returns the sign of a value: -1 for negative, 1 for positive, 0 for zero.
     /// </summary>
     /// <param name="value">The value to determine the sign of.</param>

@@ -171,7 +171,6 @@ public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
             idx += c;
         }
     }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

@@ -33,6 +33,16 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
+/// <example>
+/// <code>
+/// // Produced by MbPAAlgorithm.Adapt rather than constructed directly: the returned model
+/// // carries the episodic memory and the locally adapted output head for one task.
+/// var mbpa = new MbPAAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+/// mbpa.MetaTrain(taskBatch);
+/// var adapted = mbpa.Adapt(task);          // an MbPAAdaptedModel
+/// var prediction = adapted.Predict(task.QueryInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelTask(ModelTask.Classification)]
@@ -101,8 +111,19 @@ public class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
     /// </summary>
     private Vector<T> PredictSingle(TInput single)
     {
-        var query = MbPAConversions<T>.ResizeTo(
-            ConvertOutputToVector(BaseModel.Predict(single)), _options.FeatureDimension);
+        // FAIL AT THE REAL CAUSE. ConvertOutputToVector returns null for any TOutput that is not
+        // Vector/Matrix/Tensor, and that null went straight into ResizeTo -- so an unsupported output
+        // type surfaced as a failure inside a conversion helper. AssembleOutput already produces a
+        // precise message for exactly this condition, but it never runs: PredictSingle fails first.
+        var embedded = ConvertOutputToVector(BaseModel.Predict(single));
+        if (embedded is null)
+        {
+            throw new NotSupportedException(
+                $"MbPA cannot read an embedding out of {typeof(TOutput).Name}. " +
+                "Use Vector<T>, Matrix<T> or Tensor<T> as the meta-learning output type.");
+        }
+
+        var query = MbPAConversions<T>.ResizeTo(embedded, _options.FeatureDimension);
 
         var neighbors = _memory.Retrieve(
             query, _options.NumNeighbors, _options.KernelEpsilon, NumOps.ToDouble);
@@ -149,12 +170,29 @@ public class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
 
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            // A vector output is one scalar per example when batched, otherwise the single
-            // prediction itself.
+            // THE PACKING RULE COMES FROM OutputDimension, NOT FROM THE BATCH SIZE. This branch used
+            // to return the full OutputDimension-length prediction for one example and one SCALAR per
+            // example for two or more -- so the same model on a batch of 1 and a batch of 2 returned
+            // vectors with different meanings, and multi-class output was silently truncated to
+            // component 0 as soon as a second example appeared.
+            //
+            // A Vector<T> can carry a batch of scalar predictions OR one multi-component prediction,
+            // and OutputDimension is what distinguishes them: with a scalar head every example
+            // contributes one component; with a multi-component head a flat vector cannot represent a
+            // batch at all, so that combination is refused rather than silently truncated.
+            if (outputDim <= 1)
+            {
+                var packed = new Vector<T>(rows.Count);
+                for (int i = 0; i < rows.Count; i++) packed[i] = rows[i].Length > 0 ? rows[i][0] : NumOps.Zero;
+                return (TOutput)(object)packed;
+            }
+
             if (rows.Count == 1) return (TOutput)(object)rows[0];
-            var packed = new Vector<T>(rows.Count);
-            for (int i = 0; i < rows.Count; i++) packed[i] = rows[i].Length > 0 ? rows[i][0] : NumOps.Zero;
-            return (TOutput)(object)packed;
+
+            throw new NotSupportedException(
+                $"MbPA cannot pack {rows.Count} predictions of {outputDim} components each into a " +
+                "flat Vector<T> without discarding components. Use Matrix<T> or Tensor<T> as the " +
+                "meta-learning output type for a batched multi-component head.");
         }
 
         if (typeof(TOutput) == typeof(Matrix<T>))

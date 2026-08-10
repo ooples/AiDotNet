@@ -102,6 +102,26 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
+            // ONLY THE SINGLE HEAD IS ACCEPTED, BECAUSE ONLY THE SINGLE HEAD IS USED. PredictCore
+            // always runs Layers[0].Forward(features) and nothing else, while ForwardForTraining
+            // delegates to the base path, which walks EVERY layer in Layers. A multi-layer
+            // architecture was therefore accepted, trained end to end, and then predicted from its
+            // first layer alone -- training updated layers the prediction path never reaches, so the
+            // model appeared to train while its predictions ignored most of what was learned.
+            //
+            // Rejecting the mismatch is the honest option: this evaluator is three fixed heuristic
+            // features and one scoring head (Xu et al. 2018 SS4), so there is no meaningful
+            // multi-layer variant for PredictCore to consume.
+            if (Architecture.Layers.Count != 1)
+            {
+                throw new ArgumentException(
+                    $"{nameof(AdversarialImageEvaluator<T>)} scores images from {FeatureCount} fixed "
+                    + "heuristic features through a single learnable head, so a supplied architecture "
+                    + $"must contain exactly one layer; got {Architecture.Layers.Count}. Training would "
+                    + "update every layer while prediction reads only the first.",
+                    nameof(Architecture));
+            }
+
             Layers.AddRange(Architecture.Layers);
             return;
         }
@@ -270,13 +290,11 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         return EvaluateImage(tensor);
     }
 
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (Layers.Count == 0) return;
         Layers[0].UpdateParameters(parameters);
     }
-
     /// <summary>
     /// AIE's <see cref="Predict"/> doesn't feed the input image directly into
     /// <c>Layers[0]</c> — it first extracts a 3-element feature vector

@@ -9,6 +9,7 @@ using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.Ordinal;
 
 /// <summary>
@@ -66,6 +67,20 @@ namespace AiDotNet.Classification.Ordinal;
 public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The coefficients followed by the ordinal cut points. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     /// <summary>
     /// The learned coefficient vector (β).
     /// </summary>
@@ -503,7 +518,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     /// for serialization or optimization purposes. The coefficients come first, followed
     /// by the thresholds.</para>
     /// </remarks>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         if (_coefficients is null || _thresholds is null)
         {
@@ -534,7 +549,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     /// <para><b>For Beginners:</b> This unpacks parameters from a single vector and sets
     /// the internal coefficients and thresholds. Used when loading a saved model.</para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         if (parameters.Length == 0)
         {

@@ -36,6 +36,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
+// PUBLIC, AND IT HAS TO STAY PUBLIC. This was narrowed to internal on the assumption that nothing
+// exposed it -- true only because LFTAlgorithm lives in a different slice of the #1789 split and was
+// not on the branch where the narrowing was made. LFTAlgorithm.Transformation returns this type from
+// a public property so the learned hyper-parameters can be inspected, so narrowing it is CS0053 the
+// moment the two slices meet. If this should genuinely be an implementation detail, the property is
+// what has to change first.
 public sealed class FeatureWiseTransformation<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
@@ -58,13 +64,29 @@ public sealed class FeatureWiseTransformation<T>
     /// <param name="initialScale">Initial theta_gamma (the paper's hand-tuned value is 0.3).</param>
     /// <param name="initialBias">Initial theta_beta (the paper's hand-tuned value is 0.5).</param>
     /// <param name="random">RNG used to draw gamma and beta; supply a seeded one for reproducibility.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the feature dimension is not positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The feature dimension is not positive, or either initial value is not finite.
+    /// </exception>
     public FeatureWiseTransformation(int featureDimension, double initialScale, double initialBias, Random random)
     {
         if (featureDimension <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(featureDimension), featureDimension,
                 "Feature dimension (channel count C) must be positive.");
+        }
+
+        // Non-finite initial values propagate straight into the sampled scales and from there into
+        // every transformed output, where they read as a modelling result rather than as bad input.
+        if (double.IsNaN(initialScale) || double.IsInfinity(initialScale))
+        {
+            throw new ArgumentOutOfRangeException(nameof(initialScale), initialScale,
+                "Initial theta_gamma must be a finite value.");
+        }
+
+        if (double.IsNaN(initialBias) || double.IsInfinity(initialBias))
+        {
+            throw new ArgumentOutOfRangeException(nameof(initialBias), initialBias,
+                "Initial theta_beta must be a finite value.");
         }
 
         _random = random ?? throw new ArgumentNullException(nameof(random));
@@ -107,10 +129,27 @@ public sealed class FeatureWiseTransformation<T>
     /// <summary>
     /// Replaces both hyper-parameter vectors, for the learning-to-learn update.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Either vector's length differs from the configured feature dimension.
+    /// </exception>
     public void SetHyperparameters(Vector<T> scale, Vector<T> bias)
     {
-        ScaleHyperparameters = scale ?? throw new ArgumentNullException(nameof(scale));
-        BiasHyperparameters = bias ?? throw new ArgumentNullException(nameof(bias));
+        if (scale is null) throw new ArgumentNullException(nameof(scale));
+        if (bias is null) throw new ArgumentNullException(nameof(bias));
+
+        // Both lengths are checked BEFORE either field is written. A short bias vector made Apply
+        // throw on an index; a matching-but-short PAIR was worse -- it simply stopped transforming
+        // the trailing channels, with no error at all. Neither field is mutated unless both are
+        // usable, so a rejected call leaves the transformation on its previous state.
+        if (scale.Length != FeatureDimension || bias.Length != FeatureDimension)
+        {
+            throw new ArgumentException(
+                $"Expected both hyper-parameter vectors to have length {FeatureDimension}; got "
+                + $"scale {scale.Length} and bias {bias.Length}.");
+        }
+
+        ScaleHyperparameters = scale;
+        BiasHyperparameters = bias;
     }
 
     /// <summary>

@@ -88,6 +88,26 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
     public int MaxInstances { get; set; } = 100;
 
     /// <summary>
+    /// Gets or sets the learning rate used when the model builds its own optimizer.
+    /// </summary>
+    /// <value>Defaults to 0.01, the rate the ABCNet paper trains with (arXiv:2002.10200).</value>
+    /// <remarks>
+    /// <para>
+    /// READ THIS BEFORE RELYING ON THE DEFAULT. The paper's 0.01 is an <b>SGD with momentum</b>
+    /// rate. ABCNet builds an <c>AdamOptimizer</c> when the caller supplies none, and 0.01 is
+    /// roughly two orders of magnitude above the usual Adam scale, so the published value and the
+    /// default optimizer are not matched to each other. To reproduce the paper, inject an
+    /// SGD-with-momentum optimizer and keep this rate; to train with the default Adam optimizer,
+    /// lower this to an Adam-appropriate value such as 1e-4.
+    /// </para>
+    /// <para>
+    /// Previously the optimizer was constructed bare, so training silently used Adam's own generic
+    /// default and no caller could change it short of building the whole optimizer themselves.
+    /// </para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 0.01;
+
+    /// <summary>
     /// Validates the configuration, throwing on values that cannot describe a working model.
     /// </summary>
     public void Validate()
@@ -102,9 +122,34 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
         if (RecognitionHiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(RecognitionHiddenSize), RecognitionHiddenSize, "RecognitionHiddenSize must be positive.");
         if (MaxInstances <= 0) throw new ArgumentOutOfRangeException(nameof(MaxInstances), MaxInstances, "MaxInstances must be positive.");
 
-        // CTC cannot emit more labels than it has time steps, so an alphabet is only usable if the
-        // rectified width leaves room for it. This is a real constraint rather than a formality: a
-        // silently over-long alphabet makes long words unrecognizable no matter how well trained.
+        // ConfidenceThreshold is a probability compared against a score at ABCNet.cs:541
+        // (`if (score < _options.ConfidenceThreshold) continue;`). Above 1.0 that test is true at
+        // every position, so detection returns zero instances on every image and the model looks
+        // trained-but-useless rather than misconfigured; below 0.0 every position survives. It was
+        // the one numeric option here that nothing bounded, and the only one that fails silently.
+        if (ConfidenceThreshold < 0.0 || ConfidenceThreshold > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(ConfidenceThreshold), ConfidenceThreshold,
+                "ConfidenceThreshold must be within [0, 1]. Above 1 no detection can ever pass it; "
+                + "below 0 every position passes.");
+        }
+
+        if (LearningRate <= 0.0 || double.IsNaN(LearningRate) || double.IsInfinity(LearningRate))
+        {
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), LearningRate,
+                "LearningRate must be a positive, finite number.");
+        }
+
+        // WHAT THIS CHECK ACTUALLY ENFORCES: the alphabet must hold at least one real symbol plus
+        // the CTC blank. Nothing more.
+        //
+        // The comment that used to sit here claimed the rectified width had to "leave room for" the
+        // alphabet, and no such relation is implemented -- nor should it be, because the reasoning
+        // was inverted. CTC's time-step count bounds the length of a decoded LABEL SEQUENCE, not
+        // the SIZE of the alphabet those labels are drawn from: BezierSampleWidth time steps can
+        // emit at most that many labels whether the alphabet holds 97 characters or 97,000. The
+        // genuine width constraint is about the longest word to be recognized, which is a property
+        // of the data rather than of this configuration, so it is not checkable here.
         if (NumCharacterClasses < 2)
         {
             throw new ArgumentOutOfRangeException(nameof(NumCharacterClasses), NumCharacterClasses,

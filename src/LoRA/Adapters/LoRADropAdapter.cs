@@ -302,36 +302,6 @@ public partial class LoRADropAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Updates parameter gradients from both layers (called by Backward).
-    /// </summary>
-    /// <remarks>
-    /// This is a helper method that collects gradients from the base and LoRA layers
-    /// into the unified parameter gradient vector. It respects the frozen state of the base layer.
-    /// </remarks>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack LoRA gradients
-        Vector<T> loraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < loraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = loraGrads[i];
-        }
-    }
-
-    /// <summary>
     /// Merges the LoRA adaptation into the base layer and returns the merged layer.
     /// </summary>
     /// <returns>A new layer with LoRA weights merged into the base layer's weights.</returns>

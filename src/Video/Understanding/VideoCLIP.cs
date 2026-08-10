@@ -1128,7 +1128,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         Layers.Add(_logitScale);
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -1148,7 +1147,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
             }
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

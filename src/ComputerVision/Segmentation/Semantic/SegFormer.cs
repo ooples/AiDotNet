@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers", "https://arxiv.org/abs/2105.15203", Year = 2021, Authors = "Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo")]
-public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
+public class SegFormer<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegFormerOptions _options;
 
@@ -80,24 +80,16 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
+    // Only SegFormer's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from SemanticSegmentationBase -> SegmentationModelBase, which is the entire point of
+    // deriving from it rather than re-declaring the same ten fields.
     private readonly SegFormerModelSize _modelSize;
     private readonly int[] _embedDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly int[] _numHeads;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-
-    // Boundary between encoder and decoder layers in the Layers list
-    private int _encoderLayerEnd;
 
     #endregion
 
@@ -115,7 +107,8 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// make sure you create it using the native constructor.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
+    // same thing, so re-declaring them here would only create two sources of one fact.
 
     /// <summary>
     /// Gets whether using native mode (trainable) or ONNX mode (inference only).
@@ -126,11 +119,6 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// Gets the model size variant (B0 through B5).
     /// </summary>
     internal SegFormerModelSize ModelSize => _modelSize;
-
-    /// <summary>
-    /// Gets the number of semantic classes this model predicts.
-    /// </summary>
-    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -175,19 +163,19 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SegFormerModelSize modelSize = SegFormerModelSize.B0,
         double dropRate = 0.1,
         SegFormerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base now resolves height/width/channels/numClasses/native-mode from the architecture,
+        // which is exactly what the twelve deleted lines below used to do by hand.
+        //
+        // `optimizer` is passed straight through - INCLUDING null. The base defaults it lazily via
+        // CreateDefaultOptimizer(), which is what makes this base usable at all: the old
+        // `optimizer ?? new AdamWOptimizer<...>(this)` could never be written in a base-constructor
+        // argument, because `this` is not available there.
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new SegFormerOptions();
         Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = dropRate;
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         (_embedDims, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
 
@@ -226,36 +214,16 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         SegFormerModelSize modelSize = SegFormerModelSize.B0,
         SegFormerOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
+        // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new SegFormerOptions();
         Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"SegFormer ONNX model not found: {onnxModelPath}");
-
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         (_embedDims, _depths, _numHeads, _decoderDim) = GetModelConfig(modelSize);
-
-        try
-        {
-            _onnxSession = new InferenceSession(onnxModelPath);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"Failed to load SegFormer ONNX model: {ex.Message}", ex);
-        }
 
         InitializeLayers();
     }
@@ -329,7 +297,13 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            // Optimizer, NOT the raw _optimizer field. Before this model derived from the segmentation
+        // base it eagerly assigned `optimizer ?? new AdamWOptimizer<...>(this)`, so the field was
+        // never null in native mode. It now passes `optimizer` straight to the base, which stores it
+        // as given - so the field IS null whenever the caller supplied none, and training would run
+        // with no optimizer at all. The base's Optimizer property resolves the default lazily, which
+        // reproduces the old behaviour exactly.
+        TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -391,7 +365,7 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// from the output for convenience.
     /// </para>
     /// </remarks>
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch)
@@ -435,7 +409,7 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX session was not initialized.</exception>
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
@@ -497,41 +471,10 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// can process it correctly. The batch dimension is removed from the output afterward.
     /// </para>
     /// </remarks>
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        int c = tensor.Shape[0];
-        int h = tensor.Shape[1];
-        int w = tensor.Shape[2];
-
-        var result = new Tensor<T>([1, c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
-
-    /// <summary>
-    /// Removes the batch dimension from a [1, C, H, W] tensor, producing [C, H, W].
-    /// </summary>
-    /// <param name="tensor">A batched tensor with shape [1, channels, height, width].</param>
-    /// <returns>An unbatched tensor with shape [channels, height, width] containing the same data.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> After the network processes a single image (which was wrapped in a
-    /// batch of size 1), this method strips the batch dimension off to return the output in the
-    /// same format as the original input — just [channels, height, width].
-    /// </para>
-    /// </remarks>
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++)
-        {
-            newShape[i] = tensor.Shape[i + 1];
-        }
-
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
+    // AddBatchDimension / RemoveBatchDimension are inherited from SegmentationModelBase. The copies
+    // that used to live here were line-for-line identical, except that the base's version also guards
+    // that the input really is rank-3 before indexing Shape[0..2] - so deleting these is a strict
+    // improvement, not merely deduplication.
 
     #endregion
 
@@ -598,20 +541,6 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters across the encoder and decoder layers from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">A flat vector containing new values for all model parameters,
-    /// ordered sequentially by layer (encoder layers first, then decoder layers).</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> A neural network's "parameters" are the numerical weights that determine
-    /// its behavior. This method replaces all current weights with new values from a flat vector.
-    /// It walks through each layer in order, slicing out the correct number of parameters for that
-    /// layer and updating them. This is used internally during optimization and when loading
-    /// saved model weights.
-    /// </para>
-    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -632,7 +561,6 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
             }
         }
     }
-
     /// <summary>
     /// Collects metadata describing this SegFormer model's configuration and current state.
     /// </summary>
@@ -825,19 +753,10 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     #endregion
 
-    #region ISemanticSegmentation Implementation
-
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-
-    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
-
-    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
-
-    #endregion
+    // ISemanticSegmentation is implemented entirely by SemanticSegmentationBase, and identically:
+    // Segment(image) => Predict(image), GetClassMap => ArgmaxAlongClassDim, GetProbabilityMap =>
+    // SoftmaxAlongClassDim, plus NumClasses/InputHeight/InputWidth/IsOnnxMode from
+    // SegmentationModelBase. The explicit implementations that used to sit here restated all seven
+    // members verbatim - they became illegal (CS0540) once the interface arrived through the base,
+    // which is the compiler pointing out the duplication rather than a problem to work around.
 }

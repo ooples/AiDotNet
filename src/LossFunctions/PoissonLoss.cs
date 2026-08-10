@@ -71,26 +71,6 @@ public class PoissonLoss<T> : LossFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the derivative of the Poisson loss function.
-    /// </summary>
-    /// <param name="predicted">The predicted values from the model (should be positive).</param>
-    /// <param name="actual">The actual (target) values (typically counts or rates).</param>
-    /// <returns>A vector containing the gradient of the loss with respect to each prediction.</returns>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        Vector<T> derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // The derivative is 1 - actual/predicted
-            derivative[i] = NumOps.Subtract(NumOps.One, NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
-        }
-
-        return derivative.Divide(NumOps.FromDouble(predicted.Length));
-    }
-
-    /// <summary>
     /// Calculates both Poisson loss and gradient on GPU in a single efficient pass.
     /// </summary>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>

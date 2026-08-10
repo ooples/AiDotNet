@@ -60,13 +60,22 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Track Anything", "https://arxiv.org/abs/2411.18933", Year = 2024, Authors = "Yunyang Xiong, Chong Zhou, Xiaoyu Xiang, Lemeng Wu, Chenchen Zhu, Zechun Liu, Saksham Suri, Balakrishnan Varadarajan, Ramya Akula, Forrest Iandola, Raghuraman Krishnamoorthi, Bilge Soran, Vikas Chandra")]
-public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
+public class EfficientTAM<T> : Common.VideoSegmentationBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Downsamples by 16, not the family's 32 - measured: [1,3,64,64] returns [1,C,4,4].
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => SpatialStrideContract(inputRank, 16);
+
     private readonly EfficientTAMOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    // Only EfficientTAM's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from VideoSegmentationBase -> SegmentationModelBase.
     private readonly EfficientTAMModelSize _modelSize;
     // Paper-faithful plain-ViT image-encoder config (Xiong et al. 2024, arXiv 2411.18933):
     // ViT-Tiny/-Small with a 16x16 patch embed + pre-norm transformer blocks.
@@ -76,27 +85,15 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     private readonly int _patchSize;
     private readonly int _decoderDim;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
     #endregion
 
     #region Properties
-    /// <summary>
-    /// Gets whether this EfficientTAM instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, MaxTrackedObjects and SupportsStreaming are all inherited:
+    // SegmentationModelBase supplies the first two, and VideoSegmentationBase supplies the tracking
+    // limit (64, passed to its constructor below) and the streaming flag, which already defaults
+    // to true - exactly what the explicit interface implementations used to return.
     internal bool UseNativeMode => _useNativeMode;
     internal EfficientTAMModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
@@ -129,17 +126,17 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         // GPU stays stable — see the tracked Tensors numerical-parity issue. MSE keeps logits bounded
         // (~[0,1]) so that numerical difference never amplifies: the ViT trains stably on BOTH engines
         // (verified CPU and GPU converge to ~identical loss). Multi-class masks keep softmax CE.
-        : base(architecture, lossFunction ?? (numClasses <= 1
+        // The loss selection above is preserved verbatim - the base would otherwise substitute plain
+        // CrossEntropyWithLogitsLoss, which is exactly the degenerate single-class choice this comment
+        // rules out. `optimizer` is passed straight through INCLUDING null; the base's
+        // CreateDefaultOptimizer() builds the same `new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)`
+        // this used to inline, but lazily - the one thing a base-constructor argument cannot do.
+        : base(architecture, optimizer, lossFunction ?? (numClasses <= 1
             ? new MeanSquaredErrorLoss<T>()
-            : new CrossEntropyWithLogitsLoss<T>()))
+            : new CrossEntropyWithLogitsLoss<T>()), numClasses, maxTrackedObjects: 64)
     {
         _options = options ?? new EfficientTAMOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
-        _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _modelSize = modelSize; _dropRate = dropRate;
         (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -163,21 +160,11 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     public EfficientTAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, EfficientTAMModelSize modelSize = EfficientTAMModelSize.Tiny,
         EfficientTAMOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses, maxTrackedObjects: 64)
     {
         _options = options ?? new EfficientTAMOptions(); Options = _options;
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"EfficientTAM ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses; _modelSize = modelSize; _dropRate = 0;
-        _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
+        _modelSize = modelSize; _dropRate = 0;
         (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(modelSize);
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load EfficientTAM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -224,7 +211,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -245,7 +232,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         _ => (192, 12, 3, 16, 256)
     };
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         int batch = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
@@ -283,7 +270,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         return activations;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -304,10 +291,13 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     // autodiff tape, so gradients flow through it. The prior raw `new Tensor<T>(...)` +
     // Data.Span.CopyTo SEVERED the tape — any training path that funnels through Forward would get
     // zero gradient upstream of the reshape.
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
+    //
+    // These DELIBERATELY shadow (`new`) the inherited SegmentationModelBase helpers, which are the
+    // copy-based versions described above. Inheriting them would reintroduce exactly that bug.
+    private new Tensor<T> AddBatchDimension(Tensor<T> tensor)
         => Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] });
 
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
+    private new Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
         int[] s = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1];
@@ -346,18 +336,8 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -407,50 +387,35 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new EfficientTAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
+        ? new EfficientTAM<T>(Architecture, Optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new EfficientTAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IVideoSegmentation Implementation
+    // Tracking memory that is genuinely EfficientTAM's own. The frame counter, the tracked-id list,
+    // the initialized flag and the object-count validation now live on VideoSegmentationBase, which
+    // wraps each of these Internal hooks.
     private Tensor<T>? _trackingFeatures;
     private Tensor<T>? _trackingMasks;
-    private int[]? _trackedObjectIds;
-    private int _frameIndex;
+    private int[]? _trackedIds;
     private readonly Dictionary<int, Tensor<T>> _corrections = [];
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IVideoSegmentation<T>.MaxTrackedObjects => 64;
-    bool IVideoSegmentation<T>.SupportsStreaming => true;
-    void IVideoSegmentation<T>.InitializeTracking(Tensor<T> frame, Tensor<T> masks, int[]? objectIds)
+
+    /// <inheritdoc/>
+    protected override void InitializeTrackingInternal(Tensor<T> frame, Tensor<T> masks, int[] objectIds)
     {
         _trackingFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         _trackingMasks = masks;
-        int numObj = masks.Rank >= 3 ? masks.Shape[0] : 1;
-        _trackedObjectIds = objectIds ?? Enumerable.Range(1, numObj).ToArray();
-        _frameIndex = 0;
+        _trackedIds = objectIds;
         _corrections.Clear();
     }
-    VideoSegmentationResult<T> IVideoSegmentation<T>.PropagateToFrame(Tensor<T> frame)
+
+    /// <inheritdoc/>
+    protected override VideoSegmentationResult<T> PropagateToFrameInternal(Tensor<T> frame, int frameIndex)
     {
-        _frameIndex++;
         var currentFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
-        var ids = _trackedObjectIds ?? [1];
+        var ids = _trackedIds ?? [1];
         int numObj = ids.Length;
         Tensor<T> masks;
         if (_trackingFeatures != null && _trackingMasks != null && _trackingMasks.Rank == 3)
@@ -493,17 +458,21 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         return new VideoSegmentationResult<T>
         {
             Masks = masks, ObjectIds = ids, Confidences = confidences,
-            FrameIndex = _frameIndex, IsVisible = isVisible
+            FrameIndex = frameIndex, IsVisible = isVisible
         };
     }
-    void IVideoSegmentation<T>.AddCorrection(int objectId, Tensor<T> correctionMask)
+
+    /// <inheritdoc/>
+    public override void AddCorrection(int objectId, Tensor<T> correctionMask)
     {
         _corrections[objectId] = correctionMask;
     }
-    void IVideoSegmentation<T>.ResetTracking()
+
+    /// <inheritdoc/>
+    protected override void ResetTrackingInternal()
     {
-        _trackingFeatures = null; _trackingMasks = null; _trackedObjectIds = null;
-        _frameIndex = 0; _corrections.Clear();
+        _trackingFeatures = null; _trackingMasks = null; _trackedIds = null;
+        _corrections.Clear();
     }
     #endregion
 }

@@ -41,7 +41,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Jang et al."
 )]
-public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
+public class UnivNet<T> : VocoderBase<T>
 {
     private readonly UnivNetOptions _options;
 
@@ -88,9 +88,16 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    /// <inheritdoc />
+    /// <remarks>
+    /// MEASURED: <c>[1,80,8] -&gt; [1,1,2048]</c>, 8 mel frames x an UpsampleFactor of 256. One of the
+    /// three vocoders whose Predict is a whole-waveform synthesis.
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => WaveformUpsampleContract(inputRank);
+
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
+    // these three restated what the base already derives from the same _options fields.
 
     /// <summary>
     /// Converts mel to waveform using UnivNet's LVC (Location-Variable Convolution) blocks.
@@ -100,7 +107,7 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
     /// (3) GABlock with gated activation + location-variable conv for adaptive frequency modeling,
     /// (4) Multi-resolution spectrogram discriminator (MRSD) for training.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
@@ -175,7 +182,6 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
             idx += c;
         }
     }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

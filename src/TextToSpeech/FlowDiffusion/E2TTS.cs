@@ -216,7 +216,6 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
             idx += c;
         }
     }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

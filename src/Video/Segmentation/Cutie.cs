@@ -650,7 +650,13 @@ public class Cutie<T> : NeuralNetworkBase<T>
                 var term = Engine.TensorBroadcastMultiply(value, weight);                 // [b,C,h,w]
                 accumulated = accumulated is null ? term : Engine.TensorAdd(accumulated, term);
             }
-            attended = Engine.TensorMultiplyScalar(accumulated!, NumOps.FromDouble(1.0 / _memoryBank.Count));
+            // The loop above runs at least once because this branch is only entered for a
+            // non-empty bank, so accumulated is set. Assert it rather than suppress, so a change
+            // to the enclosing condition surfaces here instead of as a NullReferenceException.
+            if (accumulated is null)
+                throw new InvalidOperationException("Memory readout accumulated no terms despite a non-empty memory bank.");
+
+            attended = Engine.TensorMultiplyScalar(accumulated, NumOps.FromDouble(1.0 / _memoryBank.Count));
         }
 
         // ALWAYS run the memory-attention layers (indices 10-13), even when the memory bank is empty, so
@@ -792,22 +798,11 @@ public class Cutie<T> : NeuralNetworkBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -444,22 +444,8 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     }
 
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the ResNet network for the given input.
     /// </summary>
@@ -539,7 +525,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Vector<T> CalculateOutputGradient(Tensor<T> prediction, Tensor<T> expectedOutput)
     {
-        return _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        return _lossFunction.ComputeGradient(prediction.ToVector(), expectedOutput.ToVector());
     }
 
     /// <summary>

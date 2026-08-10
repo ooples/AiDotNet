@@ -215,7 +215,6 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
     }
 
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         ThrowIfDisposed();
@@ -229,7 +228,6 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             idx += c;
         }
     }
-
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {

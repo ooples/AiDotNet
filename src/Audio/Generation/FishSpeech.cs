@@ -46,6 +46,15 @@ namespace AiDotNet.Audio.Generation;
 [ResearchPaper("Fish Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis", "https://arxiv.org/abs/2411.01156", Year = 2024, Authors = "Shijia Liao, Yuxuan Wang, Tianyu Li, Yifan Hu, Ruobing Xie")]
 public class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore is a plain fold over Layers, and the last layer
+    /// CreateDefaultFishSpeechLayers emits is the GFSQ output projection
+    /// <c>FullyConnectedLayer&lt;T&gt;(codebookSize)</c>, wired from <c>_options.CodebookSize</c> (8192).
+    /// A codebook size, not a text vocabulary - TextVocabSize (32000) is an input-side quantity here.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.CodebookSize;
+
     #region Fields
 
     private readonly FishSpeechOptions _options;
@@ -280,12 +289,11 @@ public class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

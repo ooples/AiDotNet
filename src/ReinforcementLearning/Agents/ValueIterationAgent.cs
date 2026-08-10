@@ -278,7 +278,6 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => _valueTable.Count;
 
     public override int FeatureCount => _options.StateSize;
 
@@ -312,38 +311,7 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<(string, T, T)>>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
     }
 
-    public override Vector<T> GetParameters()
-    {
-        // Flatten value table into vector
-        var paramsList = new List<T>();
-        foreach (var value in _valueTable.Values)
-        {
-            paramsList.Add(value);
-        }
 
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Reconstruct value table from vector
-        int index = 0;
-        foreach (var stateKey in _valueTable.Keys.ToList())
-        {
-            if (index < parameters.Length)
-            {
-                _valueTable[stateKey] = parameters[index];
-                index++;
-            }
-        }
-    }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
@@ -366,23 +334,6 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         return clone;
-    }
-
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var loss = usedLossFunction.CalculateLoss(prediction, target);
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // DP methods don't use gradients
     }
 
     public override void SaveModel(string filepath)

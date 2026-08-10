@@ -47,6 +47,16 @@ namespace AiDotNet.Audio.Fingerprinting;
     Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
 public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> then applies <c>PostprocessOutput</c>, which is
+    /// an ELEMENTWISE sigmoid built on <c>modelOutput._shape</c> - it converts CNN14's logits to
+    /// probabilities without reshaping. The last layer of <c>CreateDefaultPANNsLayers</c> is
+    /// <c>DenseLayer&lt;T&gt;(numClasses)</c>, passed <c>_options.NumClasses</c> (527 AudioSet tags).
+    /// The wider <c>EmbeddingDim</c> head one layer earlier is the fingerprint, not Predict's output.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumClasses;
+
     private readonly PANNsModelOptions _options;
     private readonly bool _useNativeMode;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -569,20 +579,11 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         finally { SetTrainingMode(false); }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Helpers

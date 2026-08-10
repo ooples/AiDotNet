@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -501,7 +501,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var inputSize = inputShape[0];
         var rbmOutputSizes = Layers
             .Where(l => l is RBMLayer<T>)
-            .Select(l => l.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0])
+            // Metadata reports geometry, it does not demand it; an unresolved axis is reported as
+            // LayerShape.Dynamic (-1) rather than throwing out of a diagnostic call.
+            .Select(l => l.GetOutputLayerShape()[0])
             .ToList();
 
         _layerSizes = [inputSize, .. rbmOutputSizes];
@@ -909,68 +911,43 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Updates the parameters of the DBM with the given vector of parameter values.
+    /// Declares the contrastive-divergence weight and bias tensors, which live outside
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
     /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
     /// <remarks>
-    /// This method updates all the parameters of the DBM (weights and biases) from a single vector.
-    /// It expects the parameters to be arranged in the same order as they are returned by GetParameters.
+    /// <para>
+    /// A DBM carries its parameters in one of two places. Trained supervised, it builds
+    /// <c>Layers</c> and the base walk finds everything. Trained by contrastive divergence it has no
+    /// layers at all and holds <c>_layerWeights</c> and <c>_layerBiases</c> directly, which is what
+    /// this declares -- interleaved weight-then-bias per level, the order the old GetParameters
+    /// concatenated and therefore the order existing checkpoints are written in.
+    /// </para>
+    /// <para>
+    /// The guard is what stops the two modes double-counting: with layers present those same
+    /// weights are already reachable through them.
+    /// </para>
+    /// <para>
+    /// This replaces three overrides that disagreed with each other about which store was
+    /// authoritative. ParameterCount and GetParameters branched on <c>Layers.Count</c>;
+    /// UpdateParameters did NOT -- it always wrote the CD store, so in supervised mode it wrote
+    /// weights nothing would read. And there was no SetParameters override at all, so the path
+    /// serialization actually calls walked only <c>Layers</c>: in CD mode that is empty, and a
+    /// restore silently discarded the entire model while the count and the vector both reported
+    /// the full size. Declaring the tensors once makes count, vector and restore read the same
+    /// store in the same order, in both modes.
+    /// </para>
     /// </remarks>
-    /// <inheritdoc/>
-    public override long ParameterCount
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        get
-        {
-            // When using Layers-based forward/backward (supervised), use Layers parameters.
-            // When using CD training (_layerWeights), use internal parameter store.
-            if (Layers.Count > 0)
-                return (int)Layers.Sum(l => l.ParameterCount);
-
-            int count = 0;
-            for (int i = 0; i < _layerWeights.Count; i++)
-            {
-                count += _layerWeights[i].Length + _layerBiases[i].Length;
-            }
-            return count;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // When using Layers-based forward/backward (supervised), delegate to base.
         if (Layers.Count > 0)
-            return base.GetParameters();
-
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        for (int i = 0; i < _layerWeights.Count; i++)
         {
-            var weightVec = _layerWeights[i].ToVector();
-            for (int j = 0; j < weightVec.Length; j++)
-                parameters[index++] = weightVec[j];
-
-            var biasVec = _layerBiases[i].ToVector();
-            for (int j = 0; j < biasVec.Length; j++)
-                parameters[index++] = biasVec[j];
+            yield break;
         }
-        return parameters;
-    }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
         for (int i = 0; i < _layerWeights.Count; i++)
         {
-            int weightCount = _layerWeights[i].Length;
-            var weightVector = parameters.GetSubVector(index, weightCount);
-            _layerWeights[i] = new Tensor<T>(_layerWeights[i]._shape, weightVector);
-            index += weightCount;
-
-            int biasCount = _layerBiases[i].Length;
-            var biasVector = parameters.GetSubVector(index, biasCount);
-            _layerBiases[i] = new Tensor<T>(_layerBiases[i]._shape, biasVector);
-            index += biasCount;
+            yield return _layerWeights[i];
+            yield return _layerBiases[i];
         }
     }
 

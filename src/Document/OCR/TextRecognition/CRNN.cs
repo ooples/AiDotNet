@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -95,6 +95,13 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
     /// <inheritdoc/>
     public string SupportedCharacters => _charset;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced: the CTC head builds <c>[MaxSequenceLength, _charset.Length + 1]</c>, the +1 being the
+    /// CTC blank.
+    /// </remarks>
+    protected override int OutputClassCount => _charset.Length + 1;
 
     /// <inheritdoc/>
     public new int MaxSequenceLength => base.MaxSequenceLength;

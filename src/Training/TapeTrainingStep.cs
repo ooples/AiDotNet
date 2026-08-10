@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -113,6 +113,11 @@ public static class TapeTrainingStep<T>
             }
             try
             {
+                // ParameterCount is both non-materializing and CACHED. Routing this through a
+                // separate uncached walk instead cost a full subtree traversal per layer, on every
+                // Dispose and every CollectTrainableLayers -- quadratic over the layer graph, and it
+                // is what pushed the parameter-count contract sweep from 12 minutes past its
+                // 30-minute limit while leaving the layer-only sweep unchanged at 3 seconds.
                 hash ^= (ulong)layer.ParameterCount;
                 hash *= FnvPrime;
             }

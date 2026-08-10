@@ -338,44 +338,7 @@ public class TLearner<T> : CausalModelBase<T>
         return result;
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (_weightsTreated is null || _weightsControl is null)
-            return new Vector<T>(2) { [0] = _biasTreated, [1] = _biasControl };
 
-        int p = _weightsTreated.Length;
-        var parameters = new Vector<T>(2 + 2 * p);
-        parameters[0] = _biasTreated;
-        parameters[1] = _biasControl;
-        for (int i = 0; i < p; i++)
-        {
-            parameters[2 + i] = _weightsTreated[i];
-            parameters[2 + p + i] = _weightsControl[i];
-        }
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length < 2) return;
-        _biasTreated = parameters[0];
-        _biasControl = parameters[1];
-
-        int remaining = parameters.Length - 2;
-        if (remaining > 0 && remaining % 2 == 0)
-        {
-            int p = remaining / 2;
-            _weightsTreated = new Vector<T>(p);
-            _weightsControl = new Vector<T>(p);
-            for (int i = 0; i < p; i++)
-            {
-                _weightsTreated[i] = parameters[2 + i];
-                _weightsControl[i] = parameters[2 + p + i];
-            }
-        }
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
@@ -433,12 +396,28 @@ public class TLearner<T> : CausalModelBase<T>
             for (int i = 0; i < weightsTreatedArr.Count; i++)
                 _weightsTreated[i] = NumOps.FromDouble(weightsTreatedArr[i].ToObject<double>());
         }
-
         if (modelDataObj["WeightsControl"] is Newtonsoft.Json.Linq.JArray weightsControlArr)
         {
             _weightsControl = new Vector<T>(weightsControlArr.Count);
             for (int i = 0; i < weightsControlArr.Count; i++)
                 _weightsControl[i] = NumOps.FromDouble(weightsControlArr[i].ToObject<double>());
+        }
+
+        // base.LoadAdditionalModelData restored IsFitted. Persisted state that claims to be fitted
+        // but omits or truncates either weight array leaves that vector at length zero, and
+        // PredictTreated / PredictControl / EstimateTreatmentEffect then index it once per feature
+        // and throw from deep inside prediction. Reject it here, where the message can say what is
+        // actually wrong with the file.
+        if (IsFitted)
+        {
+            if (_weightsTreated.Length != NumFeatures || _weightsControl.Length != NumFeatures)
+            {
+                throw new InvalidOperationException(
+                    $"Serialized {nameof(TLearner<T>)} is marked fitted but its weight vectors do not "
+                    + $"match its {NumFeatures} features: WeightsTreated has {_weightsTreated.Length} "
+                    + $"and WeightsControl has {_weightsControl.Length}. The model data is incomplete "
+                    + $"or was written by an incompatible version.");
+            }
         }
     }
 }

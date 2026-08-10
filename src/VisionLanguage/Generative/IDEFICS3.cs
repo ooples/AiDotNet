@@ -290,7 +290,6 @@ public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

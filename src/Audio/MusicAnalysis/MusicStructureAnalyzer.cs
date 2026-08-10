@@ -43,6 +43,15 @@ namespace AiDotNet.Audio.MusicAnalysis;
     [ResearchPaper("Music Structure Analysis: A Survey", "https://doi.org/10.1007/978-3-319-25226-1_12")]
 public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMusicStructureAnalyzerLayers emits is the section-segmentation head
+    /// <c>DenseLayer&lt;T&gt;(numSections)</c>, wired from <c>_options.NumSections</c> (8). A
+    /// structural class count; the HiddenDim projection just before it is not the output width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumSections;
+
     #region Fields
 
     private readonly MusicStructureAnalyzerOptions _options;
@@ -232,12 +241,11 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

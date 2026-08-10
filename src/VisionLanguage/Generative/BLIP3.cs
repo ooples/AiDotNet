@@ -313,7 +313,6 @@ public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

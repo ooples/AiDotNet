@@ -82,19 +82,31 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // For each pair (i,j) and lag l, compute lagged correlation
         // skeleton[i,j] = max over lags of |lagged_corr(i→j)|
         var skeleton = new Matrix<T>(d, d);
+        // The ARGMAX is kept alongside the max. Phase 1 already scans every lag for every ordered
+        // pair; discarding which lag won meant Phase 2 and the orientation step each rebuilt the same
+        // argmax from scratch. ComputeLaggedCorrelation is O(n) per call, so that tripled the
+        // dominant cost -- and left three loops that had to stay in step, where an edit to one would
+        // silently desynchronize the lag used for the independence test from the lag used for the
+        // edge weight.
+        var bestLagOf = new int[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 T maxCorr = NumOps.Zero;
+                int argMaxLag = 1;
                 for (int lag = 1; lag <= MaxLag; lag++)
                 {
                     T lagCorr = ComputeLaggedCorrelation(data, i, j, lag, n);
                     T absCorr = NumOps.Abs(lagCorr);
                     if (NumOps.GreaterThan(absCorr, maxCorr))
+                    {
                         maxCorr = absCorr;
+                        argMaxLag = lag;
+                    }
                 }
                 skeleton[i, j] = maxCorr;
+                bestLagOf[i, j] = argMaxLag;
             }
 
         // Phase 2: Conditional independence tests — remove edges where
@@ -106,17 +118,7 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (i == j) continue;
                 if (!NumOps.GreaterThan(skeleton[i, j], threshold)) continue;
 
-                int bestLag = 1;
-                T bestLagCorrelation = NumOps.Zero;
-                for (int lag = 1; lag <= MaxLag; lag++)
-                {
-                    T correlation = NumOps.Abs(ComputeLaggedCorrelation(data, i, j, lag, n));
-                    if (NumOps.GreaterThan(correlation, bestLagCorrelation))
-                    {
-                        bestLagCorrelation = correlation;
-                        bestLag = lag;
-                    }
-                }
+                int bestLag = bestLagOf[i, j];
 
                 // Test if i→j survives conditioning on each other variable's lags.
                 // Each candidate conditioning variable k that produces a CONCLUSIVE
@@ -147,21 +149,11 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (survives)
                 {
                     // Temporal orientation: determine direction using best lag
-                    T bestItoJ = NumOps.Zero;
-                    T bestJtoI = NumOps.Zero;
-                    int bestLagItoJ = 1;
-                    for (int lag = 1; lag <= MaxLag; lag++)
-                    {
-                        T signedCorrIJ = ComputeLaggedCorrelation(data, i, j, lag, n);
-                        T corrIJ = NumOps.Abs(signedCorrIJ);
-                        T corrJI = NumOps.Abs(ComputeLaggedCorrelation(data, j, i, lag, n));
-                        if (NumOps.GreaterThan(corrIJ, bestItoJ))
-                        {
-                            bestItoJ = corrIJ;
-                            bestLagItoJ = lag;
-                        }
-                        if (NumOps.GreaterThan(corrJI, bestJtoI)) bestJtoI = corrJI;
-                    }
+                    // Both maxima and the winning lag come straight from Phase 1: bestItoJ is
+                    // skeleton[i, j], bestJtoI is skeleton[j, i], and the argmax is bestLagOf[i, j].
+                    T bestItoJ = skeleton[i, j];
+                    T bestJtoI = skeleton[j, i];
+                    int bestLagItoJ = bestLagOf[i, j];
 
                     // Direction with stronger lagged correlation wins.
                     // When equal (deterministic data), use asymmetric cov ratio.

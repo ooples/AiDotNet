@@ -874,23 +874,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         };
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _inputProjection.Length + _decoderStartToken.Length +
-                       _outputProjection.Length + _outputBias.Length;
-
-            foreach (var layer in _encoderLayers)
-                count += (int)layer.ParameterCount;
-            foreach (var layer in _distillingLayers)
-                count += (int)layer.ParameterCount;
-            foreach (var layer in _decoderLayers)
-                count += (int)layer.ParameterCount;
-
-            return count;
-        }
-    }
     /// <summary>
     /// Creates a new instance of the Informer model.
     /// </summary>
@@ -1087,7 +1070,21 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 /// <summary>
 /// Tensor-based encoder layer for Informer with ProbSparse attention.
 /// </summary>
-internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1, in equals out, and the declaration is deliberately narrow. This layer holds parameters
+// only - its ForwardTraced throws, because Informer runs the encoder at the model level
+// (InformerModel.ForwardBatch, on a flattened [B*S, d]). The one shape statement the layer makes
+// about ITSELF is its constructor, `base(new[] { embeddingDim }, new[] { embeddingDim })`: a
+// per-position width in and the same width out. That is the pre-norm + residual identity every
+// transformer encoder block has, and ForwardBatch does not contradict it - the encoder stack carries
+// `d` through unchanged; only the DISTILLING layers between blocks change a length, and they are a
+// separate type.
+//
+// No hand-written OutputAxesFor: with matching layouts the generator derives Same(Features), which
+// is the relation above. The sequence axis is deliberately NOT declared - this layer never sees one.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
 
     private readonly int _embeddingDim;
@@ -1096,7 +1093,7 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     private readonly int _sparsityFactor;
 
     // Multi-head attention weights (Tensor-based)
-    private readonly Tensor<T> _queryProj;
+    private  Tensor<T> _queryProj;
     internal Tensor<T> GetQueryProjection() => _queryProj;
     internal Tensor<T> GetKeyProjection() => _keyProj;
     internal Tensor<T> GetValueProjection() => _valueProj;
@@ -1109,48 +1106,30 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     internal Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
     internal Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
     internal Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
-    private readonly Tensor<T> _keyProj;
-    private readonly Tensor<T> _valueProj;
-    private readonly Tensor<T> _outputProj;
+    private  Tensor<T> _keyProj;
+    private  Tensor<T> _valueProj;
+    private  Tensor<T> _outputProj;
 
     // Feed-forward network (Tensor-based)
-    private readonly Tensor<T> _ffn1;
-    private readonly Tensor<T> _ffn1Bias;
-    private readonly Tensor<T> _ffn2;
-    private readonly Tensor<T> _ffn2Bias;
+    private  Tensor<T> _ffn1;
+    private  Tensor<T> _ffn1Bias;
+    private  Tensor<T> _ffn2;
+    private  Tensor<T> _ffn2Bias;
 
     // Layer normalization parameters (Tensor-based)
-    private readonly Tensor<T> _layerNorm1Gamma;
-    private readonly Tensor<T> _layerNorm1Beta;
-    private readonly Tensor<T> _layerNorm2Gamma;
-    private readonly Tensor<T> _layerNorm2Beta;
-
-    public override long ParameterCount =>
-        _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
-        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
+    private  Tensor<T> _layerNorm1Gamma;
+    private  Tensor<T> _layerNorm1Beta;
+    private  Tensor<T> _layerNorm2Gamma;
+    private  Tensor<T> _layerNorm2Beta;
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new Tensor<T>[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
-
-    /// <summary>Construction state: the 'dropoutRate' the layer was built with.</summary>
-    private readonly double _dropoutRate;
 
     public InformerEncoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
     {
-        _dropoutRate = dropoutRate;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
@@ -1273,16 +1252,71 @@ internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.Lay
 /// <summary>
 /// Tensor-based distilling convolution layer for sequence compression.
 /// </summary>
-internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 3 [Batch, Time, Features], NOT the rank-1 shapes this type's own constructor passes to base.
+// Like the encoder and decoder layers in this file, DistillingConvTensor holds parameters only and its
+// ForwardTraced throws - Informer runs everything at the model level. But unlike them, this layer's
+// whole purpose is to CHANGE a length, and a rank-1 [Features] declaration cannot say that: it has no
+// sequence axis to compress, so it would report "shape preserved" for the one layer in the stack that
+// does not preserve it.
+//
+// The forward that genuinely handles this layer is InformerModel.DistillBatch, which reshapes to
+// exactly this rank - `var x = Engine.Reshape(xFlat, new[] { batch, seq, embDim })` - runs the
+// depthwise kernel-3 conv and ELU (all length-preserving, via zero-padded neighbour shifts), then
+// pools with `int outLen = (seq + factor - 1) / factor;`. InformerModel.ForwardBatch applies the same
+// law to its bookkeeping: `currentSeqLen = (currentSeqLen + DistillingFactor - 1) / DistillingFactor`.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// <c>outLen = (seq + factor - 1) / factor</c> is a CEILING division, and the sliding-window form
+    /// states it exactly: <c>Window(Time, kernel: 1, stride: factor, padding: 0)</c> resolves to
+    /// <c>floor((seq - 1) / factor) + 1</c>, which equals <c>ceil(seq / factor)</c> for every
+    /// <c>seq &gt;= 1</c>. Kernel 1 rather than 3 because the kernel-3 convolution DistillBatch runs
+    /// first is length-preserving - it builds <c>x[t-1]</c> and <c>x[t+1]</c> by zero-padded shifts and
+    /// adds them, so no length is lost there and only the stride-<c>factor</c> pool changes the extent.
+    /// </para>
+    /// <para>
+    /// The tail is padded, not dropped: when <c>outLen * factor != seq</c> DistillBatch repeats the
+    /// last position up to <c>padded</c> before grouping, which is why this rounds UP where an ordinary
+    /// pooling window rounds down. <c>Scaled(Time, 1, factor)</c> would be wrong twice over - it
+    /// truncates, and it declines outright on a sequence the factor does not divide evenly.
+    /// </para>
+    /// <para>
+    /// The feature axis is <see cref="AxisRelation.Same"/>: the conv is depthwise (a per-channel
+    /// <c>[embeddingDim, 3]</c> kernel applied by broadcast multiply) and the pool reduces axis 2 of
+    /// <c>[batch, outLen, factor, embDim]</c>, so the width is carried through untouched. Not
+    /// <c>Fixed(_embeddingDim)</c> - nothing here checks the incoming width against that field.
+    /// </para>
+    /// <para>
+    /// DistillBatch's <c>if (seq &lt; 2) return (xFlat, seq)</c> early-out agrees with this rather than
+    /// contradicting it: at <c>seq == 1</c> the window also resolves to 1.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _distillingFactor <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.Window(TensorAxis.Time, kernel: 1, stride: _distillingFactor, padding: 0)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+        };
+    }
 
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
 
-    private readonly Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
-    private readonly Tensor<T> _convBias;
-
-    public override long ParameterCount => _convWeights.Length + _convBias.Length;
+    private  Tensor<T> _convWeights;  // [embeddingDim, 3] for kernel size 3
+    private  Tensor<T> _convBias;
 
     // Tape accessors so the IEngine forward can run the distilling conv/pool as tracked ops
     // (the [embDim,3] depthwise kernel + [embDim] bias + the stride factor).
@@ -1292,24 +1326,12 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        for (int i = 0; i < _convWeights.Length; i++) p.Add(_convWeights[i]);
-        for (int i = 0; i < _convBias.Length; i++) p.Add(_convBias[i]);
-        return new Vector<T>(p.ToArray());
-    }
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
-
-    /// <summary>Construction state: the 'inputSeqLen' the layer was built with.</summary>
-    private readonly int _inputSeqLen;
 
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
     {
-        _inputSeqLen = inputSeqLen;
         _embeddingDim = embeddingDim;
         _distillingFactor = distillingFactor;
 
@@ -1375,38 +1397,82 @@ internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase
 /// <summary>
 /// Tensor-based decoder layer for Informer with cross-attention.
 /// </summary>
-internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Two input ports - the decoder stream and the encoder memory - which the constructor already declares
+// (base(new int[][] { [embeddingDim], [embeddingDim] }, [embeddingDim])). A decoder layer returns its
+// TARGET stream's shape: cross-attention reads the memory but is sized by the queries, and the
+// residual adds pin every axis. Declared on port 0 for exactly that reason.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IMultiPortShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Single-input form declines: this layer has two ports, and <c>ForwardTraced</c> throws
+    /// <c>NotSupportedException</c> because the real forward is <c>InformerModel.ForwardBatch</c>.
+    /// <see cref="OutputAxesForPorts"/> is the contract.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// The output is the decoder stream unchanged in shape. Self-attention, cross-attention and the
+    /// FFN each end in a residual add against the stream, so nothing can resize without breaking the
+    /// add, and the memory on port 1 contributes keys and values rather than extent.
+    /// </para>
+    /// <para>
+    /// This layer was previously undeclared as "multi-input, rule 5". The rule was about
+    /// <see cref="OutputAxesFor(int)"/> being unable to SEE a second input - not about this
+    /// relation being hard. Once the contract could be asked about several ports, the answer was
+    /// simply that port 1 does not affect the shape.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesForPorts(IReadOnlyList<int> inputRanks)
+    {
+        if (inputRanks is null || inputRanks.Count == 0) return null;
+        if (inputRanks[0] != 3) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+        };
+    }
+
 
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
 
     // Self-attention weights
-    private readonly Tensor<T> _selfQueryProj;
-    private readonly Tensor<T> _selfKeyProj;
-    private readonly Tensor<T> _selfValueProj;
-    private readonly Tensor<T> _selfOutputProj;
+    private  Tensor<T> _selfQueryProj;
+    private  Tensor<T> _selfKeyProj;
+    private  Tensor<T> _selfValueProj;
+    private  Tensor<T> _selfOutputProj;
 
     // Cross-attention weights
-    private readonly Tensor<T> _crossQueryProj;
-    private readonly Tensor<T> _crossKeyProj;
-    private readonly Tensor<T> _crossValueProj;
-    private readonly Tensor<T> _crossOutputProj;
+    private  Tensor<T> _crossQueryProj;
+    private  Tensor<T> _crossKeyProj;
+    private  Tensor<T> _crossValueProj;
+    private  Tensor<T> _crossOutputProj;
 
     // FFN
-    private readonly Tensor<T> _ffn1;
-    private readonly Tensor<T> _ffn1Bias;
-    private readonly Tensor<T> _ffn2;
-    private readonly Tensor<T> _ffn2Bias;
+    private  Tensor<T> _ffn1;
+    private  Tensor<T> _ffn1Bias;
+    private  Tensor<T> _ffn2;
+    private  Tensor<T> _ffn2Bias;
 
     // Layer norms
-    private readonly Tensor<T> _layerNorm1Gamma;
-    private readonly Tensor<T> _layerNorm1Beta;
-    private readonly Tensor<T> _layerNorm2Gamma;
-    private readonly Tensor<T> _layerNorm2Beta;
-    private readonly Tensor<T> _layerNorm3Gamma;
-    private readonly Tensor<T> _layerNorm3Beta;
+    private  Tensor<T> _layerNorm1Gamma;
+    private  Tensor<T> _layerNorm1Beta;
+    private  Tensor<T> _layerNorm2Gamma;
+    private  Tensor<T> _layerNorm2Beta;
+    private  Tensor<T> _layerNorm3Gamma;
+    private  Tensor<T> _layerNorm3Beta;
     internal Tensor<T> GetSelfQueryProjection() => _selfQueryProj;
     internal Tensor<T> GetSelfKeyProjection() => _selfKeyProj;
     internal Tensor<T> GetSelfValueProjection() => _selfValueProj;
@@ -1426,39 +1492,14 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     internal Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
     internal Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
 
-    public override long ParameterCount =>
-        _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +
-        _crossQueryProj.Length + _crossKeyProj.Length + _crossValueProj.Length + _crossOutputProj.Length +
-        _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
-        _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2 + _layerNorm3Gamma.Length * 2;
-
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        foreach (var t in new Tensor<T>[] { _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj,
-            _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj,
-            _ffn1, _ffn1Bias, _ffn2, _ffn2Bias,
-            _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta, _layerNorm3Gamma, _layerNorm3Beta })
-            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
-        return new Vector<T>(p.ToArray());
-    }
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
-
-    /// <summary>Construction state: the 'sparsityFactor' the layer was built with.</summary>
-    private readonly int _sparsityFactor;
-
-    /// <summary>Construction state: the 'dropoutRate' the layer was built with.</summary>
-    private readonly double _dropoutRate;
 
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim })
     {
-        _dropoutRate = dropoutRate;
-        _sparsityFactor = sparsityFactor;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;

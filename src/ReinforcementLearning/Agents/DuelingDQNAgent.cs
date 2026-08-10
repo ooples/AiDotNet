@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -66,6 +66,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
     Authors = "Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas, N.")]
 public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The online dueling Q-network only. Its target network is a periodically-synced copy, and the hand-written surface excluded it -- including it now would change the vector length and invalidate every existing checkpoint. The flatten/unflatten plumbing that used to live here moved onto DuelingNetwork itself, which implements IParameterSource over the SAME shared -> value -> advantage layer order its GetFlattenedParameters always used.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_qNetwork);
+    }
     private DuelingDQNOptions<T> _options;
 
     /// <inheritdoc/>
@@ -213,7 +220,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // Backward pass through dueling architecture
-            var gradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
+            var gradients = LossFunction.ComputeGradient(currentQValues, targetQValues);
 
             // Update parameters
             _qNetwork.UpdateWeights(gradients, LearningRate);
@@ -298,26 +305,6 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var flatParams = _qNetwork.GetFlattenedParameters();
-        var vector = new Vector<T>(flatParams.Rows);
-        for (int i = 0; i < flatParams.Rows; i++)
-            vector[i] = flatParams[i, 0];
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _qNetwork.EnsureInitialized();
-        var matrix = new Matrix<T>(parameters.Length, 1);
-        for (int i = 0; i < parameters.Length; i++)
-            matrix[i, 0] = parameters[i];
-        _qNetwork.SetFlattenedParameters(matrix);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clonedOptions = new DuelingDQNOptions<T>
@@ -345,40 +332,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
         return clone;
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        throw new NotSupportedException(
-            "ComputeGradients is not supported for DuelingDQNAgent; " +
-            "use the agent's internal Train() loop or expose layer gradients. " +
-            "DuelingNetwork stores gradients internally but does not expose them.");
-    }
 
-    /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var flatParams = _qNetwork.GetFlattenedParameters();
-        var currentParams = new Vector<T>(flatParams.Rows);
-        for (int i = 0; i < flatParams.Rows; i++)
-            currentParams[i] = flatParams[i, 0];
-
-        var newParams = new Vector<T>(currentParams.Length);
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var gradValue = (i < gradients.Length) ? gradients[i] : NumOps.Zero;
-            var update = NumOps.Multiply(learningRate, gradValue);
-            newParams[i] = NumOps.Subtract(currentParams[i], update);
-        }
-
-        var matrix = new Matrix<T>(newParams.Length, 1);
-        for (int i = 0; i < newParams.Length; i++)
-            matrix[i, 0] = newParams[i];
-        _qNetwork.SetFlattenedParameters(matrix);
-    }
 
     // Helper methods
     private void CopyNetworkWeights(DuelingNetwork<T> source, DuelingNetwork<T> target)
@@ -431,7 +385,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
 /// <summary>
 /// Custom dueling network architecture that separates value and advantage streams.
 /// </summary>
-internal class DuelingNetwork<T>
+internal class DuelingNetwork<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly List<DenseLayer<T>> _sharedLayers;
@@ -734,6 +688,50 @@ internal class DuelingNetwork<T>
         }
 
         return result;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Sized from the layers rather than from <see cref="GetFlattenedParameters"/>, which would
+    /// have to build the whole flattened matrix just to report its height.
+    /// </remarks>
+    public long ParameterCount
+    {
+        get
+        {
+            EnsureInitialized();
+            long total = 0;
+            foreach (var layer in _sharedLayers) total += layer.ParameterCount;
+            foreach (var layer in _valueLayers) total += layer.ParameterCount;
+            foreach (var layer in _advantageLayers) total += layer.ParameterCount;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Delegates to <see cref="GetFlattenedParameters"/> so the shared -> value -> advantage order
+    /// this network has always serialized is preserved exactly. This is the plumbing DuelingDQNAgent
+    /// used to hand-write; it belongs on the network that owns the layers, which is what lets the
+    /// agent simply register this component and inherit all three surfaces.
+    /// </remarks>
+    public Vector<T> GetParameters()
+    {
+        EnsureInitialized();
+        var flat = GetFlattenedParameters();
+        var result = new Vector<T>(flat.Rows);
+        for (int i = 0; i < flat.Rows; i++) result[i] = flat[i, 0];
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        EnsureInitialized();
+        var matrix = new Matrix<T>(parameters.Length, 1);
+        for (int i = 0; i < parameters.Length; i++) matrix[i, 0] = parameters[i];
+        SetFlattenedParameters(matrix);
     }
 
     public Matrix<T> GetFlattenedParameters()

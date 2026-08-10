@@ -573,7 +573,6 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         TrainWithTape(input, expectedOutput, _optimizer);
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // SET each layer's parameters from the flat vector (the contract of this method — it is how
@@ -598,7 +597,6 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // (Clone_ShouldProduceIdenticalOutput).
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

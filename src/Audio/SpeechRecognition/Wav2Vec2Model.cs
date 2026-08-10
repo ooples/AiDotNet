@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -467,6 +467,23 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int featureEncoderCount = 9;
         int transformerCount = _numTransformerLayers;
 
+        // CHECKED BEFORE DISTRIBUTING, because every loop below is bounded by `i < Layers.Count` and
+        // therefore cannot fail. With too few layers each loop simply stops early: _transformerLayers
+        // ends up short, _posConv stays null, and _ctcProjection is taken from Layers[^1] -- which is
+        // then a transformer block rather than the projection. Nothing throws. The model runs and
+        // produces logits from a stack that is missing pieces, and the only visible symptom is poor
+        // recognition. The expected count is the feature encoder, the positional convolution, the
+        // transformer blocks, and the CTC projection.
+        int expectedLayerCount = featureEncoderCount + 1 + transformerCount + 1;
+        if (Layers.Count != expectedLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"Wav2Vec2 native mode expects exactly {expectedLayerCount} layers " +
+                $"({featureEncoderCount} feature encoder + 1 positional conv + {transformerCount} " +
+                $"transformer + 1 CTC projection) but found {Layers.Count}. Distributing them anyway " +
+                "would bind a partial stack and degrade recognition with no error.");
+        }
+
         for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
             _featureEncoderLayers.Add(Layers[i]);
 
@@ -768,25 +785,10 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return activations;
     }
 
-    /// <summary>
-    /// Updates model parameters by applying gradient descent.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // NeuralNetworkBase.UpdateParameters contract: caller passes NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The
-        // previous body computed `current − lr · input` then SetParameters,
-        // which on top of Adam's own update produced a double-step that
-        // destabilised training. Forward straight to SetParameters per the
-        // contract — Adam already produced the correct new values.
-        SetParameters(parameters);
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on a single batch.
     /// </summary>

@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InternImage: Exploring Large-Scale Vision Foundation Models with Deformable Convolutions", "https://arxiv.org/abs/2211.05778", Year = 2023, Authors = "Wang et al.")]
-public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
+public class InternImage<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly InternImageOptions _options;
 
@@ -77,39 +77,23 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
+    // Only InternImage's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from SemanticSegmentationBase -> SegmentationModelBase.
     private readonly InternImageModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    /// <summary>
-    /// Gets whether this InternImage instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode (trainable) and <c>false</c>
-    /// in ONNX mode (inference only). To fine-tune on your data, use the native constructor.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
+    // same thing, so re-declaring them here would only create two sources of one fact.
     internal bool UseNativeMode => _useNativeMode;
     internal InternImageModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -143,19 +127,31 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         InternImageModelSize modelSize = InternImageModelSize.Tiny,
         double dropRate = 0.1,
         InternImageOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, optimizer, lossFunction, numClasses)
     {
         _options = options ?? new InternImageOptions();
         Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = dropRate;
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates InternImage's paper-specified AdamW default when the caller supplies no optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the exact hyper-parameters the constructor used to inline
+    /// (<c>optimizer ?? new AdamWOptimizer&lt;...&gt;(this, ...)</c>). They live here because a
+    /// base-constructor argument cannot reference <c>this</c>; the base resolves this lazily after
+    /// construction, which is what makes the default expressible at all.
+    /// </para>
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -164,11 +160,6 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
                 EnableGradientClipping = true,
                 MaxGradientNorm = 5.0,
             });
-
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-
-        InitializeLayers();
-    }
 
     /// <summary>
     /// Initializes a new instance of InternImage in ONNX (inference-only) mode.
@@ -193,36 +184,14 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         InternImageModelSize modelSize = InternImageModelSize.Tiny,
         InternImageOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, onnxModelPath, numClasses)
     {
         _options = options ?? new InternImageOptions();
         Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"InternImage ONNX model not found: {onnxModelPath}");
-
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _modelSize = modelSize;
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-
-        try
-        {
-            _onnxSession = new InferenceSession(onnxModelPath);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"Failed to load InternImage ONNX model: {ex.Message}", ex);
-        }
 
         InitializeLayers();
     }
@@ -270,7 +239,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -296,7 +265,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         };
     }
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -312,7 +281,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
@@ -341,23 +310,6 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
         var result = new Tensor<T>(outputShape, new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
-        return result;
-    }
-
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++)
-            newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
     }
 
@@ -407,33 +359,8 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat vector.
-    /// </summary>
-    /// <param name="parameters">Flat parameter vector ordered by layer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values, used during optimization
-    /// and when loading saved models.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var newParams = new Vector<T>(count);
-                for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
-                layer.UpdateParameters(newParams);
-                offset += count;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this InternImage model.
     /// </summary>
@@ -522,42 +449,6 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
             ? new InternImage<T>(Architecture, null, LossFunction, _numClasses, _modelSize, _dropRate, _options)
             : new InternImage<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
     }
-
-    /// <summary>
-    /// Releases managed resources including the ONNX session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory and file handles. Use a <c>using</c> statement:
-    /// <c>using var model = new InternImage&lt;float&gt;(...);</c>
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    {
-        if (!_disposed)
-        {
-            if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; }
-            _disposed = true;
-        }
-        base.Dispose(disposing);
-    }
-
-    #endregion
-
-    #region ISemanticSegmentation Implementation
-
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-
-    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
-
-    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
-        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

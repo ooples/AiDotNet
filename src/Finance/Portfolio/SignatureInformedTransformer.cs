@@ -125,7 +125,9 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         SignatureInformedTransformerOptions<T> options)
     {
         Guard.NotNull(options);
-        options.Validate();
+
+        // Validate() is NOT repeated here. ResolveArchitecture, the only caller, has already run it,
+        // and GraphAttentionPortfolio validates once at the same point. One convention across both.
 
         // The network reads a [lookback, assets] price window and scores each asset, so the input is
         // two-dimensional and the output is one score per asset. The softmax in Objective.Weights then
@@ -182,6 +184,17 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         if (scores.Length > _options.NumAssets)
             scores = scores.Slice(0, _options.NumAssets);
 
+        // A SHORT vector was previously passed through unchanged, producing weights for fewer assets
+        // than the universe holds. Callers index weights by asset, so every entry from the first
+        // missing one onward referred to the wrong asset.
+        if (scores.Length < _options.NumAssets)
+        {
+            throw new InvalidOperationException(
+                $"The network produced {scores.Length} scores for a universe of "
+                + $"{_options.NumAssets} assets. Weights cannot be built from fewer scores than "
+                + "assets; check that the architecture's output head matches NumAssets.");
+        }
+
         return Objective.Weights(scores, _options.Temperature);
     }
 
@@ -234,7 +247,6 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         return Objective.ConditionalValueAtRisk(losses);
     }
 
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         Guard.NotNull(parameters);
@@ -247,7 +259,6 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
             offset += layerParams.Length;
         }
     }
-
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
@@ -272,6 +283,15 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
             TransactionCostBasisPoints = _options.TransactionCostBasisPoints,
         };
 
-        return new SignatureInformedTransformer<T>(copy);
+        // LossFunction always carries across. Architecture carries across ONLY when it holds no
+        // layers: InitializeLayers adds Architecture.Layers into Layers BY REFERENCE, and ILayer<T>
+        // has no Clone, so a layer-carrying architecture would give the clone the SAME layer objects
+        // as its source and training either would mutate both. See the matching note in
+        // GraphAttentionPortfolio.CreateNewInstance.
+        bool architectureCarriesLayers = Architecture.Layers is not null && Architecture.Layers.Count > 0;
+
+        return architectureCarriesLayers
+            ? new SignatureInformedTransformer<T>(copy, null, LossFunction)
+            : new SignatureInformedTransformer<T>(copy, Architecture, LossFunction);
     }
 }

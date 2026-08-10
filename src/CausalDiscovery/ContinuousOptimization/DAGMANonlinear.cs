@@ -178,56 +178,14 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         _lastLoss = finalLoss;
         _lastH = ComputeLogDetConstraintFromA(A, _sValues[^1], d).H;
 
-        return ProjectToDag(ThresholdAndClean(A, WThreshold), d);
-    }
-
-    /// <summary>
-    /// Enforces the DAG contract on the thresholded nonlinear adjacency. The
-    /// continuous M-matrix objective can leave tiny reciprocal residuals after
-    /// a bounded optimization run; greedily retaining strongest edges while
-    /// rejecting cycle-forming candidates removes those residual cycles without
-    /// changing the learned edge weights that survive.
-    /// </summary>
-    private Matrix<T> ProjectToDag(Matrix<T> input, int d)
-    {
-        var result = new Matrix<T>(d, d);
-        var edges = new List<(int From, int To, double Weight)>();
-        for (int from = 0; from < d; from++)
-            for (int to = 0; to < d; to++)
-                if (from != to)
-                {
-                    double weight = Math.Abs(NumOps.ToDouble(input[from, to]));
-                    if (weight > EDGE_TOLERANCE) edges.Add((from, to, weight));
-                }
-
-        edges.Sort((a, b) => b.Weight.CompareTo(a.Weight));
-        foreach (var edge in edges)
-        {
-            result[edge.From, edge.To] = input[edge.From, edge.To];
-            if (ContainsDirectedCycle(result, d))
-                result[edge.From, edge.To] = NumOps.Zero;
-        }
-        return result;
-    }
-
-    private bool ContainsDirectedCycle(Matrix<T> graph, int d)
-    {
-        var state = new int[d];
-        bool Visit(int node)
-        {
-            if (state[node] == 1) return true;
-            if (state[node] == 2) return false;
-            state[node] = 1;
-            for (int next = 0; next < d; next++)
-                if (next != node && Math.Abs(NumOps.ToDouble(graph[node, next])) > EDGE_TOLERANCE && Visit(next))
-                    return true;
-            state[node] = 2;
-            return false;
-        }
-
-        for (int node = 0; node < d; node++)
-            if (Visit(node)) return true;
-        return false;
+        // The shared base projection, not a local copy. The copy that used to live here sorted
+        // edges by magnitude with no tiebreak, and List<T>.Sort is introsort, which is not stable --
+        // two edges of equal magnitude were ordered arbitrarily, so the projected DAG could differ
+        // between runs on identical input. EnforceAcyclic breaks ties by (From, To) for exactly that
+        // reason, asks the cheaper "does `to` already reach `from`" question instead of rescanning
+        // the whole graph after every insertion, and traverses iteratively rather than recursing to
+        // depth d. NOTEARSNonlinear and NOTEARSSobolev already use it.
+        return EnforceAcyclic(ThresholdAndClean(A, WThreshold));
     }
 
     #endregion

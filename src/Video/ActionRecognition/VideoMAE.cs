@@ -887,7 +887,6 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -908,7 +907,6 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             }
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

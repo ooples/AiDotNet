@@ -37,7 +37,25 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4")]
-public partial class HyperbolicLinearLayer<T> : LayerBase<T>
+// FEATURE-LAST, like any linear map: ForwardTraced folds every leading axis into a flat batch
+// (`for (int d = 0; d < input.Rank - 1; d++) flatBatch *= input.Shape[d]`), checks only the trailing
+// axis against InputFeatures, and rebuilds the original shape with that trailing axis replaced by
+// OutputFeatures. The hyperbolic geometry is entirely a change of VALUES - the Möbius matmul lives in
+// the Poincaré ball, but the ball has OutputFeatures coordinates, so the shape rule is the ordinary one.
+// Ranks 1, 2 and 3 are all declared because ForwardTraced branches on all three by hand: rank 1 is
+// reshaped to [1, inputLen] and returned as [OutputFeatures], rank 2 passes through untouched, and the
+// general branch covers the rest. Rank 2 is the tested form ("1, 8").
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: leading axes are flattened into the batch and restored unchanged.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
 {
 
     /// <summary>
@@ -100,12 +118,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Gets the number of output features.
     /// </summary>
     public int OutputFeatures { get; }
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        (OutputFeatures * InputFeatures) + OutputFeatures;
 
     /// <summary>
     /// Gets whether this layer supports training.
@@ -179,6 +191,34 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">Input tensor with shape [inputFeatures] or [batch, inputFeatures].</param>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Hand-written because the trailing axis CHANGES; the roles alone would read as shape-preserving.
+    /// Derived from the shape rebuild at the end of <see cref="ForwardTraced"/> — the leading axes are
+    /// copied from <c>_originalInputShape</c> and only the last entry is overwritten:
+    /// <c>outputShape[_originalInputShape.Length - 1] = OutputFeatures;</c>
+    /// <c>Fixed(OutputFeatures)</c> reads the layer's own constructor argument, so a differently sized
+    /// instance reports its own width rather than a baked-in number.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputFeatures <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputFeatures));
+        OutputAxisContract Pass(TensorAxis a) => new(a, AxisRelation.Same(a));
+
+        // Ranks above three run through the same general branch, but each extra leading axis would
+        // need a DISTINCT role for a relation to refer to it, and there is no further batch-like role
+        // to give it — so those decline honestly rather than being named at random.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            _ => null,
+        };
+    }
+
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
@@ -563,58 +603,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
                 _weights[o, i] = NumOps.Subtract(_weights[o, i], NumOps.Multiply(learningRate, _weightsGradient[o, i]));
 
             _biases[o] = NumOps.Subtract(_biases[o], NumOps.Multiply(learningRate, _biasesGradient[o]));
-        }
-
-        _weightsTCache = null;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        var paramArray = new T[ParameterCount];
-        int idx = 0;
-
-        // Use Data.Span for direct access — avoids any indexer overhead
-        var wSpan = _weights.Data.Span;
-        for (int j = 0; j < wSpan.Length && idx < paramArray.Length; j++)
-            paramArray[idx++] = wSpan[j];
-
-        var bSpan = _biases.Data.Span;
-        for (int j = 0; j < bSpan.Length && idx < paramArray.Length; j++)
-            paramArray[idx++] = bSpan[j];
-
-        return new Vector<T>(paramArray);
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
-        }
-
-        int idx = 0;
-
-        // Restore weights
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                _weights[o, i] = parameters[idx++];
-            }
-        }
-
-        // Restore biases (scalar per output)
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            _biases[o] = parameters[idx++];
         }
 
         _weightsTCache = null;

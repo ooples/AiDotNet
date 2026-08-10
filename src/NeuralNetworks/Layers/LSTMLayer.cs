@@ -43,8 +43,61 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class LSTMLayer<T> : LayerBase<T>
+// RANK 2 IS [Time, Features], NOT [Batch, Features] - this layer's own ForwardTraced says so:
+// "2D input [timeSteps, features]: single batch". That is the opposite of the dense convention, and
+// getting it backwards would name the sequence axis Batch on exactly the rank the layer is tested at
+// ([LayerProperty(TestInputShape = "1, 4")]). Batch is therefore NOT marked optional on the rank-3
+// declaration: doing so would make it also claim rank 2 as [Time, Features] a second time.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Straight off <c>OnFirstForward</c>, which copies the input shape and then overwrites one entry:
+    /// <c>resolvedOutput[resolvedOutput.Length - 1] = _hiddenSize</c>. So every axis but the last is
+    /// carried through and the last becomes <c>Fixed(_hiddenSize)</c>, the constructor argument the gate
+    /// matrices are sized by.
+    /// </para>
+    /// <para>
+    /// THIS LAYER RETURNS THE WHOLE SEQUENCE, not the final state. The Time axis is <c>Same</c>, not
+    /// dropped and not fixed at 1 - the forward collects one hidden state per timestep and concatenates
+    /// them, and the shape-restoration block at the end of <c>ForwardTraced</c> writes
+    /// <c>[timeSteps, _hiddenSize]</c> for the rank-2 case. A contract that collapsed Time here would
+    /// describe a return_sequences=false LSTM, which this is not.
+    /// </para>
+    /// <para>
+    /// RANK 1 IS DELIBERATELY NOT DECLARED. A rank-1 <c>[features]</c> input is accepted, but it is
+    /// reshaped to <c>[1, 1, features]</c> and the restoration block handles only rank 2 and rank &gt; 3
+    /// - so it comes back as rank-3 <c>[1, 1, hidden]</c>. There is no single rank to declare for a case
+    /// whose input and output ranks disagree.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_hiddenSize <= 0) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_hiddenSize));
+        var time = new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time));
+
+        return inputRank switch
+        {
+            2 => new[] { time, features },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                time, features,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The size of each input vector (number of features).
     /// </summary>
@@ -672,33 +725,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>
-    /// Gets the total number of trainable parameters in this layer.
-    /// </summary>
-    /// <value>
-    /// The total number of parameters across all weight matrices and bias vectors.
-    /// For an LSTM with input size I and hidden size H, this is:
-    /// 4 * (H * I) + 4 * (H * H) + 4 * H = 4 * H * (I + H + 1)
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// The LSTM has 4 gates (forget, input, cell, output), each with:
-    /// - Input-to-hidden weights: [hiddenSize × inputSize]
-    /// - Hidden-to-hidden weights: [hiddenSize × hiddenSize]
-    /// - Biases: [hiddenSize]
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount =>
-        // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
-        // tensors are zero-sized placeholders. Reporting a real parameter count from
-        // an unresolved input width would (a) yield a negative number from
-        // 4*hidden*(-1) and (b) disagree with the actual length of GetParameters().
-        // Match what the placeholder tensors expose: zero parameters.
-        _inputSize <= 0
-            ? 0
-            : 4 * (_hiddenSize * _inputSize) +  // 4 input weight matrices
-              4 * (_hiddenSize * _hiddenSize) + // 4 hidden weight matrices
-              4 * _hiddenSize;                  // 4 bias vectors
+                  // 4 bias vectors
 
     /// <summary>
     /// Gets the forget gate input weights for weight loading.
@@ -777,7 +804,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// <param name="activation">Cell-state activation (default tanh).</param>
     /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
     public LSTMLayer(
-        int hiddenSize,
+        [LayerState] int hiddenSize,
         IActivationFunction<T>? activation = null,
         IActivationFunction<T>? recurrentActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
@@ -816,7 +843,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// <see cref="LSTMLayer{T}(int, IActivationFunction{T}?, IActivationFunction{T}?)"/>
     /// overload for the rest of the contract.
     /// </summary>
-    public LSTMLayer(int hiddenSize,
+    public LSTMLayer([LayerState] int hiddenSize,
         IVectorActivationFunction<T> vectorActivation,
         IVectorActivationFunction<T>? recurrentActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)
@@ -2345,82 +2372,6 @@ public partial class LSTMLayer<T> : LayerBase<T>
         InvalidateCpuStackedWeights();
     }
 
-    /// <summary>
-    /// Gets all trainable parameters of the LSTM layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) from the LSTM layer and combines them
-    /// into a single vector. This is useful for optimization algorithms that operate on all parameters at once,
-    /// or for saving and loading model weights in a uniform format.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learned values into a single list.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network has learned during training
-    /// - Include all weights and biases for each gate in the LSTM
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk in a simple format
-    /// - Advanced optimization techniques that need access to all parameters
-    /// - Sharing parameters between different models
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // An unresolved LSTM reports NO parameters, matching ParameterCount, which returns 0 while
-        // _inputSize is the lazy sentinel. Both surfaces now describe the same tensors at every
-        // point in the lifecycle: nothing before a forward resolves the width, the true counts
-        // after.
-        //
-        // This used to guess instead -- ResolveFromShape(new[] { _hiddenSize }), the "standard
-        // square default" of inputSize == hiddenSize -- and that guess was the defect, for three
-        // reasons. It mutated on READ: ResolveFromShape ends in EnsureInitializedFromInput, so
-        // merely asking a lazy layer for its parameters permanently pinned the wrong input width
-        // and allocated at it. Its stated justification was false: the comment promised "a later
-        // forward with a different input width re-adapts via the input-adaptation path", but
-        // LSTMLayer has no such path (GRULayer does, which is the only reason the same guess
-        // survives there -- by silently truncating or zero-padding real data, which is worse than
-        // throwing). And it CREATED the ParameterCount/GetParameters mismatch it was cited as
-        // preventing: BiaffineNER reported 9,801 parameters while this returned 1,934,601, because
-        // three BidirectionalLayers x two inner LSTMs each materialised a 200x200 square that the
-        // real forward then contradicted with its true width of 32.
-        //
-        // Do NOT "fix" the disagreement from the other side by making ParameterCount mirror the
-        // guess. That was tried: BidirectionalLayer's constructor guards on
-        // `_backwardLayer.ParameterCount > 0` before cloning, so a non-zero count fires the
-        // allocation inside the model constructor, before any forward exists, and BiaffineNER went
-        // from 3 failing tests to 26 -- every one "wIh.Shape[1] (200) must equal input feature
-        // count (32)". Removing the guess removes the trigger; agreeing with the guess keeps it.
-        if (!IsShapeResolved || _inputSize <= 0)
-        {
-            return Vector<T>.Empty();
-        }
-
-        // Resolved: the weight tensors are still zero-length until EnsureInitialized allocates them,
-        // and without this the concatenation below returns an empty vector while ParameterCount
-        // reports the full count.
-        EnsureInitialized();
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weightsFi.Data),
-            Vector<T>.FromMemory(_weightsIi.Data),
-            Vector<T>.FromMemory(_weightsCi.Data),
-            Vector<T>.FromMemory(_weightsOi.Data),
-            Vector<T>.FromMemory(_weightsFh.Data),
-            Vector<T>.FromMemory(_weightsIh.Data),
-            Vector<T>.FromMemory(_weightsCh.Data),
-            Vector<T>.FromMemory(_weightsOh.Data),
-            Vector<T>.FromMemory(_biasF.Data),
-            Vector<T>.FromMemory(_biasI.Data),
-            Vector<T>.FromMemory(_biasC.Data),
-            Vector<T>.FromMemory(_biasO.Data)
-        );
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         if (Gradients == null || Gradients.Count == 0)
@@ -2449,153 +2400,6 @@ public partial class LSTMLayer<T> : LayerBase<T>
     {
         base.ClearGradients();
         Gradients?.Clear();
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the LSTM layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights and biases) of the LSTM layer from a single vector.
-    /// It extracts the appropriate portions of the input vector for each parameter. This is useful for loading
-    /// saved model weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learned values from a single list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The method distributes values to the appropriate weights and biases
-    /// - This allows you to restore a previously saved model
-    /// 
-    /// For example, after loading a parameter vector from a file, this method
-    /// would update all the internal weights and biases of the LSTM to match
-    /// what was saved.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Accept the empty vector an unresolved layer hands out. GetParameters() reports nothing
-        // while the input width is still the lazy sentinel, so a round-trip -- and every caller
-        // that slices a flat vector by ParameterCount and passes the (zero-length) slice back --
-        // must be able to hand that back without throwing. Nothing to restore, and pinning a width
-        // from a zero-length vector is exactly the guess this layer no longer makes.
-        if (parameters.Length == 0 && (!IsShapeResolved || _inputSize <= 0))
-        {
-            return;
-        }
-
-        // The parameter vector's length is authoritative for the gate-weight layout. Re-infer
-        // _inputSize from it whenever the layer hasn't resolved a width yet OR the current
-        // _inputSize disagrees with the vector (e.g. a clone copied a stale width without
-        // allocating the matching gate weights — ooples/AiDotNet#1589: LSTM-CRF Clone tests
-        // threw "Expected 91600 parameters, but got 80400" because the clone's LSTM carried
-        // _inputSize=128 while the source params encode input=100).
-        int expectedForCurrent = _inputSize > 0
-            ? 4 * (_hiddenSize * _inputSize) + 4 * (_hiddenSize * _hiddenSize) + 4 * _hiddenSize
-            : -1;
-        if (!_isInitialized || _inputSize <= 0 || parameters.Length != expectedForCurrent)
-        {
-            // Recover by inferring _inputSize from parameters.Length. The flat layout is:
-            //   4 * (hidden*input) + 4 * (hidden*hidden) + 4 * hidden
-            // → input = (params - 4*hidden*hidden - 4*hidden) / (4*hidden)
-            int hidden4 = 4 * _hiddenSize;
-            int residual = parameters.Length - 4 * _hiddenSize * _hiddenSize - hidden4;
-            if (residual >= 0 && hidden4 > 0 && residual % hidden4 == 0)
-            {
-                int inferredInput = residual / hidden4;
-                if (inferredInput > 0)
-                {
-                    _inputSize = inferredInput;
-                    // Force EnsureInitialized to (re)allocate the gate weights at the inferred
-                    // width — without clearing the flag it would early-return and leave stale
-                    // [_hiddenSize, oldWidth] weights that the copy loop below then overflows.
-                    // IsShapeResolved stays false so OnFirstForward still binds the real rank-3
-                    // [B, T, F] sequence shape on the first actual Forward(...).
-                    _isInitialized = false;
-                    EnsureInitialized();
-                }
-                else
-                {
-                    throw new InvalidOperationException(
-                        $"LSTMLayer.SetParameters({parameters.Length}) cannot infer a positive " +
-                        $"input width from this parameter vector. Run a Forward(input) pass first " +
-                        $"so the layer can resolve _inputSize, or pass a resolved layer.");
-                }
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"LSTMLayer.SetParameters({parameters.Length}) called before the lazy input " +
-                    $"width was resolved, and the parameter count does not match a valid layout " +
-                    $"for hiddenSize={_hiddenSize}. Run a Forward(input) pass first or supply " +
-                    $"a vector matching 4*hidden*input + 4*hidden*hidden + 4*hidden.");
-            }
-        }
-
-        int inputWeightSize = _hiddenSize * _inputSize;
-        int hiddenWeightSize = _hiddenSize * _hiddenSize;
-        int biasSize = _hiddenSize;
-
-        int totalParams = inputWeightSize * 4 + hiddenWeightSize * 4 + biasSize * 4;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int idx = 0;
-
-        // Use Tensor.FromVector for production-grade parameter setting
-        _weightsFi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
-        idx += inputWeightSize;
-
-        _weightsIi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
-        idx += inputWeightSize;
-
-        _weightsCi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
-        idx += inputWeightSize;
-
-        _weightsOi = Tensor<T>.FromVector(parameters.Slice(idx, inputWeightSize), new int[] { _hiddenSize, _inputSize });
-        idx += inputWeightSize;
-
-        _weightsFh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
-        idx += hiddenWeightSize;
-
-        _weightsIh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
-        idx += hiddenWeightSize;
-
-        _weightsCh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
-        idx += hiddenWeightSize;
-
-        _weightsOh = Tensor<T>.FromVector(parameters.Slice(idx, hiddenWeightSize), new int[] { _hiddenSize, _hiddenSize });
-        idx += hiddenWeightSize;
-
-        _biasF = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
-        idx += biasSize;
-
-        _biasI = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
-        idx += biasSize;
-
-        _biasC = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
-        idx += biasSize;
-
-        _biasO = Tensor<T>.FromVector(parameters.Slice(idx, biasSize), new int[] { _hiddenSize });
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_weightsFi);
-        Engine.InvalidatePersistentTensor(_weightsIi);
-        Engine.InvalidatePersistentTensor(_weightsCi);
-        Engine.InvalidatePersistentTensor(_weightsOi);
-        Engine.InvalidatePersistentTensor(_weightsFh);
-        Engine.InvalidatePersistentTensor(_weightsIh);
-        Engine.InvalidatePersistentTensor(_weightsCh);
-        Engine.InvalidatePersistentTensor(_weightsOh);
-        Engine.InvalidatePersistentTensor(_biasF);
-        Engine.InvalidatePersistentTensor(_biasI);
-        Engine.InvalidatePersistentTensor(_biasC);
-        Engine.InvalidatePersistentTensor(_biasO);
     }
 
     /// <summary>

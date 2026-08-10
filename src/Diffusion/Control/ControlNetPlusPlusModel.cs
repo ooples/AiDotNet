@@ -56,6 +56,15 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987", Year = 2024, Authors = "Li et al.")]
 public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_controlEncoder);
+    }
+
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 7.5;
     private const double DEFAULT_REWARD_WEIGHT = 0.5;
@@ -76,7 +85,6 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet++ model.
@@ -137,42 +145,7 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
             seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Single-allocation concat. The previous List<T> + per-element Add +
-        // ToArray triple-copied the parameter vector (~3x the model's size) and
-        // OOM'd the CI runner when materialising a paper-scale (580M-param) model.
-        // Vector<T>.Concatenate pre-sizes one result and vectorized-copies each
-        // sub-network's parameters in exactly once.
-        return Vector<T>.Concatenate(
-            _baseUNet.GetParameters(),
-            _controlEncoder.GetParameters());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int baseCount = checked((int)_baseUNet.ParameterCount);
-        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
-        long expectedTotal = (long)baseCount + ctrlCount;
-        if (parameters.Length != expectedTotal)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        var baseParams = new T[baseCount];
-        for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
-        _baseUNet.SetParameters(new Vector<T>(baseParams));
-        offset += baseCount;
-
-        var ctrlParams = new T[ctrlCount];
-        for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
-        _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
-    }
 
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()

@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Attributes;
@@ -291,21 +291,19 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     // end-to-end throws "Index -1 ... out of bounds for embedding table with vocabulary size
     // 50000". See the task notes; do not try to solve it by re-wiring ForwardForTraining alone.
 
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            EnsureNativeInitialized();
-            return base.ParameterCount;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <inheritdoc />
+    /// <remarks>
+    /// Nougat builds its encoder and decoder lists inside EnsureNativeInitialized, so there is nothing for the base to walk until that has run.
+    /// <para>
+    /// This replaces the ParameterCount and GetParameters overrides that each ran the
+    /// initializer and then called base -- and SetParameters, which had NEITHER, so a restore
+    /// could run against an unbuilt model. The base calls this hook from all of them, so the count,
+    /// the vector, the restore and the chunks cannot observe different stages of construction.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         EnsureNativeInitialized();
-        return base.GetParameters();
     }
 
     /// <inheritdoc/>

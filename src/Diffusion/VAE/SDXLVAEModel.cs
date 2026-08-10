@@ -48,6 +48,15 @@ namespace AiDotNet.Diffusion.VAE;
 [ResearchPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2023, Authors = "Podell et al.")]
 public class SDXLVAEModel<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written
+    /// GetParameters concatenated, which is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var layer in _encoderLayers) RegisterParameterComponent(layer);
+        foreach (var layer in _decoderLayers) RegisterParameterComponent(layer);
+    }
+
     private const double SDXL_LATENT_SCALE = 0.13025;
     private const int SDXL_BASE_CHANNELS = 128;
 
@@ -77,8 +86,6 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
     public override double LatentScaleFactor => SDXL_LATENT_SCALE;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
-
     /// <inheritdoc />
     public override bool SupportsTiling => true;
 
@@ -251,56 +258,12 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         });
     }
 
-    private int CalculateParameterCount()
-    {
-        long count = 0;
-
-        if (_inputConv != null) count += _inputConv.GetParameters().Length;
-        foreach (var layer in _encoderLayers) count += layer.GetParameters().Length;
-        if (_meanConv != null) count += _meanConv.GetParameters().Length;
-        if (_logVarConv != null) count += _logVarConv.GetParameters().Length;
-        if (_postQuantConv != null) count += _postQuantConv.GetParameters().Length;
-        foreach (var layer in _decoderLayers) count += layer.GetParameters().Length;
-        if (_outputConv != null) count += _outputConv.GetParameters().Length;
-
-        return (int)Math.Min(count, int.MaxValue);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        AddLayerParams(parameters, _inputConv);
-        foreach (var layer in _encoderLayers) AddLayerParams(parameters, layer);
-        AddLayerParams(parameters, _meanConv);
-        AddLayerParams(parameters, _logVarConv);
-        AddLayerParams(parameters, _postQuantConv);
-        foreach (var layer in _decoderLayers) AddLayerParams(parameters, layer);
-        AddLayerParams(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
-    }
 
     private static void AddLayerParams(List<T> parameters, ILayer<T>? layer)
     {
         if (layer == null) return;
         var p = layer.GetParameters();
         for (int i = 0; i < p.Length; i++) parameters.Add(p[i]);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        SetLayerParams(_inputConv, parameters, ref index);
-        foreach (var layer in _encoderLayers) SetLayerParams(layer, parameters, ref index);
-        SetLayerParams(_meanConv, parameters, ref index);
-        SetLayerParams(_logVarConv, parameters, ref index);
-        SetLayerParams(_postQuantConv, parameters, ref index);
-        foreach (var layer in _decoderLayers) SetLayerParams(layer, parameters, ref index);
-        SetLayerParams(_outputConv, parameters, ref index);
     }
 
     private static void SetLayerParams(ILayer<T>? layer, Vector<T> parameters, ref int index)

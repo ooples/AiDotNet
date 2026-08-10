@@ -230,8 +230,6 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                     var output = Forward(preprocessed);
                     double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
                         output.ToVector(), preprocessedLabels.ToVector()));
-                    var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
-                    var gt = Tensor<T>.FromVector(grad);
                     // Backward removed — tape-based training handles gradients
                     _optimizer.UpdateParameters(Layers);
 
@@ -348,18 +346,10 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     /// <remarks>
     /// A BiLSTM-CRF processes the actual sequence length (Lample et al. 2016); the

@@ -400,7 +400,17 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
             activations[$"Encoder_{i}"] = x.Clone();
         }
 
-        var z = _mlp3!.Forward(_mlp2!.Forward(_mlp1!.Forward(MeanOverTime(eng, x))));
+        // These views are non-null exactly when _bound is true, which the caller above has already
+        // checked - but the compiler cannot see that invariant. Assert it once here rather than
+        // suppressing the warning at each dereference, so a future change that breaks the pairing
+        // fails with a message naming the invariant instead of a NullReferenceException.
+        if (_mlp1 is null || _mlp2 is null || _mlp3 is null)
+        {
+            throw new InvalidOperationException(
+                "Layer views are bound (_bound) but the latent MLP stack is null; BindLayerViewsFromLayers did not complete.");
+        }
+
+        var z = _mlp3.Forward(_mlp2.Forward(_mlp1.Forward(MeanOverTime(eng, x))));
         activations["Latent"] = z.Clone();
         activations["RIR"] = FiNSForwardSingle(input).Clone();
         return activations;
@@ -467,10 +477,17 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         }
 
         // --- Adaptive average pooling over time, then the 3-layer MLP producing z ---
+        // Same invariant as GetNamedLayerActivations: reached only when _bound is true, so these
+        // views are non-null. Asserted once so the dereferences below need no suppression.
+        if (_mlp1 is null || _mlp2 is null || _mlp3 is null ||
+            _maskHead is null || _noiseFilterbank is null || _mixConv is null)
+        {
+            throw new InvalidOperationException(
+                "Layer views are bound (_bound) but the FiNS stack is null; BindLayerViewsFromLayers did not complete.");
+        }
+
         var pooled = MeanOverTime(eng, x);
-        System.Console.Error.WriteLine($"[RIRTRACE] pooled=[{string.Join(",", pooled.Shape)}]");                       // [1, C]
-        var z = _mlp3!.Forward(_mlp2!.Forward(_mlp1!.Forward(pooled)));
-        System.Console.Error.WriteLine($"[RIRTRACE] z=[{string.Join(",", z.Shape)}]");   // [1, latentDim]
+        var z = _mlp3.Forward(_mlp2.Forward(_mlp1.Forward(pooled)));
 
         // --- Decoder: upsample from a seed, FiLM-conditioned on z at both stages ---
         int blocks = _decoderUpsample.Count;
@@ -488,19 +505,19 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         h = ResizeTime(eng, h, _options.RIRLength);
 
         // --- Heads: M masks plus the early component on the extra channel ---
-        var heads = _maskHead!.Forward(h);                        // [1, M+1, L]
+        var heads = _maskHead.Forward(h);                        // [1, M+1, L]
         int m = _options.NumNoiseBands;
         var masks = eng.TensorNarrow(heads, 1, 0, m);             // [1, M, L]
         var early = eng.TensorNarrow(heads, 1, m, 1);             // [1, 1, L]
         early = ZeroBeyond(eng, early, _options.EarlyResponseLength);
 
         // --- Filtered noise shaping: sigmoid mask times band-filtered noise ---
-        var subbands = _noiseFilterbank!.Forward(GetNoiseSignal(_options.RIRLength));  // [1, M, L]
+        var subbands = _noiseFilterbank.Forward(GetNoiseSignal(_options.RIRLength));  // [1, M, L]
         subbands = ResizeTime(eng, subbands, _options.RIRLength);
         var late = eng.TensorMultiply(eng.Sigmoid(masks), subbands);                   // [1, M, L]
 
         // --- Mix the M late bands and the early component with a 1x1 convolution ---
-        var mixed = _mixConv!.Forward(eng.TensorConcatenate([late, early], 1));        // [1, 1, L]
+        var mixed = _mixConv.Forward(eng.TensorConcatenate([late, early], 1));        // [1, 1, L]
         return eng.Reshape(mixed, [_options.RIRLength]);
     }
 
@@ -526,12 +543,11 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Returns the waveform unchanged: FiNS is a TIME-DOMAIN model whose encoder consumes raw
     /// samples. The previous implementation ran a mel spectrogram here, which is the input
@@ -692,7 +708,7 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         if (_noiseSignal is not null && _noiseSignal.Shape[^1] == length) return _noiseSignal;
 
         // Fixed seed: the noise is part of the model, not a per-call random draw. See _noiseSignal.
-        var rng = new Random(20210715);
+        var rng = RandomHelper.CreateSeededRandom(20210715);
         var noise = new Tensor<T>([1, 1, length]);
         for (int n = 0; n < length; n++)
             noise[0, 0, n] = NumOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);

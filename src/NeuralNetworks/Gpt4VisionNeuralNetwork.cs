@@ -89,8 +89,8 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
 
     // Vision encoder layers (ViT)
     private readonly List<ILayer<T>> _visionEncoderLayers = [];
-    private Matrix<T>? _visionClsToken;
-    private Matrix<T>? _visionPositionalEmbeddings;
+    private Tensor<T>? _visionClsToken;
+    private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _visionPatchEmbedding;
     private ILayer<T>? _visionLayerNorm;
 
@@ -100,7 +100,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
 
     // Language Model (Transformer Decoder)
     private readonly List<ILayer<T>> _languageModelLayers = [];
-    private Matrix<T>? _textPositionalEmbeddings;
+    private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _tokenEmbedding;
     private ILayer<T>? _lmHead;
     private ILayer<T>? _finalLayerNorm;
@@ -342,9 +342,9 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         _lmHead = Layers[idx++];
 
         // Vision CLS token and positional embeddings
-        _visionClsToken = Matrix<T>.CreateDefault(1, _visionEmbeddingDim, NumOps.Zero);
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionEmbeddingDim, NumOps.Zero);
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _embeddingDimension, NumOps.Zero);
+        _visionClsToken = new Tensor<T>([1, _visionEmbeddingDim]);
+        _visionPositionalEmbeddings = new Tensor<T>([numPatches + 1, _visionEmbeddingDim]);
+        _textPositionalEmbeddings = new Tensor<T>([_maxSequenceLength, _embeddingDimension]);
     }
 
     #endregion
@@ -994,7 +994,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         var embeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionEmbeddingDim], NumOps.Zero);
 
         // Add CLS token
-        for (int j = 0; j < _visionEmbeddingDim && j < clsToken.Columns; j++)
+        for (int j = 0; j < _visionEmbeddingDim && j < clsToken.Shape[1]; j++)
         {
             embeddings[0, j] = clsToken[0, j];
         }
@@ -1009,9 +1009,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         }
 
         // Add positional embeddings
-        for (int i = 0; i < embeddings.Shape[0] && i < positionalEmbeddings.Rows; i++)
+        for (int i = 0; i < embeddings.Shape[0] && i < positionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < _visionEmbeddingDim && j < positionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _visionEmbeddingDim && j < positionalEmbeddings.Shape[1]; j++)
             {
                 embeddings[i, j] = NumOps.Add(embeddings[i, j], positionalEmbeddings[i, j]);
             }
@@ -1131,7 +1131,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         var embMatrix = TensorToMatrix(embeddings);
         for (int i = 0; i < seqLen && i < embMatrix.Rows; i++)
         {
-            for (int j = 0; j < _embeddingDimension && j < embMatrix.Columns && j < _textPositionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _embeddingDimension && j < embMatrix.Columns && j < _textPositionalEmbeddings.Shape[1]; j++)
             {
                 embMatrix[i, j] = NumOps.Add(embMatrix[i, j], _textPositionalEmbeddings[i, j]);
             }
@@ -1441,89 +1441,48 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     #region NeuralNetworkBase Overrides
 
-    /// <inheritdoc/>
-    public override long ParameterCount
+    /// <summary>
+    /// Declares the CLS token and the two positional embedding tables, which live outside
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared in the order the deleted ParameterCount added them: vision CLS token, vision
+    /// positional embeddings, text positional embeddings.
+    /// </para>
+    /// <para>
+    /// They are <c>Tensor&lt;T&gt;</c> now rather than <c>Matrix&lt;T&gt;</c> because a matrix is
+    /// invisible to the trainable-parameter walk -- which is the whole reason ParameterCount had to
+    /// be written by hand in the first place, and the reason the two surfaces disagreed. The count
+    /// added these three tables; <c>GetParameters</c> was NOT overridden, so it walked only
+    /// <c>Layers</c> and never saw them. The tables were therefore counted but never handed out,
+    /// never restored, and never trained through a flat-vector optimizer.
+    /// </para>
+    /// <para>
+    /// The override also opened with <c>if (!_useNativeMode) return 0;</c> while the inherited
+    /// GetParameters kept returning the real layer vector, so in architecture mode the count said
+    /// zero and the vector did not. Deleting it removes that split too: both surfaces now walk
+    /// <c>Layers</c> plus these tensors, in both modes. The per-modality lists
+    /// (<c>_visionEncoderLayers</c> and friends) need no declaration -- they are filled FROM
+    /// <c>Layers</c> (<c>_visionEncoderLayers.Add(Layers[idx++])</c>), so they are typed views of
+    /// layers the base walk already reaches, and declaring them would double-count.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        get
+        if (_visionClsToken is not null)
         {
-            if (!_useNativeMode)
-            {
-                return 0;
-            }
+            yield return _visionClsToken;
+        }
 
-            int count = 0;
+        if (_visionPositionalEmbeddings is not null)
+        {
+            yield return _visionPositionalEmbeddings;
+        }
 
-            // Vision encoder layers
-            foreach (var layer in _visionEncoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Language model layers
-            foreach (var layer in _languageModelLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Cross-attention layers
-            foreach (var layer in _crossAttentionLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Single layers
-            if (_visionPatchEmbedding is not null)
-            {
-                count += (int)_visionPatchEmbedding.ParameterCount;
-            }
-
-            if (_visionLayerNorm is not null)
-            {
-                count += (int)_visionLayerNorm.ParameterCount;
-            }
-
-            if (_visionProjector1 is not null)
-            {
-                count += (int)_visionProjector1.ParameterCount;
-            }
-
-            if (_visionProjector2 is not null)
-            {
-                count += (int)_visionProjector2.ParameterCount;
-            }
-
-            if (_tokenEmbedding is not null)
-            {
-                count += (int)_tokenEmbedding.ParameterCount;
-            }
-
-            if (_lmHead is not null)
-            {
-                count += (int)_lmHead.ParameterCount;
-            }
-
-            if (_finalLayerNorm is not null)
-            {
-                count += (int)_finalLayerNorm.ParameterCount;
-            }
-
-            // Positional embeddings
-            if (_visionClsToken is not null)
-            {
-                count += _visionClsToken.Rows * _visionClsToken.Columns;
-            }
-
-            if (_visionPositionalEmbeddings is not null)
-            {
-                count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
-            }
-
-            if (_textPositionalEmbeddings is not null)
-            {
-                count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
-            }
-
-            return count;
+        if (_textPositionalEmbeddings is not null)
+        {
+            yield return _textPositionalEmbeddings;
         }
     }
 
@@ -1555,9 +1514,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         var predictedEmbedding = PoolFeatures(projected);
         var targetEmbedding = TensorToVector(expectedOutput);
         LastLoss = LossFunction.CalculateLoss(predictedEmbedding, targetEmbedding);
-
-        // Compute gradient of loss w.r.t. output
-        var lossGradient = LossFunction.CalculateDerivative(predictedEmbedding, targetEmbedding);
 
         // Get parameter gradients and apply gradient descent update
         var paramGradients = GetGpt4VParameterGradients();

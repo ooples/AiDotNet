@@ -36,7 +36,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class AddLayer<T> : LayerBase<T>
+// MULTI-INPUT, yet the shape still resolves against ONE input - which is the case the multi-input rule
+// exists to distinguish, not to exclude. ValidateInputShapes rejects any construction whose shapes are
+// not all identical, and the constructor passes `inputShapes[0]` straight through as the output shape:
+//     base(inputShapes, inputShapes[0], ...)
+// So the second addend cannot change the answer; it is constrained to equal the first. Element-wise sum
+// plus an optional activation leaves every axis untouched at every rank.
+[ElementWiseShape(Note = "Element-wise sum of identically-shaped inputs; shape is untouched at any rank.")]
+[AutoParameters]
+public partial class AddLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// Stores the input tensors from the most recent forward pass for use in the backward pass.
@@ -269,7 +277,7 @@ public partial class AddLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         // Collect sequential input_0, input_1, ... — require contiguous keys starting at 0
@@ -347,7 +355,7 @@ public partial class AddLayer<T> : LayerBase<T>
     /// This operation combines information from multiple sources in your network.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {
@@ -369,70 +377,6 @@ public partial class AddLayer<T> : LayerBase<T>
         }
 
         return activated;
-    }
-
-    /// <summary>
-    /// Updates the layer's internal parameters during training.
-    /// </summary>
-    /// <param name="learningRate">How quickly the network should learn from new data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is called during the training process after the forward and backward passes have been completed.
-    /// For layers with trainable parameters, this method would update those parameters based on the gradients
-    /// calculated during backpropagation and the provided learning rate. However, since addition layers have
-    /// no trainable parameters, this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would update the layer's internal values during training, but addition layers have nothing to update.
-    /// 
-    /// In neural networks, training involves adjusting parameters to reduce errors.
-    /// This method is where those adjustments happen, but addition layers don't have
-    /// any adjustable parameters, so this method is empty.
-    /// 
-    /// For comparison:
-    /// - In a Dense layer, this would update weights and biases
-    /// - In a BatchNorm layer, this would update scale and shift parameters
-    /// - In this AddLayer, there's nothing to update
-    /// 
-    /// The learning rate parameter controls how big the updates would be if there
-    /// were any parameters to update - higher values mean bigger changes.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters of this layer as a flat vector.
-    /// </summary>
-    /// <returns>An empty vector since addition layers have no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns all trainable parameters of the layer as a flat vector. For layers with trainable
-    /// parameters, this would involve reshaping multi-dimensional parameters (like weight matrices) into a
-    /// one-dimensional vector. However, since addition layers have no trainable parameters, this method
-    /// returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the layer's trainable values as a single list, but addition layers have none.
-    /// 
-    /// Some operations in neural networks need to work with all parameters at once:
-    /// - Saving and loading models
-    /// - Applying regularization (techniques to prevent overfitting)
-    /// - Using advanced optimization algorithms
-    /// 
-    /// This method provides those parameters as a single vector, but since
-    /// addition layers don't have any trainable parameters, it returns an empty vector.
-    /// 
-    /// For comparison:
-    /// - A Dense layer with 100 inputs and 10 outputs would return a vector with 1,010 values
-    ///   (1,000 weights + 10 biases)
-    /// - This AddLayer returns an empty vector with 0 values
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Add layers don't have parameters, so return an empty vector
-        return Vector<T>.Empty();
     }
 
     /// <summary>

@@ -50,7 +50,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
     "https://papers.nips.cc/paper/2010/hash/091d584fced301b442654dd8c23b3fc9-Abstract.html",
     Year = 2010,
     Authors = "van Hasselt, H.")]
-public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
     private DoubleQLearningOptions<T> _options;
 
@@ -262,16 +262,6 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    /// <summary>
-    /// Folded from <see cref="GetParameters"/> so the count and the vector cannot disagree.
-    /// </summary>
-    /// <remarks>
-    /// The previous product formula described a DIFFERENT set of tensors than the getter builds,
-    /// and the two drifted apart the moment the tables became ragged. Deriving the count from the
-    /// vector is the same rule applied to DeepReinforcementLearningAgentBase: one source, the count
-    /// is a fold over it, never a second opinion about it.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -304,55 +294,61 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable1 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable1.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _qTable2 = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable2.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _epsilon = state.Epsilon;
+
+        // The two tables are validated together, HERE, before anything reads them. GetParameters
+        // sizes its vector from _qTable1.Count but then fills from both tables, indexing
+        // stateQValues[action] for every action in 0..ActionSize-1. Persisted data with a state
+        // missing from one table overruns that vector; a state missing an ACTION throws
+        // KeyNotFoundException from inside the flatten. Neither failure says anything about the file
+        // that caused it.
+        ValidatePairedQTables();
     }
 
-    public override Vector<T> GetParameters()
+    /// <summary>
+    /// Requires the two Q-tables to describe the same states and each state to hold exactly the
+    /// actions <c>0 .. ActionSize - 1</c>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The restored tables are not a matched pair.</exception>
+    private void ValidatePairedQTables()
     {
-        // Flatten both Q-tables into vector using linear indexing
-        // Vector size: stateCount * 2 * actionSize
-        // No Math.Max(..., 1): an agent that has learned nothing has zero parameters, and
-        // inventing one only to avoid an empty vector is what desynchronised the two APIs.
-        int stateCount = _qTable1.Count;
-        int vectorSize = stateCount * 2 * _options.ActionSize;
-        var parameters = new Vector<T>(vectorSize);
-
-        // Fill _qTable1 values (indices 0 to stateCount*actionSize-1)
-        int idx = 0;
-        foreach (var stateQValues in _qTable1.Values)
+        if (_qTable1.Count != _qTable2.Count)
         {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
+            throw new InvalidOperationException(
+                $"Serialized {nameof(DoubleQLearningAgent<T>)} has {_qTable1.Count} states in QTable1 "
+                + $"and {_qTable2.Count} in QTable2. Double Q-learning keeps one entry per state in "
+                + "both tables; the model data is incomplete or was written by an incompatible version.");
         }
 
-        // Fill _qTable2 values (indices stateCount*actionSize to stateCount*2*actionSize-1)
-        foreach (var stateQValues in _qTable2.Values)
+        foreach (var entry in _qTable1)
         {
-            for (int action = 0; action < _options.ActionSize; action++)
+            if (!_qTable2.ContainsKey(entry.Key))
             {
-                parameters[idx++] = stateQValues[action];
+                throw new InvalidOperationException(
+                    $"Serialized {nameof(DoubleQLearningAgent<T>)} has state '{entry.Key}' in QTable1 "
+                    + "but not in QTable2.");
+            }
+
+            RequireCompleteActionSet(entry.Key, entry.Value, nameof(_qTable1));
+            RequireCompleteActionSet(entry.Key, _qTable2[entry.Key], nameof(_qTable2));
+        }
+    }
+
+    private void RequireCompleteActionSet(string stateKey, Dictionary<int, T> actions, string tableName)
+    {
+        for (int action = 0; action < _options.ActionSize; action++)
+        {
+            if (!actions.ContainsKey(action))
+            {
+                throw new InvalidOperationException(
+                    $"Serialized {nameof(DoubleQLearningAgent<T>)} is missing action {action} for state "
+                    + $"'{stateKey}' in {tableName}. Every state must hold actions 0 to "
+                    + $"{_options.ActionSize - 1}.");
             }
         }
-
-        return parameters;
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Tabular RL methods cannot restore Q-values from parameters alone
-        // because the parameter vector contains only Q-values, not state keys.
-        //
-        // For a fresh agent (empty Q-tables), state keys are unknown, so restoration fails.
-        // For proper save/load, use Serialize()/Deserialize() which preserves state mappings.
-        //
-        // This is a fundamental limitation of tabular methods - unlike neural networks,
-        // the "parameters" (Q-values) are meaningless without their state associations.
 
-        throw new NotSupportedException(
-            "Tabular Double Q-Learning agents do not support parameter restoration without state information. " +
-            "Use Serialize()/Deserialize() methods instead, which preserve state-to-Q-value mappings for both Q-tables.");
-    }
+
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
@@ -374,12 +370,12 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

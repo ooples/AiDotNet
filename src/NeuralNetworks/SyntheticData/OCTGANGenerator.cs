@@ -789,7 +789,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         finally { SetTrainingMode(false); }
     }
 
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -809,7 +808,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             }
         }
     }
-
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(System.IO.BinaryWriter writer)
     {

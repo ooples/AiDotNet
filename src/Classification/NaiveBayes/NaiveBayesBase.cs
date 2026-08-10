@@ -1,5 +1,7 @@
 using AiDotNet.Models.Options;
 
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.NaiveBayes;
 
 /// <summary>
@@ -23,8 +25,22 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// </para>
 /// </remarks>
 public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The log priors, which is what this surface has always exposed. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     /// <summary>
     /// Naive Bayes models compute parameters from class statistics during training.
     /// They do not support flat parameter initialization via SetParameters.
@@ -257,7 +273,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // Return log priors as the base parameters
         if (LogPriors == null)
@@ -276,7 +292,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // When the model is untrained (NumClasses == 0), infer NumClasses from the
         // parameter vector. This is required for the optimizer's InitializeRandomSolution
@@ -295,21 +311,6 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
         {
             LogPriors[i] = parameters[i];
         }
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Naive Bayes doesn't typically use gradient-based optimization
-        // Return zero gradients for compatibility
-        return new Vector<T>(NumClasses);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Naive Bayes doesn't typically use gradient-based optimization
-        // This is a no-op for compatibility
     }
 
     /// <inheritdoc/>

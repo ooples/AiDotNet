@@ -36,7 +36,19 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureFusion)]
 [LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class MultiplyLayer<T> : LayerBase<T>
+// MULTI-INPUT, yet the shape still resolves against ONE input - the same case AddLayer documents, and
+// the case the multi-input rule exists to distinguish rather than to exclude. ValidateInputShapes
+// rejects any construction whose shapes are not all identical (`!inputShapes[i].SequenceEqual(
+// inputShapes[0])` throws), and both constructors pass `inputShapes[0]` straight through as the output
+// shape:
+//     base(inputShapes, inputShapes[0], ...)
+// So the other factors cannot change the answer; they are constrained to equal the first. Element-wise
+// Hadamard product plus an optional activation leaves every axis untouched at every rank, which is why
+// this is the shorthand rather than named axes - a gate mask and the features it gates carry entirely
+// different axis meanings, and this layer is indifferent to both.
+[ElementWiseShape(Note = "Element-wise product of identically-shaped inputs; shape is untouched at any rank.")]
+[AutoParameters]
+public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <summary>
     /// The input tensors from the most recent forward pass.
@@ -207,7 +219,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>
     /// <summary>
     /// Named multi-input forward pass.
     /// </summary>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         var tensors = new List<Tensor<T>>();
@@ -281,7 +293,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>
     /// The method also saves all inputs and the output for later use in backpropagation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {
@@ -422,54 +434,6 @@ public partial class MultiplyLayer<T> : LayerBase<T>
         }
 
         return inputGradients;
-    }
-
-    /// <summary>
-    /// Updates the parameters of the multiply layer using the calculated gradients.
-    /// </summary>
-    /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// This method is part of the training process, but since MultiplyLayer has no trainable parameters,
-    /// this method does nothing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method would normally update a layer's internal values during training.
-    /// 
-    /// However, since MultiplyLayer just performs a fixed mathematical operation (multiplication) and doesn't
-    /// have any internal values that can be learned or adjusted, this method is empty.
-    /// 
-    /// This is unlike layers such as Dense or Convolutional layers, which have weights and biases
-    /// that get updated during training.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No parameters to update in this layer
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters from the multiply layer as a single vector.
-    /// </summary>
-    /// <returns>An empty vector since MultiplyLayer has no trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer as a single vector. Since MultiplyLayer
-    /// has no trainable parameters, it returns an empty vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method returns all the learnable values in the layer.
-    /// 
-    /// Since MultiplyLayer:
-    /// - Only performs fixed mathematical operations (multiplication)
-    /// - Has no weights, biases, or other learnable parameters
-    /// - The method returns an empty list
-    /// 
-    /// This is different from layers like Dense layers, which would return their weights and biases.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // MultiplyLayer has no trainable parameters
-        return Vector<T>.Empty();
     }
 
     /// <summary>

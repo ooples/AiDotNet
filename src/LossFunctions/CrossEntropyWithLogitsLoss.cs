@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -99,56 +99,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         return NumOps.Negate(loss);
     }
 
-    /// <summary>
-    /// Calculates the derivative of cross-entropy loss with respect to logits.
-    /// </summary>
-    /// <param name="predicted">Raw logits.</param>
-    /// <param name="actual">One-hot encoded target vector.</param>
-    /// <returns>Gradient: softmax(logits) * sum(targets) - targets.</returns>
-    /// <remarks>
-    /// <para>
-    /// The gradient of cross-entropy loss with respect to logits has the elegant form:
-    ///   d(loss)/d(logit_i) = softmax(logit_i) * sum(target) - target_i
-    ///
-    /// For a one-hot target or normalized soft distribution, sum(target) = 1 and
-    /// this reduces to the familiar softmax(logit_i) - target_i form. Retaining
-    /// the target mass is necessary because <see cref="CalculateLoss"/> also
-    /// accepts weighted/non-normalized soft targets.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        ValidateVectorLengths(predicted, actual);
-
-        // Compute softmax probabilities
-        T maxLogit = predicted[0];
-        for (int i = 1; i < predicted.Length; i++)
-        {
-            if (NumOps.GreaterThan(predicted[i], maxLogit))
-                maxLogit = predicted[i];
-        }
-
-        var expValues = new Vector<T>(predicted.Length);
-        T sumExp = NumOps.Zero;
-        T targetMass = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            expValues[i] = NumOps.Exp(NumOps.Subtract(predicted[i], maxLogit));
-            sumExp = NumOps.Add(sumExp, expValues[i]);
-            targetMass = NumOps.Add(targetMass, actual[i]);
-        }
-
-        // Gradient = softmax(logits) * sum(targets) - targets.
-        // The target-mass factor is one for the usual one-hot/probability target.
-        var derivative = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T softmaxI = NumOps.Divide(expValues[i], sumExp);
-            derivative[i] = NumOps.Subtract(NumOps.Multiply(softmaxI, targetMass), actual[i]);
-        }
-
-        return derivative;
-    }
 
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
@@ -207,12 +157,23 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // gradient by the ignored fraction. PyTorch's reduction='mean' divides by the number of
         // non-ignored targets, which is the parity this class documents.
         //
-        // Each supervised row's target mass is 1 (one-hot) or sums to 1 (a distribution), and an
-        // ignored row's is 0, so summing the mass counts exactly the supervised slots. When
-        // nothing is ignored that count equals the slot count and this is identical to the plain
-        // mean, so existing callers are unaffected.
-        var targetMass = Engine.ReduceSum(target, new[] { classAxis }, keepDims: false);
-        var supervised = Engine.ReduceSum(targetMass, batchAxes, keepDims: false);
+        // COUNT THE ROWS, DO NOT SUM THEIR MASS. Summing mass counts correctly only while every
+        // supervised row carries mass exactly 1 -- one-hot, or a normalized distribution. A weighted
+        // or unnormalized soft target breaks that: scale a batch's targets by w and the numerator
+        // scales by w too, but so does this denominator, so the tape loss comes out divided by w
+        // while CalculateLoss (which does not divide at all) does not. Same inputs, two different
+        // objectives, and nothing in the type says the targets have to be normalized.
+        //
+        // Sign of the absolute mass is the indicator instead: any row with target mass counts once,
+        // whatever that mass is, and an ignored row -- an index outside [0, numClasses), the -1
+        // sentinel, which one-hot encodes to an all-zero row -- counts zero. Absolute value first so
+        // a row of signed weights cannot cancel to zero mass and be read as ignored. The target
+        // carries no gradient, so sign's kink at zero costs nothing here.
+        //
+        // For one-hot targets this is exactly the previous value, so existing callers are unaffected.
+        var targetMass = Engine.ReduceSum(Engine.TensorAbs(target), new[] { classAxis }, keepDims: false);
+        var supervisedRows = Engine.TensorSign(targetMass);
+        var supervised = Engine.ReduceSum(supervisedRows, batchAxes, keepDims: false);
 
         var total = Engine.ReduceSum(perSample, batchAxes, keepDims: false);
 
@@ -277,7 +238,7 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             if (explicitAxis < 0 || explicitAxis >= rank)
             {
                 throw new ArgumentOutOfRangeException(
-                    nameof(_classAxis),
+                    "classAxis",
                     _classAxis.Value,
                     $"Class axis {_classAxis.Value} is outside logits rank {rank}.");
             }
@@ -363,7 +324,9 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
     private double ProbabilityAxisScore(Tensor<T> target, int axis)
     {
-        int[] shape = target.Shape.ToArray();
+        // _shape, not Shape.ToArray(): every read below is read-only, so the defensive copy was
+        // pure allocation on a per-call scoring path (ADNPERF001).
+        int[] shape = target._shape;
         int axisSize = shape[axis];
         int inner = 1;
         for (int i = axis + 1; i < shape.Length; i++)

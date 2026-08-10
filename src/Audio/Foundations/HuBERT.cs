@@ -44,6 +44,17 @@ namespace AiDotNet.Audio.Foundations;
 [ResearchPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed")]
 public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
+    /// <c>CreateDefaultFoundationModelLayers</c> ends with the last
+    /// <c>TransformerEncoderBlock&lt;T&gt;(hiddenDim, ...)</c>, which emits its own width - there is no
+    /// projection head, so Predict returns hidden STATES at <c>_options.HiddenDim</c>. Note
+    /// <c>FeatureEncoderDim</c> is the CNN front-end width and is projected to <c>HiddenDim</c> before
+    /// the transformer; the cluster-unit vocabulary HuBERT is pre-trained against is not exposed here.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.HiddenDim;
+
     #region Fields
 
     private readonly HuBERTOptions _options;
@@ -257,13 +268,11 @@ public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

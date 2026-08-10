@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ResearchPaper("Improving Stochastic Policy Gradients in Continuous Control with Deep Reinforcement Learning using the Beta Distribution",
         "https://proceedings.mlr.press/v70/chou17a.html",
         Year = 2017,
-        Authors = "Chou, P.-W., Maturana, D., & Scherer, S.")]
+        Authors = "Pei-Wen Chou, Daniel Maturana, Sebastian Scherer")]
     public class BetaPolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _policyNetwork;

@@ -56,7 +56,28 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4")]
-internal partial class MambaBlock<T> : LayerBase<T>
+// Shape-preserving, and the residual connection is what makes that a hard guarantee rather than a
+// coincidence: ForwardTraced ends with Engine.TensorAdd(output3D, input3D), which only type-checks when
+// the input's trailing width already equals _modelDimension. So every axis is carried through and
+// nothing needs a hand-written relation - the generator derives Same(role) for each.
+//
+// Rank 2 is [Time, Features], not [Batch, Features]: ForwardTraced reads the sequence length from
+// input.Shape[rank - 2] at every rank, and the constructor's base shape is [-1, modelDimension] with the
+// -1 documented as the FREE sequence axis. That also matches [LayerProperty(TestInputShape = "4, 16")].
+// Both ranks are spelled out rather than folded into one BatchOptional declaration because the generator
+// emits one arm per declared axis count, and the optional-batch form would leave rank 2 without one.
+//
+// Rank 1 is deliberately absent: the output-reshape block indexes outputShape[rank - 2], so a rank-1
+// input throws rather than round-tripping.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Selective scan is a recurrence over Time: the sequence length is consumed, never resized.")]
+[AutoParameters]
+public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
 {
     // Configuration
     private readonly int _modelDimension;
@@ -180,20 +201,6 @@ internal partial class MambaBlock<T> : LayerBase<T>
     public int DtRank => _dtRank;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _convWeights.Length + _convBias.Length +
-        _xProjectionWeights.Length +
-        _dtProjectionWeights.Length + _dtProjectionBias.Length +
-        _aLog.Length + _dParam.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
-
-    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
-    private readonly int _sequenceLength;
-
-    /// <summary>
     /// Creates a new Mamba block.
     /// </summary>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -247,7 +254,6 @@ internal partial class MambaBlock<T> : LayerBase<T>
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)
@@ -723,53 +729,6 @@ internal partial class MambaBlock<T> : LayerBase<T>
         // Re-register against the new tensor instances created by the updates above (TensorAdd returns new
         // tensors), so the autodiff registry tracks the live weights — now including _aLog and _dParam.
         RegisterTrainableParameters();
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in new[]
-        {
-            _inputProjectionWeights, _inputProjectionBias,
-            _convWeights, _convBias,
-            _xProjectionWeights,
-            _dtProjectionWeights, _dtProjectionBias,
-            _aLog, _dParam,
-            _outputProjectionWeights, _outputProjectionBias
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in new[]
-        {
-            _inputProjectionWeights, _inputProjectionBias,
-            _convWeights, _convBias,
-            _xProjectionWeights,
-            _dtProjectionWeights, _dtProjectionBias,
-            _aLog, _dParam,
-            _outputProjectionWeights, _outputProjectionBias
-        })
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     public override Vector<T> GetParameterGradients()

@@ -976,7 +976,6 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         }
     }
 
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -996,7 +995,6 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             }
         }
     }
-
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(System.IO.BinaryWriter writer)
     {

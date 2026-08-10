@@ -301,7 +301,6 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override long ParameterCount => QTableEntryCount;
 
     public override int FeatureCount => _options.StateSize;
 
@@ -337,42 +336,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-        foreach (var stateEntry in _qTable)
-        {
-            foreach (var actionValue in stateEntry.Value)
-            {
-                paramsList.Add(actionValue.Value);
-            }
-        }
 
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var stateEntry in _qTable.ToList())
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (index < parameters.Length)
-                {
-                    _qTable[stateEntry.Key][a] = parameters[index];
-                    index++;
-                }
-            }
-        }
-    }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
@@ -396,24 +360,6 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         clone._epsilon = _epsilon;
         return clone;
-    }
-
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        // Loss computation not used in Monte Carlo methods
-
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Monte Carlo methods don't use gradients in the traditional sense
     }
 
     public override void SaveModel(string filepath)

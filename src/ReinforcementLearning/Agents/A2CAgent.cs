@@ -57,8 +57,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.A2C;
     "https://arxiv.org/abs/1602.01783",
     Year = 2016,
     Authors = "Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., Silver, D., & Kavukcuoglu, K.")]
-public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_policyNetwork);
+        RegisterParameterComponent(_valueNetwork);
+    }
     private A2COptions<T> _a2cOptions;
 
     /// <inheritdoc/>
@@ -503,39 +512,6 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var policyParams = _policyNetwork.GetParameters();
-        var valueParams = _valueNetwork.GetParameters();
-
-        var total = policyParams.Length + valueParams.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        for (int i = 0; i < policyParams.Length; i++) vector[idx++] = policyParams[i];
-        for (int i = 0; i < valueParams.Length; i++) vector[idx++] = valueParams[i];
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var policyParams = _policyNetwork.GetParameters();
-        var valueParams = _valueNetwork.GetParameters();
-
-        var policyVector = new Vector<T>(policyParams.Length);
-        var valueVector = new Vector<T>(valueParams.Length);
-
-        int idx = 0;
-        for (int i = 0; i < policyParams.Length; i++) policyVector[i] = parameters[idx++];
-        for (int i = 0; i < valueParams.Length; i++) valueVector[i] = parameters[idx++];
-
-        _policyNetwork.UpdateParameters(policyVector);
-        _valueNetwork.UpdateParameters(valueVector);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new A2CAgent<T>(_a2cOptions);
@@ -544,7 +520,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();

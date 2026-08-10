@@ -216,7 +216,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -250,62 +249,34 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
         _totalSteps = state.TotalSteps;
     }
-    public override Vector<T> GetParameters()
+
+    /// <summary>
+    /// The Q-table's <c>(state, action)</c> entries in a fixed order.
+    /// </summary>
+    /// <remarks>
+    /// ONE ordered enumeration, shared by <see cref="ParameterCount"/>, <see cref="GetParameters"/>
+    /// and <see cref="SetParameters"/>. GetParameters allocated the real entry count but then wrote
+    /// ActionSize values per state, so a ragged table -- the normal state of a tabular agent that has
+    /// not tried every action -- wrote PAST the end of the vector. SetParameters had the mirror
+    /// defect, inserting zero-valued entries for actions the agent had never visited and shifting
+    /// every later value onto the wrong pair.
+    /// </remarks>
+    private List<(string State, int Action)> OrderedQTableEntries()
     {
-        // Length 0 when nothing has been learned yet, matching ParameterCount. The previous
-        // `: 1` invented a parameter the agent does not have, purely to satisfy a test that
-        // asserted a freshly constructed agent has parameters. That premise was wrong for
-        // tabular RL and the padding is what desynchronised the two APIs.
-        int paramCount = checked((int)QTableEntryCount);
-        var v = new Vector<T>(paramCount);
-        int idx = 0;
+        var entries = new List<(string State, int Action)>();
+        var states = new List<string>(_qTable.Keys);
+        states.Sort(StringComparer.Ordinal);
 
-        // Sort state keys for deterministic ordering
-        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
-        foreach (var stateKey in sortedStates)
+        foreach (string state in states)
         {
-            var actionDict = _qTable[stateKey];
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (actionDict.ContainsKey(a))
-                {
-                    v[idx++] = actionDict[a];
-                }
-                else
-                {
-                    v[idx++] = NumOps.Zero;
-                }
-            }
+            var actions = new List<int>(_qTable[state].Keys);
+            actions.Sort();
+            foreach (int action in actions) entries.Add((state, action));
         }
 
-
-        return v;
+        return entries;
     }
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null || parameters.Length == 0)
-        {
-            return;
-        }
 
-        int idx = 0;
-        var sortedStates = _qTable.Keys.OrderBy(k => k).ToList();
-
-        foreach (var stateKey in sortedStates)
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (idx < parameters.Length)
-                {
-                    if (!_qTable[stateKey].ContainsKey(a))
-                    {
-                        _qTable[stateKey][a] = NumOps.Zero;
-                    }
-                    _qTable[stateKey][a] = parameters[idx++];
-                }
-            }
-        }
-    }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new DynaQPlusAgent<T>(_options);
@@ -351,13 +322,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         clone._totalSteps = _totalSteps;
 
         return clone;
-    }
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Dyna-Q+ uses model-based planning with Q-learning updates, not gradient-based optimization
-        // This method is not applicable for tabular Q-learning methods
-        throw new NotSupportedException("Dyna-Q+ uses model-based planning with Q-learning updates, not gradient-based optimization. Use StoreExperience for updates.");
     }
     public override void SaveModel(string filepath)
     {

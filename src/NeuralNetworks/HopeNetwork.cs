@@ -517,10 +517,6 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates all parameters in the network (required by NeuralNetworkBase).
-    /// Distributes parameters across all CMS blocks and recurrent layers.
-    /// </summary>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (parameters == null)
@@ -572,7 +568,6 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         // (Clone_AfterTraining_ShouldPreserveLearnedWeights / Issue1296 class).
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
-
     /// <summary>
     /// Trains the network on a single input-output pair (required by NeuralNetworkBase).
     /// </summary>

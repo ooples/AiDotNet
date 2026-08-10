@@ -46,7 +46,7 @@ namespace AiDotNet.AdversarialRobustness.Defenses;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Visual Prompting for Adversarial Robustness", "https://arxiv.org/abs/2210.06284", Year = 2024, Authors = "Aochuan Chen, Peter Hartona, Jiancheng Liu, Yunhui Guo, Xing Xie, Sung-En Chang")]
+[ResearchPaper("Visual Prompting for Adversarial Robustness", "https://arxiv.org/abs/2210.06284", Year = 2023, Authors = "Aochuan Chen, Peter Lorenz, Yuguang Yao, Pin-Yu Chen, Sijia Liu")]
 public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<T, TInput, TOutput>
 {
     /// <summary>

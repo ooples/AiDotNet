@@ -162,7 +162,7 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
 
         // Use the provided loss function if available, otherwise fall back to MSE
         var loss = lossFunction ?? DefaultLossFunction;
-        var lossGradient = loss.CalculateDerivative(predictions, target);
+        var lossGradient = loss.ComputeGradient(predictions, target);
 
         double scale = 1.0 / count;
         for (int r = 0; r < count; r++)

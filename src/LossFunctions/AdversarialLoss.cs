@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -219,17 +219,6 @@ public class AdversarialLoss<T> : LossFunctionBase<T>
             "from a flat vector. Use ComputeTapeLoss(Tensor, Tensor).");
     }
 
-    /// <inheritdoc/>
-    /// <exception cref="NotSupportedException">
-    /// Always thrown, for the same reason as <see cref="CalculateLoss"/>. The gradient is produced by
-    /// the autodiff tape through the discriminator.
-    /// </exception>
-    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
-    {
-        throw new NotSupportedException(
-            "AdversarialLoss must run a convolutional discriminator and cannot recover image shape " +
-            "from a flat vector. Its gradient comes from the autodiff tape via ComputeTapeLoss.");
-    }
 
     #endregion
 }

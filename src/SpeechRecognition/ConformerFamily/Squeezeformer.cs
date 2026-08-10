@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -80,7 +80,37 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </para>
     /// </remarks>
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateSqueezeformerOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+    {
+        // VALIDATED HERE RATHER THAN LEFT TO THE OPTIMIZER, because each of these fails silently rather
+        // than loudly. A non-positive peak rate gives a model that runs a full training job and does not
+        // move; a negative weight decay is an anti-regularizer that grows the weights every step; and a
+        // negative WarmupSteps does not error -- it just misses the `> 0` test below, so warmup is
+        // quietly switched off and the paper's 2e-3 peak is applied flat from step 0, which the remark
+        // above this method identifies as precisely the unstable regime.
+        if (_options.PeakLearningRate <= 0.0 || double.IsNaN(_options.PeakLearningRate) || double.IsInfinity(_options.PeakLearningRate))
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.PeakLearningRate must be positive; got {_options.PeakLearningRate}. " +
+                "A non-positive rate trains for the full run and changes nothing, and an infinite one " +
+                "sends every parameter to NaN on the first step.");
+        }
+
+        if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.WeightDecay must be non-negative; got {_options.WeightDecay}. " +
+                "A negative decay grows the weights every step instead of shrinking them, and an " +
+                "infinite one collapses them to zero.");
+        }
+
+        if (_options.WarmupSteps < 0)
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.WarmupSteps must be non-negative; got {_options.WarmupSteps}. " +
+                "Use 0 to disable warmup -- a negative value disables it too, but looks like a setting.");
+        }
+
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -100,6 +130,7 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 EnableGradientClipping = true,
                 MaxGradientNorm = 1.0
             });
+    }
 
     /// <summary>
     /// Transcribes audio using Squeezeformer's temporal U-Net encoder.
@@ -131,8 +162,30 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultSqueezeformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: _options.FeedForwardExpansionFactor, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, useLayerNormalization: _options.UseLayerNormalization)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected, _optimizer); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+
+        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
+        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
+        // training mode when it did. The next Predict then runs with dropout live and stochastic
+        // batch-norm statistics, so it silently returns a different answer for the same input, and
+        // nothing about that failure points back at the exception that caused it.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new()
@@ -156,8 +209,50 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             ["Language"] = _options.Language
         }
     };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardExpansionFactor); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardExpansionFactor = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
+    /// <summary>Version of the trailing, optimizer-shaping section of this payload.</summary>
+    /// <remarks>
+    /// Version 1 added PeakLearningRate, WeightDecay, WarmupSteps and UseLayerNormalization. Payloads
+    /// written before it simply end after Language, which is what the reader keys on -- this method is
+    /// the last thing NeuralNetworkBase.Serialize writes, so an exhausted stream is an exact signal
+    /// rather than a guess.
+    /// </remarks>
+    private const int NetworkSpecificPayloadVersion = 1;
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardExpansionFactor); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language);
+        // The settings that SHAPE THE OPTIMIZER. Without these a reloaded model resumed training under
+        // whatever defaults CreateSqueezeformerOptimizer saw at construction, not the ones it was saved
+        // with -- a different learning rate and decay, silently.
+        w.Write(NetworkSpecificPayloadVersion); w.Write(_options.PeakLearningRate); w.Write(_options.WeightDecay); w.Write(_options.WarmupSteps); w.Write(_options.UseLayerNormalization); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardExpansionFactor = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
+        var stream = r.BaseStream;
+        if (!stream.CanSeek || stream.Position < stream.Length)
+        {
+            int payloadVersion = r.ReadInt32();
+            if (payloadVersion != NetworkSpecificPayloadVersion)
+            {
+                throw new InvalidOperationException(
+                    $"Squeezeformer was saved with network-payload version {payloadVersion}, but this " +
+                    $"build reads version {NetworkSpecificPayloadVersion}. Load it with a matching " +
+                    "version of AiDotNet, or re-save it from one.");
+            }
+
+            _options.PeakLearningRate = r.ReadDouble(); _options.WeightDecay = r.ReadDouble(); _options.WarmupSteps = r.ReadInt32(); _options.UseLayerNormalization = r.ReadBoolean();
+
+            // Rebuild it: _optimizer was created from the options as they stood BEFORE this payload was
+            // read, so leaving it in place means the restored settings describe the model but not the
+            // optimizer that trains it.
+            _optimizer = CreateSqueezeformerOptimizer();
+            SetBaseTrainOptimizer(_optimizer);
+        }
+        else
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "AiDotNet.Squeezeformer: this model was saved before the optimizer settings were " +
+                "persisted, so PeakLearningRate, WeightDecay, WarmupSteps and UseLayerNormalization " +
+                "keep their defaults. Re-save the model to carry them forward.");
+        }
+
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Squeezeformer<T>(Architecture, mp, _options); return new Squeezeformer<T>(Architecture, _options); }
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
     private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }

@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 
 /// <summary>
@@ -40,8 +42,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
+public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Entry-based like its siblings, but this one appended a single zero when the table was empty so the surface is never zero-length.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableEntriesParameterSource<T>(_qTable, padEmptyToOne: true));
+    }
     private MonteCarloOptions<T> _options;
 
     /// <inheritdoc/>
@@ -244,10 +253,6 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     }
 
-    public override long ParameterCount =>
-        // Match GetParameters which returns at least one entry (zero) when the
-        // Q-table is empty.
-        _qTable.Count == 0 ? 1 : _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -282,64 +287,6 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var paramsList = new List<T>();
-        foreach (var stateEntry in _qTable)
-        {
-            foreach (var actionValue in stateEntry.Value)
-            {
-                paramsList.Add(actionValue.Value);
-            }
-        }
-
-        if (paramsList.Count == 0)
-        {
-            paramsList.Add(NumOps.Zero);
-        }
-
-        var paramsVector = new Vector<T>(paramsList.Count);
-        for (int i = 0; i < paramsList.Count; i++)
-        {
-            paramsVector[i] = paramsList[i];
-        }
-
-        return paramsVector;
-    }
-
-    /// <summary>
-    /// Sets parameters. Note: This method cannot reconstruct the Q-table structure from a flat vector
-    /// without additional state mapping information. It only updates existing Q-table entries.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        // Can only update existing Q-table entries since we don't have state mapping
-        int index = 0;
-        foreach (var stateEntry in _qTable.ToList())
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                if (index < parameters.Length)
-                {
-                    _qTable[stateEntry.Key][a] = parameters[index];
-                    index++;
-                }
-            }
-        }
-
-        // Warn if Q-table is empty - parameters cannot be applied
-        if (_qTable.Count == 0 && parameters.Length > 0)
-        {
-            // Parameters will be ignored since Q-table structure doesn't exist yet
-            // This is a limitation of the SetParameters design for tabular methods
-        }
-    }
-
     /// <summary>
     /// Creates a deep copy of the agent, including all Q-table entries.
     /// </summary>
@@ -371,12 +318,12 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

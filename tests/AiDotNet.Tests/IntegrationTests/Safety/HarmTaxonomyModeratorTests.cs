@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
@@ -30,6 +30,62 @@ public class HarmTaxonomyModeratorTests
             for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble();
             frames.Add(t);
         }
+        return frames;
+    }
+
+    /// <summary>
+    /// A video built to trip SEVERAL harm categories at once, one representative signal each.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Frames(int, int)"/> is uniform noise, which is exactly the content the taxonomy is
+    /// meant to find nothing in — so it cannot be used to assert that findings ARE produced. The
+    /// multi-label and non-empty assertions need a fixture whose content is detectable, and it must
+    /// be detectable under more than one category for the non-mutually-exclusive claim to mean
+    /// anything.
+    /// </remarks>
+    private static List<Tensor<double>> MultiHarmFrames()
+    {
+        var frames = Frames(60);
+
+        // ACTUAL SKIN-TONE PIXELS, NOT MERELY SATURATED ONES. The previous fixture drove the GREEN
+        // channel to 0.0, and CLIPImageSafetyClassifier's skin predicate requires g > 40 of 255 --
+        // so the "saturated" region was explicitly NOT skin, the skin fraction never approached the
+        // 0.8 NSFW threshold, and every assertion below was checking an empty collection. The fixture
+        // has to contain what it claims to contain for the assertions to mean anything.
+        //
+        // Values are normalized 0-1 (the classifier rescales by 255 when every channel is <= 1) and
+        // chosen to sit inside the predicate: r=0.85 (217) > g=0.65 (166) > b=0.55 (140), each above
+        // its floor, r-g = 51 clears the 15 minimum difference, and the implied HSV hue/saturation
+        // land in the accepted band. Every pixel is skin so the fraction is 1.0, comfortably over the
+        // 0.8 bar and independent of the random noise Frames() seeded.
+        for (int f = 0; f < frames.Count; f++)
+        {
+            var t = frames[f];
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 8; x++)
+                {
+                    int r = (0 * 8 + y) * 8 + x;
+                    int g = (1 * 8 + y) * 8 + x;
+                    int b = (2 * 8 + y) * 8 + x;
+                    if (b >= t.Length) continue;
+
+                    // TWO shades of skin, cut hard at the midpoint. Uniform frames trip the image
+                    // classifier but leave the temporal detectors nothing to see -- no scene change,
+                    // no motion -- so only ONE category was ever reported and the
+                    // non-mutually-exclusive assertion could not pass. Both shades satisfy the skin
+                    // predicate (dark: r=115 > g=76 > b=56, all above their floors, r-g=39 > 15), so
+                    // the NSFW fraction stays 1.0 across the whole video while the shade flips on EVERY
+                    // frame, so the temporal-consistency and scene-transition detectors see a real
+                    // discontinuity at every pair rather than at a single midpoint.
+                    bool secondScene = f % 2 == 1;
+                    t[r] = secondScene ? 0.45 : 0.85;
+                    t[g] = secondScene ? 0.30 : 0.65;
+                    t[b] = secondScene ? 0.22 : 0.55;
+                }
+            }
+        }
+
         return frames;
     }
 
@@ -72,16 +128,30 @@ public class HarmTaxonomyModeratorTests
             SafetyCategory.PolicyViolation,
         };
 
+        // BOTH DIRECTIONS. Checking only that every unmapped signal is on the list lets the list
+        // rot the other way: once PolicyViolation gains a mapping, its entry sits here forever and
+        // nothing reports that the deliberate exclusion is now a lie. A stale exclusion is exactly
+        // as invisible as an unmapped signal, so it gets the same assertion.
+        var actuallyUnmapped = new HashSet<SafetyCategory>();
+
         foreach (SafetyCategory signal in (SafetyCategory[])Enum.GetValues(typeof(SafetyCategory)))
         {
             var harm = HarmTaxonomyMap.ToHarmCategory(signal);
             if (harm is null)
             {
+                actuallyUnmapped.Add(signal);
                 Assert.True(deliberatelyUnmapped.Contains(signal),
                     $"{signal} maps to no harm category and is not on the deliberate-exclusion list. " +
                     "Either map it or record why it is not a content harm.");
             }
         }
+
+        var staleExclusions = deliberatelyUnmapped.Except(actuallyUnmapped).ToList();
+        Assert.True(staleExclusions.Count == 0,
+            "These signals are on the deliberate-exclusion list but now DO map into the taxonomy: " +
+            string.Join(", ", staleExclusions) +
+            ". Remove them from the list -- an exclusion that no longer excludes anything documents " +
+            "a decision that has since been reversed.");
     }
 
     [Fact]
@@ -100,9 +170,21 @@ public class HarmTaxonomyModeratorTests
         // Multi-label by design: a video may be reported under several categories, but each category
         // yields a single video-level finding rather than one per frame.
         var moderator = new MultimodalVideoModerator<double>();
-        var findings = moderator.EvaluateVideo(Frames(60), 30.0);
+        var findings = moderator.EvaluateVideo(MultiHarmFrames(), 30.0);
 
         Assert.NotNull(findings);
+
+        // AN EMPTY LIST SATISFIED THE DUPLICATE CHECK. A moderator that detected nothing at all
+        // passed this test, and the property the name claims -- that SEVERAL categories can be
+        // reported for one video -- was never asserted at all. Both halves are asserted now.
+        Assert.NotEmpty(findings);
+
+        var categories = findings.Select(f => f.Category).Distinct().ToList();
+        Assert.True(categories.Count > 1,
+            "Non-mutually-exclusive means a single video can be reported under SEVERAL categories. " +
+            "This fixture is built to trip more than one, yet only these were reported: " +
+            string.Join(", ", categories));
+
         var duplicated = findings.GroupBy(f => f.Category).Where(g => g.Count() > 1).ToList();
         Assert.True(duplicated.Count == 0,
             "Each harm category folds to one video-level finding; got duplicates for: " +
@@ -117,15 +199,38 @@ public class HarmTaxonomyModeratorTests
         Assert.Equal(14, MultimodalVideoModerator<double>.TaxonomyFrameBudget);
 
         var moderator = new MultimodalVideoModerator<double>();
-        Assert.NotNull(moderator.EvaluateVideo(Frames(30), 30.0));
-        Assert.NotNull(moderator.EvaluateVideo(Frames(600), 30.0));
+
+        // THE CONSTANT ALONE PROVES NOTHING. Asserting the budget field and then only that two
+        // calls returned non-null left the actual cost property untested: a moderator that reverted
+        // to a per-frame rate satisfied every one of those assertions. The number of frames the
+        // moderator actually looked at is the observable, so that is what is asserted.
+        moderator.EvaluateVideo(Frames(30), 30.0);
+        int sampledForShort = moderator.LastSampledFrameCount;
+
+        moderator.EvaluateVideo(Frames(600), 30.0);
+        int sampledForLong = moderator.LastSampledFrameCount;
+
+        // EXACTLY THE BUDGET, NOT AT MOST. "Equal counts and <= budget" is satisfied by a sampler
+        // that reads ZERO frames, which is the degenerate this assertion is meant to exclude. Both
+        // fixtures are longer than the budget (30 and 600 frames against 14), so a constant-budget
+        // sampler must consume all 14 for each call -- fewer means it is not sampling, more means
+        // it is rate-based.
+        Assert.Equal(MultimodalVideoModerator<double>.TaxonomyFrameBudget, sampledForShort);
+        Assert.Equal(MultimodalVideoModerator<double>.TaxonomyFrameBudget, sampledForLong);
     }
 
     [Fact]
     public void FindingsAreVideoLevel()
     {
-        var frames = Frames(90);
-        foreach (var finding in new MultimodalVideoModerator<double>().EvaluateVideo(frames, 30.0))
+        var frames = MultiHarmFrames();
+        var findings = new MultimodalVideoModerator<double>().EvaluateVideo(frames, 30.0);
+
+        // A foreach over an empty list runs its body zero times and passes. Nothing else in this
+        // file established that the fixture produces findings at all, so a moderator that stopped
+        // detecting everything turned this test -- and two others -- green.
+        Assert.NotEmpty(findings);
+
+        foreach (var finding in findings)
         {
             Assert.Equal(0, finding.SpanStart);
             Assert.True(finding.SpanEnd > 0);
@@ -154,6 +259,12 @@ public class HarmTaxonomyModeratorTests
         var moderator = new MultimodalVideoModerator<double>();
         Assert.Empty(moderator.EvaluateVideo(new List<Tensor<double>>(), 30.0));
         Assert.Empty(moderator.EvaluateVideo(Frames(10), 0.0));
-        Assert.NotNull(moderator.EvaluateVideo(Frames(1), 30.0));
+
+        // THE CONTRACT FOR ONE FRAME, not NotNull -- which the moderator satisfies either way and
+        // which therefore contradicted this method's own name. A single frame is a valid video: the
+        // taxonomy's harms are judged from content, and one frame of benign noise carries none of
+        // them. It is degenerate in LENGTH, not in kind, so it must produce no findings for benign
+        // content rather than being exempt from the assertion.
+        Assert.Empty(moderator.EvaluateVideo(Frames(1), 30.0));
     }
 }

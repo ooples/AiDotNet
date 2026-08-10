@@ -220,7 +220,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -346,7 +346,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         int embeddingDimension = 256,
         int maxSequenceLength = 32,
         int imageSize = 224,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Blip2Options? options = null)
         : base(architecture,
@@ -472,7 +472,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         int numLmDecoderLayers = 6,
         LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
         ITokenizer? tokenizer = null,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         Blip2Options? options = null)
         : base(architecture,
@@ -1952,293 +1952,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     }
 
     /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-
-            // Q-Former parameters
-            count += _numQueryTokens * _qformerHiddenDim; // Query tokens
-            count += _numQueryTokens * _qformerHiddenDim; // Query positional embeddings
-
-            foreach (var layer in _qformerSelfAttentionLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _qformerCrossAttentionLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            foreach (var layer in _qformerFeedForwardLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            if (_itmHead is not null)
-                count += (int)_itmHead.ParameterCount;
-
-            if (_itcProjection is not null)
-                count += (int)_itcProjection.ParameterCount;
-
-            if (_languageModelProjection is not null)
-                count += (int)_languageModelProjection.ParameterCount;
-
-            // LM Decoder layers
-            foreach (var layer in _lmDecoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // LM Head
-            if (_lmHead is not null)
-                count += (int)_lmHead.ParameterCount;
-
-            return count;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-
-        // Add query tokens (trainable)
-        if (_queryTokens is not null)
-        {
-            for (int i = 0; i < _queryTokens.Shape[0]; i++)
-            {
-                for (int j = 0; j < _queryTokens.Shape[1]; j++)
-                {
-                    parameters.Add(_queryTokens[i, j]);
-                }
-            }
-        }
-
-        // Add query positional embeddings (trainable)
-        if (_queryPositionalEmbeddings is not null)
-        {
-            for (int i = 0; i < _queryPositionalEmbeddings.Shape[0]; i++)
-            {
-                for (int j = 0; j < _queryPositionalEmbeddings.Shape[1]; j++)
-                {
-                    parameters.Add(_queryPositionalEmbeddings[i, j]);
-                }
-            }
-        }
-
-        // Add Q-Former layer parameters
-        foreach (var layer in _qformerSelfAttentionLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters.Add(layerParams[i]);
-            }
-        }
-
-        foreach (var layer in _qformerCrossAttentionLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters.Add(layerParams[i]);
-            }
-        }
-
-        foreach (var layer in _qformerFeedForwardLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters.Add(layerParams[i]);
-            }
-        }
-
-        // Add projection head parameters
-        if (_itmHead is not null)
-        {
-            var headParams = _itmHead.GetParameters();
-            for (int i = 0; i < headParams.Length; i++)
-            {
-                parameters.Add(headParams[i]);
-            }
-        }
-
-        if (_itcProjection is not null)
-        {
-            var projParams = _itcProjection.GetParameters();
-            for (int i = 0; i < projParams.Length; i++)
-            {
-                parameters.Add(projParams[i]);
-            }
-        }
-
-        if (_languageModelProjection is not null)
-        {
-            var lmProjParams = _languageModelProjection.GetParameters();
-            for (int i = 0; i < lmProjParams.Length; i++)
-            {
-                parameters.Add(lmProjParams[i]);
-            }
-        }
-
-        // Add LM decoder layer parameters
-        foreach (var layer in _lmDecoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                parameters.Add(layerParams[i]);
-            }
-        }
-
-        // Add LM head parameters
-        if (_lmHead is not null)
-        {
-            var lmHeadParams = _lmHead.GetParameters();
-            for (int i = 0; i < lmHeadParams.Length; i++)
-            {
-                parameters.Add(lmHeadParams[i]);
-            }
-        }
-
-        return new Vector<T>([.. parameters]);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        // Set query tokens
-        if (_queryTokens is not null)
-        {
-            for (int i = 0; i < _queryTokens.Shape[0]; i++)
-            {
-                for (int j = 0; j < _queryTokens.Shape[1]; j++)
-                {
-                    _queryTokens[i, j] = parameters[offset++];
-                }
-            }
-        }
-
-        // Set query positional embeddings
-        if (_queryPositionalEmbeddings is not null)
-        {
-            for (int i = 0; i < _queryPositionalEmbeddings.Shape[0]; i++)
-            {
-                for (int j = 0; j < _queryPositionalEmbeddings.Shape[1]; j++)
-                {
-                    _queryPositionalEmbeddings[i, j] = parameters[offset++];
-                }
-            }
-        }
-
-        // Set Q-Former layer parameters
-        foreach (var layer in _qformerSelfAttentionLayers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParamCount;
-        }
-
-        foreach (var layer in _qformerCrossAttentionLayers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParamCount;
-        }
-
-        foreach (var layer in _qformerFeedForwardLayers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParamCount;
-        }
-
-        // Set projection head parameters
-        if (_itmHead is not null)
-        {
-            int paramCount = checked((int)_itmHead.ParameterCount);
-            var headParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                headParams[i] = parameters[offset + i];
-            }
-            _itmHead.SetParameters(headParams);
-            offset += paramCount;
-        }
-
-        if (_itcProjection is not null)
-        {
-            int paramCount = checked((int)_itcProjection.ParameterCount);
-            var projParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                projParams[i] = parameters[offset + i];
-            }
-            _itcProjection.SetParameters(projParams);
-            offset += paramCount;
-        }
-
-        if (_languageModelProjection is not null)
-        {
-            int paramCount = checked((int)_languageModelProjection.ParameterCount);
-            var lmProjParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                lmProjParams[i] = parameters[offset + i];
-            }
-            _languageModelProjection.SetParameters(lmProjParams);
-            offset += paramCount;
-        }
-
-        // Set LM decoder layer parameters
-        foreach (var layer in _lmDecoderLayers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParamCount;
-        }
-
-        // Set LM head parameters
-        if (_lmHead is not null)
-        {
-            int paramCount = checked((int)_lmHead.ParameterCount);
-            var lmHeadParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                lmHeadParams[i] = parameters[offset + i];
-            }
-            _lmHead.SetParameters(lmHeadParams);
-            offset += paramCount;
-        }
-    }
-
-    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
@@ -2255,7 +1968,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         LastLoss = LossFunction.CalculateLoss(imageOutput.ToVector(), expectedOutput.ToVector());
 
         // Backward pass - compute gradients
-        var lossGradient = LossFunction.CalculateDerivative(imageOutput.ToVector(), expectedOutput.ToVector());
+        var lossGradient = LossFunction.ComputeGradient(imageOutput.ToVector(), expectedOutput.ToVector());
         var gradient = Tensor<T>.FromVector(lossGradient);
 
         // Apply gradient descent update using the computed gradients

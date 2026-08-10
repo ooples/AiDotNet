@@ -57,6 +57,15 @@ namespace AiDotNet.Diffusion.NoisePredictors;
     [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
 public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The SAME resolution the write path uses. Reading through the shape-only
+    /// ResolveShapesViaForward instead left seven lazy layers reporting zero, so restoring the
+    /// model grew it from 3,146,496 to 5,006,595.</remarks>
+    protected override void EnsureParametersReady()
+    {
+        TriggerLazyShapeResolution();
+    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>
@@ -185,9 +194,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
-
-    /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsCFG => true;
@@ -1200,30 +1206,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
-    {
-        EnsureLayersInitialized();
-        // Resolve every lazy layer's TRUE shape via a shape-only forward (single source
-        // of truth) — NO weight materialisation, so this stays cheap on a foundation-scale
-        // U-Net (the Unit-03b construction OOM was the old materialising dummy forward).
-        // Using the forward topology (not a per-construction estimate) guarantees this
-        // count equals GetParameters().Length and the real forward's resolution, including
-        // decoder skip concatenation.
-        ResolveShapesViaForward();
-
-        // Walk the same layers GetParameters walks and sum their actual ParameterCount.
-        // Must match GetParameters().Length exactly — the previous "approximate" formula
-        // diverged from the real count and broke contract tests asserting equality.
-        long count = 0;
-        AddLayerCount(ref count, _inputConv);
-        AddLayerCount(ref count, _timeEmbedMlp1);
-        AddLayerCount(ref count, _timeEmbedMlp2);
-        for (int i = 0; i < _encoderBlocks.Count; i++) AddBlockCount(ref count, _encoderBlocks[i]);
-        for (int i = 0; i < _middleBlocks.Count; i++) AddBlockCount(ref count, _middleBlocks[i]);
-        for (int i = 0; i < _decoderBlocks.Count; i++) AddBlockCount(ref count, _decoderBlocks[i]);
-        AddLayerCount(ref count, _outputConv);
-        return (int)Math.Min(count, int.MaxValue);
-    }
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
@@ -1237,46 +1219,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         AddLayerCount(ref count, block.CrossAttentionBlock);
         AddLayerCount(ref count, block.Downsample);
         AddLayerCount(ref count, block.Upsample);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        EnsureLayersInitialized();
-        // Resolve all layer shapes via the shape-only forward (single source of truth,
-        // no materialisation) so the returned vector's length matches ParameterCount
-        // exactly. Each layer.GetParameters() below then materialises just that layer's
-        // weights on demand.
-        ResolveShapesViaForward();
-
-        // Collect all sublayer parameter vectors first (each layer allocates its own)
-        var layerParams = new List<Vector<T>>();
-        int totalCount = 0;
-
-        CollectLayerParams(layerParams, ref totalCount, _inputConv);
-        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp1);
-        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp2);
-
-        for (int i = 0; i < _encoderBlocks.Count; i++)
-            CollectBlockParams(layerParams, ref totalCount, _encoderBlocks[i]);
-        for (int i = 0; i < _middleBlocks.Count; i++)
-            CollectBlockParams(layerParams, ref totalCount, _middleBlocks[i]);
-        for (int i = 0; i < _decoderBlocks.Count; i++)
-            CollectBlockParams(layerParams, ref totalCount, _decoderBlocks[i]);
-
-        CollectLayerParams(layerParams, ref totalCount, _outputConv);
-
-        // Single allocation at exact size, then copy from cached sublayer vectors
-        var parameters = new Vector<T>(totalCount);
-        int idx = 0;
-        for (int v = 0; v < layerParams.Count; v++)
-        {
-            var p = layerParams[v];
-            for (int i = 0; i < p.Length; i++)
-                parameters[idx++] = p[i];
-        }
-
-        return parameters;
     }
 
     private static void CollectLayerParams(List<Vector<T>> dest, ref int totalCount, ILayer<T>? layer)
@@ -1294,71 +1236,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         CollectLayerParams(dest, ref totalCount, block.CrossAttentionBlock);
         CollectLayerParams(dest, ref totalCount, block.Downsample);
         CollectLayerParams(dest, ref totalCount, block.Upsample);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Emits one chunk per layer in the SAME canonical order as <see cref="GetParameters"/> /
-    /// <see cref="SetParameters"/> (EnumerateAllLayers), so the flat concatenation of the chunks is
-    /// index-identical to GetParameters() — the load-bearing per-index streaming contract (#1624) — without
-    /// ever materializing the full aggregate. The earlier per-tensor walk (GetTrainableParameters +
-    /// sub-layer recursion) produced a DIFFERENT intra-layer order than GetParameters, so a chunked clone
-    /// mis-mapped weights (#1758); this mirrors the per-layer pattern the DiT/U-ViT predictors already use.
-    /// </remarks>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        EnsureLayersInitialized();
-        // Resolve shapes exactly as GetParameters does (shape-only, no weight materialization) so each
-        // layer's chunk is sized identically to its slice of the flat vector.
-        ResolveShapesViaForward();
-        foreach (var (_, p) in EnumerateParameterizedLayers())
-            yield return new Tensor<T>(new[] { p.Length }, p);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Consumes one chunk per parameterized layer in the SAME canonical order <see cref="GetParameterChunks"/>
-    /// emits them and <see cref="SetParameters"/> applies them, so a chunked round-trip restores each layer
-    /// exactly. The base <see cref="NoisePredictorBase{T}"/> SetParameterChunks walks a REFLECTION order
-    /// (ReflectInstanceLayers) that differs from this predictor's explicit layer order, which mis-mapped UNet
-    /// tensors when a clone restored from chunks (this predictor's Clone, and FluxSchnellModel's, which
-    /// round-trips the predictor's chunks directly). One chunk in flight at a time — never a flat aggregate.
-    /// </remarks>
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        ThrowIfDisposed();
-        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        EnsureLayersInitialized();
-        // Size lazy layers to their real ParameterCount first (mirrors SetParameters) so each layer's slice
-        // lands instead of being dropped into a still-zero-sized layer.
-        TriggerLazyShapeResolution();
-        // Foundation-scale (#1715): engage streaming before touching weights — see GetParameterChunks.
-        MaybeEngageWeightStreaming();
-        _preserveMaterializedParameters = true;
-
-        using var e = chunks.GetEnumerator();
-        foreach (var (layer, p) in EnumerateParameterizedLayers())
-        {
-            if (!e.MoveNext())
-                throw new ArgumentException(
-                    "SetParameterChunks received fewer chunks than the predictor has parameterized layers.",
-                    nameof(chunks));
-            var incoming = e.Current.ToVector();
-            // The participation gate is shared with GetParameterChunks (same materialized
-            // GetParameters().Length source), so a well-formed round-trip lines up 1:1; verify the per-layer
-            // length as well so any future ILayer whose ParameterCount disagrees with GetParameters().Length
-            // fails loudly here instead of silently shifting every subsequent layer's restored weights.
-            if (incoming.Length != p.Length)
-                throw new ArgumentException(
-                    $"SetParameterChunks chunk length {incoming.Length} does not match layer parameter length {p.Length}.",
-                    nameof(chunks));
-            layer.SetParameters(incoming);
-        }
-        if (e.MoveNext())
-            throw new ArgumentException(
-                "SetParameterChunks received more chunks than the predictor has parameterized layers.",
-                nameof(chunks));
-        InvalidateCompiledPlans();
     }
 
     /// <summary>
@@ -1434,40 +1311,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             foreach (var parameter in EnumerateMaterializedParameters(subLayer))
                 yield return parameter;
         }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        EnsureLayersInitialized();
-        // Resolve lazy layer shapes first so each layer's slice is sized to its
-        // real ParameterCount; otherwise lazy layers size to 0 and the incoming
-        // values are silently dropped (the SetParameters/GetParameters round-trip bug).
-        TriggerLazyShapeResolution();
-        _preserveMaterializedParameters = true;
-
-        var index = 0;
-
-        SetLayerParameters(_inputConv, parameters, ref index);
-        SetLayerParameters(_timeEmbedMlp1, parameters, ref index);
-        SetLayerParameters(_timeEmbedMlp2, parameters, ref index);
-
-        foreach (var block in _encoderBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        foreach (var block in _middleBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        foreach (var block in _decoderBlocks)
-        {
-            SetBlockParameters(block, parameters, ref index);
-        }
-
-        SetLayerParameters(_outputConv, parameters, ref index);
     }
 
     private void SetLayerParameters(ILayer<T>? layer, Vector<T> parameters, ref int index)

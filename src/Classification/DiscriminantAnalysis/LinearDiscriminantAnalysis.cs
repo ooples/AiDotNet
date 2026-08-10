@@ -5,6 +5,8 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 namespace AiDotNet.Classification.DiscriminantAnalysis;
 
 /// <summary>
@@ -75,8 +77,22 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
 public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The flattened class means. Its own comment says LDA has no simple parameter vector, but it DOES serialize the means and a test asserts they are non-empty after training -- deleting the surface on the strength of the comment was wrong. PackParameters and UnpackParameters ARE the previous
+    /// GetParameters and SetParameters, renamed rather than rewritten, so the layout is
+    /// byte-for-byte unchanged. What changes is that the COUNT now folds this same
+    /// component instead of ClassifierBase's NumFeatures * NumClasses formula, which
+    /// described the classifier's shape rather than what it serializes.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
     /// <summary>
     /// LDA computes parameters from class covariance matrices during training.
     /// It does not support flat parameter initialization.
@@ -605,7 +621,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         // LDA doesn't have a simple parameter vector like linear classifiers
         // Return flattened class means for serialization
@@ -628,7 +644,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
         // LDA computes parameters from class statistics, not direct parameter setting.
         // Accept silently so the optimizer can initialize the model without crashing.
@@ -639,21 +655,6 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     {
         // Return a fresh instance — LDA parameters come from training, not direct setting
         return CreateNewInstance();
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // LDA is a closed-form solution, not gradient-based
-        // Return zero gradients
-        return new Vector<T>(NumClasses * NumFeatures);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // LDA is a closed-form solution, not gradient-based
-        // This is a no-op
     }
 
     /// <inheritdoc/>

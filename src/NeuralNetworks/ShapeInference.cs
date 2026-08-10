@@ -85,6 +85,25 @@ public static class ShapeInference
     /// actually built with — the stride, kernel and scale factor it was handed, not defaults.
     /// </remarks>
     public static int[]? InferOutputShape(object instance, IReadOnlyList<int> inputShape)
+        => InferOutputShape(instance, inputShape, isBatched: true);
+
+    /// <summary>
+    /// Computes the output shape a type produces, saying whether <paramref name="inputShape"/>
+    /// INCLUDES a batch axis.
+    /// </summary>
+    /// <param name="instance">The layer or model. Must implement <see cref="IShapeContract"/>.</param>
+    /// <param name="inputShape">A concrete input shape.</param>
+    /// <param name="isBatched">
+    /// <c>true</c> when the leading axis is a batch - a real tensor; <c>false</c> for a PER-SAMPLE
+    /// shape, which is what chain resolution propagates.
+    /// </param>
+    /// <returns>The inferred output shape, or <c>null</c> if it cannot be determined.</returns>
+    /// <remarks>
+    /// The single-argument overload defaults to <c>true</c>, preserving what every existing caller
+    /// gets. Chain resolution must pass <c>false</c>: it propagates per-sample shapes, and a layer that
+    /// treats the leading axis as a batch would otherwise collapse the wrong axes.
+    /// </remarks>
+    public static int[]? InferOutputShape(object instance, IReadOnlyList<int> inputShape, bool isBatched)
     {
         if (instance is null) throw new ArgumentNullException(nameof(instance));
         if (inputShape is null) throw new ArgumentNullException(nameof(inputShape));
@@ -94,13 +113,64 @@ public static class ShapeInference
         var named = NameAxes(instance.GetType(), inputShape);
         if (named is null) return null;
 
-        var axes = contract.OutputAxesFor(inputShape.Count);
+        var axes = contract.OutputAxesFor(inputShape.Count, isBatched);
         if (axes is null || axes.Count == 0) return null;
 
         var result = new int[axes.Count];
         for (int i = 0; i < axes.Count; i++)
         {
             if (!axes[i].Relation.TryResolve(named, out int size)) return null;
+            result[i] = size;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the output shape a MULTI-INPUT type produces for the given input shapes.
+    /// </summary>
+    /// <param name="instance">The layer or model. Must implement <see cref="IShapeContract"/>.</param>
+    /// <param name="inputShapes">One concrete shape per input port, in port order.</param>
+    /// <returns>The inferred output shape, or <c>null</c> if it cannot be determined.</returns>
+    /// <remarks>
+    /// <para>
+    /// Axis NAMING still comes from the type's declared input layout, and every port is named with that
+    /// same layout - which is correct for the layers this exists for, since a join requires its inputs
+    /// to agree on every axis except the joined one. A port whose rank the layout does not accept makes
+    /// the whole inference decline rather than resolving from the ports that did name.
+    /// </para>
+    /// <para>
+    /// The single-shape overload remains the path for the overwhelming majority of layers; this is only
+    /// consulted when a type genuinely has several inputs.
+    /// </para>
+    /// </remarks>
+    public static int[]? InferOutputShape(object instance, IReadOnlyList<IReadOnlyList<int>> inputShapes)
+    {
+        if (instance is null) throw new ArgumentNullException(nameof(instance));
+        if (inputShapes is null) throw new ArgumentNullException(nameof(inputShapes));
+        if (inputShapes.Count == 0) return null;
+
+        if (instance is not IShapeContract contract) return null;
+
+        var named = new IReadOnlyDictionary<TensorAxis, int>[inputShapes.Count];
+        var ranks = new int[inputShapes.Count];
+        for (int i = 0; i < inputShapes.Count; i++)
+        {
+            var shape = inputShapes[i];
+            if (shape is null) return null;
+            var axes = NameAxes(instance.GetType(), shape);
+            if (axes is null) return null;
+            named[i] = axes;
+            ranks[i] = shape.Count;
+        }
+
+        var outputAxes = contract.OutputAxesForPorts(ranks);
+        if (outputAxes is null || outputAxes.Count == 0) return null;
+
+        var result = new int[outputAxes.Count];
+        for (int i = 0; i < outputAxes.Count; i++)
+        {
+            if (!outputAxes[i].Relation.TryResolve(named, out int size)) return null;
             result[i] = size;
         }
 

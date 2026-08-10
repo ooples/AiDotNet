@@ -1177,7 +1177,6 @@ public class OpenSora<T> : NeuralNetworkBase<T>
             }
         }
     }
-
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

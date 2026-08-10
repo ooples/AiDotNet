@@ -40,8 +40,71 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class LocallyConnectedLayer<T> : LayerBase<T>
+// CHANNELS-LAST, unlike ConvolutionalLayer. The roles come from this layer's own OnFirstForward, which
+// names them: rank 4 is [B,H,W,C] and rank 3 is [H,W,C], and any other rank throws outright.
+//
+// Written as two declarations rather than one BatchOptional declaration, because ADNSHAPE005 compares
+// [LayerProperty] against the raw AXIS COUNT of each input layout and does not model the optional batch.
+// This layer carries BOTH ExpectedInputRank = 3 and a rank-4 TestInputShape, so a single 4-axis
+// batch-optional layout - correct at runtime - would still be reported as contradicting the rank-3 claim.
+[TensorLayout(TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input,
+    Note = "NHWC unbatched: per-position filters, so the spatial axes are the ones that carry meaning.")]
+[TensorLayout(TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output,
+    Note = "Channel count becomes the configured output channel count; H and W follow kernel/stride.")]
+[AutoParameters]
+public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written, not generated: every relation here reads a constructor argument, which an attribute
+    /// cannot carry. The terms come straight off <c>OnFirstForward</c> -
+    /// <c>_outputHeight = (h - _kernelSize) / _stride + 1</c> and the matching width line - which is
+    /// exactly <c>Window(kernel: _kernelSize, stride: _stride, padding: 0)</c>. This layer exposes no
+    /// padding parameter, hence the 0.
+    /// </para>
+    /// <para>
+    /// The channel axis is <c>Fixed(_outputChannels)</c> because that is the constructor argument the
+    /// layer sizes its filter bank by, and <c>ResolveShapes</c> writes it verbatim as the trailing output
+    /// dim. It is a field, never a literal - a stride-1 16-channel layer and a stride-2 4-channel layer
+    /// report different contracts from the same code.
+    /// </para>
+    /// <para>
+    /// Rank 3 gets no batch axis. The unbatched form goes in as <c>[H,W,C]</c> and comes back out as
+    /// <c>[H',W',C']</c> - <c>ForwardTraced</c> reshapes to 4-D internally but restores the original rank
+    /// before returning, so inventing a batch axis here would describe an intermediate, not the output.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        // A lazily-shaped layer still has real kernel/stride/channel counts from construction, but guard
+        // anyway: AxisRelation rejects non-positive sizes, and claiming nothing beats claiming zero.
+        if (_outputChannels <= 0 || _kernelSize <= 0 || _stride <= 0) return null;
+
+        var height = new OutputAxisContract(
+            TensorAxis.Height, AxisRelation.Window(TensorAxis.Height, _kernelSize, _stride, padding: 0));
+        var width = new OutputAxisContract(
+            TensorAxis.Width, AxisRelation.Window(TensorAxis.Width, _kernelSize, _stride, padding: 0));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels));
+
+        return inputRank switch
+        {
+            3 => new[] { height, width, channels },
+            4 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                height, width, channels,
+            },
+            _ => null,
+        };
+    }
+
     /// <summary>
     /// The weight tensors for the locally connected filters.
     /// </summary>
@@ -300,29 +363,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _stride;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because this layer has trainable parameters (weights and biases).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be trained through backpropagation.
-    /// The LocallyConnectedLayer always returns true because it contains trainable weights and biases.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you if the layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer has parameters that can be adjusted during training
-    /// - It will improve its performance as it sees more data
-    /// - It participates in the learning process
-    /// 
-    /// The Locally Connected layer always supports training because it has weights 
-    /// and biases that are learned during training.
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => _weights.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -357,9 +397,9 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int outputChannels,
-        int kernelSize,
-        int stride,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride,
         IActivationFunction<T>? activationFunction = null)
         : base(
             [-1, -1, -1],
@@ -412,9 +452,9 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int outputChannels,
-        int kernelSize,
-        int stride,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride,
         IVectorActivationFunction<T> vectorActivationFunction)
         : base(
             [-1, -1, -1],
@@ -835,44 +875,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters of the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters (weights and biases) and combines them into a single vector.
-    /// This is useful for optimization algorithms that operate on all parameters at once, or for saving and loading
-    /// model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer.
-    /// 
-    /// The parameters:
-    /// - Are the numbers that the neural network learns during training
-    /// - Include all the unique filter weights (which can be very many!) and biases
-    /// - Are combined into a single long list (vector)
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// 
-    /// For locally connected layers, this vector can be very large due to the
-    /// unique filters for each spatial location.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Get weight parameters as vector
-        var weightVector = new Vector<T>(_weights.ToArray());
-
-        // Get bias parameters as vector
-        var biasVector = new Vector<T>(_biases.ToArray());
-
-        // Concatenate weights and biases
-        return Vector<T>.Concatenate(weightVector, biasVector);
-    }
-
-    /// <summary>
     /// Sets the trainable parameters of the layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -938,28 +940,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             ResolveFromShape(new[] { inH, inW, inC });
         }
         base.Deserialize(reader);
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int totalParams = _weights.Length + _biases.Length;
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        // Copy IN PLACE into existing tensor storage. Replacing the field
-        // refs via `Tensor<T>.FromVector` would leave the engine's persistent-
-        // tensor registry pointing at the old _weights/_biases objects
-        // (allocated via ResolveFromShape during Deserialize), so subsequent
-        // training/streaming would silently follow stale references.
-        int weightsLength = _weights.Length;
-        parameters.AsSpan().Slice(0, weightsLength).CopyTo(_weights.Data.Span);
-        parameters.AsSpan().Slice(weightsLength, _biases.Length).CopyTo(_biases.Data.Span);
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

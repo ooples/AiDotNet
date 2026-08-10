@@ -1406,7 +1406,6 @@ public class SAM2<T> : NeuralNetworkBase<T>
         RecordModuleSpans();
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -1427,7 +1426,6 @@ public class SAM2<T> : NeuralNetworkBase<T>
             }
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -517,34 +517,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         return current;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the VAE network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter counts.
-    /// It updates both the standard network layers and the specialized mean and log variance layers.
-    /// This is typically used during training when applying gradient updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the internal values of the VAE during training.
-    /// 
-    /// Think of parameters as the "settings" of the VAE:
-    /// - Each layer needs a certain number of parameters to function
-    /// - During training, these parameters are constantly adjusted to improve performance
-    /// - This method takes a big list of new parameter values and gives each layer its share
-    /// 
-    /// It makes sure to update:
-    /// - All the regular layers in the network
-    /// - The special mean and log variance layers that make the VAE work
-    /// 
-    /// It's like distributing updated parts to each section of a machine so it works better.
-    /// Each layer gets exactly the number of parameters it needs.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the mean layer or log variance layer have not been properly initialized.
-    /// </exception>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int startIndex = 0;
@@ -574,7 +546,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
             throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
         }
     }
-
     /// <summary>
     /// Makes a prediction using the Variational Autoencoder by encoding the input, sampling from the latent space, and decoding.
     /// </summary>

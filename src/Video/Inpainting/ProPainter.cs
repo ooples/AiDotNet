@@ -982,7 +982,6 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         if (_outputConv is not null) Layers.Add(_outputConv);
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -1002,7 +1001,6 @@ public class ProPainter<T> : VideoInpaintingBase<T>
             }
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

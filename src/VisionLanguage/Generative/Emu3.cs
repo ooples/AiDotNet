@@ -290,7 +290,6 @@ public class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

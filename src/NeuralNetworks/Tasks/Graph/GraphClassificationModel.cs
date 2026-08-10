@@ -387,25 +387,8 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = parameters.SubVector(index, layerParamCount);
-                layer.SetParameters(layerParams);
-                index += layerParamCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Trains the model on a graph classification task.
     /// </summary>
@@ -598,23 +581,6 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
         // Normalize: exp / sum using element-wise division with broadcast
         return Engine.TensorBroadcastDivide<T>(expValues, sumExp);
-    }
-
-    /// <summary>
-    /// Gets all parameters as a vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
-        }
-        return new Vector<T>([.. allParams]);
     }
 
     #region Abstract Method Implementations

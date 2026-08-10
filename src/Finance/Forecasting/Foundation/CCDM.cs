@@ -124,7 +124,6 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
         // ILossFunction<T> interface). Reject any user-supplied loss
         // that doesn't derive from it at construction time instead of
         // bubbling up a bare InvalidCastException on first Train().
-        RequireTapeCompatibleLossFunction(lossFunction);
         options ??= new CCDMOptions<T>(); _options = options; Options = _options;
         _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -135,30 +134,10 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
         CCDMOptions<T>? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        RequireTapeCompatibleLossFunction(lossFunction);
         options ??= new CCDMOptions<T>(); _options = options; Options = _options;
         _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options); InitializeLayers();
-    }
-
-    /// <summary>
-    /// Enforces the constructor contract that a user-supplied
-    /// <see cref="ILossFunction{T}"/> must derive from
-    /// <see cref="LossFunctions.LossFunctionBase{T}"/> for CCDM's
-    /// tape-based training to work. Throws at construction time rather
-    /// than letting a mismatched implementation reach
-    /// <c>TrainWithTape</c>, where the failure is an opaque cast.
-    /// </summary>
-    private static void RequireTapeCompatibleLossFunction(ILossFunction<T>? lossFunction)
-    {
-        if (lossFunction is not null && lossFunction is not LossFunctions.LossFunctionBase<T>)
-            throw new ArgumentException(
-                "CCDM tape-based training requires a LossFunctionBase<T> implementation " +
-                "(ComputeTapeLoss is defined there, not on ILossFunction<T>). " +
-                "Derive your custom loss from LossFunctionBase<T>, or pass null to use " +
-                "the default MeanSquaredErrorLoss.",
-                nameof(lossFunction));
     }
 
     private void CopyOptionsToFields(CCDMOptions<T> options)
@@ -290,11 +269,8 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
         return x;
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "CCDM" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "SigmaMin", _sigmaMin }, { "SigmaMax", _sigmaMax }, { "UseNativeMode", _useNativeMode } },

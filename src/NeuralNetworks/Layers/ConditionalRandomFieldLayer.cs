@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,7 +44,27 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
+// Roles are quoted from this layer's own guard: "requires rank>=2 input [seqLen, numClasses] or
+// [batch, seqLen, numClasses]". The trailing axis is the tag set (Features), the one before it the
+// sequence position (Time). Batch is optional rather than a second declaration because ForwardTraced
+// treats rank 2 as the same computation -- it reshapes to [1, seqLen, numClasses], decodes, and then
+// restores the caller's shape ("Engine.Reshape(output, _originalInputShape)").
+//
+// SHAPE-PRESERVING despite being a decoder, which is the part worth stating explicitly: Viterbi picks
+// one tag per timestep, but the layer emits that choice ONE-HOT over the class axis
+// ("output[b, t, bestPath[t]] = NumOps.One") into a tensor allocated at [batchSize, seqLen,
+// _numClasses]. Nothing is reduced away, so no axis changes size. The training-mode short-circuit
+// returns the emissions unchanged, which preserves the shape for the same reason.
+//
+// Ranks above 3 also run -- the layer folds the leading axes into batch and reshapes back -- but they
+// are deliberately NOT declared: two or more leading axes cannot be given distinct roles here, and an
+// axis role is precisely how a relation names its input.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContract
 {
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -98,31 +118,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
     private bool _isInitialized;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> as CRF layers have trainable parameters.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// This property returns true because ConditionalRandomFieldLayer has trainable parameters (transition matrix,
-    /// start scores, and end scores) that are adjusted during the training process to minimize the network's error.
-    /// </para>
-    /// <para><b>For Beginners:</b> This property tells you that this layer can learn from data.
-    /// 
-    /// A value of true means:
-    /// - The layer contains values (parameters) that will change during training
-    /// - It will improve its performance as it sees more examples
-    /// - It participates in the learning process of the neural network
-    /// 
-    /// CRF layers always support training because they need to learn:
-    /// - How likely one label is to follow another (transition probabilities)
-    /// - Which labels are likely to appear at the start of a sequence
-    /// - Which labels are likely to appear at the end of a sequence
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -983,41 +978,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters from the layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all trainable parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method retrieves all trainable parameters from the layer (transition matrix, start scores, and
-    /// end scores) and combines them into a single vector. This is useful for optimization algorithms that
-    /// operate on all parameters at once, or for saving and loading model weights.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method collects all the learnable values from the layer into a single list.
-    /// 
-    /// The parameters include:
-    /// - The transition matrix (shows how likely one label is to follow another)
-    /// - The start scores (shows which labels are likely at sequence beginnings)
-    /// - The end scores (shows which labels are likely at sequence endings)
-    /// 
-    /// All these values are flattened into a single long list (vector).
-    /// 
-    /// This is useful for:
-    /// - Saving the model to disk
-    /// - Loading parameters from a previously trained model
-    /// - Advanced optimization techniques that need access to all parameters
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatTrans = new Vector<T>(_transitionMatrix.ToArray());
-        var flatStart = new Vector<T>(_startScores.ToArray());
-        var flatEnd = new Vector<T>(_endScores.ToArray());
-
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
-    }
-
-    /// <summary>
     /// Computes the linear-chain CRF negative log-likelihood for a batched
     /// emissions tensor and the corresponding gold-label sequence:
     /// <c>NLL(emissions, labels) = logZ(emissions) − goldScore(emissions, labels)</c>
@@ -1237,7 +1197,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var lseKeepDim = Engine.TensorAdd(logSum, max);
 
         // Now squeeze the reduced axis to match the shape contract.
-        var inShape = x.Shape.ToArray();
+        var inShape = x._shape;
         var outShape = new int[inShape.Length - 1];
         int oi = 0;
         for (int i = 0; i < inShape.Length; i++)
@@ -1378,29 +1338,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // value is -1, matching the lazy-ctor contract.
         metadata["SequenceLength"] = _sequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int transSize = _numClasses * _numClasses;
-        int totalParams = transSize + _numClasses * 2;
-
-        if (parameters.Length != totalParams)
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-
-        // Copy the flat vector INTO the owned parameter tensors in place. Reassigning to
-        // Tensor.FromVector(...).Reshape(_transitionMatrix._shape) would (a) replace the owned
-        // tensors with new storage and (b) alias each new tensor's _shape array to the live
-        // parameter's array (Reshape reuses the array reference it is handed), reintroducing the
-        // pool/aliasing hazard InitializeParameters was fixed to avoid. In-place copy keeps the
-        // parameters owned with their own shapes.
-        var transVec = parameters.Slice(0, transSize);
-        var startVec = parameters.Slice(transSize, _numClasses);
-        var endVec = parameters.Slice(transSize + _numClasses, _numClasses);
-
-        CopyVectorInto(_transitionMatrix, transVec);
-        CopyVectorInto(_startScores, startVec);
-        CopyVectorInto(_endScores, endVec);
     }
 
     /// <summary>Copies a flat vector into an owned tensor's storage in place (length must match).</summary>

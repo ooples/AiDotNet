@@ -48,6 +48,16 @@ namespace AiDotNet.Audio.Multimodal;
 [ResearchPaper("Pengi: An Audio Language Model for Audio Tasks", "https://doi.org/10.48550/arXiv.2305.11834", Year = 2023, Authors = "Soham Deshmukh, Benjamin Elizalde, Rita Singh, Huaming Wang")]
 public class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultPengiLayers emits is the LM output projection
+    /// <c>DenseLayer&lt;T&gt;(llmHiddenDim)</c>, wired from <c>_options.LLMHiddenDim</c> (2048).
+    /// The intermediate projection layers ramp from AudioEncoderDim through
+    /// <c>(audioEncoderDim + llmHiddenDim) / 2</c>, but the final layer lands on llmHiddenDim.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.LLMHiddenDim;
+
     #region Fields
 
     private readonly PengiOptions _options;
@@ -186,12 +196,11 @@ public class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

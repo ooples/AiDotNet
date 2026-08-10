@@ -1,5 +1,10 @@
 using AiDotNet.Interfaces;
 using System;
+using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -34,8 +39,48 @@ namespace AiDotNet.Video;
 /// This is useful for video stabilization, frame interpolation, action recognition, and more.
 /// </para>
 /// </remarks>
-public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A frame PAIR stacked on the channel axis, so this axis is 2*channels. PredictCore "
+         + "rejects an odd channel count for exactly that reason.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output,
+    Note = "A flow field: two channels, dx and dy, at the input resolution.")]
+public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The optical-flow family's law: <c>[Batch, 2, Height, Width]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Read from <see cref="PredictCore"/> rather than probed. It requires rank 4
+    /// <c>[batch, 2*channels, height, width]</c> - two frames stacked on the channel axis, which is
+    /// why it rejects an odd channel count - and returns one flow field per sample at the input
+    /// resolution.
+    /// </para>
+    /// <para>
+    /// The channel axis is <c>Fixed(2)</c> and NOT derived from the input's, which is the whole point
+    /// of stating it: the input channel axis is <c>2*channels</c> for an arbitrary channel count, and
+    /// the output is always exactly two - dx and dy. A relation that carried the input channel axis
+    /// through would be wrong for every input except a stacked pair of single-channel frames.
+    /// </para>
+    /// <para>
+    /// The spatial axes are <c>Same</c>: flow is estimated per pixel, so a model that downsampled
+    /// internally still returns the field at the resolution it was given.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 4) return null;
+        return
+        [
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(2)),
+            new OutputAxisContract(TensorAxis.Height, AxisRelation.Same(TensorAxis.Height)),
+            new OutputAxisContract(TensorAxis.Width, AxisRelation.Same(TensorAxis.Width)),
+        ];
+    }
+
     /// <summary>
     /// Gets the number of iterative refinement steps.
     /// </summary>

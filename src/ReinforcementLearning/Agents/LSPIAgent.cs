@@ -8,6 +8,8 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
 /// <summary>
@@ -43,6 +45,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     Authors = "Lagoudakis, M. G. & Parr, R.")]
 public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The linear weight matrix, row-major, which is what the hand-written loop over
+    /// [action, feature] produced. Registered through an accessor because this agent can
+    /// REPLACE the matrix rather than mutate it.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new MatrixParameterSource<T>(() => _weights));
+    }
     private LSPIOptions<T> _options;
 
     /// <inheritdoc/>
@@ -358,7 +369,6 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
     public override byte[] Serialize()
     {
@@ -465,28 +475,6 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         _iterations = Convert.ToInt32(state.Iterations);
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int paramCount = _options.ActionSize * _options.FeatureSize;
-        var vector = new Vector<T>(paramCount);
-        int idx = 0;
-
-        for (int a = 0; a < _options.ActionSize; a++)
-            for (int f = 0; f < _options.FeatureSize; f++)
-                vector[idx++] = _weights[a, f];
-
-        return vector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int a = 0; a < _options.ActionSize; a++)
-            for (int f = 0; f < _options.FeatureSize; f++)
-                if (idx < parameters.Length)
-                    _weights[a, f] = parameters[idx++];
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new LSPIAgent<T>(_options);
@@ -503,19 +491,6 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
         clone._iterations = _iterations;
         return clone;
     }
-
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        var pred = Predict(input);
-        var lf = lossFunction ?? LossFunction;
-        var predMatrix = new Matrix<T>(new[] { pred });
-        var targetMatrix = new Matrix<T>(new[] { target });
-        var loss = lf.CalculateLoss(predMatrix.GetRow(0), targetMatrix.GetRow(0));
-        var grad = lf.CalculateDerivative(predMatrix.GetRow(0), targetMatrix.GetRow(0));
-        return grad;
-    }
-
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

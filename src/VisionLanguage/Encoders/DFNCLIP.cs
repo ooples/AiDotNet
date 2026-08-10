@@ -356,7 +356,6 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             idx += c;
         }
     }
-
     /// <summary>
     /// Surface the text-encoder stack to streaming-offload / weight-registry
     /// hooks (NeuralNetworkBase.GetExtraTrainableLayers contract). Both this

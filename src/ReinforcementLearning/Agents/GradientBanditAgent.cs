@@ -7,6 +7,8 @@ using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using AiDotNet.Validation;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
 /// <summary>
@@ -43,6 +45,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The per-arm preferences this bandit learns.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorParameterSource<T>(() => _preferences));
+    }
     private GradientBanditOptions<T> _options;
 
     /// <inheritdoc/>
@@ -228,7 +237,6 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override long ParameterCount => _options.NumArms;
     public override int FeatureCount => 1;
     public override byte[] Serialize()
     {
@@ -272,8 +280,6 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
             _preferences[i] = NumOps.FromDouble(reader.ReadDouble());
         }
     }
-    public override Vector<T> GetParameters() => _preferences;
-    public override void SetParameters(Vector<T> parameters) { for (int i = 0; i < _options.NumArms && i < parameters.Length; i++) _preferences[i] = parameters[i]; }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new GradientBanditAgent<T>(_options);
@@ -286,8 +292,6 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         clone._totalSteps = _totalSteps;
         return clone;
     }
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var predMatrix = new Matrix<T>(new[] { pred }); var targetMatrix = new Matrix<T>(new[] { target }); var loss = lf.CalculateLoss(predMatrix.GetRow(0), targetMatrix.GetRow(0)); var grad = lf.CalculateDerivative(predMatrix.GetRow(0), targetMatrix.GetRow(0)); return grad; }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

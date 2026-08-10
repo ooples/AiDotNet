@@ -15,8 +15,8 @@ namespace AiDotNet.Attributes;
 /// A parameter marked with this attribute is written to the layer's metadata by generated code and
 /// read back by a generated factory, so the constructor receives the value it was originally given.
 /// The generator resolves the value through a backing field or property matching the parameter name
-/// (<c>name</c>, <c>_name</c>, <c>m_name</c> or <c>Name</c>) and <b>fails the build</b> when no such
-/// member exists — a layer that cannot round-trip does not compile.
+/// (<c>name</c>, <c>_name</c>, <c>m_name</c>, <c>Name</c> or <c>_Name</c>) and <b>fails the build</b>
+/// when no such member exists — a layer that cannot round-trip does not compile.
 /// </para>
 /// <para>
 /// Parameters left unmarked are still handled: activation functions are restored from the activation
@@ -44,8 +44,17 @@ public sealed class LayerStateAttribute : Attribute
     /// </summary>
     /// <remarks>
     /// Set this only to match a key an existing hand-written <c>GetMetadata</c> already writes.
-    /// Lookup is case-insensitive, so a <c>inputChannels</c> parameter already finds an
-    /// <c>"InputChannels"</c> key without needing this.
+    /// <para>
+    /// <b>The key must match EXACTLY, including case.</b> The generated writer and the generated
+    /// factory both use this literal string, and the metadata store looks it up ordinally — so a
+    /// parameter named <c>inputChannels</c> does <b>not</b> find a hand-written <c>"InputChannels"</c>
+    /// key. Set <see cref="Key"/> to the exact spelling the existing metadata uses.
+    /// </para>
+    /// <para>
+    /// A mismatched key does not raise an error: the generated factory's presence check fails, the
+    /// parameter falls back to its default, and the layer rebuilds with the wrong value silently. Copy
+    /// the existing key rather than retyping it.
+    /// </para>
     /// </remarks>
     public string? Key { get; set; }
 

@@ -1501,6 +1501,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // continuous mel targets — a family-wide objective change to evaluate separately, not here.)
         "BioBERTNER", "BiaffineNER", "BSRoFormer", "AnomalyTransformerDetector",
         "AVID", "ABINet", "APNet", "APNet2", "AzureSpeechSTT", "AWSTranscribe",
+        // XTTSv2Clone (voice-cloning TTS) had no mitigation at all: its training probes ran the
+        // container out of memory at double precision.
+        "XTTSv2Clone",
+        // W-Z lane memory: that lane crashed its test host outright — "the host process exited
+        // unexpectedly" — after peaking at 16383 MB, i.e. exactly the 16 GB runner cap, so it could
+        // not report a trustworthy result at all. These four are the vocoder / voice-cloning models in
+        // the lane still running at double precision with no other mitigation; float halves their
+        // activation and tape footprint.
+        "XTTSv2",
+        "WaveGlow",
+        "WaveRNN",
+        "YourTTS",
+        // WhisperModel emits [3001, 51865] -- 155.6M logits, one vocab distribution per mel frame --
+        // so a single output tensor is 1.24 GB at double precision, and the tape holds several. This
+        // class alone accounted for the W-Z lane's 16 GB host crash.
+        "WhisperModel",
+        // TTVSR timed out at 120s/180s. Float first per the mitigation order, before any shrinking,
+        // so the fixture keeps as much of the real trajectory-aware architecture as it can.
+        "TTVSR",
         // ConvTasNet (Luo & Mesgarani 2019) separates at waveform resolution, so its
         // MoreData probe exhausted the 120 s gate outright. Start at the bottom of the
         // ladder: FP32 also enrols it in the audio family's smoke-iteration caps, which is
@@ -2008,6 +2027,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "DeCLIP", "DEVA", "DocGCN", "FlowLens", "LLM2CLIP", "Mamba2LanguageModel",
         "GLALanguageModel", "GatedDeltaNetLanguageModel",
         "ZambaLanguageModel", "Zamba2LanguageModel",
+        // xLSTM (Beck et al. 2024) is a peer of the recurrent language models above and was simply
+        // missing here: with no bound at all its MoreData probe ran the full 50/200-iteration pair
+        // and blew the 120s per-test timeout.
+        "XLSTMLanguageModel",
+        // VinVL carries ~86M parameters over 36x2048 region features and had no bound either, so its
+        // MoreData probe timed out at 120s once training actually ran.
+        "VinVL",
+        // VideoCLIP runs its spatial encoder per frame at 768 hidden channels and had no bound, so
+        // Training_ShouldReduceLoss hit the 120s timeout even at the fixture's small 4x3x32x32 clip.
+        "VideoCLIP",
+        // Upscale4KAgent had no bound either and ran its MoreData probe past 120s and its
+        // memorization probe past 180s.
+        "Upscale4KAgent",
+        // VideoLISA had no bound and ran its training probes out of memory outright.
+        "VideoLISA",
+        // UNITER only started training its encoder once its mean-pool stopped detaching the tape, and
+        // a real backward pass over a BERT-scale stack costs enough that the unbounded probe overran
+        // the 120s gate. Oscar and ViLBERT share that fix but are already capped by their own family
+        // branch, so listing them here would declare the overrides twice.
+        "UNITER",
+        // VRT is a video restoration transformer with no bound at all; its MoreData and
+        // Training probes both overran the 120s gate.
+        "VRT",
+        // VideoGigaGAN's training probes overran the 120s gate with no bound in place.
+        "VideoGigaGAN",
+        // UNINEXT's training probes overran the 120s gate with no bound in place.
+        "UNINEXT",
+        // Zipformer's training probes overran the 120s gate with no bound in place.
+        "Zipformer",
+        // ViTAdapter is listed in HeavyTimeoutTestClassNames, but the Category trait is not reaching
+        // its generated class, so it still runs here and times out. Bound it directly rather than
+        // depending on a tag that is not being applied.
+        "ViTAdapter",
         // RemoteCLIP is a CLIP dual-encoder at the same scaffold scale as its already-listed
         // siblings DeCLIP / LLM2CLIP (VisionLanguageTestBase<float>, InputShape [3, 128, 128])
         // and had no repetition bound, so it inherited the base 50+200-step MoreData probe and
@@ -4135,6 +4187,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DecoderEmbeddingDim = 32, NumDecoderHeads = 4, VocabSize = 64, MaxOutputTokens = 16, " +
                     "UseDaViT = false, LearningRate = 1e-5 })";
             }
+            else if (model.ClassName == "WhisperModel" && model.TypeParameterCount == 1)
+            {
+                // Whisper's layer chain keeps the ENCODER's sequence length all the way to the vocab
+                // projection, so at the paper-scale 30 s default the model emits one 51865-wide logit
+                // row per mel frame: [3001, 51865] = 155.6M values, 622 MB per tensor in float with
+                // several live on the tape. That is what OOM'd the lane. Bind a 2 s clip through the
+                // public ctor -- (16000 * 2) / 160 = 200 frames instead of 3000 -- which exercises the
+                // identical code path at 1/15th the footprint. Every assertion still runs in full;
+                // only the clip length changes, and the library's own 30 s paper default is untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceClassification, " +
+                    "inputSize: 32000, outputSize: 32), " +
+                    "modelSize: AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, " +
+                    "maxAudioLengthSeconds: 2, maxTokens: 16)";
+            }
             else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
             {
@@ -4998,6 +5066,162 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 8, LearningRate = 5e-5, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "TabPFNNetwork" && model.TypeParameterCount == 1)
+            {
+                // TabPFN's 1e-4 (Hollmann et al., ICLR 2023) drives the loss to a ~1e-4 floor within
+                // 50 iterations; past that it oscillates around the floor rather than settling, so
+                // MoreData_ShouldNotDegrade saw 200 iterations (5.87e-4) come out above 50
+                // (7.72e-5). Both values are already near zero -- this is float noise around a
+                // converged minimum, not divergence -- so bind a gentler rate that stays monotone
+                // over the longer run. Mirrors the parameterless ctor's architecture exactly; the
+                // library default stays at the published 1e-4.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 10, outputSize: 10), " +
+                    "new AiDotNet.Models.Options.TabPFNOptions<double> { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "TimeBridge" && model.TypeParameterCount == 1)
+            {
+                // TimeBridge's optimizer now reads TimeBridgeOptions.LearningRate, whose 1e-3 default
+                // matches Adam's own. At fixture scale that overshoots hard -- the loss rose from
+                // 0.2908 to 7.9099 in one step and two iterations landed at 306.76 against one
+                // iteration's 11.39. Bind a gentler rate through the public option.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 512, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.TimeBridgeOptions<double> { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "TTVSR" && model.TypeParameterCount == 1)
+            {
+                // TTVSROptions carries the paper's 2e-4 (Liu et al., CVPR 2022), tuned for the full
+                // trajectory-aware transformer on real video sequences. Now that the optimizer
+                // actually reads it, that rate overshoots at fixture scale -- the class passed in
+                // isolation but failed LossStrictlyDecreases and MoreData inside the full lane. Bind
+                // a gentler rate through the public option; the library default is unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.TTVSROptions { LearningRate = 1e-4, " +
+                    "NumFeatures = 32, NumTransformerBlocks = 2, NumResBlocks = 4, " +
+                    "NumScales = 2, TrajectoryLength = 3, NumHeads = 4 })";
+            }
+            else if (model.ClassName == "UDVD" && model.TypeParameterCount == 1)
+            {
+                // UDVDOptions defaults to the paper's 1e-4 (Sheth et al., ICCV 2021). That rate is
+                // tuned for the full blind-spot network on real video; at fixture scale it overshoots
+                // -- the loss rose from 0.2480 to 2.6160 on Training_ShouldReduceLoss and 200
+                // iterations came out worse than 50. Bind a gentler rate through the public option;
+                // the library default stays at the published value.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.UDVDOptions { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "XLSR" && model.TypeParameterCount == 1)
+            {
+                // XLS-R's fixture passed no options, so it built the published encoder: 1024-wide,
+                // 24 layers, 16 heads over a 30 s window. Clone_AfterTraining holds the trained model
+                // AND its clone live at once, which doubles that footprint and threw
+                // OutOfMemoryException. Keep the fixture's architecture exactly as the default path
+                // emits it and bound only the public options.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.XLSROptions { MaxAudioLengthSeconds = 2, " +
+                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, VocabSize = 64, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName == "XLMRoBERTaNER" || model.ClassName == "TemplateNER")
+                     && model.TypeParameterCount == 1)
+            {
+                // TransformerNEROptions defaults to 5e-5, the standard fine-tuning rate for a
+                // PRE-TRAINED checkpoint (Conneau et al., ACL 2020 for XLM-R). The generated fixtures
+                // build randomly-initialised weights instead, where that rate overshoots: both models
+                // reported the SAME two-iteration loss ABOVE their one-iteration loss (3.4570 vs
+                // 2.8475) on MoreData_ShouldNotDegrade, which is the shared TransformerNERBase
+                // training path rather than anything model-specific. Bind a gentler rate through the
+                // public option; the library default stays at the published fine-tuning value.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 768, outputSize: 4), " +
+                    "new AiDotNet.NER.Options.TransformerNEROptions { LearningRate = 5e-6 })";
+            }
+            else if (model.ClassName == "XLSTMLanguageModel" && model.TypeParameterCount == 1)
+            {
+                // The fixture took the constructor defaults, which are paper scale: a 50277-token
+                // vocabulary (the Pile vocabulary from Beck et al., 2024) behind a 256-wide 4-layer
+                // stack over a 512-token context. That output projection is why the memorization
+                // loss sits at 272127 rather than a language-model-scale value, why 15 steps moved it
+                // only 0.75%, and why the class costs 55 s. Bound the vocabulary and context through
+                // the public constructor parameters; production defaults are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    "vocabSize: 64, modelDimension: 32, numLayers: 1, numHeads: 4, maxSeqLength: 128, " +
+                    "options: new AiDotNet.NeuralNetworks.Options.XLSTMOptions { LearningRate = 3e-4 })";
+            }
+            else if (model.ClassName == "XTTSv2Clone" && model.TypeParameterCount == 1)
+            {
+                // XTTSv2Clone's fixture passed no options, so it built the production stack: a
+                // 1024-wide 12-layer codec LM over 8x1024 codebooks with MaxCodecFrames = 3000.
+                // MoreData_ShouldNotDegrade runs two full training passes over that graph and threw
+                // OutOfMemoryException. Keep the fixture's architecture exactly as the default path
+                // emits it and bound only the public options, preserving the same
+                // text-encoder -> codec-LM -> speaker-conditioning topology at smoke scale.
+                // Dropout stays disabled so the voice-cloning determinism assertions stay meaningful.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions { NumCodebooks = 1, " +
+                    "CodebookSize = 16, LLMDim = 32, NumLLMLayers = 1, TextEncoderDim = 32, " +
+                    "SpeakerEmbeddingDim = 32, MaxCodecFrames = 8, NumEncoderLayers = 1, " +
+                    "NumHeads = 4, DropoutRate = 0.0, LearningRate = 1e-3 })";
+            }
+            else if (model.ClassName == "WaveGrad" && model.TypeParameterCount == 1)
+            {
+                // WaveGrad's paper learning rate (2e-4, Chen et al. 2021 S3.2) is tuned for the full
+                // U-Net trained on large batches of full-length audio. On Adam's first step every
+                // parameter moves by exactly +/- lr, and at this fixture's smoke scale that single
+                // step tripled the memorization loss (0.7074 -> 2.2224). Bind a proportionally
+                // smaller rate through the public option; the library default stays at the paper's
+                // 2e-4 and every assertion still runs unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.WaveGradOptions { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "YuE" && model.TypeParameterCount == 1)
+            {
+                // YuE's generated fixture passed NO options, so it built at full paper scale: a
+                // 2048-wide 24-layer semantic stack over a 32000-token lyrics vocabulary, plus a
+                // 1024-wide 12-layer acoustic stack, with MaxDurationSeconds = 300 at 44.1 kHz --
+                // 13.2M samples of context. Individual invariants took 35-80 s and the class threw
+                // both OutOfMemoryException and the 120 s per-test timeout, making it the single
+                // slowest class in the X-Z lane. Keep the fixture's architecture EXACTLY as the
+                // default path emits it and bound only the public options, so the same
+                // semantic -> acoustic -> codec topology is exercised at smoke scale. Production
+                // defaults and inference behaviour are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Generation.YuEOptions { SampleRate = 16000, " +
+                    "MaxDurationSeconds = 0.05, SemanticDim = 32, NumSemanticLayers = 1, " +
+                    "NumSemanticHeads = 4, AcousticDim = 32, NumAcousticLayers = 1, " +
+                    "NumAcousticHeads = 4, LyricsVocabSize = 64, SemanticVocabSize = 64, " +
+                    "AcousticCodebookSize = 32, NumAcousticQuantizers = 2, NumStyleTags = 8, " +
+                    "StyleEmbeddingDim = 32, DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS"
                       || model.ClassName == "SPEARTTS")
@@ -8683,7 +8907,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ContextLength = 64, ForecastHorizon = 16, " +
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, " +
                     "CodebookSize = 64, CodebookDimension = 16, NumCodebooks = 1, " +
-                    "DropoutRate = 0.0 })";
+                    "DropoutRate = 0.0, LearningRate = 1e-3 })";
+            }
+            else if (model.ClassName == "Tacotron2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Classic.", System.StringComparison.Ordinal))
+            {
+                // The model's own default is the paper's 10^-3 (Shen et al. 2018), stated for
+                // full-scale training at batch 64. At this fixture's single-sample smoke scale that
+                // step diverges, so bind a smaller one -- through OPTIONS, not the optimizer
+                // parameter. CreateNewInstance forwards _options but NOT the injected optimizer, so
+                // an injected rate applied to the original and silently reverted to 10^-3 in every
+                // clone: MoreData_ShouldNotDegrade's two-iteration clone loss sat at 23.1915 while
+                // the one-iteration original managed 5.1901. Going through options makes the rate
+                // survive cloning. The library default stays at the published value.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 640), " +
+                    "new AiDotNet.TextToSpeech.Classic.Tacotron2Options { LearningRate = 1e-6 })";
             }
             else if (model.ClassName == "Tacotron2Model" && model.TypeParameterCount == 1)
             {
@@ -8773,10 +9014,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // generator/critic pair, both ConvolutionalNeuralNetwork, so the architecture must be
                 // 2-D or 3-D. outputSize is the full 8x8 image the generator has to project, which the
                 // model then presents to the critic in image layout.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                // Generator and critic need DIFFERENT output widths. The single-architecture
+                // constructor hands the same one to both, so the critic was emitting 64 values like
+                // the generator instead of a single score — and with its softmax head every input
+                // scored a uniform 1/64. meanReal and meanFake came out identical to the digit
+                // (1.5625e-2), so E[D(fake)] - E[D(real)] was exactly 0, the gradients were genuinely
+                // zero and neither network could move. A WGAN critic emits ONE score per sample.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "generatorArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 64))";
+                    "inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 64), " +
+                    "criticArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 1), " +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional)";
             }
             else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1)
             {
@@ -8785,9 +9038,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // alone is ~38M entries — about 300 MB in double before any activation — which is what
                 // OOM-killed Metadata_ShouldExist. numFrames=4 and a 32x32 clip match the InputShape
                 // the video family emits, and a 512-token vocabulary keeps the same text pathway while
-                // cutting that table by two orders of magnitude. hiddenDim is a constructor parameter
-                // now as well (paper default 768), but the layer factory does not build a usable stack
-                // at smaller widths — "Index 1 is out of range" — so the fixture leaves it at 768.
+                // cutting that table by two orders of magnitude. The transformer DEPTHS are constructor
+                // parameters now too (paper defaults 12/4/12, BERT-base scale), but the fixture keeps
+                // every one of them at the paper value: the model's layer-index bookkeeping assumes
+                // those depths, so a shallower stack stops gradients reaching the encoder and breaks
+                // cloning. Reducing the model's scale needs that bookkeeping fixed first.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
@@ -14004,6 +14259,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
 
+        if (model.ClassName == "VideoLISA")
+        {
+            // VideoLISA's encoder (CreateVideoLISAEncoderLayers) begins with normalization layers, so a
+            // spatially CONSTANT probe carries no information that survives them: 0.1-everywhere and
+            // 0.9-everywhere normalize to the same tensor and the model necessarily returns the same
+            // mask. That is the normalization behaving correctly, not a collapsed network, but it
+            // fails DifferentInputs_ShouldProduceDifferentOutputs as written. Give each value its own
+            // spatial PATTERN rather than a flat fill — the same approach the audio base already uses
+            // for scale-normalizing front ends — so the two probes stay distinguishable after
+            // normalization and the invariant still catches a genuinely dead network.
+            sb.AppendLine();
+            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+            sb.AppendLine("        if (value == 0.0) return tensor;");
+            sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
+            sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}System.Math.Sin((i + 1) * (value + 0.5) * 2.0);");
+            sb.AppendLine("        return tensor;");
+            sb.AppendLine("    }");
+        }
+
         if (model.ClassName == "FloRNN")
         {
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
@@ -16498,6 +16774,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // constants, which the embedding rounded to the same handful of indices and which no
             // amount of training could separate.
             "MegaTTS" => true,
+            // Tacotron2 (TextToSpeech.Classic) is built on CreateDefaultAcousticModelLayers, whose
+            // first layer is an EmbeddingLayer over a 256-token vocabulary, so it consumes token IDs
+            // and predicts mel frames. It was being fed a continuous [8, 80] mel block straight into
+            // that embedding. ForwardTacotron, from the same family, is already routed here.
+            "Tacotron2" => true,
             // Proprietary-API TTS wrappers (text input, API does synthesis).
             "WellSaidLabs" => true,
             "ElevenLabsTTS" => true,

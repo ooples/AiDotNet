@@ -79,6 +79,15 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("InstantID: Zero-shot Identity-Preserving Generation in Seconds", "https://arxiv.org/abs/2401.07519", Year = 2024, Authors = "Wang et al.")]
 public class InstantIDModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_vae);
+    }
+
     #region Constants
 
     public const int DefaultWidth = 1024;
@@ -109,7 +118,6 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
     /// <summary>Gets the face embedding dimension.</summary>
     public int FaceEmbeddingDim => FACE_EMBEDDING_DIM;
 
@@ -175,27 +183,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
 
     #region IParameterizable
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var up = _unet.GetParameters(); var vp = _vae.GetParameters();
-        var c = new Vector<T>(up.Length + vp.Length);
-        for (int i = 0; i < up.Length; i++) c[i] = up[i];
-        for (int i = 0; i < vp.Length; i++) c[up.Length + i] = vp[i];
-        return c;
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int uc = (int)_unet.ParameterCount, vc = (int)_vae.ParameterCount;
-        if (parameters.Length != uc + vc)
-            throw new ArgumentException($"Expected {uc + vc}, got {parameters.Length}.", nameof(parameters));
-        var up = new Vector<T>(uc); var vp = new Vector<T>(vc);
-        for (int i = 0; i < uc; i++) up[i] = parameters[i];
-        for (int i = 0; i < vc; i++) vp[i] = parameters[uc + i];
-        _unet.SetParameters(up); _vae.SetParameters(vp);
-    }
 
     #endregion
 

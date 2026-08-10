@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -678,33 +678,6 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         return Forward(PreprocessAudio(input));
     }
 
-    /// <summary>
-    /// Extracts the last timestep from a sequence tensor.
-    /// </summary>
-    private Tensor<T> ExtractLastTimestep(Tensor<T> sequenceOutput)
-    {
-        var shape = sequenceOutput._shape;
-        if (shape.Length < 2) return sequenceOutput;
-
-        // Assuming shape [batch, seq, hidden] or [batch, hidden]
-        var data = sequenceOutput.ToVector().ToArray();
-        int lastDim = shape[^1];
-        int resultSize = shape[0] * lastDim;
-
-        // Extract last timestep values
-        // Write DIRECTLY into the tensor's storage. Tensor<T>.ToVector() materializes a COPY, not a
-        // view, so the previous `result.ToVector()[i] = ...` filled a throwaway vector and returned
-        // the freshly-allocated (all-zero) tensor — the extracted last timestep was always zeros.
-        var result = new Tensor<T>([shape[0], lastDim]);
-        var resultSpan = result.Data.Span;
-        int offset = data.Length - resultSize;
-        for (int i = 0; i < resultSize && offset + i < data.Length; i++)
-        {
-            resultSpan[i] = data[offset + i];
-        }
-
-        return result;
-    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -772,7 +745,6 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         }
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // Apply gradient descent updates to all layers
@@ -790,7 +762,6 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 
         _outputLayer?.UpdateParameters(learningRate);
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

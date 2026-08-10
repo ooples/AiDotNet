@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 
 /// <summary>
@@ -53,8 +55,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
+public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table, padded to ActionSize per state and clamped to one row -- the same
+    /// flattening this agent used to write by hand.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableParameterSource<T>(_qTable, _options.ActionSize));
+    }
     private MonteCarloOptions<T> _options;
 
     /// <inheritdoc/>
@@ -253,7 +263,6 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -288,57 +297,6 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        // Flatten Q-table into vector. Min one row × actionSize so the result
-        // matches ParameterCount on a freshly-constructed agent.
-        int stateCount = Math.Max(_qTable.Count, 1);
-        var parameters = new Vector<T>(stateCount * _options.ActionSize);
-
-        int idx = 0;
-        foreach (var stateQValues in _qTable.Values)
-        {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Save existing state keys before clearing
-        var stateKeys = _qTable.Keys.ToList();
-
-        // If Q-table is empty, cannot reconstruct from parameters alone
-        // This method updates existing Q-values but preserves table structure
-        if (stateKeys.Count == 0)
-        {
-            // Cannot set parameters on an uninitialized agent
-            // Q-table structure must be built through experience first
-            return;
-        }
-
-        // Update Q-values while preserving the state keys
-        int maxStates = parameters.Length / _options.ActionSize;
-        int idx = 0;
-
-        for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
-        {
-            var stateKey = stateKeys[i];
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                if (idx < parameters.Length)
-                {
-                    _qTable[stateKey][action] = parameters[idx];
-                    idx++;
-                }
-            }
-        }
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new FirstVisitMonteCarloAgent<T>(_options);
@@ -363,12 +321,12 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

@@ -32,8 +32,49 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = false, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 3")]
-public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
+// Rank 3 ONLY, enforced rather than assumed: ForwardTraced throws
+// "requires rank-3 [B, C, T] input" for anything else, and the axis names are its own.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class DepthwiseConv1DLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From this layer's own arithmetic in <see cref="ForwardTraced"/>:
+    /// <c>tOut = (tIn + 2*_padding - _kernelSize) / _stride + 1</c> - the sliding-window formula at
+    /// dilation 1, which this layer does not parameterize.
+    /// </para>
+    /// <para>
+    /// The channel relation is <c>Fixed</c> rather than <c>Scaled</c> by the multiplier, and the
+    /// difference is not cosmetic. A depthwise convolution's channel count is fixed AT CONSTRUCTION -
+    /// ForwardTraced rejects any other input width outright ("holds one filter per input channel, so
+    /// the channel count is fixed at construction"), so the output width is <c>_channels *
+    /// _multiplier</c> for every input this layer accepts, never a function of the one it was given.
+    /// <c>Scaled(Channels, _multiplier)</c> would be numerically identical on accepted input and wrong
+    /// about why, implying the layer would follow a wider input it would in fact refuse.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 3 || _channels <= 0 || _multiplier <= 0
+            || _kernelSize <= 0 || _stride <= 0 || _padding < 0)
+        {
+            return null;
+        }
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_channels * _multiplier)),
+            new OutputAxisContract(
+                TensorAxis.Time, AxisRelation.Window(TensorAxis.Time, _kernelSize, _stride, _padding)),
+        };
+    }
+
     private readonly int _channels;
     private readonly int _multiplier;
     private readonly int _kernelSize;
@@ -98,9 +139,6 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override long ParameterCount => (long)_channels * _multiplier * _kernelSize + (long)_channels * _multiplier;
-
-    /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 3)
@@ -137,39 +175,6 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>
         var biasReshaped = Engine.Reshape(_bias, new[] { 1, _channels * _multiplier, 1 });
         var withBias = Engine.TensorBroadcastAdd(conv, biasReshaped);
         return ApplyActivation(withBias);
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // Tape-based autodiff applies gradients to the registered trainable parameters; the manual
-        // hook is a no-op (mirrors Conv1DLayer).
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-        => Vector<T>.Concatenate(new Vector<T>(_kernel.ToArray()), new Vector<T>(_bias.ToArray()));
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int kernelLen = _channels * _multiplier * _kernelSize;
-        int biasLen = _channels * _multiplier;
-        if (parameters.Length != kernelLen + biasLen)
-        {
-            throw new ArgumentException(
-                $"Expected {kernelLen + biasLen} parameters for DepthwiseConv1DLayer, but got {parameters.Length}.");
-        }
-
-        // Copy in place (NOT `_kernel = new Tensor<T>(...)`) so the persistent-tensor identities
-        // registered in the ctor stay valid — replacing the fields would leave the registry/optimizer
-        // pointing at the old tensors and a Clone restored via SetParameters would silently lose the
-        // loaded values on the next step. Same pattern as Conv1DLayer/DenseLayer.SetParameters.
-        parameters.AsSpan().Slice(0, kernelLen).CopyTo(_kernel.Data.Span);
-        parameters.AsSpan().Slice(kernelLen, biasLen).CopyTo(_bias.Data.Span);
-
-        Engine.InvalidatePersistentTensor(_kernel);
-        Engine.InvalidatePersistentTensor(_bias);
     }
 
     /// <inheritdoc/>

@@ -336,49 +336,8 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network using the provided parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing updated parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter values to each layer in the network. It extracts
-    /// the appropriate segment of the parameter vector for each layer based on the layer's parameter count.
-    /// For HTM networks, this is typically used for fine-tuning parameters after initial learning.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the configuration values in the network.
-    /// 
-    /// While HTM networks primarily learn through the specific Learning methods in each layer,
-    /// this method allows you to directly update the parameters of all layers at once:
-    /// 
-    /// 1. It takes a long list of parameter values
-    /// 2. Determines which values belong to which layers
-    /// 3. Updates each layer with its corresponding values
-    /// 
-    /// This might be used for:
-    /// - Fine-tuning a network after initial training
-    /// - Applying optimized parameters found through experimentation
-    /// - Resetting certain aspects of the network
-    /// 
-    /// This method is less commonly used in HTM networks compared to other types of neural networks,
-    /// as HTMs typically learn through their specialized learning mechanisms.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the current state of the HTM network.
     /// </summary>

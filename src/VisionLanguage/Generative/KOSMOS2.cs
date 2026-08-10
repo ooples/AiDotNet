@@ -286,7 +286,6 @@ public class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

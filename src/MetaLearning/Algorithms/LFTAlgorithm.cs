@@ -353,6 +353,19 @@ public class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             return shifted;
         }
 
+        // THE HEAD IS PART OF THE PROBE STATE, NOT JUST THE MODEL. RunPseudoSeenStage mutates
+        // _metricHead IN PLACE, and ProbeLoss reset only ParamModel -- so ProbeLoss(-1) trained on
+        // top of the head ProbeLoss(+1) had already moved. The two probes then measured different
+        // head trajectories and the SPSA difference mixed the hyper-parameter effect with the extra
+        // head training, biasing the gradient estimate. PseudoUnseenLoss scores THROUGH this head, so
+        // the contamination lands directly in the quantity being differenced.
+        //
+        // _metricHead at entry IS the real stage-1 outcome (stage 1 has already run), so it is both
+        // the correct per-probe starting point and the correct value to leave behind -- which also
+        // fixes the second half: the head previously kept the mutations from BOTH probes, so the real
+        // stage-1 head was lost on every iteration where stage 2 ran.
+        var stageOneHead = _metricHead.Clone();
+
         // Each probe must REDO stage 1 under the perturbed hyper-parameters, then measure the
         // pseudo-unseen loss on the model that produced. Measuring without re-running stage 1 scores
         // a quantity independent of theta_f.
@@ -360,14 +373,25 @@ public class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         {
             _transformation.SetHyperparameters(Shift(scale, deltaScale, sign), Shift(bias, deltaBias, sign));
             ParamModel.SetParameters(initParams);
+            _metricHead = stageOneHead.Clone();
             RunPseudoSeenStage(pseudoSeen, initParams, losses: null, metaGradients: new List<Vector<T>>());
             return PseudoUnseenLoss(pseudoUnseen);
         }
 
-        double lossPlus = ProbeLoss(+1.0);
-        double lossMinus = ProbeLoss(-1.0);
-
-        _transformation.SetHyperparameters(scale, bias);
+        double lossPlus;
+        double lossMinus;
+        try
+        {
+            lossPlus = ProbeLoss(+1.0);
+            lossMinus = ProbeLoss(-1.0);
+        }
+        finally
+        {
+            // Restored on every exit, including a throw from inside a probe, which would otherwise
+            // leave a perturbed transformation and a probe-contaminated head behind silently.
+            _transformation.SetHyperparameters(scale, bias);
+            _metricHead = stageOneHead;
+        }
 
         double scaledDifference = (lossPlus - lossMinus) / (2.0 * perturbation);
         if (double.IsNaN(scaledDifference) || double.IsInfinity(scaledDifference)) return;

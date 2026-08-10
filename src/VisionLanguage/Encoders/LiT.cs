@@ -298,7 +298,6 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
             idx += count;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

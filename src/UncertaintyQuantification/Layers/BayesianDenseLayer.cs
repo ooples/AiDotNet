@@ -1,4 +1,7 @@
-﻿using AiDotNet.Extensions;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -28,8 +31,70 @@ namespace AiDotNet.UncertaintyQuantification.Layers;
 /// to express uncertainty in its predictions.
 /// </para>
 /// </remarks>
-public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
+// A fully-connected layer that happens to sample its weights: the shape rule is DenseLayer's, and it is
+// read off ForwardTraced rather than assumed. The guard checks only the LAST dimension - "expects
+// last-dimension feature size {_inputSize}" - and the tail reconstructs the output as the input's shape
+// with `outputShape[^1] = _outputSize`. Every leading axis is carried through untouched, at any rank.
+//
+// Rank 1 and rank 4 are declared because this layer ACCEPTS them, not because they are typical. The
+// rank-4 axes are named [Batch, Channels, Height, Features] rather than with placeholders because that
+// is exactly the convolution hand-off, and naming it makes the consequence legible: fed a feature map,
+// this layer maps WIDTH as its feature axis - almost never what an author meant, and worth being able
+// to see rather than discovering from a size mismatch two layers later.
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Per-position projection: the leading axes are carried through untouched.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written rather than generated, for the same reason <c>DenseLayer</c> writes its own: the last
+    /// axis takes a size the CONFIGURATION fixes, and an attribute cannot carry a constructor argument.
+    /// <c>ForwardTraced</c> ends by copying every leading dimension and overwriting only the last -
+    /// <c>outputShape[^1] = _outputSize</c> - with the rank-1 and rank-2 special cases reshaping to
+    /// <c>[_outputSize]</c> and returning <c>[batch, _outputSize]</c> respectively. Same rule, three
+    /// spellings.
+    /// </para>
+    /// <para>
+    /// Sampling the posterior does not touch the shape: the sampled weights are added to
+    /// <c>_weightMean</c>, which is <c>[_outputSize, _inputSize]</c> whether or not a sample is drawn.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (_outputSize <= 0 || inputRank < 1) return null;
+
+        var features = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputSize));
+        OutputAxisContract Pass(TensorAxis axis) => new(axis, AxisRelation.Same(axis));
+
+        // Enumerated rather than generated, because every leading axis needs a DISTINCT role: a relation
+        // refers to its input BY ROLE, so two anonymous placeholders in one layout could not be told
+        // apart and the whole naming would be refused. Ranks beyond four decline honestly.
+        return inputRank switch
+        {
+            1 => new[] { features },
+            2 => new[] { Pass(TensorAxis.Batch), features },
+            3 => new[] { Pass(TensorAxis.Batch), Pass(TensorAxis.Time), features },
+            4 => new[]
+            {
+                Pass(TensorAxis.Batch), Pass(TensorAxis.Channels), Pass(TensorAxis.Height), features,
+            },
+            _ => null,
+        };
+    }
+
     private readonly Random _rng;
     private readonly object _rngLock = new();
     private readonly int _inputSize;
@@ -106,9 +171,6 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         // Initialize weight and bias parameters
         InitializeParameters();
     }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 2L * _outputSize * _inputSize + 2L * _outputSize;
 
     private void InitializeParameters()
     {
@@ -451,70 +513,6 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);
-        _sampledWeightEpsilon = null;
-        _sampledBiasEpsilon = null;
-        _samplePending = false;
-    }
-
-    /// <summary>
-    /// Gets all trainable parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var paramCount = _outputSize * _inputSize * 2 + _outputSize * 2;
-        var parameters = new Vector<T>(paramCount);
-        int idx = 0;
-
-        // Pack weight means
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                parameters[idx++] = _weightMean[i, j];
-
-        // Pack weight log variances
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                parameters[idx++] = _weightLogVar[i, j];
-
-        // Pack bias means
-        for (int i = 0; i < _outputSize; i++)
-            parameters[idx++] = _biasMean[i];
-
-        // Pack bias log variances
-        for (int i = 0; i < _outputSize; i++)
-            parameters[idx++] = _biasLogVar[i];
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var expectedCount = _outputSize * _inputSize * 2 + _outputSize * 2;
-        if (parameters.Length != expectedCount)
-            throw new ArgumentException($"Expected {expectedCount} parameters, got {parameters.Length}");
-
-        int idx = 0;
-
-        // Unpack weight means
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                _weightMean[i, j] = parameters[idx++];
-
-        // Unpack weight log variances
-        for (int i = 0; i < _outputSize; i++)
-            for (int j = 0; j < _inputSize; j++)
-                _weightLogVar[i, j] = parameters[idx++];
-
-        // Unpack bias means
-        for (int i = 0; i < _outputSize; i++)
-            _biasMean[i] = parameters[idx++];
-
-        // Unpack bias log variances
-        for (int i = 0; i < _outputSize; i++)
-            _biasLogVar[i] = parameters[idx++];
-
         _sampledWeightEpsilon = null;
         _sampledBiasEpsilon = null;
         _samplePending = false;

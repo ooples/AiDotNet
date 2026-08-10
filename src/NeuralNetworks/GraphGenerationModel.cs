@@ -75,6 +75,14 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Variational Graph Auto-Encoders", "https://arxiv.org/abs/1611.07308")]
 public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The variational head: the mean and log-variance projections that turn the
+    /// encoder output into a latent distribution. They live outside Layers, and the
+    /// hand-written surfaces appended them in this order after the layer walk -- which is
+    /// exactly where the base fold puts extra tensors.</remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+        => new[] { _meanWeights, _logVarWeights };
     private readonly GraphGenerationModelOptions _options;
 
     /// <inheritdoc/>
@@ -251,13 +259,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // configurations fail at construction with a clear message instead
         // of throwing mid-training when the user has already paid the cost
         // of the forward pass.
-        if (_lossFunction is not LossFunctions.LossFunctionBase<T>)
-        {
-            throw new ArgumentException(
-                "GraphGenerationModel requires a tape-capable loss function. " +
-                $"Pass a LossFunctionBase<T> implementation (got {_lossFunction.GetType().Name}).",
-                nameof(lossFunction));
-        }
         var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = learningRate,
@@ -530,10 +531,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         return NumOps.Divide(kl, n);
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int index = 0;
@@ -562,7 +559,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
                 .Reshape(_logVarWeights._shape);
         }
     }
-
     /// <summary>
     /// Trains the model on graph data.
     /// </summary>
@@ -851,50 +847,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         return new Vector<T>(allGrads.ToArray());
     }
 
-    /// <summary>
-    /// Counts the layer parameters PLUS the variational weights, matching
-    /// <see cref="GetParameters"/> exactly.
-    /// </summary>
-    /// <remarks>
-    /// <c>GetParameters</c> appends <c>_meanWeights</c> and <c>_logVarWeights</c> after the layer
-    /// walk, but the count was left to the base, which knows only about <c>Layers</c>. The two
-    /// therefore disagreed by the full size of the variational head -- 1,600 declared against
-    /// 2,624 returned -- so a round-trip through <c>SetParameters</c> silently dropped the mean
-    /// and log-variance projections that make this a VAE rather than a plain autoencoder.
-    /// </remarks>
-    public override long ParameterCount =>
-        base.ParameterCount + _meanWeights.Length + _logVarWeights.Length;
-
-    /// <summary>
-    /// Gets all parameters as a vector.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        // Encoder parameters
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
-        }
-
-        // Variational layer parameters
-        for (int i = 0; i < _meanWeights.Length; i++)
-        {
-            allParams.Add(_meanWeights.GetFlat(i));
-        }
-        for (int i = 0; i < _logVarWeights.Length; i++)
-        {
-            allParams.Add(_logVarWeights.GetFlat(i));
-        }
-
-        return new Vector<T>([.. allParams]);
-    }
-
     #region Abstract Method Implementations
 
     /// <summary>
@@ -1030,7 +982,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // handled internally) when the caller didn't supply one. The
         // constructor enforces LossFunctionBase<T> so this cast cannot
         // fail at runtime.
-        var tapeLoss = (LossFunctions.LossFunctionBase<T>)_lossFunction;
+        var tapeLoss = _lossFunction;
         var reconLoss = tapeLoss.ComputeTapeLoss(reconstructed, adjacencyMatrix);
 
         // KL divergence to N(0, I) per Kipf & Welling 2016 §3.2:

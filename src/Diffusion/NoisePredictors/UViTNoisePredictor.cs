@@ -486,31 +486,6 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region IParameterizable
 
-    /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            // #1237: long accumulator. UViT at full hidden / depth scale
-            // can sum past int.MaxValue across encoder + decoder blocks.
-            long count = _patchEmbed.ParameterCount + _timeEmbed1.ParameterCount + _timeEmbed2.ParameterCount;
-
-            foreach (var block in _encoderBlocks)
-                count += GetBlockParamCount(block);
-
-            count += GetBlockParamCount(_middleBlock);
-
-            for (int i = 0; i < _decoderBlocks.Count; i++)
-            {
-                count += GetBlockParamCount(_decoderBlocks[i]);
-                count += _skipProjections[i].ParameterCount;
-            }
-
-            count += _finalNorm.ParameterCount + _outputProj.ParameterCount;
-            return count;
-        }
-    }
-
     private static long GetBlockParamCount(UViTBlock block)
     {
         long c = 0;
@@ -556,61 +531,6 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         if (block.Norm2 != null) yield return block.Norm2;
         if (block.MLP1 != null) yield return block.MLP1;
         if (block.MLP2 != null) yield return block.MLP2;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var layer in UViTLayerSequence()) AddLayerParams(allParams, layer);
-
-        var result = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++) result[i] = allParams[i];
-        return result;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Previously this set only the patch/time-embed layers and stopped — leaving every encoder/
-        // middle/decoder block, skip projection, final norm and output projection at their random-init
-        // values (so Clone / optimizer round-trips silently produced a wrong model). Walk the full
-        // canonical sequence so the whole network round-trips. Lazy layers must already be resolved
-        // (Clone probe-forwards first) — DenseLayer self-resolves from the vector length, attention
-        // layers need their shapes materialized before the assignment lands.
-        int offset = 0;
-        foreach (var layer in UViTLayerSequence()) offset = SetLayerParams(layer, parameters, offset);
-    }
-
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // #1624: one chunk per layer in the canonical sequence, index-identical to GetParameters,
-        // without materializing the full aggregate.
-        foreach (var layer in UViTLayerSequence())
-        {
-            var p = layer.GetParameters();
-            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
-        }
-    }
-
-    /// <inheritdoc />
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        using var e = chunks.GetEnumerator();
-        foreach (var layer in UViTLayerSequence())
-        {
-            if (layer.ParameterCount == 0) continue;
-            if (!e.MoveNext())
-                throw new System.ArgumentException(
-                    "SetParameterChunks received fewer chunks than U-ViT has parameterized layers.",
-                    nameof(chunks));
-            layer.SetParameters(e.Current.ToVector());
-        }
-        if (e.MoveNext())
-            throw new System.ArgumentException(
-                "SetParameterChunks received more chunks than U-ViT has parameterized layers.",
-                nameof(chunks));
     }
 
     private static void AddLayerParams(List<T> list, ILayer<T> layer)

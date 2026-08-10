@@ -66,6 +66,18 @@ namespace AiDotNet.Audio.MusicGen;
 [ResearchPaper("Simple and Controllable Music Generation", "https://doi.org/10.48550/arXiv.2306.05284", Year = 2023, Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
 public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore calls Forward, the sequential fold over Layers.
+    /// CreateDefaultMusicGenLayers ends with a <c>numCodebooks</c>-long run of
+    /// <c>DenseLayer&lt;T&gt;(codebookSize)</c> heads (the delay-pattern output projection) appended
+    /// flat to Layers, so the fold chains them and the LAST one sets the width -
+    /// <c>_options.CodebookSize</c> (2048). Note the heads are per-codebook, so the width is
+    /// CodebookSize alone, NOT CodebookSize * NumCodebooks; and LmHiddenDim is the width one layer
+    /// earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.CodebookSize;
+
     #region Fields
 
     private readonly MusicGenOptions _options;
@@ -979,26 +991,11 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return _textEncoder.Run(input);
     }
 
-    /// <summary>
-    /// Updates model parameters.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        }
-
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on input data.
     /// </summary>

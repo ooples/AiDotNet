@@ -50,8 +50,17 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor", "https://arxiv.org/abs/1801.01290", Year = 2018, Authors = "Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, Sergey Levine")]
-public class FinancialSACAgent<T> : TradingAgentBase<T>
+public class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Actor then both critics, the order all three hand-written surfaces used. Soft actor-critic trains twin critics to damp overestimation bias -- they are independent parameters, not copies of each other. The TARGET critics stay out, as they did before: a target is refreshed from these weights rather than trained.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_actor);
+        RegisterParameterComponent(_critic1);
+        RegisterParameterComponent(_critic2);
+    }
     #region Fields
 
     private readonly FinancialSACAgentOptions<T> _options;
@@ -73,9 +82,6 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _actor.ParameterCount + _critic1.ParameterCount + _critic2.ParameterCount;
 
     #endregion
 
@@ -293,83 +299,6 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
         _actor.Deserialize(reader.ReadBytes(actorLen));
     }
 
-    /// <summary>
-    /// Gets all trainable parameters from the actor and critic networks.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> SAC has three networks - actor, critic1, and critic2.
-    /// This method returns all their weights concatenated together so they can
-    /// be saved, analyzed, or transferred to another model.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters()
-    {
-        var actorParams = _actor.GetParameters();
-        var critic1Params = _critic1.GetParameters();
-        var critic2Params = _critic2.GetParameters();
-
-        var combined = new Vector<T>(actorParams.Length + critic1Params.Length + critic2Params.Length);
-
-        int offset = 0;
-        for (int i = 0; i < actorParams.Length; i++)
-            combined[offset + i] = actorParams[i];
-
-        offset += actorParams.Length;
-        for (int i = 0; i < critic1Params.Length; i++)
-            combined[offset + i] = critic1Params[i];
-
-        offset += critic1Params.Length;
-        for (int i = 0; i < critic2Params.Length; i++)
-            combined[offset + i] = critic2Params[i];
-
-        return combined;
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters for the actor and critic networks.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> SAC has three networks - actor, critic1, and critic2.
-    /// This method splits the provided parameters and distributes them to each network.
-    /// The parameter order must match GetParameters: actor first, then critic1, then critic2.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int actorCount = checked((int)_actor.ParameterCount);
-        int critic1Count = checked((int)_critic1.ParameterCount);
-        int critic2Count = checked((int)_critic2.ParameterCount);
-
-        if (parameters.Length != actorCount + critic1Count + critic2Count)
-        {
-            throw new ArgumentException(
-                $"Parameter count mismatch. Expected {actorCount + critic1Count + critic2Count}, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        var actorParams = new Vector<T>(actorCount);
-        var critic1Params = new Vector<T>(critic1Count);
-        var critic2Params = new Vector<T>(critic2Count);
-
-        int offset = 0;
-        for (int i = 0; i < actorCount; i++)
-            actorParams[i] = parameters[offset + i];
-
-        offset += actorCount;
-        for (int i = 0; i < critic1Count; i++)
-            critic1Params[i] = parameters[offset + i];
-
-        offset += critic1Count;
-        for (int i = 0; i < critic2Count; i++)
-            critic2Params[i] = parameters[offset + i];
-
-        _actor.SetParameters(actorParams);
-        _critic1.SetParameters(critic1Params);
-        _critic2.SetParameters(critic2Params);
-    }
-
     #endregion
 
     #region Model Metadata
@@ -417,7 +346,7 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialSACAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return _actor.ComputeGradients(Tensor<T>.FromVector(input), Tensor<T>.FromVector(target), lossFunction);
     }
@@ -430,7 +359,7 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialSACAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _actor.ApplyGradients(gradients, learningRate);
     }

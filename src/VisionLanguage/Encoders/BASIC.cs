@@ -53,6 +53,19 @@ namespace AiDotNet.VisionLanguage.Encoders;
 )]
 public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
+    // NO SHAPE CONTRACT, and the reason is measured rather than assumed.
+    //
+    // Probing at extent 8 and 12 showed this model carries every input axis and replaces only the
+    // LAST: [1,3,8,8] -> [1,3,8,1024], [1,12,8,8] -> [1,12,8,1024]. The trailing 1024 equalled this
+    // model's EmbeddingDim in that build, so a trailing-feature contract keyed on EmbeddingDim looked
+    // right. The conformance sweep at extent 64 refuted it: the contract said [1,3,64,1536] and
+    // Predict returned [1,3,64,1024]. EmbeddingDim had moved to 1536 while the real output width
+    // stayed 1024, so the width is NOT EmbeddingDim - it only coincided at one construction.
+    //
+    // Two observations that agree are not enough to pin a constant whose source is unknown. Until the
+    // 1024 is traced to the field that actually produces it, stating a contract here would be a guess
+    // with a citation attached.
+
     private readonly BASICOptions _options;
 
     public override ModelOptions GetOptions() => _options;
@@ -279,7 +292,6 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             idx += count;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

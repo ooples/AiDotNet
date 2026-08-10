@@ -175,7 +175,6 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
         }
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int required = 0;
@@ -192,7 +191,6 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
             offset += p.Length;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -12,8 +12,24 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class FrameInterpolationTestBase<T> : VideoNNModelTestBase<T>
 {
+    /// <summary>
+    /// Two independent forward passes must both produce finite, non-empty output.
+    /// </summary>
+    /// <remarks>
+    /// RENAMED TO WHAT IT ACTUALLY CHECKS. As <c>InterpolatedFrame_ShouldBeBetweenInputs</c>
+    /// this asserted nothing of the kind: two INDEPENDENT <c>Predict</c> calls cannot show
+    /// that a frame lies between two others, because no interpolation is performed between
+    /// them. The old body was also satisfiable three ways without the model working -- an
+    /// empty output skipped the loop entirely, <c>Infinity</c> passed the NaN-only check, and
+    /// a length mismatch was hidden by <c>Math.Min</c>.
+    ///
+    /// A genuine between-ness invariant needs an interpolation entry point taking both frames
+    /// and a t; this base class has no such contract, so claiming one in the test name was the
+    /// defect. Asserting the weaker property under an honest name is worth more than a strong
+    /// name over a check that cannot fail.
+    /// </remarks>
     [Fact(Timeout = 120000)]
-    public async Task InterpolatedFrame_ShouldBeBetweenInputs()
+    public async Task IndependentFrames_ShouldProduceFiniteOutput()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
@@ -25,14 +41,21 @@ public abstract class FrameInterpolationTestBase<T> : VideoNNModelTestBase<T>
         var out1 = network.Predict(frame1);
         var out2 = network.Predict(frame2);
 
-        // Interpolated output should have values between the two inputs' outputs
-        // At minimum, both should produce finite output
-        for (int i = 0; i < Math.Min(out1.Length, out2.Length); i++)
+        // An empty output previously skipped the loop and passed.
+        Assert.True(out1.Length > 0, "Frame interpolation produced empty output for frame 1.");
+        Assert.True(out2.Length > 0, "Frame interpolation produced empty output for frame 2.");
+        Assert.True(out1.Length == out2.Length,
+            $"Two frames of identical shape produced different output lengths ({out1.Length} vs {out2.Length}).");
+
+        for (int i = 0; i < out1.Length; i++)
         {
             double value1 = ConvertToDouble(out1[i]);
             double value2 = ConvertToDouble(out2[i]);
-            Assert.False(double.IsNaN(value1) || double.IsNaN(value2),
-                $"Frame interpolation output[{i}] is NaN.");
+            // Infinity previously passed a NaN-only check.
+            Assert.True((!double.IsNaN(value1) && !double.IsInfinity(value1)),
+                $"Frame interpolation output[{i}] for frame 1 is {value1}.");
+            Assert.True((!double.IsNaN(value2) && !double.IsInfinity(value2)),
+                $"Frame interpolation output[{i}] for frame 2 is {value2}.");
         }
     }
 

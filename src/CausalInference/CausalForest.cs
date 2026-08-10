@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.CausalInference;
 
 #pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
@@ -60,6 +62,19 @@ namespace AiDotNet.CausalInference;
 [ResearchPaper("Estimation and Inference of Heterogeneous Treatment Effects using Random Forests", "https://doi.org/10.1080/01621459.2017.1319839", Year = 2018, Authors = "Stefan Wager, Susan Athey")]
 public class CausalForest<T> : CausalModelBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The propensity-score coefficients. This also FIXES a measured mismatch: ParameterCount came from CausalModelBase as NumFeatures, which SetParameters set to length - 1 for the intercept, so the count reported 5 against a 6-element vector after any restore and a saved vector could not be reloaded. Count and vector now both fold this one source; NumFeatures keeps its old meaning for everything else that reads it.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VectorFieldParameterSource<T>(
+            () => _propensityCoefficients,
+            value =>
+            {
+                _propensityCoefficients = value;
+                NumFeatures = value.Length - 1;   // -1 for the intercept, as before
+            }));
+    }
     /// <summary>
     /// Number of trees in the forest.
     /// </summary>
@@ -876,27 +891,6 @@ public class CausalForest<T> : CausalModelBase<T>
     #endregion
 
     #region IFullModel Implementation
-
-    /// <summary>
-    /// Gets all model parameters.
-    /// </summary>
-    public override Vector<T> GetParameters()
-    {
-        // For tree models, we return propensity coefficients
-        return _propensityCoefficients ?? new Vector<T>(0);
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length > 0)
-        {
-            _propensityCoefficients = parameters;
-            NumFeatures = parameters.Length - 1;
-        }
-    }
 
     /// <summary>
     /// Creates a new instance with specified parameters.

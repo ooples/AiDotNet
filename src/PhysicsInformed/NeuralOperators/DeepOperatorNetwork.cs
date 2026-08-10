@@ -135,6 +135,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     [ResearchPaper("Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators", "https://doi.org/10.1038/s42256-021-00302-5", Year = 2021, Authors = "Lu Lu, Pengzhan Jin, Guofei Pang, Zhongqiang Zhang, George Em Karniadakis")]
     public class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
+
+        // InitializeLayers already does Layers.AddRange(_branchNet.Layers) followed by Layers.AddRange(_trunkNet.Layers), so the base walk over Layers ALREADY produces the branch-then-trunk parameters the hand-written surfaces rebuilt by hand, in the same order.
         private readonly DeepOperatorNetworkOptions _options;
 
         /// <inheritdoc/>
@@ -606,7 +608,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                         var predictions = Engine.TensorMatMul(trunkOutput2D, branchOutputT);
 
                         // Compute loss under the same tape
-                        var lossTensor = ((LossFunctions.LossFunctionBase<T>)lossFunction)
+                        var lossTensor = lossFunction
                             .ComputeTapeLoss(predictions, targets);
                         T lossVal = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
                         totalLoss = NumOps.Add(totalLoss, lossVal);
@@ -620,7 +622,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                             allParams, grads, lossVal,
                             branchInput, targets,
                             (inp, _) => ForwardForTraining(inp),
-                            (pred, tgt) => ((LossFunctions.LossFunctionBase<T>)lossFunction).ComputeTapeLoss(pred, tgt),
+                            (pred, tgt) => lossFunction.ComputeTapeLoss(pred, tgt),
                             null);
                         opt.Step(context);
                     }
@@ -774,14 +776,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _trunkNet.UpdateParameters(trunkParameters);
         }
 
-        /// <summary>
-        /// Gets the trainable parameters as a flattened vector.
-        /// </summary>
-        public override Vector<T> GetParameters()
-        {
-            return Vector<T>.Concatenate(_branchNet.GetParameters(), _trunkNet.GetParameters());
-        }
-
         public override Vector<T> GetGradients()
         {
             return Vector<T>.Concatenate(_branchNet.GetGradients(), _trunkNet.GetGradients());
@@ -927,11 +921,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 layer.ClearGradients();
             }
         }
-
-        /// <summary>
-        /// Gets the total number of parameters across branch and trunk networks.
-        /// </summary>
-        public override long ParameterCount => _branchNet.GetParameterCount() + _trunkNet.GetParameterCount();
 
         public override bool SupportsTraining => true;
     }

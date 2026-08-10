@@ -57,8 +57,44 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "16, 4, 2, 8, true, 0.0, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+// Rank 2 - [numNodes, inputFeatures] - is what the forward's own restore branch names ("Was 2D, return
+// [nodes, outputFeatures]") and the only form [LayerProperty(TestInputShape = "4, 16")] exercises. Other
+// ranks ARE handled, but their node count must agree with the separately-installed adjacency matrix, so
+// a declaration there would be a claim about a tensor this layer never sees on its own.
+//
+// The node axis is TensorAxis.Other: graph nodes are neither a sequence nor a spatial extent, and naming
+// them Time would licence a downstream causal layer to mask them by position, which is meaningless here.
+[TensorLayout(TensorAxis.Other, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN because the emitted width is <c>_outputFeatures</c>, set by the output projection
+    /// <c>[_numHeads * _headDim, _outputFeatures]</c>, and nothing after it widens again: the FFN expands
+    /// to <c>_ffnHiddenDim</c> and comes back through <c>[_ffnHiddenDim, _outputFeatures]</c>, and both
+    /// residual adds sit at <c>_outputFeatures</c> - when <c>_inputFeatures != _outputFeatures</c> the
+    /// layer zero-pads or truncates the RESIDUAL to reach that width rather than changing the width.
+    /// </para>
+    /// <para>
+    /// The node axis is Same: attention over the adjacency re-weights nodes, it does not add or drop any.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _outputFeatures <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_outputFeatures)),
+        };
+    }
+
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly int _numHeads;
@@ -210,8 +246,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </summary>
     private readonly IActivationFunction<T> _ffnActivation;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -1197,26 +1231,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()),
-            new Vector<T>(_ffnWeights1.ToArray()),
-            new Vector<T>(_ffnWeights2.ToArray()),
-            new Vector<T>(_ffnBias1.ToArray()),
-            new Vector<T>(_ffnBias2.ToArray()),
-            new Vector<T>(_layerNorm1Scale.ToArray()),
-            new Vector<T>(_layerNorm1Bias.ToArray()),
-            new Vector<T>(_layerNorm2Scale.ToArray()),
-            new Vector<T>(_layerNorm2Bias.ToArray())
-        );
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         var gQuery = _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_queryWeights.Length);
@@ -1251,86 +1265,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _ffnWeights2Gradient = null;
         _ffnBias1Gradient = null;
         _ffnBias2Gradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int querySize = _queryWeights.Length;
-        int keySize = _keyWeights.Length;
-        int valueSize = _valueWeights.Length;
-        int outputWeightsSize = _outputWeights.Length;
-        int outputBiasSize = _outputBias.Length;
-        int ffn1Size = _ffnWeights1.Length;
-        int ffn2Size = _ffnWeights2.Length;
-        int ffnBias1Size = _ffnBias1.Length;
-        int ffnBias2Size = _ffnBias2.Length;
-        int ln1ScaleSize = _layerNorm1Scale.Length;
-        int ln1BiasSize = _layerNorm1Bias.Length;
-        int ln2ScaleSize = _layerNorm2Scale.Length;
-        int ln2BiasSize = _layerNorm2Bias.Length;
-
-        int totalParams = querySize + keySize + valueSize + outputWeightsSize + outputBiasSize +
-                          ffn1Size + ffn2Size + ffnBias1Size + ffnBias2Size +
-                          ln1ScaleSize + ln1BiasSize + ln2ScaleSize + ln2BiasSize;
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
-        }
-
-        int index = 0;
-
-        var queryParams = parameters.SubVector(index, querySize);
-        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights._shape);
-        index += querySize;
-
-        var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights._shape);
-        index += keySize;
-
-        var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights._shape);
-        index += valueSize;
-
-        var outputWeightsParams = parameters.SubVector(index, outputWeightsSize);
-        _outputWeights = Tensor<T>.FromVector(outputWeightsParams).Reshape(_outputWeights._shape);
-        index += outputWeightsSize;
-
-        var outputBiasParams = parameters.SubVector(index, outputBiasSize);
-        _outputBias = Tensor<T>.FromVector(outputBiasParams);
-        index += outputBiasSize;
-
-        var ffn1Params = parameters.SubVector(index, ffn1Size);
-        _ffnWeights1 = Tensor<T>.FromVector(ffn1Params).Reshape(_ffnWeights1._shape);
-        index += ffn1Size;
-
-        var ffn2Params = parameters.SubVector(index, ffn2Size);
-        _ffnWeights2 = Tensor<T>.FromVector(ffn2Params).Reshape(_ffnWeights2._shape);
-        index += ffn2Size;
-
-        var ffnBias1Params = parameters.SubVector(index, ffnBias1Size);
-        _ffnBias1 = Tensor<T>.FromVector(ffnBias1Params);
-        index += ffnBias1Size;
-
-        var ffnBias2Params = parameters.SubVector(index, ffnBias2Size);
-        _ffnBias2 = Tensor<T>.FromVector(ffnBias2Params);
-        index += ffnBias2Size;
-
-        var ln1ScaleParams = parameters.SubVector(index, ln1ScaleSize);
-        _layerNorm1Scale = Tensor<T>.FromVector(ln1ScaleParams);
-        index += ln1ScaleSize;
-
-        var ln1BiasParams = parameters.SubVector(index, ln1BiasSize);
-        _layerNorm1Bias = Tensor<T>.FromVector(ln1BiasParams);
-        index += ln1BiasSize;
-
-        var ln2ScaleParams = parameters.SubVector(index, ln2ScaleSize);
-        _layerNorm2Scale = Tensor<T>.FromVector(ln2ScaleParams);
-        index += ln2ScaleSize;
-
-        var ln2BiasParams = parameters.SubVector(index, ln2BiasSize);
-        _layerNorm2Bias = Tensor<T>.FromVector(ln2BiasParams);
     }
 
     /// <inheritdoc/>

@@ -2,6 +2,10 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
+
 namespace AiDotNet.Diffusion.StyleTransfer;
 
 /// <summary>
@@ -37,8 +41,47 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// learnable correction to what it produces. How much freedom that correction has depends on how
 /// noisy the current generation step is — that is the whole idea of T-LoRA.</para>
 /// </remarks>
-public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionBlockDecorator<T>
+// A DECORATOR, so the shape law is the wrapped block's. `ForwardTraced` is
+// `PostProcess(_inner.Forward(input))`, and PostProcess adds a residual: it permutes the channel axis
+// last, reshapes to [tokens, C], adds `flattened x delta` (a [C, C] matmul, so the width is unchanged),
+// then reshapes and permutes straight back to `shape`. Nothing there moves an axis, which is why this
+// delegates rather than composing anything on top.
+//
+// The layouts name the input axes for ShapeInference.NameAxes, and the two declared ranks are exactly
+// the two forms the blocks this decorates accept - TLoRAModel.InjectAdapters wraps
+// DiffusionAttention (rank 3, [Batch, Time, Features]) and DiffusionCrossAttention (rank 3 and the
+// image form [Batch, Channels, Height, Width]). PostProcess's own comment says the same thing from the
+// other side: "either sequence format [B, S, C] or image format [B, C, H, W]".
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Token form: the adapter's channel axis is the trailing feature width.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Image form: PostProcess permutes Channels last, adapts, and permutes back.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionBlockDecorator<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Delegated to the wrapped block. The adapter contributes a low-rank residual of identical shape -
+    /// at initialization it contributes exactly zero - so it changes VALUES and never extents. The
+    /// constructor states the same relation, chaining
+    /// <c>base(inner.GetInputShape(), inner.GetOutputShape())</c>.
+    /// </para>
+    /// <para>
+    /// Only expressible because <c>OutputAxesFor</c> is an INSTANCE method: which block this was
+    /// constructed around decides the answer. A block that declares no contract makes this return null,
+    /// which is honest rather than a guess.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+        => (_inner as IShapeContract)?.OutputAxesFor(inputRank);
+
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
     private readonly ILayer<T> _inner;
@@ -217,26 +260,6 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         + _adapter.SingularValues.Length;
 
     /// <summary>
-    /// Returns the wrapped block's parameters followed by the adapter's A, B and S.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The inner block's weights are included, and must be. In this library
-    /// <c>GetParameters</c>/<c>SetParameters</c> is the FULL-STATE contract that clone, save and load
-    /// are built on, not merely the optimizer's view — the flat concatenation has to be
-    /// index-identical across the pair. Reporting only the adapter would silently drop the base
-    /// attention weights from the model's state, so a round-trip or a <c>Clone</c> would return a
-    /// network with re-initialized attention.
-    /// </para>
-    /// <para>
-    /// The paper's "freeze W" is therefore expressed where it belongs — in what training updates, not
-    /// in what serialization can see. <see cref="TrainableParameterOffset"/> gives callers the index
-    /// where the adapter's block begins so an optimizer can restrict itself to it.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters() => _inner.GetParameters();
-
-    /// <summary>
     /// The adapter's own trainable state — A, then B, then S — kept OUT of
     /// <see cref="GetParameters"/> on purpose.
     /// </summary>
@@ -309,24 +332,6 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
     }
 
 
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Forwards straight to the wrapped block, so the decorator consumes exactly the vector the bare
-    /// block would. Adapter state goes through <see cref="SetAdapterState"/>.
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _inner.SetParameters(parameters);
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate)
-    {
-        // No gradients are accumulated on the adapter by this layer's own backward path, so there is
-        // nothing to step here. Training flows through the model's parameter vector
-        // (GetParameters/SetParameters), which is how LatentDiffusionModelBase drives updates.
-    }
 
     /// <inheritdoc/>
     public override void ResetState()

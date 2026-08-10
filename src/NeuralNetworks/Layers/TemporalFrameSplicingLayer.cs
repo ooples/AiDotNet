@@ -1,3 +1,6 @@
+// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -12,9 +15,44 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Slicing and reshaping remain connected to the gradient tape through the
 /// tensor engine.
 /// </remarks>
-internal sealed partial class TemporalFrameSplicingLayer<T> : LayerBase<T>
+// Rank 2 [Time, Features] - the shape ResolveShapes declares. OutputAxesFor below is hand-written
+// because both relations depend on the splicing factor, a constructor argument.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public sealed partial class TemporalFrameSplicingLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _factor;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Splices <c>_factor</c> consecutive frames into one, so time shrinks by that factor and features
+    /// grow by it. Resolved output is
+    /// <c>[retainedTime / _factor, features * _factor]</c> where
+    /// <c>retainedTime = time - (time % _factor)</c>.
+    /// </para>
+    /// <para>
+    /// The time relation LOOKS like it needs modulo arithmetic, and I first assumed it was outside the
+    /// relation vocabulary. It is not: <c>(time - time % f) / f</c> is exactly <c>floor(time / f)</c>,
+    /// which is what <c>Window(kernel: f, stride: f, padding: 0)</c> evaluates to -
+    /// <c>floor((time - (f-1) - 1) / f) + 1</c>. Reading the resolved shape instead of the guard
+    /// condition is what showed that; the vocabulary needed no extension.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _factor <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(
+                TensorAxis.Time,
+                AxisRelation.Window(TensorAxis.Time, kernel: _factor, stride: _factor, padding: 0)),
+            new OutputAxisContract(
+                TensorAxis.Features, AxisRelation.Scaled(TensorAxis.Features, _factor, 1)),
+        };
+    }
 
     public TemporalFrameSplicingLayer()
         : this(2)
@@ -31,9 +69,6 @@ internal sealed partial class TemporalFrameSplicingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => false;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => 0;
 
     /// <inheritdoc/>
     protected override void OnFirstForward(Tensor<T> input)
@@ -90,20 +125,7 @@ internal sealed partial class TemporalFrameSplicingLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters() => Vector<T>.Empty();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException($"TemporalFrameSplicingLayer has no parameters; got {parameters.Length}.", nameof(parameters));
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients() => Vector<T>.Empty();
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate) { }
 
     /// <inheritdoc/>
     public override void ResetState() { }

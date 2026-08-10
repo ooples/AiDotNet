@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -62,6 +64,14 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
 public class CycleGAN<T> : NeuralNetworkBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Both generators then both discriminators, the order the hand-written concatenation walked them. All four are trained: CycleGAN optimises the A->B and B->A mappings jointly against a discriminator per domain.</remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => GeneratorAtoB.Layers.Cast<LayerBase<T>?>()
+            .Concat(GeneratorBtoA.Layers.Cast<LayerBase<T>?>())
+            .Concat(DiscriminatorA.Layers.Cast<LayerBase<T>?>())
+            .Concat(DiscriminatorB.Layers.Cast<LayerBase<T>?>());
     private readonly CycleGANOptions _options;
 
     /// <inheritdoc/>
@@ -971,19 +981,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// CycleGAN owns four sub-networks (two generators + two discriminators) outside
-    /// the inherited <c>Layers</c> list, so the base ParameterCount (which only sums
-    /// <c>Layers</c>) reports 0 — that's the symptom behind the "GAN has only 0
-    /// parameters" invariant test failure. Aggregate the four networks here.
-    /// </remarks>
-    public override long ParameterCount =>
-        GeneratorAtoB.GetParameterCount() +
-        GeneratorBtoA.GetParameterCount() +
-        DiscriminatorA.GetParameterCount() +
-        DiscriminatorB.GetParameterCount();
-
-    /// <inheritdoc />
-    /// <remarks>
     /// Streams parameters from each of the four sub-networks in sequence:
     /// <c>GeneratorAtoB</c>, <c>GeneratorBtoA</c>, <c>DiscriminatorA</c>,
     /// <c>DiscriminatorB</c>. Per #1237, callers walking these chunks
@@ -996,22 +993,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         foreach (var chunk in GeneratorBtoA.GetParameterChunks()) yield return chunk;
         foreach (var chunk in DiscriminatorA.GetParameterChunks()) yield return chunk;
         foreach (var chunk in DiscriminatorB.GetParameterChunks()) yield return chunk;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var a2b = GeneratorAtoB.GetParameters();
-        var b2a = GeneratorBtoA.GetParameters();
-        var dA = DiscriminatorA.GetParameters();
-        var dB = DiscriminatorB.GetParameters();
-        var combined = new Vector<T>(a2b.Length + b2a.Length + dA.Length + dB.Length);
-        int idx = 0;
-        for (int i = 0; i < a2b.Length; i++) combined[idx++] = a2b[i];
-        for (int i = 0; i < b2a.Length; i++) combined[idx++] = b2a[i];
-        for (int i = 0; i < dA.Length; i++) combined[idx++] = dA[i];
-        for (int i = 0; i < dB.Length; i++) combined[idx++] = dB[i];
-        return combined;
     }
 
     /// <summary>

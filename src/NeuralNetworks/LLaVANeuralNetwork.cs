@@ -92,7 +92,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _textTokenEmbedding;
-    private Matrix<T>? _textPositionalEmbeddings;
+    private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _outputProjection;
     private ILayer<T>? _groundingHead;
 
@@ -326,7 +326,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         // Initialize positional embeddings
         _visionClsToken = new Tensor<T>(new[] { 1, _visionHiddenDim });
         _visionPositionalEmbeddings = new Tensor<T>(new[] { numPatches + 1, _visionHiddenDim });
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
+        _textPositionalEmbeddings = new Tensor<T>([_maxSequenceLength, _lmHiddenDim]);
 
         InitializeWeights();
     }
@@ -357,9 +357,9 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _textPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _textPositionalEmbeddings.Shape[1]; j++)
                 {
                     _textPositionalEmbeddings[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
                 }
@@ -778,11 +778,11 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         var embedded = _textTokenEmbedding.Forward(inputTensor);
 
-        if (_textPositionalEmbeddings is not null && tokenIds.Count <= _textPositionalEmbeddings.Rows)
+        if (_textPositionalEmbeddings is not null && tokenIds.Count <= _textPositionalEmbeddings.Shape[0])
         {
-            for (int i = 0; i < tokenIds.Count && i < _textPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < tokenIds.Count && i < _textPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _lmHiddenDim && j < _textPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _lmHiddenDim && j < _textPositionalEmbeddings.Shape[1]; j++)
                 {
                     embedded[i, j] = NumOps.Add(embedded[i, j], _textPositionalEmbeddings[i, j]);
                 }
@@ -1046,11 +1046,26 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     {
         int seqLen = sequence.Shape[0];
 
+        // The narrow below only goes one way. A sequence LONGER than the table would ask
+        // TensorNarrow for length > dim and fail with an engine-level error naming neither the
+        // positional table nor the patch count -- and the loop-based body this replaced clamped
+        // silently instead, so any architecture whose patch count exceeds numPatches + 1 changed
+        // behavior here. Name the cause.
+        int tableLen = posEmbeddings.Shape[0];
+        if (seqLen > tableLen)
+        {
+            throw new InvalidOperationException(
+                $"The sequence has {seqLen} positions but the positional table holds only {tableLen}. " +
+                "The table is sized for numPatches + 1 (one CLS token plus one row per patch), so this " +
+                $"means the vision encoder produced more patches than the configured image size and " +
+                "patch size allow. Increase the table's size or reduce the patch count.");
+        }
+
         // Add the registered trainable positional table DIRECTLY with a tape-aware op so the gradient
         // reaches _visionPositionalEmbeddings (updated by the tape optimizer via GetExtraTrainableTensors).
         // When the sequence is shorter than the table (fewer patches than the configured maximum), narrow
         // the table to the used rows first — still tape-connected — so shapes line up for the add.
-        var pos = posEmbeddings.Shape[0] == seqLen
+        var pos = tableLen == seqLen
             ? posEmbeddings
             : Engine.TensorNarrow(posEmbeddings, dim: 0, start: 0, length: seqLen);
 
@@ -1094,75 +1109,19 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
     #region NeuralNetworkBase Implementation
 
-    /// <inheritdoc/>
-    public override long ParameterCount
+    // ParameterCount is NOT overridden. It summed the layer role-lists plus the embeddings and
+    // omitted the grounding head, while GetParameters was never overridden at all and folded the
+    // base enumeration -- two different answers, 24,772 against 24,260. Both now fold Layers plus
+    // what the two hooks below declare.
+    /// <inheritdoc />
+    /// <remarks>
+    /// The grounding head, a real layer held outside <c>Layers</c>. The hand-written count left it
+    /// out and so did the vector, so it was consistent only by being invisible to both -- 132
+    /// trainable values that could not be saved, restored or optimized.
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
     {
-        get
-        {
-            if (!_useNativeMode)
-            {
-                return 0;
-            }
-
-            int count = 0;
-
-            // Vision encoder layers
-            foreach (var layer in _visionEncoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Projection layers
-            foreach (var layer in _projectionLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Language model layers
-            foreach (var layer in _languageModelLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Single layers
-            if (_patchEmbedding is not null)
-            {
-                count += (int)_patchEmbedding.ParameterCount;
-            }
-
-            if (_textTokenEmbedding is not null)
-            {
-                count += (int)_textTokenEmbedding.ParameterCount;
-            }
-
-            if (_outputProjection is not null)
-            {
-                count += (int)_outputProjection.ParameterCount;
-            }
-
-            if (_groundingHead is not null)
-            {
-                count += (int)_groundingHead.ParameterCount;
-            }
-
-            // Positional embeddings
-            if (_visionClsToken is not null)
-            {
-                count += _visionClsToken.Length;
-            }
-
-            if (_visionPositionalEmbeddings is not null)
-            {
-                count += _visionPositionalEmbeddings.Length;
-            }
-
-            if (_textPositionalEmbeddings is not null)
-            {
-                count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
-            }
-
-            return count;
-        }
+        if (_groundingHead is LayerBase<T> head) yield return head;
     }
 
     /// <inheritdoc/>
@@ -1276,6 +1235,10 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     {
         if (_visionClsToken is not null) yield return _visionClsToken;
         if (_visionPositionalEmbeddings is not null) yield return _visionPositionalEmbeddings;
+        // The text positional table too. It was a Matrix<T>, which no automatic parameter
+        // path can see, so the count included its 512 values and the vector did not --
+        // measured 24,772 against 24,260, a gap that WAS exactly this field.
+        if (_textPositionalEmbeddings is not null) yield return _textPositionalEmbeddings;
     }
 
     /// <inheritdoc/>
@@ -1394,8 +1357,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            int rows = _textPositionalEmbeddings.Rows;
-            int columns = _textPositionalEmbeddings.Columns;
+            int rows = _textPositionalEmbeddings.Shape[0];
+            int columns = _textPositionalEmbeddings.Shape[1];
             for (int i = 0; i < rows; i++)
             {
                 int rowOffset = i * columns;
@@ -1438,6 +1401,20 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         };
     }
 
+    /// <summary>
+    /// Version of the trailing, out-of-<c>Layers</c> section of this network's serialized payload.
+    /// </summary>
+    /// <remarks>
+    /// Version 1 added the CLS token and the two positional tables. The payload that shipped before it
+    /// carries no marker at all -- it simply ends after <c>_useNativeMode</c>. That is exactly what the
+    /// reader keys on: <see cref="SerializeNetworkSpecificData"/> is the last thing
+    /// <c>NeuralNetworkBase.Serialize</c> writes, so "nothing left in the stream" is an unambiguous
+    /// signal of a pre-version payload rather than a guess. Reading the version unconditionally is what
+    /// turned an old model into an <c>EndOfStreamException</c> out of <c>ReadTensor</c>, with nothing in
+    /// the message about compatibility.
+    /// </remarks>
+    private const int NetworkSpecificPayloadVersion = 1;
+
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
@@ -1456,6 +1433,11 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         writer.Write(_visionEncoderType);
         writer.Write(_useNativeMode);
 
+        // Everything from here on was added after the first shipped payload, which ended at
+        // _useNativeMode. The version marker is what lets the reader tell the two apart -- see
+        // NetworkSpecificPayloadVersion.
+        writer.Write(NetworkSpecificPayloadVersion);
+
         // Persist the TRAINABLE state that lives OUTSIDE Layers: the CLS token and the vision/text
         // positional tables. Clone() (all three paths — COW fallback, large layer-by-layer copy, and
         // the serialize round-trip) transfers this model-level state ONLY through these hooks; the
@@ -1466,7 +1448,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         // post-training values genuinely differ from the seed init and MUST be carried across a clone.
         WriteTensor(writer, _visionClsToken);
         WriteTensor(writer, _visionPositionalEmbeddings);
-        WriteMatrix(writer, _textPositionalEmbeddings);
+        WriteTensor(writer, _textPositionalEmbeddings);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T>? tensor)
@@ -1507,8 +1489,19 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             shape[i] = reader.ReadInt32();
         }
 
+        // The shape and the length are two independent reads, and the loop below trusts the length
+        // while the allocation trusts the shape. Disagreement therefore either overruns the tensor or
+        // silently leaves a partly-initialized one -- a trained model that loads as half seed noise.
+        // Reject it here, where the two values are both in hand.
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
+        if (length != tensor.Length)
+        {
+            throw new InvalidOperationException(
+                $"Serialized tensor declares {length} elements, but its shape [{string.Join(", ", shape)}] " +
+                $"holds {tensor.Length}. The payload is corrupt or was written by an incompatible version.");
+        }
+
         for (int i = 0; i < length; i++)
         {
             tensor[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -1587,12 +1580,34 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         // distribution InitializeNativeLayers performs at construction.
         RewireNativeSubLayersFromLayers();
 
+        // A payload written before the out-of-Layers state existed ends here. Detecting that is not a
+        // heuristic: this method is the last read of NeuralNetworkBase.Deserialize, over a seekable
+        // MemoryStream, so an exhausted stream means precisely "nothing more was written".
+        var stream = reader.BaseStream;
+        if (stream.CanSeek && stream.Position >= stream.Length)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "AiDotNet.LLaVANeuralNetwork: this model was saved before the CLS token and positional " +
+                "tables were persisted, so they keep their freshly initialized values. Predictions will " +
+                "differ from the model as trained. Re-save the model to carry that state forward.");
+            return;
+        }
+
+        int payloadVersion = reader.ReadInt32();
+        if (payloadVersion != NetworkSpecificPayloadVersion)
+        {
+            throw new InvalidOperationException(
+                $"LLaVANeuralNetwork was saved with network-payload version {payloadVersion}, but this " +
+                $"build reads version {NetworkSpecificPayloadVersion}. Load this model with a matching " +
+                "version of AiDotNet, or re-save it from one.");
+        }
+
         // Restore the trained out-of-Layers state (CLS token + positional tables) written above,
         // overwriting the seed-initialised tensors that CreateNewInstance() produced. This is what
         // makes a clone (and a save/load round-trip) reproduce the trained model's predictions.
         _visionClsToken = ReadTensor(reader);
         _visionPositionalEmbeddings = ReadTensor(reader);
-        _textPositionalEmbeddings = ReadMatrix(reader);
+        _textPositionalEmbeddings = ReadTensor(reader);
     }
 
     /// <summary>

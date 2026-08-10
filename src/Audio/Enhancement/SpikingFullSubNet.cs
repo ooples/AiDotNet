@@ -45,6 +45,16 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("Spiking-FullSubNet: Spiking Neural Networks for Speech Enhancement", "https://arxiv.org/abs/2406.04662", Year = 2024, Authors = "Jiaying Lin, Rong Xie, Qi Liu")]
 public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> folds <c>Layers</c>, <c>PostprocessOutput</c> is the identity, and
+    /// <c>CreateDefaultSpikingFullSubNetLayers</c> ends at the mask head
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins, sigmoid)</c>, fed from <c>_options.NumFreqBins</c>. This is
+    /// a REAL-valued per-bin mask - one value per bin - unlike sibling FullSubNet+ whose head is 2F
+    /// for a complex mask, so the two models do NOT share a width despite sharing a factory shape.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins;
+
     #region Fields
 
     private readonly SpikingFullSubNetOptions _options;
@@ -249,13 +259,11 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

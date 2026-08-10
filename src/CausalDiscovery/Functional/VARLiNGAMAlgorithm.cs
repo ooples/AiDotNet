@@ -79,6 +79,12 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
             new CausalDiscoveryOptions { EdgeThreshold = _threshold });
         var B0Graph = directLiNGAM.DiscoverStructure(residuals);
 
+        // The (I - B_0) M_tau product below uses the UNTHRESHOLDED coefficients. DirectLiNGAM zeroes
+        // anything under its edge threshold in the graph it returns, and doing matrix algebra with
+        // that treats every small-but-real coefficient as an exact zero, which biases B_tau. The
+        // reported graph stays thresholded; only the algebra sees the raw values.
+        var b0Coefficients = directLiNGAM.RawCoefficients ?? B0Graph.AdjacencyMatrix;
+
         // Step 3: Start the framework's 2-D summary with the instantaneous effects.
         var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
@@ -105,7 +111,7 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
                         structuralWeight = NumOps.Subtract(
                             structuralWeight,
                             NumOps.Multiply(
-                                B0Graph.AdjacencyMatrix[intermediary, target],
+                                b0Coefficients[intermediary, target],
                                 laggedCoefs[intermediary][lag * d + source]));
                     }
 

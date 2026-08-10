@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -47,6 +48,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Total: 24,000 parameters (still 97.6% reduction from 1M!)
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
@@ -78,32 +80,6 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// control over the complexity of weight vs. activation adaptations.
     /// </remarks>
     public int ActivationRank => _activationAdaptation.Rank;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (both weight and activation adaptations).
-    /// </summary>
-    /// <remarks>
-    /// If the base layer is frozen, this returns the sum of weight and activation LoRA parameters.
-    /// Otherwise, it includes base layer parameters as well.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Sum as long throughout — base layers can have
-            // > int.MaxValue parameters on large foundation models, and
-            // a sufficiently large weight + activation rank could push
-            // the totals past the int boundary even on smaller bases.
-            // Closes #1271.7Bna.
-            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
-            long loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0L;
-            long activationCount = _activationAdaptation != null ? _activationAdaptation.ParameterCount : 0L;
-            return baseCount + loraCount + activationCount;
-        }
-    }
-
-    /// <summary>Construction state: the 'weightRank' the layer was built with.</summary>
-    private readonly int _weightRank;
 
     /// <summary>
     /// Initializes a new GLoRA adapter with the specified parameters.
@@ -145,7 +121,6 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         bool freezeBaseLayer = true)
         : base(baseLayer, weightRank, weightAlpha, freezeBaseLayer)
     {
-        _weightRank = weightRank;
         // Default activation rank to weight rank if not specified
         int actualActivationRank = activationRank > 0 ? activationRank : weightRank;
 
@@ -156,7 +131,6 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update parameter vector to include activation adaptation
         Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        UpdateParametersFromLayers();
     }
 
     /// <summary>
@@ -226,134 +200,6 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Gets the current parameters as a vector.
-    /// </summary>
-    /// <returns>Vector containing parameters from both adaptations (and base layer if not frozen).</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Parameters.Clone();
-    }
-
-    /// <summary>
-    /// Sets the layer parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing parameters for both adaptations (and base layer if not frozen).</param>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
-        }
-
-        Parameters = parameters.Clone();
-        UpdateLayersFromParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack weight adaptation LoRA parameters
-        Vector<T> weightLoraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < weightLoraParams.Length; i++)
-        {
-            Parameters[idx++] = weightLoraParams[i];
-        }
-
-        // Pack activation adaptation LoRA parameters
-        Vector<T> activationLoraParams = _activationAdaptation.GetParameters();
-        for (int i = 0; i < activationLoraParams.Length; i++)
-        {
-            Parameters[idx++] = activationLoraParams[i];
-        }
-    }
-
-    /// <summary>
-    /// Updates the layers from the parameter vector.
-    /// </summary>
-    private void UpdateLayersFromParameters()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, unpack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            int baseParamCount = checked((int)_baseLayer.ParameterCount);
-            Vector<T> baseParams = new Vector<T>(baseParamCount);
-            for (int i = 0; i < baseParamCount; i++)
-            {
-                baseParams[i] = Parameters[idx++];
-            }
-            _baseLayer.SetParameters(baseParams);
-        }
-
-        // Unpack weight adaptation LoRA parameters
-        int weightLoraParamCount = checked((int)_loraLayer.ParameterCount);
-        Vector<T> weightLoraParams = new Vector<T>(weightLoraParamCount);
-        for (int i = 0; i < weightLoraParamCount; i++)
-        {
-            weightLoraParams[i] = Parameters[idx++];
-        }
-        _loraLayer.SetParameters(weightLoraParams);
-
-        // Unpack activation adaptation LoRA parameters
-        int activationLoraParamCount = checked((int)_activationAdaptation.ParameterCount);
-        Vector<T> activationLoraParams = new Vector<T>(activationLoraParamCount);
-        for (int i = 0; i < activationLoraParamCount; i++)
-        {
-            activationLoraParams[i] = Parameters[idx++];
-        }
-        _activationAdaptation.SetParameters(activationLoraParams);
-    }
-
-    /// <summary>
-    /// Updates the parameter gradients vector from the layer gradients.
-    /// </summary>
-    private void UpdateParameterGradientsFromLayers()
-    {
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // If base layer is not frozen, pack its gradients first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseGrads = _baseLayer.GetParameterGradients();
-            for (int i = 0; i < baseGrads.Length; i++)
-            {
-                ParameterGradients[idx++] = baseGrads[i];
-            }
-        }
-
-        // Pack weight adaptation LoRA gradients
-        Vector<T> weightLoraGrads = _loraLayer.GetParameterGradients();
-        for (int i = 0; i < weightLoraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = weightLoraGrads[i];
-        }
-
-        // Pack activation adaptation LoRA gradients
-        Vector<T> activationLoraGrads = _activationAdaptation.GetParameterGradients();
-        for (int i = 0; i < activationLoraGrads.Length; i++)
-        {
-            ParameterGradients[idx++] = activationLoraGrads[i];
-        }
     }
 
     /// <summary>

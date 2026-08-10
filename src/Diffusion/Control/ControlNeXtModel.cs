@@ -56,6 +56,15 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("ControlNeXt: Powerful and Efficient Control for Image and Video Generation", "https://arxiv.org/abs/2408.06070", Year = 2024, Authors = "Peng et al.")]
 public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_controlEncoder);
+    }
+
     private const int LATENT_CHANNELS = 4;
 
     private UNetNoisePredictor<T> _baseUNet;
@@ -73,7 +82,6 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
 
     public ControlNeXtModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -112,22 +120,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, baseChannels: 256, channelMultipliers: new[] { 1, 2, 4 }, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        var p1 = _baseUNet.GetParameters(); for (int i = 0; i < p1.Length; i++) all.Add(p1[i]);
-        var p2 = _controlEncoder.GetParameters(); for (int i = 0; i < p2.Length; i++) all.Add(p2[i]);
-        return new Vector<T>(all.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int o = 0;
-        int c1 = checked((int)_baseUNet.ParameterCount); var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
-        int c2 = checked((int)_controlEncoder.ParameterCount); var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

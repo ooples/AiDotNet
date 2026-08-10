@@ -87,28 +87,6 @@ internal static class ObjectiveOps
     }
 
     /// <summary>
-    /// Symmetric InfoNCE over an in-batch similarity matrix, differentiably.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <c>L = -(mean_i log softmax_row(S)[i,i] + mean_i log softmax_col(S)[i,i])</c>, the form
-    /// CLIP-style two-tower models train with and the one VideoCLIP states as
-    /// <c>-sum(log NCE(zv,zt) + log NCE(zt,zv))</c>.
-    /// </para>
-    /// <para>
-    /// Both directions are included deliberately. Dropping one is a common and quiet bug: the loss
-    /// still falls, but only one tower's embedding space is shaped by the other.
-    /// </para>
-    /// </remarks>
-    internal static Tensor<T> SymmetricInfoNce<T>(Tensor<T> similarity)
-    {
-        var engine = AiDotNetEngine.Current;
-        var rowTerm = MeanDiagonal(LogSoftmax(similarity, axis: 1));
-        var colTerm = MeanDiagonal(LogSoftmax(similarity, axis: 0));
-        return engine.TensorNegate(engine.TensorAdd(rowTerm, colTerm));
-    }
-
-    /// <summary>
     /// Scaled similarity matrix <c>a @ b^T / temperature</c>, optionally L2-normalized first.
     /// </summary>
     internal static Tensor<T> SimilarityMatrix<T>(Tensor<T> a, Tensor<T> b, double temperature, bool normalize)

@@ -90,6 +90,17 @@ namespace AiDotNet.Audio.AudioGen;
 [ResearchPaper("AudioGen: Textually Guided Audio Generation", "https://doi.org/10.48550/arXiv.2209.15352", Year = 2022, Authors = "Felix Kreuk, Gabriel Synnaeve, Adam Polyak, Uriel Singer, Alexandre Défossez, Jade Copet, Devi Parikh, Yaniv Taigman, Yossi Adi")]
 public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: native <c>PredictCore</c> is <c>Forward(input)</c>, a plain fold over <c>Layers</c>,
+    /// and the last layer emitted by <c>LayerHelper&lt;T&gt;.CreateDefaultAudioGenLayers</c> is
+    /// <c>DenseLayer&lt;T&gt;(codebookSize * numCodebooks)</c> - the flattened per-codebook logits.
+    /// <see cref="InitializeLayers"/> passes <c>_codebookSize</c> and <c>_numCodebooks</c> into those
+    /// two arguments, so the width is their PRODUCT (4 x 1024 = 4096 by default) and is stored nowhere
+    /// as a single field.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _codebookSize * _numCodebooks;
+
     private readonly AudioGenOptions _options;
 
     /// <inheritdoc/>
@@ -874,45 +885,11 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return _textEncoder.Run(input);
     }
 
-    /// <summary>
-    /// Updates model parameters by applying gradient descent.
-    /// </summary>
-    /// <param name="gradients">The gradients to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// Applies the simple gradient descent update rule: params = params - learning_rate * gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the model learns!
-    ///
-    /// During training:
-    /// 1. The model makes predictions
-    /// 2. We calculate how wrong it was (loss)
-    /// 3. We compute gradients (which direction to adjust each parameter)
-    /// 4. This method applies those adjustments to make the model better
-    ///
-    /// The learning rate controls how big each adjustment is:
-    /// - Too big: Model learns fast but may overshoot optimal values
-    /// - Too small: Model learns slowly but more precisely
-    /// - Default (0.001): A good starting point for most tasks
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode. Use the native constructor for training.");
-        }
-
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on input data.
     /// </summary>

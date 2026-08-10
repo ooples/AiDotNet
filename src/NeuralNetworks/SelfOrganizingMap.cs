@@ -337,18 +337,9 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     private T CalculateRadius(T initialRadius, int currentEpoch, T timeConstant)
         => NumOps.Multiply(initialRadius, NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.FromDouble(currentEpoch), timeConstant))));
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int expectedLength = (_mapWidth * _mapHeight) * _inputDimension;
-        if (parameters.Length != expectedLength)
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
-
-        int idx = 0;
-        for (int i = 0; i < _mapWidth * _mapHeight; i++)
-            for (int j = 0; j < _inputDimension; j++)
-                _weights[i, j] = parameters[idx++];
-    }
+    // UpdateParameters was overridden here to write the codebook back element by element, with its
+    // own length check. The base distributes over the same declared tensor -- see
+    // GetExtraTrainableTensors below -- and validates the length once, for every model.
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
@@ -405,28 +396,25 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => _mapWidth * _mapHeight * _inputDimension;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-        for (int i = 0; i < _mapWidth * _mapHeight; i++)
-            for (int j = 0; j < _inputDimension; j++)
-                parameters[idx++] = _weights[i, j];
-        return parameters;
-    }
-
     /// <summary>
-    /// Yields the SOM codebook as a single parameter chunk. SOM stores its weights in the <c>_weights</c>
-    /// codebook tensor — outside the layer chain by design (Kohonen 1982 §3: a single competitive-learning
-    /// codebook, not a stack of trainable layers) — so the base layer-walking enumeration would yield none,
-    /// and the snapshot-before/after invariants (Training_ShouldChangeParameters, GradientFlow) would
-    /// compare empty sequences and false-fail "no parameters changed".
+    /// Declares the SOM codebook, which lives outside the layer chain.
     /// </summary>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    /// <remarks>
+    /// <para>
+    /// A SOM has no trainable layers by design -- Kohonen 1982 §3 describes a single competitive
+    /// layer holding one codebook, not a stack -- so the base walk over <c>Layers</c> finds nothing
+    /// unless the codebook is declared. Declaring it here gives the count, the vector, the restore
+    /// and the chunks all one source, laid out [mapWidth * mapHeight, inputDimension] row-major,
+    /// the same order the deleted GetParameters produced.
+    /// </para>
+    /// <para>
+    /// This replaces a ParameterCount formula (<c>_mapWidth * _mapHeight * _inputDimension</c>), a
+    /// GetParameters that copied the codebook out element by element, an UpdateParameters that
+    /// copied it back, and a GetParameterChunks that already yielded <c>_weights</c> -- four members
+    /// describing one tensor, any of which could have been changed without the others.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
         yield return _weights;
     }

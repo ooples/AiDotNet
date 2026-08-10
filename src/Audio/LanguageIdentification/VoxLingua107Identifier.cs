@@ -70,6 +70,17 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ResearchPaper("VoxLingua107: A Dataset for Spoken Language Recognition", "https://arxiv.org/abs/2011.12998", Year = 2021, Authors = "Jörgen Valk, Tanel Alumäe")]
 public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore returns ForwardNative, whose last step is
+    /// <c>_classifierLayer.Forward(...)</c>. That layer is the final entry of
+    /// CreateDefaultVoxLingua107Layers, which sizes its classifier head as
+    /// <c>architecture.OutputSize &gt; 0 ? architecture.OutputSize : 107</c> - the identical
+    /// expression this model caches in <c>_numLanguages</c>, so the field tracks the head exactly.
+    /// A class count (107 by paper default), not EmbeddingDimension, which is the pooling width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _numLanguages;
+
     #region Constants
 
     /// <summary>
@@ -492,24 +503,8 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            // Apply actual parameter updates from optimizer
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                layerParams[i] = newParams[i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

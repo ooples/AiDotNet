@@ -806,7 +806,6 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
             }
         }
     }
-
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>
@@ -905,7 +904,23 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
             if (layer is LayerBase<T> lazy && !lazy.IsShapeResolved)
             {
                 try { lazy.ResolveFromShape([1, 4, Math.Max(8, _height), Math.Max(8, _width)]); }
-                catch (ArgumentException) { }
+                catch (ArgumentException ex)
+                {
+                    // NOT SILENT. A layer refusing this probe shape is an EXPECTED outcome -- the
+                    // shape is a guess made on the flow branch's behalf, and a layer that rejects it
+                    // simply stays lazy, which is what the loop is willing to accept. But swallowing
+                    // the exception outright made the other case invisible too: a layer that should
+                    // have resolved and did not just silently drops out of the serialized parameter
+                    // graph, which is exactly the completeness this override exists to guarantee.
+                    //
+                    // Debug.WriteLine matches how the neighbouring video models surface this class of
+                    // diagnostic (SlowFast.cs uses it in four places); there is no logger abstraction
+                    // at this layer to route it to.
+                    System.Diagnostics.Debug.WriteLine(
+                        $"E2FGVI.ResolveLazyLayerShapes: {layer.GetType().Name} rejected the probe " +
+                        $"shape [1, 4, {Math.Max(8, _height)}, {Math.Max(8, _width)}] and remains " +
+                        $"lazy; its parameters will not be serialized. {ex.GetType().Name}: {ex.Message}");
+                }
             }
         }
     }

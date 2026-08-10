@@ -63,8 +63,18 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
     "https://arxiv.org/abs/2110.06169",
     Year = 2022,
     Authors = "Kostrikov, I., Nair, A., & Levine, S.")]
-public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Policy, value, then both Q networks -- the order the hand-written concatenation used. It reached them through ExtractNetworkParameters, which is just network.GetParameters(), so registering the networks is the same enumeration with the loops removed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_policyNetwork);
+        RegisterParameterComponent(_valueNetwork);
+        RegisterParameterComponent(_q1Network);
+        RegisterParameterComponent(_q2Network);
+    }
     private IQLOptions<T> _options;
 
     /// <inheritdoc/>
@@ -445,51 +455,6 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var policyParams = ExtractNetworkParameters(_policyNetwork);
-        var valueParams = ExtractNetworkParameters(_valueNetwork);
-        var q1Params = ExtractNetworkParameters(_q1Network);
-        var q2Params = ExtractNetworkParameters(_q2Network);
-
-        var total = policyParams.Length + valueParams.Length + q1Params.Length + q2Params.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in policyParams) vector[idx++] = p;
-        foreach (var p in valueParams) vector[idx++] = p;
-        foreach (var p in q1Params) vector[idx++] = p;
-        foreach (var p in q2Params) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var policyParams = ExtractNetworkParameters(_policyNetwork);
-        var valueParams = ExtractNetworkParameters(_valueNetwork);
-        var q1Params = ExtractNetworkParameters(_q1Network);
-        var q2Params = ExtractNetworkParameters(_q2Network);
-
-        int idx = 0;
-        var policyVec = new Vector<T>(policyParams.Length);
-        var valueVec = new Vector<T>(valueParams.Length);
-        var q1Vec = new Vector<T>(q1Params.Length);
-        var q2Vec = new Vector<T>(q2Params.Length);
-
-        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
-        for (int i = 0; i < valueParams.Length; i++) valueVec[i] = parameters[idx++];
-        for (int i = 0; i < q1Params.Length; i++) q1Vec[i] = parameters[idx++];
-        for (int i = 0; i < q2Params.Length; i++) q2Vec[i] = parameters[idx++];
-
-        UpdateNetworkParameters(_policyNetwork, policyVec);
-        UpdateNetworkParameters(_valueNetwork, valueVec);
-        UpdateNetworkParameters(_q1Network, q1Vec);
-        UpdateNetworkParameters(_q2Network, q2Vec);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new IQLAgent<T>(_options);
@@ -498,7 +463,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)

@@ -69,6 +69,8 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ResearchPaper("Exploratory Undersampling for Class-Imbalance Learning", "https://doi.org/10.1109/TSMCB.2008.2007853", Year = 2009, Authors = "Xu-Ying Liu, Jianxin Wu, Zhi-Hua Zhou")]
 public class EasyEnsembleClassifier<T> : ClassifierBase<T>
 {
+
+    // Returned _subClassifiers.Count. Same as its two siblings.
     /// <summary>
     /// The ensemble of AdaBoost classifiers.
     /// </summary>
@@ -654,31 +656,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Gets the model parameters.
-    /// </summary>
-    /// <returns>Vector with subclassifier count.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Complex ensemble models don't fit into a simple parameter vector.
-    /// Use serialization for full model persistence.</para>
-    /// </remarks>
-    public Vector<T> GetParameters()
-    {
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_subClassifiers.Count) };
-    }
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">Parameter vector (limited support).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use serialization to save/load ensemble models.</para>
-    /// </remarks>
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Limited support for ensemble models
-    }
-
-    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     /// <param name="parameters">Parameters (limited support).</param>
@@ -703,34 +680,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     {
         return new EasyEnsembleClassifier<T>(_nSubsets, _nEstimatorsPerSubset, _maxDepth,
             _learningRate, _samplingStrategy, _softVoting);
-    }
-
-    /// <summary>
-    /// Computes gradients (not applicable for ensemble models).
-    /// </summary>
-    /// <param name="input">Input feature matrix.</param>
-    /// <param name="target">Target labels.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <returns>Zero gradient vector.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Ensemble models don't use gradient descent.</para>
-    /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        return new Vector<T>(1) { [0] = NumOps.Zero };
-    }
-
-    /// <summary>
-    /// Applies gradients (not applicable for ensemble models).
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <param name="learningRate">Learning rate.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Ensemble models don't support gradient updates.</para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Ensemble models don't support gradient-based updates
     }
 
     /// <summary>

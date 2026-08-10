@@ -245,7 +245,6 @@ public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
     }
 
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         ThrowIfDisposed();
@@ -259,7 +258,6 @@ public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
             idx += c;
         }
     }
-
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {

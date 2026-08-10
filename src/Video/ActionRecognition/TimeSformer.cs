@@ -609,7 +609,6 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
@@ -632,7 +631,6 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
             }
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

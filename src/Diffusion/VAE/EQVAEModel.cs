@@ -48,6 +48,15 @@ namespace AiDotNet.Diffusion.VAE;
 [ResearchPaper("EQ-VAE: Equivariance Regularized Latent Space for Improved Generative Image Modeling", "https://arxiv.org/abs/2502.09509", Year = 2025, Authors = "Xu et al.")]
 public class EQVAEModel<T> : VAEModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written
+    /// GetParameters concatenated, which is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var layer in _encoderLayers) RegisterParameterComponent(layer);
+        foreach (var layer in _decoderLayers) RegisterParameterComponent(layer);
+    }
+
     private const double EQVAE_LATENT_SCALE = 0.18215;
     private const double DEFAULT_EQUIVARIANCE_WEIGHT = 0.1;
 
@@ -72,8 +81,6 @@ public class EQVAEModel<T> : VAEModelBase<T>
     public override double LatentScaleFactor => EQVAE_LATENT_SCALE;
 
     /// <inheritdoc />
-    public override long ParameterCount => CalculateParameterCount();
-
     /// <inheritdoc />
     public override bool SupportsTiling => true;
 
@@ -269,54 +276,6 @@ public class EQVAEModel<T> : VAEModelBase<T>
         return NumOps.Multiply(NumOps.FromDouble(_equivarianceWeight), sum);
     }
 
-    private int CalculateParameterCount()
-    {
-        long count = 0;
-        foreach (var layer in _encoderLayers)
-            count += layer.GetParameters().Length;
-        foreach (var layer in _decoderLayers)
-            count += layer.GetParameters().Length;
-        return (int)Math.Min(count, int.MaxValue);
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new List<T>();
-        foreach (var layer in _encoderLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parameters.Add(p[i]);
-        }
-        foreach (var layer in _decoderLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) parameters.Add(p[i]);
-        }
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in _encoderLayers)
-        {
-            var p = layer.GetParameters();
-            var np = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length && index < parameters.Length; i++)
-                np[i] = parameters[index++];
-            layer.SetParameters(np);
-        }
-        foreach (var layer in _decoderLayers)
-        {
-            var p = layer.GetParameters();
-            var np = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length && index < parameters.Length; i++)
-                np[i] = parameters[index++];
-            layer.SetParameters(np);
-        }
-    }
 
     /// <inheritdoc />
     public override IVAEModel<T> Clone()

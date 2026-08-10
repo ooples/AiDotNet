@@ -69,6 +69,29 @@ namespace AiDotNet.Audio.StableAudio;
 [ResearchPaper("Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion", "https://arxiv.org/abs/2402.04825", Year = 2024, Authors = "Zach Evans, CJ Carr, Josiah Taylor, Scott H. Hawley, Jordi Pons")]
 public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Declines: emits a TIME axis the family law does not have. Measured, [1,64] returns [1,64,1] -
+    /// one mono sample per input position - not the rank-2 [1,1] the inherited contract would claim.
+    /// The width (1) is correct; the rank is not, and declaring the time relation needs its own
+    /// measurement rather than a guess at Same(Time).
+    /// </remarks>
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured from the output construction: native <c>PredictCore</c> calls the base <c>Forward</c>,
+    /// which is a plain fold over <c>Layers</c>, and <c>PostprocessOutput</c> is the identity - so the
+    /// width is the last layer's output dimension. <c>LayerHelper.CreateDefaultStableAudioLayers</c>
+    /// ends its VAE decoder with <c>new DenseLayer&lt;T&gt;(1, identity)</c>, commented "mono audio
+    /// output". The width is therefore 1: a single waveform sample per position.
+    /// This one is a STRUCTURAL CONSTANT, not an option - unlike <c>LatentDimension</c> (64) or
+    /// <c>DiTHiddenDimension</c>, which are interior widths consumed earlier in the same chain. The
+    /// diffusion sampler (<c>ForwardThroughDiT</c> / <c>DecodeLatentsToAudio</c>) walks slices of
+    /// <c>Layers</c>, but <c>PredictCore</c> does not go through it, so it does not set this width.
+    /// </remarks>
+    protected override int OutputFeatureWidth => 1;
+
     #region Fields
 
     private readonly StableAudioOptions _options;
@@ -973,26 +996,11 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return _textEncoder.Run(input);
     }
 
-    /// <summary>
-    /// Updates model parameters.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        }
-
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on input data.
     /// </summary>

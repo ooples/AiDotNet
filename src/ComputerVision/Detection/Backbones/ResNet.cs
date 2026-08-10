@@ -10,6 +10,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
+using System.Linq;
+
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
 /// <summary>
@@ -40,6 +42,29 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
 public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The stem convolution and every layer inside every stage. These live outside <c>Layers</c>,
+    /// held in plain block objects, which is why this backbone used to THROW from GetParameters
+    /// rather than expose a flat vector -- the base walk would have found nothing.
+    /// <para>
+    /// Refusing was never right. PyTorch has no module that declines to enumerate its parameters;
+    /// parameters_to_vector over a ResNet works. The refusal was unfinished plumbing wearing the
+    /// shape of a design decision, and it cost the model checkpointing, flat-vector optimizers and
+    /// every count-based diagnostic. Declaring the layers here gets all of that back, and the count,
+    /// the vector, the restore and the chunk walk all fold this one declaration.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _conv1;
+        foreach (var stage in _stages)
+        {
+            foreach (var layer in stage.EnumerateLayers()) yield return layer;
+        }
+    }
+    // UpdateParameters delegated straight to SetParameters. The base does that now.
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
@@ -186,22 +211,6 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return activations;
     }
 
-    /// <summary>
-    /// Sum across the stem conv plus every residual stage. Inherited
-    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> already delegates to
-    /// this virtual property, so the <see cref="IDetectionBackbone{T}"/>
-    /// contract is satisfied without re-declaring the method here.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = _conv1.ParameterCount;
-            for (int i = 0; i < _stages.Count; i++)
-                count += _stages[i].GetParameterCount();
-            return count;
-        }
-    }
 
     public void WriteParameters(BinaryWriter writer)
     {
@@ -270,19 +279,8 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
             "(FasterRCNN, YOLOv8, DETR, …) which orchestrates the joint forward/backward pass. " +
             "Train the parent detection model instead.");
 
-    public override Vector<T> GetParameters() =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not expose a flat parameter vector. " +
-            "Use WriteParameters(BinaryWriter) / ReadParameters(BinaryReader) to round-trip weights.");
 
-    public override void SetParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters(BinaryReader).");
 
-    public override void UpdateParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: backbones do not accept a flat parameter update vector. " +
-            "Update happens inside the parent detector's optimizer step.");
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
@@ -319,6 +317,10 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 /// </summary>
 internal class ResNetStage<T>
 {
+    /// <summary>The layers of every block in this stage, in order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+        => _blocks.SelectMany(b => b.EnumerateLayers());
+
     private readonly List<ResidualBlock<T>> _blocks;
 
     public ResNetStage(int inChannels, int outChannels, int numBlocks, int stride, bool useBottleneck, IActivationFunction<T> activation)
@@ -372,6 +374,15 @@ internal class ResNetStage<T>
 /// </summary>
 internal class ResidualBlock<T>
 {
+    /// <summary>The convolutional layers this block owns, in forward order.</summary>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _conv1;
+        yield return _conv2;
+        if (_conv3 is not null) yield return _conv3;
+        if (_downsample is not null) yield return _downsample;
+    }
+
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly ConvolutionalLayer<T> _conv2;
     private readonly ConvolutionalLayer<T>? _conv3;

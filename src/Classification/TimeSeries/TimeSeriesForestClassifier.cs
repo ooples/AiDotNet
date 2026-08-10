@@ -74,6 +74,9 @@ namespace AiDotNet.Classification.TimeSeries;
 [ResearchPaper("A Time Series Forest for Classification and Feature Extraction", "https://doi.org/10.1016/j.ins.2013.01.006", Year = 2013, Authors = "Houtao Deng, George Runger, Eugene Tuv, Martyanov Vladimir")]
 public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
+
+    // Returned the tree count, its own comment calling it "simplified". An honest zero replaces a
+    // placeholder.
     private readonly TimeSeriesForestOptions<T> _options;
 
     /// <inheritdoc/>
@@ -311,19 +314,6 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     }
 
     /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        // Serialize tree structure (simplified - just returns tree count)
-        return new Vector<T>(1) { [0] = NumOps.FromDouble(_trees?.Count ?? 0) };
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        // Trees are structural - cannot be set from simple parameters
-    }
-
-    /// <inheritdoc />
     public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = new TimeSeriesForestClassifier<T>(_options);
@@ -340,19 +330,6 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new TimeSeriesForestClassifier<T>(_options);
-    }
-
-    /// <inheritdoc />
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        // Tree-based model - no gradient computation
-        return new Vector<T>(0);
-    }
-
-    /// <inheritdoc />
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        // Tree-based model - no gradient application
     }
 
     /// <inheritdoc />

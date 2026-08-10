@@ -44,6 +44,16 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ResearchPaper("MT3: Multi-Task Multitrack Music Transcription", "https://arxiv.org/abs/2111.03017", Year = 2022, Authors = "Josh Gardner, Ian Simon, Ethan Manilow, Curtis Hawthorne, Jesse Engel")]
 public class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Traced from output construction: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultMT3Layers emits is the token-prediction head <c>DenseLayer&lt;T&gt;(vocabSize)</c>
+    /// over the MIDI-like event-token vocabulary, wired from <c>_options.VocabSize</c> (6000). Unlike
+    /// the audio-LLM models in this family, MT3 genuinely ties an unembedding head, so here the
+    /// vocabulary IS the width - DecoderDim (512) is one layer earlier.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     #region Fields
 
     private readonly MT3Options _options;
@@ -228,12 +238,11 @@ public class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MelSpec is not null) return MelSpec.Forward(rawAudio);

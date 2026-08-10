@@ -62,6 +62,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
     Authors = "Ha, D. & Schmidhuber, J.")]
 public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
+
+    /// <inheritdoc />
+    /// <remarks>Every network this agent owns, in the order Networks yields them, which is the
+    /// order the hand-written concatenation used.</remarks>
+    protected override void RegisterComponents()
+    {
+        foreach (var network in Networks) RegisterParameterComponent(network);
+    }
     private WorldModelsOptions<T> _options;
 
     /// <inheritdoc/>
@@ -683,45 +691,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        foreach (var network in Networks)
-        {
-            var netParams = network.GetParameters();
-            for (int i = 0; i < netParams.Length; i++)
-            {
-                allParams.Add(netParams[i]);
-            }
-        }
-
-        var paramVector = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            paramVector[i] = allParams[i];
-        }
-
-        return paramVector;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        foreach (var network in Networks)
-        {
-            int paramCount = checked((int)network.ParameterCount);
-            var netParams = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                netParams[i] = parameters[offset + i];
-            }
-            network.UpdateParameters(netParams);
-            offset += paramCount;
-        }
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         // The fresh constructor reproduces the VAE/RNN network ARCHITECTURE exactly (deterministic
@@ -754,18 +723,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         clone._updateCount = _updateCount;
         return clone;
-    }
-
-    public override Vector<T> ComputeGradients(
-        Vector<T> input,
-        Vector<T> target,
-        ILossFunction<T>? lossFunction = null)
-    {
-
-        var prediction = Predict(input);
-        var usedLossFunction = lossFunction ?? LossFunction;
-        var gradient = usedLossFunction.CalculateDerivative(prediction, target);
-        return gradient;
     }
 
     public override void SaveModel(string filepath)

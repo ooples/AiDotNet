@@ -165,7 +165,6 @@ public class UDVD<T> : VideoDenoisingBase<T>
         }
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int required = 0;
@@ -182,7 +181,6 @@ public class UDVD<T> : VideoDenoisingBase<T>
             offset += p.Length;
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

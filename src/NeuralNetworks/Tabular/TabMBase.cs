@@ -81,6 +81,21 @@ public abstract class TabMBase<T>
     public int[] HiddenDimensions => Options.HiddenDimensions;
 
     /// <summary>
+    /// Trainable layers a subclass adds on top of the backbone, walked after it by every
+    /// parameter surface below.
+    /// </summary>
+    /// <remarks>
+    /// The task head. A classifier and a regressor share this whole backbone and differ only by a
+    /// final projection, and each re-implemented the surfaces just to append that one layer. The
+    /// subclass now states WHAT it adds and the folds below decide where it goes, so the count and
+    /// the vector cannot place it differently. Mirrors NeuralNetworkBase.GetExtraTrainableLayers,
+    /// which solves the same problem for models that derive from it -- this base has no base at
+    /// all, so it cannot inherit that one.
+    /// </remarks>
+    protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<ILayer<T>>();
+
+    /// <summary>
     /// Gets the total number of trainable parameters in the base model.
     /// </summary>
     public virtual long ParameterCount
@@ -92,6 +107,11 @@ public abstract class TabMBase<T>
             foreach (var layer in _hiddenLayers)
             {
                 count += (int)layer.ParameterCount;
+            }
+
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) count += (int)extra.ParameterCount;
             }
             return count;
         }
@@ -306,6 +326,17 @@ public abstract class TabMBase<T>
             }
         }
 
+
+        // Subclass head, last, in the same position ParameterCount puts it.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            var extraParams = extra.GetParameters();
+            for (int i = 0; i < extraParams.Length; i++)
+            {
+                allParams.Add(extraParams[i]);
+            }
+        }
         return new Vector<T>([.. allParams]);
     }
 

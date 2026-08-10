@@ -69,6 +69,16 @@ namespace AiDotNet.Audio.AudioLDM;
 [ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://doi.org/10.48550/arXiv.2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
 public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: native <c>PredictCore</c> is <c>Forward(input)</c>, a plain fold over <c>Layers</c>.
+    /// The stack from <c>LayerHelper&lt;T&gt;.CreateDefaultAudioLDMLayers</c> ends with the VAE
+    /// decoder's mel projection, <c>DenseLayer&lt;T&gt;(numMels)</c>, and
+    /// <see cref="InitializeLayers"/> supplies <c>numMels: _options.NumMelBins</c>. So the last axis
+    /// is a MEL-BIN COUNT (64 by default), not the latent dimension the U-Net projects to mid-stack.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumMelBins;
+
     #region Fields
 
     private readonly AudioLDMOptions _options;
@@ -1297,26 +1307,11 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return _clapEncoder.Run(input);
     }
 
-    /// <summary>
-    /// Updates model parameters.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        }
-
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on input data.
     /// </summary>

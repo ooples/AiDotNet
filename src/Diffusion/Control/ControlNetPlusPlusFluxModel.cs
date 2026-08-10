@@ -54,6 +54,15 @@ namespace AiDotNet.Diffusion.Control;
     [ResearchPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987", Year = 2024, Authors = "Li et al.")]
 public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_predictor);
+        RegisterParameterComponent(_controlEncoder);
+    }
+
     private const int FLUX_LATENT_CHANNELS = 16;
     private const int FLUX_CONTEXT_DIM = 4096;
     private const double DEFAULT_GUIDANCE = 3.5;
@@ -74,7 +83,6 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => FLUX_LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _controlEncoder.ParameterCount;
 
     public ControlNetPlusPlusFluxModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -112,22 +120,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var all = new List<T>();
-        var p1 = _predictor.GetParameters(); for (int i = 0; i < p1.Length; i++) all.Add(p1[i]);
-        var p2 = _controlEncoder.GetParameters(); for (int i = 0; i < p2.Length; i++) all.Add(p2[i]);
-        return new Vector<T>(all.ToArray());
-    }
 
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int o = 0;
-        int c1 = checked((int)_predictor.ParameterCount); var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _predictor.SetParameters(new Vector<T>(a1)); o += c1;
-        int c2 = (int)_controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

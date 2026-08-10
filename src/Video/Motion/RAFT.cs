@@ -694,7 +694,6 @@ public class RAFT<T> : OpticalFlowBase<T>
         finally { NumIterations = savedIters; }
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
@@ -714,7 +713,6 @@ public class RAFT<T> : OpticalFlowBase<T>
             }
         }
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

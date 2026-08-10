@@ -166,7 +166,6 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
             idx += count;
         }
     }
-
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);

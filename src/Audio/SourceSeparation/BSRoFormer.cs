@@ -42,6 +42,15 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://doi.org/10.48550/arXiv.2309.02612", Year = 2023, Authors = "Wei-Tsung Lu, Ju-Chiang Wang, Qiuqiang Kong, Yun-Ning Hung")]
 public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// DERIVED, not stored: PredictCore folds over Layers, and the last layer
+    /// CreateDefaultBSRoFormerLayers emits is <c>DenseLayer&lt;T&gt;(numFreqBins * numStems * 2)</c>.
+    /// The trailing x2 is the COMPLEX mask (real and imaginary parts per bin) - dropping it would
+    /// halve the true width. 8200 (1025 x 4 x 2 at the defaults) is stored nowhere.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * _options.NumStems * 2;
+
     #region Fields
 
     private readonly BSRoFormerOptions _options;
@@ -203,12 +212,11 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

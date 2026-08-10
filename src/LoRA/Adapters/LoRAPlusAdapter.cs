@@ -204,8 +204,12 @@ public partial class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Forward pass is identical to base LoRA implementation
-        return base.Forward(input);
+        // Forward pass is identical to base LoRA implementation.
+        // ForwardTraced, NOT Forward: LayerBase.Forward is the non-virtual recording wrapper that
+        // dispatches to ForwardTraced, so base.Forward(input) would come straight back here and
+        // recurse until the stack overflows. LoRAAdapterBase overrides ForwardTraced, so this is the
+        // base implementation that call was always meant to reach.
+        return base.ForwardTraced(input);
     }
 
     /// <summary>
@@ -271,7 +275,6 @@ public partial class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update the adapter's parameter vector
-        UpdateParametersFromLayers();
     }
 
     /// <summary>

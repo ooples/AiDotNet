@@ -53,8 +53,29 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
+// Shape-preserving at every accepted rank, and read from this layer's own forward rather than assumed:
+// ForwardTraced takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is [Time, Features]
+// with NO batch axis - the same convention every layer in this folder follows. Its three exits confirm
+// the shape is untouched: [_modelDimension] at rank 1, [seqLen, _modelDimension] at rank 2, and the
+// original leading axes with [seqLen, _modelDimension] appended above that.
+//
+// The feature width is Same, not Fixed(_modelDimension), and the forward makes the distinction explicit:
+// it THROWS when modelDim != _modelDimension, so the width is a precondition the caller must already
+// satisfy, not something this layer sets. Rank 1 is accepted (seqLen defaults to 1) but not declared -
+// a single timestep with no time axis is a degenerate probe shape, not a form to route a stack through.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeContract
 {
+    // OutputAxesFor is GENERATED from the [TensorLayout] attributes above (ShapeContractGenerator).
+    // Nothing to write here: the layouts already state that every axis is carried through, and
+    // restating that in a hand-copied method is how a contract drifts from its own declaration.
+
     // Configuration
     private readonly int _modelDimension;
     private readonly int _recurrenceDimension;
@@ -140,20 +161,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     public int RecurrenceDimension => _recurrenceDimension;
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _inputProjectionWeights.Length + _inputProjectionBias.Length +
-        _recurrenceGateWeights.Length + _recurrenceGateBias.Length +
-        _inputGateWeights.Length + _inputGateBias.Length +
-        _valueProjectionWeights.Length +
-        _decayParam.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
-
-    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
-    private readonly int _sequenceLength;
-
-    /// <summary>
     /// Creates a new Real-Gated Linear Recurrence Unit (RG-LRU) layer.
     /// </summary>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -186,7 +193,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)
@@ -511,36 +517,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var parameters = new Vector<T>(totalParams);
-        int index = 0;
-
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
-        }
     }
 
     private Tensor<T>[] GetAllTensors() =>

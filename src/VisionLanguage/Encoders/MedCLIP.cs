@@ -269,7 +269,6 @@ public class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

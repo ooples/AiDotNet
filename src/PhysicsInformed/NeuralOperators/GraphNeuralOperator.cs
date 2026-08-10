@@ -286,24 +286,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
 
 
-        /// <summary>
-        /// Updates the operator parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in _graphLayers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
-                    layer.SetParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
+        // ParameterCount, GetParameters and UpdateParameters were overridden here to walk
+        // _graphLayers by hand. Every layer in _graphLayers is also registered into Layers
+        // (see InitializeLayers), which is exactly what the base walks -- so all three said
+        // what the base already says. Deleting them also drops the (int) cast the count
+        // applied to a long Sum, which truncated past 2^31 parameters.
 
         public override Vector<T> GetGradients()
         {
@@ -457,32 +444,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return new GraphNeuralOperator<T>(Architecture, _numMessagePassingLayers, _hiddenDim, null, _inputDim, _normalizeAdjacency);
         }
 
-        /// <summary>
-        /// Gets the total number of parameters across graph layers.
-        /// </summary>
-        public override long ParameterCount => (int)_graphLayers.Sum(layer => layer.ParameterCount);
-
-        /// <summary>
-        /// Gets the operator parameters as a flattened vector.
-        /// </summary>
-        public override Vector<T> GetParameters()
-        {
-            var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-            int index = 0;
-
-            foreach (var layer in _graphLayers)
-            {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameters.Length; i++)
-                {
-                    parameters[index + i] = layerParameters[i];
-                }
-
-                index += layerParameters.Length;
-            }
-
-            return parameters;
-        }
 
         public Tensor<T> Forward(Tensor<T> nodeFeatures, Tensor<T> adjacencyMatrix)
         {

@@ -262,23 +262,8 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
         }
     }
 
-    /// <summary>
-    /// Updates model parameters from a flat vector.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This lets optimizers update all weights at once.</para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Returns metadata describing the model.
     /// </summary>

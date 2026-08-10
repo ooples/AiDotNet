@@ -98,7 +98,18 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     
     #region Shared Fields
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    /// <summary>
+    /// Not readonly: <c>UseAMSGrad</c> is restored from a saved model, and the default optimizer
+    /// captures that flag at construction, so a reload has to rebuild it. Only ever replaced when
+    /// this instance built its own -- see <see cref="_usesDefaultOptimizer"/>.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// True when no optimizer was supplied to the constructor, so the default one may be rebuilt on
+    /// deserialization. A CALLER-SUPPLIED optimizer is never discarded.
+    /// </summary>
+    private readonly bool _usesDefaultOptimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FactorVAEOptions<T> _options;
 
@@ -120,7 +131,12 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private double _beta;
     private double _gamma;
     private double _dropoutRate;
-    private readonly Random _random;
+    /// <summary>
+    /// Not readonly for the same reason as <see cref="_optimizer"/>: it is built from
+    /// <c>Seed</c> at construction, and a restored seed has to rebuild it or the reloaded model
+    /// keeps sampling from the seed it happened to be constructed with.
+    /// </summary>
+    private Random _random;
 
     #endregion
 
@@ -260,6 +276,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         InitializeLayers();
@@ -309,6 +326,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         InitializeLayers();
@@ -390,11 +408,25 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 
         // Prediction uses the PRIOR branch: the future returns the posterior needs are, by definition,
         // unavailable here. The prior's mean is used rather than a sample, so predictions are
-        // deterministic — sampling at inference would make the same input give different answers.
-        var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
-        var prior = RunSpan(features, PriorSpanStart, PriorSpanEnd);
-        var (priorMean, _) = SplitMeanAndLogVariance(prior);
-        return DecodeReturns(priorMean, features);
+        // deterministic -- sampling at inference would make the same input give different answers.
+        //
+        // Inference mode is set for the SAME reason PredictNative sets it: the default native stack
+        // contains BatchNormalizationLayer and DropoutLayer, and this span path walks Layers directly
+        // via RunSpan. Without this, a prediction taken after a training step applied batch
+        // statistics and dropout. Restored afterwards so a caller who was mid-training keeps its mode.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            var features = RunSpan(input, FeatureSpanStart, FeatureSpanEnd);
+            var prior = RunSpan(features, PriorSpanStart, PriorSpanEnd);
+            var (priorMean, _) = SplitMeanAndLogVariance(prior);
+            return DecodeReturns(priorMean, features);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     #endregion
@@ -632,6 +664,18 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 
         int numFactors = factors.Shape[factors.Shape.Length - 1];
         int numAssets = alpha.Shape[alpha.Shape.Length - 1];
+        // Only rank 1 and rank 2 are supported, and the rank is checked rather than assumed. The
+        // batched branch treats alpha.Shape[0] as the WHOLE batch, so a rank-3 feature tensor such as
+        // [batch, sequence, assets] collapsed its sequence axis into the batch: the beta reshape
+        // target then asked for batch * assets * factors elements out of a buffer holding
+        // batch * sequence * assets * factors, and reshaped the wrong count without saying so.
+        if (alpha.Shape.Length > 2)
+        {
+            throw new ArgumentException(
+                $"{nameof(FactorVAE<T>)} supports unbatched [assets] or batched [batch, assets] "
+                + $"features; got rank {alpha.Shape.Length}. Flatten any sequence axis into the batch "
+                + "before predicting.", nameof(features));
+        }
 
         if (alpha.Shape.Length == 1)
         {
@@ -655,6 +699,17 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private Tensor<T> AlignReturns(Tensor<T> returns, Tensor<T> features)
     {
         int rank = features.Shape.Length;
+
+        // Same two supported ranks as DecodeReturns. Without this, mismatched returns were forced to
+        // rank 2 while features could be rank 3, and Engine.Concat(.., features.Shape.Length - 1)
+        // then joined tensors of different ranks.
+        if (rank > 2)
+        {
+            throw new ArgumentException(
+                $"{nameof(FactorVAE<T>)} supports rank-1 or rank-2 features; got rank {rank}.",
+                nameof(features));
+        }
+
         if (returns.Shape.Length == rank) return returns;
 
         // Flatten everything after the leading (batch) axis onto the feature axis.
@@ -704,30 +759,8 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         }
     }
 
-    /// <summary>
-    /// Updates model parameters from a flat vector.
-    /// </summary>
-    /// <param name="parameters">Flat parameter vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This lets you load saved weights into the model,
-    /// which is useful for serialization and fine-tuning.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count <= 0)
-                continue;
-
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata describing this model instance.
     /// </summary>
@@ -802,6 +835,15 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         writer.Write(_beta);
         writer.Write(_gamma);
         writer.Write(_dropoutRate);
+
+        // The three options CreateNewInstance already copies. Without them, a model saved after
+        // training and reloaded into an instance built from defaults got a different KL weight and a
+        // different sampling seed, so the reloaded model did not behave like the saved one. Seed is
+        // nullable, so a presence flag precedes it.
+        writer.Write(_options.KlWeight);
+        writer.Write(_options.UseAMSGrad);
+        writer.Write(_options.Seed.HasValue);
+        if (_options.Seed.HasValue) writer.Write(_options.Seed.Value);
     }
 
     /// <summary>
@@ -825,6 +867,25 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         _beta = reader.ReadDouble();
         _gamma = reader.ReadDouble();
         _dropoutRate = reader.ReadDouble();
+
+        // Read back in the order SerializeNetworkSpecificData wrote them.
+        _options.KlWeight = reader.ReadDouble();
+        _options.UseAMSGrad = reader.ReadBoolean();
+        _options.Seed = reader.ReadBoolean() ? reader.ReadInt32() : (int?)null;
+
+        // Restoring the OPTIONS is not enough on its own. _random and the default optimizer are both
+        // built from these values during construction, so without rebuilding them the reloaded model
+        // kept sampling from the seed it happened to be constructed with and kept the AMSGrad setting
+        // it was constructed with -- the three restored values would have been dead on arrival.
+        // KlWeight needs no such treatment: it is read from _options at the point of use.
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSeededRandom(DefaultSamplingSeed);
+
+        // Only when this instance built its own. A caller-supplied optimizer carries state and
+        // configuration the saved model knows nothing about, and discarding it would be worse than
+        // the flag not taking effect.
+        if (_usesDefaultOptimizer) _optimizer = CreateDefaultOptimizer();
     }
 
     #endregion

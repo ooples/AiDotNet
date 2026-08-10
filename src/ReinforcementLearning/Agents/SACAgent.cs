@@ -63,8 +63,28 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
     "https://arxiv.org/abs/1801.01290",
     Year = 2018,
     Authors = "Haarnoja, T., Zhou, A., Abbeel, P., & Levine, S.")]
-public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_policyNetwork);
+        RegisterParameterComponent(_q1Network);
+        RegisterParameterComponent(_q2Network);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Refreshes what derives from the parameters. This ran at the end of the
+    /// hand-written SetParameters; losing it would not fail a test, it would just leave
+    /// the agent training against a stale target.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_q1Network, _q1TargetNetwork);
+        CopyNetworkWeights(_q2Network, _q2TargetNetwork);
+    }
     private SACOptions<T> _sacOptions;
 
     /// <inheritdoc/>
@@ -675,49 +695,6 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var policyParams = _policyNetwork.GetParameters();
-        var q1Params = _q1Network.GetParameters();
-        var q2Params = _q2Network.GetParameters();
-
-        var total = policyParams.Length + q1Params.Length + q2Params.Length;
-        var vector = new Vector<T>(total);
-
-        int idx = 0;
-        foreach (var p in policyParams) vector[idx++] = p;
-        foreach (var p in q1Params) vector[idx++] = p;
-        foreach (var p in q2Params) vector[idx++] = p;
-
-        return vector;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var policyParams = _policyNetwork.GetParameters();
-        var q1Params = _q1Network.GetParameters();
-        var q2Params = _q2Network.GetParameters();
-
-        int idx = 0;
-        var policyVec = new Vector<T>(policyParams.Length);
-        var q1Vec = new Vector<T>(q1Params.Length);
-        var q2Vec = new Vector<T>(q2Params.Length);
-
-        for (int i = 0; i < policyParams.Length; i++) policyVec[i] = parameters[idx++];
-        for (int i = 0; i < q1Params.Length; i++) q1Vec[i] = parameters[idx++];
-        for (int i = 0; i < q2Params.Length; i++) q2Vec[i] = parameters[idx++];
-
-        _policyNetwork.UpdateParameters(policyVec);
-        _q1Network.UpdateParameters(q1Vec);
-        _q2Network.UpdateParameters(q2Vec);
-
-        // Update targets
-        CopyNetworkWeights(_q1Network, _q1TargetNetwork);
-        CopyNetworkWeights(_q2Network, _q2TargetNetwork);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new SACAgent<T>(_sacOptions);
@@ -726,7 +703,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();

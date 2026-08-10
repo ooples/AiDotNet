@@ -340,7 +340,6 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

@@ -886,8 +886,40 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 /// <summary>
 /// Represents a single stack in the N-HiTS architecture using Tensor operations.
 /// </summary>
-internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+// Rank 1 only, and that is enforced rather than assumed: ForwardInternal reshapes its argument to
+// `[_inputLength, 1]`, which only succeeds when the whole tensor holds exactly _inputLength values.
+// The axis is Time on both sides - in is the (already pooled) lookback window, out is the forecast
+// horizon - which is also what the constructor declares:
+// `base(new[] { inputLength }, new[] { outputLength })`.
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// HAND-WRITTEN, and Fixed rather than Same for a reason worth stating: this stack does not
+    /// merely resize its input, it REFUSES to be resized BY it. ForwardInternal's last statement is
+    /// <c>Engine.Reshape(col, new[] { _outputLength })</c>, and the loop before it walks the MLP's
+    /// own weight list, so the horizon comes from the stack's configuration alone.
+    /// </para>
+    /// <para>
+    /// The guard at the top of ForwardInternal makes that emphatic: an input whose length is not
+    /// <c>_inputLength</c> is RESAMPLED onto _inputLength ("Ensure input matches expected size")
+    /// rather than rejected. So no input length - not even a wrong one - reaches the output.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 1 || _outputLength <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Fixed(_outputLength)),
+        };
+    }
+
     private readonly int _inputLength;
     private readonly int _outputLength;
     private readonly int _hiddenSize;
@@ -907,55 +939,8 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// </summary>
     public int InputLength => _inputLength;
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var w in _weights)
-                count += w.Length;
-            foreach (var b in _biases)
-                count += b.Length;
-            return count;
-        }
-    }
-
     public override bool SupportsTraining => true;
     public override void ResetState() { _lastForwardInput = null; }
-    public override void UpdateParameters(T learningRate) { /* tape-based optimizer updates registered params */ }
-
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-        foreach (var w in _weights)
-            for (int i = 0; i < w.Length; i++) allParams.Add(w[i]);
-        foreach (var b in _biases)
-            for (int i = 0; i < b.Length; i++) allParams.Add(b[i]);
-        return new Vector<T>(allParams.ToArray());
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int idx = 0;
-        foreach (var w in _weights)
-        {
-            for (int i = 0; i < w.Length; i++)
-                w[i] = parameters[idx++];
-        }
-        foreach (var b in _biases)
-        {
-            for (int i = 0; i < b.Length; i++)
-                b[i] = parameters[idx++];
-        }
-    }
-
     /// <summary>
     /// Persists the constructor's parameters so DeserializationHelper can
     /// reconstruct the layer with paper-faithful dimensions instead of the
@@ -979,13 +964,9 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return metadata;
     }
 
-    /// <summary>Construction state: the 'numBlocks' the layer was built with.</summary>
-    private readonly int _numBlocks;
-
     public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
         : base(new[] { inputLength }, new[] { outputLength })
     {
-        _numBlocks = numBlocks;
         _inputLength = inputLength;
         _outputLength = outputLength;
         _hiddenSize = hiddenSize;

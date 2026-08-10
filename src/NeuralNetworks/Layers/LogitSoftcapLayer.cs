@@ -17,7 +17,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "30.0")]
-public partial class LogitSoftcapLayer<T> : LayerBase<T>
+// Squashes values through a bounded function; shape is never touched, at any rank.
+[ElementWiseShape(Note = "Bounds logits via tanh scaling. Shape untouched at any rank.")]
+[AutoParameters]
+public partial class LogitSoftcapLayer<T> : LayerBase<T>, IShapeContract
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly double _cap;
@@ -51,26 +54,10 @@ public partial class LogitSoftcapLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override long ParameterCount => 0;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != 0)
-            throw new ArgumentException("LogitSoftcapLayer has no parameters.");
-    }
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients() => new Vector<T>(0);
 
     /// <inheritdoc/>
     public override void ClearGradients() { }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(T learningRate) { }
 
     /// <inheritdoc/>
     public override void ResetState() { }

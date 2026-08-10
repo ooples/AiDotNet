@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Lee et al."
 )]
-public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
+public class BigVGAN<T> : VocoderBase<T>
 {
     private readonly BigVGANOptions _options;
 
@@ -87,15 +87,15 @@ public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
         InitializeLayers();
     }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate;
-    int IVocoder<T>.MelChannels => _options.MelChannels;
-    public int UpsampleFactor => _options.HopSize;
+    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase. Each constructor already
+    // assigns base.SampleRate / .MelChannels / .HopSize from these same _options fields, and the base
+    // UpsampleFactor is HopSize, so the three members deleted here restated values the base derives.
 
     /// <summary>
     /// Converts mel to waveform using BigVGAN's AMP blocks with Snake activation.
     /// Per the paper (Lee et al., 2023): Uses anti-aliased multi-periodicity composition (AMP) modules replacing standard residual blocks. Snake activation (x + sin^2(alpha*x)/alpha) captures periodic patterns better than LeakyReLU. Trained on large-scale data (LibriTTS + others) for universal vocoding across unseen speakers, languages, and recording conditions.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
@@ -195,19 +195,11 @@ public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

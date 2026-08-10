@@ -51,6 +51,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     BatchOptional = true, Direction = TensorLayoutDirection.Output,
     Note = "Channel count becomes OutputDepth; H and W follow stride/padding.")]
+[AutoParameters]
 public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
@@ -398,6 +399,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// so you can understand where you made a mistake.
     /// </para>
     /// </remarks>
+    // [Scratch]: these hold the last forward's input and output for the backward pass. They are
+    // per-forward CACHES, not weights, and [AutoParameters] would otherwise discover them --
+    // any non-nullable Tensor<T> field is a candidate. Counting them makes ParameterCount
+    // depend on the batch size and spatial extent of whatever ran last: this layer measured
+    // 37,120 against its true 3,584, the extra 33,536 being a cached [1,3,16,16] input and a
+    // [1,128,16,16] output. It also made a model appear to change size once a forward had run.
+    [Scratch]
     private Tensor<T> _lastInput;
 
     /// <summary>
@@ -418,6 +426,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// and adjust its internal values to make better predictions next time.
     /// </para>
     /// </remarks>
+    // [Scratch]: these hold the last forward's input and output for the backward pass. They are
+    // per-forward CACHES, not weights, and [AutoParameters] would otherwise discover them --
+    // any non-nullable Tensor<T> field is a candidate. Counting them makes ParameterCount
+    // depend on the batch size and spatial extent of whatever ran last: this layer measured
+    // 37,120 against its true 3,584, the extra 33,536 being a cached [1,3,16,16] input and a
+    // [1,128,16,16] output. It also made a model appear to change size once a forward had run.
+    [Scratch]
     private Tensor<T> _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
@@ -1753,55 +1768,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool HasUninitializedParameters => !_isInitialized && InputDepth <= 0;
 
-    public override long ParameterCount => _isInitialized
-        ? _kernels.Length + _biases.Shape[0]
-        // Input depth still unknown: report NOTHING rather than a guess. This used to assume
-        // InputDepth=1 so that a "model has learnable parameters" check could pass before the first
-        // forward, but GetParameters() returns an EMPTY vector in exactly this state — so the count
-        // described weights the flat vector did not contain. Everything pairing the two broke on it:
-        // SetParameters rejected a correctly-sized saved vector as a length mismatch, and the
-        // finance smoke test's ParameterCount == GetParameters().Length invariant failed outright
-        // (TimesNet claimed 456 against a 216-element vector). PyTorch has the same situation with
-        // LazyConv2d and refuses to guess — UninitializedParameter.numel() raises. Callers that need
-        // to distinguish "no parameters" from "not sized yet" ask HasUninitializedParameters.
-        : InputDepth <= 0
-        ? 0L
-        // Input depth known but weights not yet allocated: derive the count from it. Cheap, exact,
-        // and it agrees with GetParameters(), which allocates at this same depth via
-        // EnsureInitialized. No forward pass and no multi-MB materialisation for a metadata read.
-        // Cast one operand to long so the multiplication runs in 64-bit. With
-        // paper-scale convs (e.g. DiT-XL: OutputDepth=1152, InputDepth=1152,
-        // KernelSize=2 → 5,308,416 fits in int; but a 11x11 conv at
-        // OutputDepth=1024, InputDepth=2048 overflows: 1024*2048*121=253M,
-        // and a 7x7 at OutputDepth=4096, InputDepth=4096 is 4096*4096*49 =
-        // 821M which already exceeds int.MaxValue/4) so the arithmetic must be long-promoted up
-        // front.
-        : (long)OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // For deferred-shape layers that haven't seen their first Forward
-        // yet (e.g., conditioning branch in UNetNoisePredictor that's only
-        // activated when text embeddings are present), EnsureInitialized
-        // would throw because InputDepth is still the -1 sentinel. Return
-        // an empty parameter vector — Clone/SetParameters/ParameterCount
-        // semantically have nothing to copy/set/count for an uninitialised
-        // layer and will pick up the real parameters on a subsequent pass
-        // after the first Forward materialises them.
-        // Same predicate ParameterCount uses, deliberately: the two must never describe different
-        // parameter sets. Keying this on IsShapeResolved while the count keyed on InputDepth let a
-        // layer with a known depth but an unresolved output axis report a count and hand back an
-        // empty vector.
-        if (HasUninitializedParameters) return new Vector<T>(0);
-
-        EnsureInitialized();
-        // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_kernels.Data),
-            Vector<T>.FromMemory(_biases.Data));
-    }
-
     /// <summary>
     /// Gets all parameter gradients of the layer as a single vector.
     public override void ClearGradients()
@@ -1830,93 +1796,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_kernelsGradient.Data),
             Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (kernel weights and biases) of the layer from a single
-    /// vector. The vector must have the exact length required for all parameters of the layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
-    /// 
-    /// When setting parameters:
-    /// - The vector must have exactly the right number of values
-    /// - The values are assigned to the kernels and biases in a specific order
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Copying parameters from another model
-    /// - Setting parameters that were optimized externally
-    /// 
-    /// It's like replacing all the "knowledge" in the layer with new information.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Round-trip from saved parameters: derive inputDepth from vector length.
-        // Layout: kernels [outputDepth, inputDepth, kernelSize, kernelSize] + biases [outputDepth].
-        // inputDepth = (length - outputDepth) / (outputDepth * kernelSize * kernelSize).
-        if (!IsShapeResolved)
-        {
-            if (parameters.Length == 0) return;
-            // #639: depthwise (Groups>1) has a [OutputDepth, 1, K, K] kernel and
-            // InputDepth == Groups by definition, so resolve directly — the full-conv
-            // inference below (which assumes a [outC, inC, K, K] kernel) would pick the
-            // wrong InputDepth from the smaller depthwise parameter count.
-            if (Groups > 1)
-            {
-                // InputDepth == Groups for depthwise; fall through to EnsureInitialized below.
-                ResolveFromShape(new[] { Groups, KernelSize, KernelSize });
-            }
-            else
-            {
-            int kernelArea = OutputDepth * KernelSize * KernelSize;
-            if (OutputDepth <= 0 || kernelArea <= 0)
-                throw new InvalidOperationException(
-                    "Cannot SetParameters on deferred-shape ConvolutionalLayer before OutputDepth/KernelSize are known.");
-            int candidateInputDepth = (parameters.Length - OutputDepth) / kernelArea;
-            if (candidateInputDepth <= 0
-                || candidateInputDepth * kernelArea + OutputDepth != parameters.Length)
-                throw new ArgumentException(
-                    $"Cannot infer inputDepth for ConvolutionalLayer from {parameters.Length} parameters " +
-                    $"(outputDepth={OutputDepth}, kernelSize={KernelSize}).");
-            // Convolutional layers need a 3D inputShape [C, H, W]; H/W can't be
-            // derived from the parameter vector alone. Use spatial dims =
-            // KernelSize so OnFirstForward's "input spatial dims must be
-            // >= kernelSize" guard passes — kernels and biases only depend
-            // on inputDepth/outputDepth/kernelSize, so the actual spatial
-            // dims used here are immaterial for SetParameters. Using 1×1
-            // would fail the guard for any kernelSize>1.
-            ResolveFromShape(new[] { candidateInputDepth, KernelSize, KernelSize });
-            }
-        }
-
-        EnsureInitialized();
-        int kernelLen = _kernels.Length;
-        int biasLen = _biases.Shape[0];
-        if (parameters.Length != kernelLen + biasLen)
-        {
-            throw new ArgumentException($"Expected {kernelLen + biasLen} parameters, but got {parameters.Length}");
-        }
-
-        // Bulk copy into contiguous tensor storage in-place — replaces 4-nested scalar loops
-        // Preserves tensor identity so engine persistent tensor references remain valid
-        var src = parameters.AsSpan();
-        src.Slice(0, kernelLen).CopyTo(_kernels.Data.Span);
-        src.Slice(kernelLen, biasLen).CopyTo(_biases.Data.Span);
-
-        // Span writes preserve tensor identity and do not advance Tensor.Version.
-        // Drop the materialized inference reshape so it cannot retain old values.
-        InvalidateBiasReshapeCache();
-
-        // Notify engine that parameters have changed (for GPU cache invalidation)
-        Engine.InvalidatePersistentTensor(_kernels);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     internal override void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)

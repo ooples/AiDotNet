@@ -67,8 +67,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
     "https://link.springer.com/article/10.1007/BF00992696",
     Year = 1992,
     Authors = "Williams, R. J.")]
-public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_policyNetwork);
+    }
     private REINFORCEOptions<T> _reinforceOptions;
 
     /// <inheritdoc/>
@@ -436,27 +444,6 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        return _policyNetwork.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Calls <see cref="NeuralNetworkBase{T}.SetParameters"/> (not
-    /// <c>UpdateParameters</c>) so the call is a full state restore that
-    /// round-trips with <see cref="GetParameters"/>. <c>UpdateParameters</c>
-    /// on the underlying network is the optimizer-style apply-delta path
-    /// and doesn't guarantee that the resulting parameter vector equals
-    /// the input; Clone would then produce a network whose
-    /// <c>Predict(state)</c> diverges from the original on every call.
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _policyNetwork.SetParameters(parameters);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new REINFORCEAgent<T>(_reinforceOptions);
@@ -465,7 +452,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();

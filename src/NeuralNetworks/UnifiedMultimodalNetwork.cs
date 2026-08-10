@@ -1185,7 +1185,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         return _classificationHead.Forward(pooled);
     }
 
-    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         // NeuralNetworkBase.UpdateParameters contract: the caller passes the
@@ -1199,7 +1198,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         // documented contract.
         SetParameters(parameters);
     }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -1262,135 +1260,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             _embeddingDimension,
             _maxSequenceLength,
             _numTransformerLayers);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        // Force shape resolution before reading ParameterCount per layer.
-        // Without this, a freshly-cloned model (whose lazy DenseLayers carry
-        // the InputShape=-1 sentinel until first Forward) reports
-        // ParameterCount=0 for every encoder/decoder, and the orig→cloned
-        // SetParameters loop silently drops every parameter — defeating
-        // Clone() and surfacing as Clone_ShouldProduceIdenticalOutput
-        // divergence. Mirrors AudioVisualCorrespondenceNetwork.GetParameters
-        // / SetParameters / ParameterCount. Idempotent (short-circuits via
-        // _layerShapesResolved on subsequent calls).
-        ResolveLazyLayerShapes();
-
-        var allParams = new List<T>();
-
-        void AddLayerParams(ILayer<T> layer)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
-
-        AddLayerParams(_textEncoder);
-        AddLayerParams(_imageEncoder);
-        AddLayerParams(_audioEncoder);
-        AddLayerParams(_videoEncoder);
-
-        foreach (var layer in _transformerLayers) AddLayerParams(layer);
-        foreach (var layer in _crossModalAttention) AddLayerParams(layer);
-
-        AddLayerParams(_textDecoder);
-        AddLayerParams(_imageDecoder);
-        AddLayerParams(_audioDecoder);
-        AddLayerParams(_videoDecoder);
-
-        AddLayerParams(_fusionLayer);
-        AddLayerParams(_classificationHead);
-        AddLayerParams(_generationHead);
-
-        var result = new Vector<T>(allParams.Count);
-        for (int i = 0; i < allParams.Count; i++)
-        {
-            result[i] = allParams[i];
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Resolve lazy InputShape across every sublayer so each layer's
-        // ParameterCount returns its real weight count, not 0. Without this
-        // the loop below sizes every slice to 0 and writes nothing, leaving
-        // the clone with fresh random weights instead of the original's.
-        ResolveLazyLayerShapes();
-
-        var offset = 0;
-
-        void SetLayerParams(ILayer<T> layer)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var p = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-            {
-                if (offset + i < parameters.Length)
-                {
-                    p[i] = parameters[offset + i];
-                }
-            }
-            layer.SetParameters(p);
-            offset += count;
-        }
-
-        SetLayerParams(_textEncoder);
-        SetLayerParams(_imageEncoder);
-        SetLayerParams(_audioEncoder);
-        SetLayerParams(_videoEncoder);
-
-        foreach (var layer in _transformerLayers) SetLayerParams(layer);
-        foreach (var layer in _crossModalAttention) SetLayerParams(layer);
-
-        SetLayerParams(_textDecoder);
-        SetLayerParams(_imageDecoder);
-        SetLayerParams(_audioDecoder);
-        SetLayerParams(_videoDecoder);
-
-        SetLayerParams(_fusionLayer);
-        SetLayerParams(_classificationHead);
-        SetLayerParams(_generationHead);
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            // Resolve lazy InputShape so the encoder/decoder lazy DenseLayers
-            // report their true parameter count (otherwise InputShape=-1 →
-            // count=0 immediately after construction, failing
-            // Parameters_ShouldBeNonEmpty before any Forward).
-            ResolveLazyLayerShapes();
-
-            var count = 0;
-
-            count += (int)_textEncoder.ParameterCount;
-            count += (int)_imageEncoder.ParameterCount;
-            count += (int)_audioEncoder.ParameterCount;
-            count += (int)_videoEncoder.ParameterCount;
-
-            foreach (var layer in _transformerLayers) count += (int)layer.ParameterCount;
-            foreach (var layer in _crossModalAttention) count += (int)layer.ParameterCount;
-
-            count += (int)_textDecoder.ParameterCount;
-            count += (int)_imageDecoder.ParameterCount;
-            count += (int)_audioDecoder.ParameterCount;
-            count += (int)_videoDecoder.ParameterCount;
-
-            count += (int)_fusionLayer.ParameterCount;
-            count += (int)_classificationHead.ParameterCount;
-            count += (int)_generationHead.ParameterCount;
-
-            return count;
-        }
     }
 
     /// <inheritdoc/>

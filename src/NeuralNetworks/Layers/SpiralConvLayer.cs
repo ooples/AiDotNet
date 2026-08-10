@@ -43,8 +43,58 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
-public partial class SpiralConvLayer<T> : LayerBase<T>
+// Mesh convolution: [V, C] or [B, V, C], per OnFirstForward's own guard - "requires rank-2 [V,C] or
+// rank-3 [B,V,C] input". The vertex axis takes TensorAxis.Other, the same escape hatch
+// PrincipalNeighbourhoodAggregationLayer uses for its node axis, because a mesh vertex count is not
+// any of the spatial roles and calling it Height or Features would assert a structure it does not have.
+//
+// THE SPIRAL NEIGHBOURHOOD DOES NOT REACH THE SHAPE. SpiralLength sizes the gathered feature vector
+// (weights are [OutputChannels, c * SpiralLength]), but GatherSpiralFeatures produces one row per
+// vertex and the matmul contracts that width away - so vertices are preserved, not windowed.
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Input,
+    Note = "Unbatched mesh: leading axis is the vertex count.")]
+[TensorLayout(TensorAxis.Other, TensorAxis.Channels, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Channels,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// From <c>OnFirstForward</c>: <c>ResolveShapes(new[] { v, c }, new[] { v, OutputChannels })</c> -
+    /// the vertex count survives and only the channel axis is rewritten. <c>ProcessBatched</c>'s own
+    /// documented return is <c>[batch, numVertices, OutputChannels]</c>, so the batch axis is carried
+    /// through as well.
+    /// </para>
+    /// <para>
+    /// <c>Fixed(OutputChannels)</c> reads the constructor argument that sizes the weight matrix's row
+    /// count and the bias vector, so it is a width this layer's parameters impose. <c>InputChannels</c>
+    /// is by contrast DISCOVERED from the first input, which is exactly why it appears nowhere here.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (OutputChannels <= 0) return null;
+
+        var vertices = new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other));
+        var channels = new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(OutputChannels));
+
+        return inputRank switch
+        {
+            2 => new[] { vertices, channels },
+            3 => new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                vertices,
+                channels,
+            },
+            _ => null,
+        };
+    }
+
     #region Properties
 
     /// <summary>
@@ -957,34 +1007,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets all trainable parameters as a single vector.
-    /// </summary>
-    /// <returns>Vector containing all weights and biases.</returns>
-    public override Vector<T> GetParameters()
-    {
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()));
-    }
-
-    /// <summary>
-    /// Sets all trainable parameters from a vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    /// <exception cref="ArgumentException">Thrown when parameter count is incorrect.</exception>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int expected = _weights.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-
-        int idx = 0;
-        _weights = new Tensor<T>(_weights._shape, parameters.Slice(idx, _weights.Length));
-        idx += _weights.Length;
-        _biases = new Tensor<T>(_biases._shape, parameters.Slice(idx, _biases.Length));
-    }
-
-    /// <summary>
     /// Gets the weight tensor.
     /// </summary>
     /// <returns>Weights [OutputChannels, InputChannels * SpiralLength].</returns>
@@ -995,11 +1017,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// </summary>
     /// <returns>Biases [OutputChannels].</returns>
     public override Tensor<T> GetBiases() => _biases;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
     /// Emits the construction parameters the network's flat-parameter

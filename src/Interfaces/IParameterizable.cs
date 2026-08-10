@@ -8,44 +8,13 @@ namespace AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("Parameterizable")]
-public interface IParameterizable<T, TInput, TOutput>
+/// <remarks>
+/// GetParameters, SetParameters and ParameterCount come from
+/// <see cref="IParameterSource{T}"/> -- the minimal contract shared with components that
+/// own parameters without being full models (encoders, projectors, layers).
+/// </remarks>
+public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
 {
-    /// <summary>
-    /// Gets the parameters that can be optimized.
-    /// </summary>
-    Vector<T> GetParameters();
-
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">The parameter vector to set.</param>
-    /// <remarks>
-    /// This method allows direct modification of the model's internal parameters.
-    /// This is useful for optimization algorithms that need to update parameters iteratively.
-    /// If the length of <paramref name="parameters"/> does not match <see cref="ParameterCount"/>,
-    /// an <see cref="ArgumentException"/> should be thrown.
-    /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// Thrown when the length of <paramref name="parameters"/> does not match <see cref="ParameterCount"/>.
-    /// </exception>
-    void SetParameters(Vector<T> parameters);
-
-    /// <summary>
-    /// Gets the total number of trainable parameters in the model. Return
-    /// type is <see cref="long"/> (int64), matching PyTorch's
-    /// <c>c10::TensorImpl::numel()</c> int64_t convention so foundation-scale
-    /// models like Sora, HiDream Full, SD3.5 Large, HunyuanVideo, Flux 2,
-    /// etc. (all &gt;2.1 B parameters) report accurately without overflow.
-    /// </summary>
-    /// <remarks>
-    /// Per-tensor weights still fit in <see cref="int"/> (Vector{T}.Length
-    /// is int and a single tensor doesn't exceed int.MaxValue elements in
-    /// any current architecture). The aggregate uses a long accumulator,
-    /// computed by summing each chunk's <c>Length</c> from
-    /// <see cref="GetParameterChunks"/>.
-    /// </remarks>
-    long ParameterCount { get; }
-
     /// <summary>
     /// Yields the model's trainable weight tensors as references — zero-copy,
     /// streaming. Callers iterate per-tensor without ever materializing a

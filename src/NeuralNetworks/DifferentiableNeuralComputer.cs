@@ -388,7 +388,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     // matrix is read/written by the legacy Serialize/Deserialize paths only.
     // _lastCombinedVector was a backward-pass cache for the manual matmul that
     // the new Layers-chain projection no longer needs.
-    private Matrix<T> _outputWeights;
+    private Tensor<T> _outputWeights;
 #pragma warning disable CS0169
     private Vector<T>? _lastCombinedVector;
 #pragma warning restore CS0169
@@ -481,7 +481,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         _precedenceWeighting = new Vector<T>(_memorySize);
         _temporalLinkMatrix = new Matrix<T>(_memorySize, _memorySize);
-        _outputWeights = new Matrix<T>(combinedSize, outputSize);
+        _outputWeights = new Tensor<T>([combinedSize, outputSize]);
 
         InitializeOutputWeights();
         InitializeMemory();
@@ -560,7 +560,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         _precedenceWeighting = new Vector<T>(_memorySize);
         _temporalLinkMatrix = new Matrix<T>(_memorySize, _memorySize);
-        _outputWeights = new Matrix<T>(combinedSize, outputSize);
+        _outputWeights = new Tensor<T>([combinedSize, outputSize]);
 
         InitializeOutputWeights();
         InitializeMemory();
@@ -570,9 +570,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private void InitializeOutputWeights()
     {
         // Initialize with small random values
-        for (int i = 0; i < _outputWeights.Rows; i++)
+        for (int i = 0; i < _outputWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _outputWeights.Columns; j++)
+            for (int j = 0; j < _outputWeights.Shape[1]; j++)
             {
                 _outputWeights[i, j] = NumOps.FromDouble((Random.NextDouble() * 0.2) - 0.1);
             }
@@ -824,43 +824,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                3 * readHeads; // Read modes (backward, content, forward)
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Differentiable Neural Computer.
-    /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter vector among all the layers in the network.
-    /// Each layer receives a portion of the parameter vector corresponding to its number of parameters.
-    /// The method keeps track of the starting index for each layer's parameters in the input vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates all the internal values of the neural network at once.
-    /// 
-    /// When updating parameters:
-    /// - The input is a long list of numbers representing all values in the entire network
-    /// - The method divides this list into smaller chunks
-    /// - Each layer gets its own chunk of values
-    /// - The layers use these values to adjust their internal settings
-    /// 
-    /// This method is typically used during training or when loading a pre-trained model,
-    /// allowing all network parameters to be updated at once.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the Differentiable Neural Computer.
     /// </summary>
@@ -1608,10 +1573,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
 
         // Write output weights
-        writer.Write(_outputWeights.Rows);
-        writer.Write(_outputWeights.Columns);
-        for (int i = 0; i < _outputWeights.Rows; i++)
-            for (int j = 0; j < _outputWeights.Columns; j++)
+        writer.Write(_outputWeights.Shape[0]);
+        writer.Write(_outputWeights.Shape[1]);
+        for (int i = 0; i < _outputWeights.Shape[0]; i++)
+            for (int j = 0; j < _outputWeights.Shape[1]; j++)
                 writer.Write(Convert.ToDouble(_outputWeights[i, j]));
 
         // Write read weightings
@@ -1714,7 +1679,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Read output weights
         int owRows = reader.ReadInt32();
         int owCols = reader.ReadInt32();
-        _outputWeights = new Matrix<T>(owRows, owCols);
+        _outputWeights = new Tensor<T>([owRows, owCols]);
         for (int i = 0; i < owRows; i++)
             for (int j = 0; j < owCols; j++)
                 _outputWeights[i, j] = NumOps.FromDouble(reader.ReadDouble());

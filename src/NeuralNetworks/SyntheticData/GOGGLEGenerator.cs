@@ -827,41 +827,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         }
     }
 
-    /// <summary>
-    /// Total trainable parameter count = the layer parameters PLUS the learned
-    /// adjacency tensor (a registered extra trainable tensor). Overridden so the
-    /// flat-parameter contract (GetParameters / UpdateParameters / ParameterCount)
-    /// stays symmetric with <see cref="GetExtraTrainableTensors"/>.
-    /// </summary>
-    public override long ParameterCount
-    {
-        get
-        {
-            long total = base.ParameterCount;
-            if (_adjacency is not null && _adjacency.Length > 0)
-                total += _adjacency.Length;
-            return total;
-        }
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var layerParams = base.GetParameters();
-        if (_adjacency is null || _adjacency.Length == 0)
-            return layerParams;
-
-        // Append adjacency after the layer parameters; UpdateParameters consumes
-        // it in the identical order so the flat-parameter round-trip is lossless.
-        var combined = new Vector<T>(layerParams.Length + _adjacency.Length);
-        for (int i = 0; i < layerParams.Length; i++)
-            combined[i] = layerParams[i];
-        for (int i = 0; i < _adjacency.Length; i++)
-            combined[layerParams.Length + i] = _adjacency[i];
-        return combined;
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         int startIndex = 0;
@@ -886,7 +851,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                 _adjacency[i] = parameters[startIndex + i];
         }
     }
-
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

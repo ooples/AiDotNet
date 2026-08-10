@@ -83,6 +83,17 @@ namespace AiDotNet.Diffusion.Control;
 [ResearchPaper("IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2308.06721", Year = 2023, Authors = "Ye et al.")]
 public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
 {
+    /// <inheritdoc />
+    /// <remarks>Registration order is serialization order, and matches the
+    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_baseUNet);
+        RegisterParameterComponent(_vae);
+        RegisterParameterComponent(_imageEncoder);
+        RegisterParameterComponent(_imageProjector);
+    }
+
     #region Constants
 
     /// <summary>
@@ -166,8 +177,6 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IPA_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _baseUNet.ParameterCount + _vae.ParameterCount + _imageEncoder.ParameterCount + _imageProjector.ParameterCount;
 
     /// <summary>
     /// Gets or sets the default image prompt weight (0-1).
@@ -490,75 +499,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         return Engine.TensorAdd(a, b);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var unetParams = _baseUNet.GetParameters();
-        var vaeParams = _vae.GetParameters();
-        var encoderParams = _imageEncoder.GetParameters();
-        var projectorParams = _imageProjector.GetParameters();
 
-        var totalLength = unetParams.Length + vaeParams.Length + encoderParams.Length + projectorParams.Length;
-        var combined = new T[totalLength];
-
-        var offset = 0;
-        for (int i = 0; i < unetParams.Length; i++)
-        {
-            combined[offset++] = unetParams[i];
-        }
-        for (int i = 0; i < vaeParams.Length; i++)
-        {
-            combined[offset++] = vaeParams[i];
-        }
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            combined[offset++] = encoderParams[i];
-        }
-        for (int i = 0; i < projectorParams.Length; i++)
-        {
-            combined[offset++] = projectorParams[i];
-        }
-
-        return new Vector<T>(combined);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int unetCount = checked((int)_baseUNet.ParameterCount);
-        var vaeCount = checked((int)_vae.ParameterCount);
-        int encoderCount = checked((int)_imageEncoder.ParameterCount);
-        int projectorCount = checked((int)_imageProjector.ParameterCount);
-
-        var offset = 0;
-        var unetParams = new T[unetCount];
-        for (int i = 0; i < unetCount; i++)
-        {
-            unetParams[i] = parameters[offset++];
-        }
-        _baseUNet.SetParameters(new Vector<T>(unetParams));
-
-        var vaeParams = new T[vaeCount];
-        for (int i = 0; i < vaeCount; i++)
-        {
-            vaeParams[i] = parameters[offset++];
-        }
-        _vae.SetParameters(new Vector<T>(vaeParams));
-
-        var encoderParams = new T[encoderCount];
-        for (int i = 0; i < encoderCount; i++)
-        {
-            encoderParams[i] = parameters[offset++];
-        }
-        _imageEncoder.SetParameters(new Vector<T>(encoderParams));
-
-        var projectorParams = new T[projectorCount];
-        for (int i = 0; i < projectorCount; i++)
-        {
-            projectorParams[i] = parameters[offset++];
-        }
-        _imageProjector.SetParameters(new Vector<T>(projectorParams));
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
@@ -614,7 +555,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
 /// Image encoder for extracting features from reference images.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class ImageEncoder<T>
+public class ImageEncoder<T> : IParameterSource<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -858,7 +799,7 @@ public class ImageEncoder<T>
 /// Projects image features to text embedding space.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class ImageProjector<T>
+public class ImageProjector<T> : IParameterSource<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

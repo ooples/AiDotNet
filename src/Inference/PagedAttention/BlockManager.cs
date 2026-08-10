@@ -24,7 +24,7 @@ namespace AiDotNet.Inference.PagedAttention;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for tensor computations.</typeparam>
-internal class BlockManager<T>
+public class BlockManager<T>
 {
     private readonly BlockManagerConfig _config;
     private readonly object _lock = new();
@@ -339,7 +339,7 @@ internal class BlockManager<T>
 /// <summary>
 /// Configuration for the block manager.
 /// </summary>
-internal class BlockManagerConfig
+public class BlockManagerConfig
 {
     /// <summary>
     /// Number of tokens per block.
@@ -435,7 +435,7 @@ internal class BlockManagerConfig
 /// <summary>
 /// Statistics about the block manager state.
 /// </summary>
-internal class BlockManagerStats
+public class BlockManagerStats
 {
     /// <summary>Total number of blocks in the pool.</summary>
     public int TotalBlocks { get; set; }

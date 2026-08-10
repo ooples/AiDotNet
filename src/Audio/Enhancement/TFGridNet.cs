@@ -60,6 +60,17 @@ namespace AiDotNet.Audio.Enhancement;
 [ResearchPaper("TF-GridNet: Making Time-Frequency Domain Models Great Again for Monaural Speaker Separation", "https://arxiv.org/abs/2209.03952", Year = 2023, Authors = "Zhong-Qiu Wang, Samuele Cornell, Shukjae Choi, Younglo Lee, Byeong-Yeol Kim, Shinji Watanabe")]
 public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>
+    /// Measured: <c>PredictCore</c> RMS-normalizes, folds <c>Layers</c>, then rescales by the same
+    /// scalar - <c>TensorMultiplyScalar</c> leaves the shape untouched - and <c>PostprocessOutput</c>
+    /// is the identity. The last layer of <c>CreateDefaultTFGridNetLayers</c> is
+    /// <c>DenseLayer&lt;T&gt;(numFreqBins * 2)</c>, the reconstructed complex STFT (real + imaginary
+    /// per bin), wired from <c>_options.NumFreqBins</c>. The helper's local <c>outDim</c> (the clamped
+    /// <c>embeddingDim * 4</c> grid width) is computed and then NOT used by that layer.
+    /// </remarks>
+    protected override int OutputFeatureWidth => _options.NumFreqBins * 2;
+
     #region Fields
 
     private readonly TFGridNetOptions _options;
@@ -324,13 +335,11 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 

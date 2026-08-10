@@ -32,7 +32,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 16, 16", TestConstructorArgs = "16, 2, 4")]
-public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
+// Shape-preserving at rank 3, so the generator derives Same on every axis and there is no hand-written
+// OutputAxesFor here. That is not an assumption about transformer blocks in general - it falls out of
+// ForwardTraced, which ends in AddTensors(residual1, DropPath(mlpOut, batch)) with residual1 itself an
+// AddTensors against the raw input. A residual add is only defined between matching shapes, so both
+// branches are pinned to the input's shape and so is the result. The windowing is internal: the block
+// partitions the token axis into windows, attends inside each, and stitches the sequence back together.
+//
+// NOT [ElementWiseShape], even though the shape is untouched - that shorthand claims preservation at ANY
+// rank, and this layer is rank-3 only. ForwardTraced reads Shape[0] and Shape[1] as batch and sequence
+// length without a rank check, and WindowAttention reads Shape[1] again; the roles are those of the
+// method's own summary, "[batch, seqLen, dim]". The sequence axis is Time rather than Height/Width
+// because the 2D grid arrives already flattened - this layer re-derives h and w by factorizing seqLen.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _dim;
     private readonly int _numHeads;
@@ -79,16 +96,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _norm1.ParameterCount +
-        _norm2.ParameterCount +
-        _qkvProj.ParameterCount +
-        _outProj.ParameterCount +
-        _relativePositionBiasTable.Length +
-        _mlpFc1.ParameterCount +
-        _mlpFc2.ParameterCount;
 
     /// <summary>
     /// Gets whether this block uses shifted windows.
@@ -569,79 +576,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
                     mask[b, s, d] = v;
         }
         return Engine.TensorMultiply(branch, mask);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        allParams.AddRange(_norm1.GetParameters().ToArray());
-        allParams.AddRange(_norm2.GetParameters().ToArray());
-        allParams.AddRange(_qkvProj.GetParameters().ToArray());
-        allParams.AddRange(_outProj.GetParameters().ToArray());
-
-        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
-        {
-            allParams.Add(_relativePositionBiasTable[i]);
-        }
-
-        allParams.AddRange(_mlpFc1.GetParameters().ToArray());
-        allParams.AddRange(_mlpFc2.GetParameters().ToArray());
-
-        return new Vector<T>([.. allParams]);
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Lazy ctor: sublayers may be in placeholder shape state. Resolve from
-        // known constants — every Dense/Norm operates on the per-token feature
-        // dim (dim) except _mlpFc2 which contracts back from dim*mlpRatio.
-        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(new[] { _dim });
-        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(new[] { _dim });
-        if (!_qkvProj.IsShapeResolved) _qkvProj.ResolveFromShape(new[] { _dim });
-        if (!_outProj.IsShapeResolved) _outProj.ResolveFromShape(new[] { _dim });
-        if (!_mlpFc1.IsShapeResolved) _mlpFc1.ResolveFromShape(new[] { _dim });
-        if (!_mlpFc2.IsShapeResolved) _mlpFc2.ResolveFromShape(new[] { _dim * _mlpRatio });
-
-        int offset = 0;
-
-        // Norm1
-        int norm1Count = checked((int)_norm1.ParameterCount);
-        _norm1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, norm1Count).ToArray()));
-        offset += norm1Count;
-
-        // Norm2
-        int norm2Count = checked((int)_norm2.ParameterCount);
-        _norm2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, norm2Count).ToArray()));
-        offset += norm2Count;
-
-        // QKV projection
-        int qkvCount = checked((int)_qkvProj.ParameterCount);
-        _qkvProj.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, qkvCount).ToArray()));
-        offset += qkvCount;
-
-        // Output projection
-        int outCount = checked((int)_outProj.ParameterCount);
-        _outProj.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, outCount).ToArray()));
-        offset += outCount;
-
-        // Relative position bias
-        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
-        {
-            _relativePositionBiasTable[i] = parameters[offset + i];
-        }
-        offset += _relativePositionBiasTable.Length;
-
-        // MLP FC1
-        int fc1Count = checked((int)_mlpFc1.ParameterCount);
-        _mlpFc1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, fc1Count).ToArray()));
-        offset += fc1Count;
-
-        // MLP FC2
-        int fc2Count = checked((int)_mlpFc2.ParameterCount);
-        _mlpFc2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, fc2Count).ToArray()));
     }
 
     /// <summary>

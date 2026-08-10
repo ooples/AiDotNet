@@ -13,7 +13,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
-public partial class MoEDecoderBlock<T> : LayerBase<T>
+// Pre-LN residual block, so shape preservation is structural rather than incidental: ForwardTraced is two
+// `Engine.TensorAdd(residual, sublayerOut)` pairs, and each one only types when the sublayer returned the
+// residual's exact shape. That holds whatever attention implementation is injected - a sublayer that
+// resized would fail the add rather than change this block's contract. Rank-agnostic for the same reason.
+[ElementWiseShape(Note = "Two residual adds pin the output to the input shape at every rank.")]
+[AutoParameters]
+public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
     private readonly RMSNormalizationLayer<T> _norm1;
     private readonly LayerBase<T> _attention;
@@ -78,36 +84,6 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>
         yield return _attention;
         yield return _norm2;
         yield return _moe;
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get { long total = 0; foreach (var l in SubLayers()) total += l.ParameterCount; return total; }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var l in SubLayers()) acc = Vector<T>.Concatenate(acc, l.GetParameters());
-        return acc;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        long expected = ParameterCount;
-        if (parameters.Length != expected)
-            throw new System.ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
-        int offset = 0;
-        foreach (var l in SubLayers())
-        {
-            int count = (int)l.ParameterCount;
-            if (count == 0) continue;
-            l.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
     }
 
     /// <inheritdoc/>

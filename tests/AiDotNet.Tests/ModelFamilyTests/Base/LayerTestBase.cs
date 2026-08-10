@@ -339,12 +339,6 @@ public abstract class LayerTestBase
     // =========================================================================
 
     /// <summary>
-    /// Whether the shape-robustness sweep applies. Override to <c>false</c> ONLY for a layer whose input
-    /// shape is genuinely not perturbable, never to silence a crash.
-    /// </summary>
-    protected virtual bool ShapeRobustnessApplicable => true;
-
-    /// <summary>
     /// Feeds the layer input shapes one step away from its declared one, and requires every outcome to be
     /// either a real output or a deliberate rejection.
     /// </summary>
@@ -371,7 +365,13 @@ public abstract class LayerTestBase
     public async Task Forward_NearbyShapes_AreHandledOrDeliberatelyRejected()
     {
         await Task.Yield();
-        if (!ShapeRobustnessApplicable) return;
+
+        // NO OPT-OUT. There used to be a ShapeRobustnessApplicable hook, and an override to false
+        // returned from this test having asserted NOTHING -- so the layers most likely to need this
+        // invariant were the ones most likely to be excused from it, silently and permanently.
+        // Every layer can participate, because the invariant already accepts an explicit rejection:
+        // a layer whose input shape is genuinely fixed satisfies it by REFUSING nearby shapes with a
+        // validation exception that names the constraint, which is the correct behaviour anyway.
         using var _arena = TensorArena.Create();
 
         var probes = AiDotNet.NeuralNetworks.ShapeRelationDiscovery.ProbeShapes(InputShape);
@@ -431,29 +431,90 @@ public abstract class LayerTestBase
         }
     }
 
-    /// <summary>An exception that states a shape constraint, as opposed to one that leaks an assumption.</summary>
-    /// <remarks>
-    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
-    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
-    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
-    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
-    /// </remarks>
     /// <summary>Environmental failure - the machine, not the layer.</summary>
     private static bool IsResourceExhaustion(System.Exception ex)
         => ex is System.OutOfMemoryException or System.InsufficientExecutionStackException
             or System.OperationCanceledException;
 
+    /// <summary>An exception that STATES a shape constraint, as opposed to one that leaks an assumption.</summary>
+    /// <remarks>
+    /// The AiDotNet.Exceptions shape family is listed FIRST because it is the best possible answer
+    /// here, not a grudging allowance: a layer that throws TensorShapeMismatchException has not merely
+    /// avoided crashing, it has named the exact constraint in a type built to carry it. A generic
+    /// ArgumentException also passes, since stating the constraint in prose is still stating it.
+    /// <para>
+    /// THREE TYPES WERE REMOVED BECAUSE THEY SWALLOW THE DEFECT THIS INVARIANT HUNTS. The target is a
+    /// layer that ASSUMES a shape silently and then fails from inside a kernel; accepting the generic
+    /// failure modes as "deliberate rejection" meant exactly that failure counted as a pass:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>InvalidOperationException is what a kernel throws when its own state is wrong -- the
+    /// canonical shape of the bug, not of a rejection.</item>
+    /// <item>NotSupportedException and NotImplementedException say the layer does not do this at all.
+    /// That is a gap in the layer, and marking it as a well-stated shape constraint hides it.</item>
+    /// </list>
+    /// <para>
+    /// A layer that genuinely means to reject a shape has five precise types and ArgumentException
+    /// available, all of which state the constraint.
+    /// </para>
+    /// </remarks>
+    /// <summary>Whether an exception is the layer deliberately refusing a shape.</summary>
+    /// <remarks>
+    /// <para>
+    /// The dedicated exception types are self-evidently shape rejections and are accepted outright.
+    /// A bare <see cref="System.ArgumentException"/> is not: it is also what an internal argument
+    /// failure throws, so accepting every one of them let a defect that names no shape constraint
+    /// pass as correct behaviour -- which is the exact distinction this invariant exists to draw.
+    /// </para>
+    /// <para>
+    /// So a generic ArgumentException has to SAY something about shape. The vocabulary below is the
+    /// language layer validation actually uses; a message drawn from none of it is treated as a
+    /// crash and reported, which is the safe direction: a real rejection worded outside this
+    /// vocabulary shows up as a failure asking for a clearer message, whereas the old behaviour hid
+    /// real defects.
+    /// </para>
+    /// </remarks>
     private static bool IsDeliberateShapeRejection(System.Exception ex)
-        => ex is AiDotNet.Exceptions.TensorShapeMismatchException
+    {
+        if (ex is AiDotNet.Exceptions.TensorShapeMismatchException
             or AiDotNet.Exceptions.TensorDimensionException
             or AiDotNet.Exceptions.TensorRankException
             or AiDotNet.Exceptions.InvalidInputDimensionException
             or AiDotNet.Exceptions.VectorLengthMismatchException
-            or System.ArgumentException
-            or System.InvalidOperationException
-            or System.NotSupportedException
-            or System.NotImplementedException
-            or System.RankException;
+            or System.RankException)
+        {
+            return true;
+        }
+
+        if (ex is not System.ArgumentException) return false;
+
+        return NamesAShapeConstraint(ex.Message);
+    }
+
+    /// <summary>The words a shape validation message uses when it states a constraint.</summary>
+    /// <remarks>
+    /// SHAPE-SPECIFIC ONLY. An earlier list also carried "expected", "size", "must be", "must have"
+    /// and "mismatch" -- none of which is evidence of a SHAPE constraint. `ArgumentException("Expected
+    /// a non-null value.")` matched, so an internal argument failure was accepted as deliberate shape
+    /// validation, which is the exact conflation this invariant exists to prevent. Every term below
+    /// names a tensor axis or an extent and cannot appear in a generic argument message by accident.
+    /// </remarks>
+    private static readonly string[] ShapeConstraintVocabulary =
+    {
+        "shape", "dimension", "dimensions", "rank", "axis", "axes",
+        "height", "width", "channel", "channels", "batch", "divisible",
+    };
+
+    private static bool NamesAShapeConstraint(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        foreach (var word in ShapeConstraintVocabulary)
+        {
+            if (message!.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        }
+        return false;
+    }
 
     /// <summary>Best-effort symbolic summary of what the layer did to the shapes it accepted.</summary>
     private static string DescribeDiscoveredRelation(List<(int[] Input, int[] Output)> observations)
@@ -956,15 +1017,33 @@ public abstract class LayerTestBase
         // matrix entry in a dense flat buffer, so comparing them positionally checks unrelated
         // numbers. Map through the COO coordinates instead. A sparse gradient shares the parameter's
         // payload layout, so it is read directly.
+        // THE PUBLIC SPARSE API, NOT THE INTERNAL PAYLOAD. This read the backing DataVector of
+        // the very type under test, so a change to that payload's layout would silently change
+        // what the gradient check compares -- the helper would keep returning a number and the
+        // number would mean something else. SparseTensor<double> exposes Values / RowIndices /
+        // ColumnIndices, which is what the SparseTensor suites themselves assert against.
+        //
+        // COO construction is rank-2, so the column stride is Shape[1]; a non-rank-2 sparse
+        // tensor has no COO reading and is refused rather than indexed on a guess.
         static double ReadAnalyticalScalar(Tensor<double> grad, Tensor<double> param, int i)
         {
-            if (grad is SparseTensor<double> gsp) return gsp.DataVector[i];
+            if (grad is SparseTensor<double> gsp)
+            {
+                return i >= 0 && i < gsp.Values.Length ? gsp.Values[i] : 0.0;
+            }
+
             if (param is SparseTensor<double> psp)
             {
-                int cols = psp.Shape[psp.Shape.Length - 1];
-                int flat = psp.RowIndices[i] * cols + psp.ColumnIndices[i];
-                return flat >= 0 && flat < grad.Length ? grad.DataVector[flat] : 0.0;
+                Assert.True(psp.Shape.Length == 2,
+                    $"SparseTensor COO indices are rank-2; got rank {psp.Shape.Length}, so " +
+                    "RowIndices/ColumnIndices cannot be mapped to a flat gradient index.");
+                if (i < 0 || i >= psp.RowIndices.Length) return 0.0;
+
+                int cols = psp.Shape[1];
+                int flat = (psp.RowIndices[i] * cols) + psp.ColumnIndices[i];
+                return flat >= 0 && flat < grad.Length ? grad[flat] : 0.0;
             }
+
             return grad[i];
         }
 

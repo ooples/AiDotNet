@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Universal Instance Perception as Object Discovery and Retrieval", "https://arxiv.org/abs/2303.06674", Year = 2023, Authors = "Yan et al.")]
-public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
+public class UNINEXT<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly UNINEXTOptions _options;
 
@@ -79,39 +79,24 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
+    // Only UNINEXT's OWN configuration lives here. _height, _width, _channels, _numClasses,
+    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
+    // come from PanopticSegmentationBase -> SegmentationModelBase.
     private readonly int _numQueries;
     private readonly UNINEXTModelSize _modelSize;
     private readonly int[] _channelDims;
     private readonly int _decoderDim;
     private readonly int[] _depths;
     private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
-    private InferenceSession? _onnxSession;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _disposed;
-    private int _encoderLayerEnd;
 
     #endregion
 
     #region Properties
 
-    /// <summary>
-    /// Gets whether this UNINEXT instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
+    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
+    // SegmentationModelBase and say exactly the same thing.
     internal bool UseNativeMode => _useNativeMode;
     internal UNINEXTModelSize ModelSize => _modelSize;
-    internal int NumClasses => _numClasses;
 
     #endregion
 
@@ -143,20 +128,21 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         UNINEXTModelSize modelSize = UNINEXTModelSize.R50,
         double dropRate = 0.1,
         UNINEXTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        // The base resolves numClasses/native-mode, and defaults `optimizer` LAZILY via
+        // CreateDefaultOptimizer() - which is why null is passed straight through instead of
+        // `optimizer ?? new AdamWOptimizer<...>(this)`, an expression that cannot appear in a
+        // constructor initializer.
+        : base(architecture, optimizer, lossFunction, numClasses,
+               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
     {
         _options = options ?? new UNINEXTOptions();
         Options = _options;
+        // UNINEXT's own detection-scale defaults, which differ from the base's 512x512.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 800;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1333;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = dropRate;
-        _useNativeMode = true;
-        _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
@@ -186,31 +172,20 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 300,
         UNINEXTModelSize modelSize = UNINEXTModelSize.R50,
         UNINEXTOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
+        // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
+        : base(architecture, onnxModelPath, numClasses,
+               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
     {
         _options = options ?? new UNINEXTOptions();
         Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"UNINEXT ONNX model not found: {onnxModelPath}");
-
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 800;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1333;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = 0.0;
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _optimizer = null;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
-
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load UNINEXT ONNX model: {ex.Message}", ex); }
 
         InitializeLayers();
     }
@@ -258,7 +233,7 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput, Optimizer);
         }
         finally
         {
@@ -281,7 +256,7 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         };
     }
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
@@ -292,7 +267,7 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         return features;
     }
 
-    private Tensor<T> PredictOnnx(Tensor<T> input)
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4;
@@ -311,21 +286,7 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         return result;
     }
 
-    private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
-
-    private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
+    // AddBatchDimension and RemoveBatchDimension come from SegmentationModelBase.
 
     #endregion
 
@@ -362,32 +323,8 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var newParams = new Vector<T>(count);
-                for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
-                layer.UpdateParameters(newParams);
-                offset += count;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this UNINEXT model's configuration.
     /// </summary>
@@ -468,48 +405,28 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return _useNativeMode
-            ? new UNINEXT<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
+            ? new UNINEXT<T>(Architecture, Optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
             : new UNINEXT<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    {
-        if (!_disposed)
-        {
-            if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; }
-            _disposed = true;
-        }
-        base.Dispose(disposing);
-    }
+    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
+    // and UNINEXT owns no further unmanaged resources.
 
     #endregion
 
     #region IPanopticSegmentation Implementation
 
-    int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
-    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
-    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
-    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
+    // NumClasses, InputHeight, InputWidth, IsOnnxMode, Segment, NumStuffClasses and NumThingClasses
+    // are all supplied by SegmentationModelBase / PanopticSegmentationBase.
 
-    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
+    /// <inheritdoc/>
+    public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
         var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        int numStuff = Math.Max(1, _numClasses / 3);
+        int numStuff = NumStuffClasses;
         var instanceMap = new Tensor<T>([h, w]);
         var panopticMap = new Tensor<T>([h, w]);
         var segments = new List<PanopticSegment<T>>();

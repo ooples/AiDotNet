@@ -335,7 +335,6 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             idx += c;
         }
     }
-
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

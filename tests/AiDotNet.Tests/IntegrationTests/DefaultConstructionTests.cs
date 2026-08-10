@@ -24,9 +24,24 @@ public class DefaultConstructionTests
 
     /// <summary>
     /// How long to let a timed-out construction actually finish before moving on, so its CPU cost
-    /// is not charged to the next model measured. Bounded so a true deadlock cannot hang the suite.
+    /// is not charged to the next model measured.
     /// </summary>
     private static readonly TimeSpan StragglerDrainTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>Total draining allowed across the whole sweep, not per straggler.</summary>
+    /// <remarks>
+    /// PER-TYPE DRAINING COULD EXCEED THE TEST'S OWN TIMEOUT. The sweep runs under
+    /// <c>[Fact(Timeout = 120000)]</c>. At 10 s per construction plus 30 s of draining, one
+    /// straggler cost up to 40 s and three consumed the entire budget, at which point xUnit aborts
+    /// the test -- which reports NOTHING, while the abandoned constructor threads keep running into
+    /// the next test anyway. That is strictly worse than the CPU-charging problem draining exists to
+    /// solve.
+    ///
+    /// So the budget is shared across the sweep and checked before each drain. Once it is spent,
+    /// later stragglers are recorded as undrained and the sweep keeps moving, which is the same
+    /// outcome the per-type bound produced for a genuine deadlock.
+    /// </remarks>
+    private static readonly TimeSpan TotalStragglerDrainBudget = TimeSpan.FromSeconds(45);
 
     public DefaultConstructionTests(ITestOutputHelper output)
     {
@@ -100,6 +115,7 @@ public class DefaultConstructionTests
         var timeouts = new List<string>();
         var undrained = new List<string>();
         var successes = 0;
+        var drainSpent = new System.Diagnostics.Stopwatch();
 
         foreach (var closedType in types)
         {
@@ -134,7 +150,21 @@ public class DefaultConstructionTests
                     //
                     // Bounded, so a genuine deadlock cannot hang the suite; anything still running
                     // after the drain is counted and reported rather than silently accumulating.
-                    if (!task.Wait(StragglerDrainTimeout))
+                    var remainingDrain = TotalStragglerDrainBudget - drainSpent.Elapsed;
+                    if (remainingDrain <= TimeSpan.Zero)
+                    {
+                        // The shared budget is gone. Recording rather than draining keeps the sweep
+                        // inside its own timeout; an aborted test reports nothing at all.
+                        undrained.Add(typeName);
+                        continue;
+                    }
+
+                    var thisDrain = remainingDrain < StragglerDrainTimeout ? remainingDrain : StragglerDrainTimeout;
+                    drainSpent.Start();
+                    bool drained = task.Wait(thisDrain);
+                    drainSpent.Stop();
+
+                    if (!drained)
                     {
                         undrained.Add(typeName);
                     }
@@ -206,5 +236,20 @@ public class DefaultConstructionTests
         Assert.True(failures.Count == 0,
             $"{failures.Count} model(s) threw exceptions during default construction:\n" +
             string.Join("\n", failures.Select(f => $"  {f.TypeName}: {f.Error}")));
+
+        // AND A FLOOR ON WHAT WAS ACTUALLY VERIFIED. Gating on failures.Count alone meant timeouts
+        // and undrained stragglers were printed and discarded, so a change that made every
+        // constructor slow -- or a heavily loaded runner -- drove every type into the timeout
+        // branch, left failures empty, and reported green having constructed nothing.
+        //
+        // The floor is a fraction rather than a fixed count so it does not need editing as models
+        // are added, and it is deliberately loose: an individual timeout still must not fail the
+        // shard (that is the whole point of the gate above), but a systemic regression turns it red.
+        int minimumSuccesses = Math.Max(1, (types.Count * 2) / 3);
+        Assert.True(successes >= minimumSuccesses,
+            $"Only {successes} of {types.Count} models constructed successfully, below the floor of " +
+            $"{minimumSuccesses}. {timeouts.Count} timed out and {undrained.Count} were still running " +
+            "after the shared drain budget. A sweep that verifies almost nothing must not report " +
+            "green: this is a systemic regression or a runner problem, not an individual slow model.");
     }
 }

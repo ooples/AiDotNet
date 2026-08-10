@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
 
 /// <summary>
@@ -52,8 +54,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
     "https://doi.org/10.1109/ADPRL.2009.4927542",
     Year = 2009,
     Authors = "van Seijen, H., van Hasselt, H., Whiteson, S., & Wiering, M.")]
-public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
+public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table, padded to ActionSize per state and clamped to one row -- the same
+    /// flattening this agent used to write by hand.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableParameterSource<T>(_qTable, _options.ActionSize));
+    }
     private ExpectedSARSAOptions<T> _options;
 
     /// <inheritdoc/>
@@ -257,7 +267,6 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -290,43 +299,6 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        int stateCount = Math.Max(_qTable.Count, 1);
-        var parameters = new Vector<T>(stateCount * _options.ActionSize);
-
-        int idx = 0;
-        foreach (var stateQValues in _qTable.Values)
-        {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Reconstruct Q-table from vector
-        _qTable.Clear();
-
-        var stateKeys = _qTable.Keys.ToList();
-        int maxStates = parameters.Length / _options.ActionSize;
-
-        for (int i = 0; i < Math.Min(maxStates, stateKeys.Count); i++)
-        {
-            var qValues = new Dictionary<int, T>();
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                int idx = i * _options.ActionSize + action;
-                qValues[action] = parameters[idx];
-            }
-            _qTable[stateKeys[i]] = qValues;
-        }
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new ExpectedSARSAAgent<T>(_options);
@@ -345,12 +317,12 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
+    public void ApplyGradients(Vector<T> gradients, T learningRate) { }
 
     public override void SaveModel(string filepath)
     {

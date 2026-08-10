@@ -345,30 +345,8 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
         base.Train(input, target);
     }
 
-    /// <summary>
-    /// Updates model parameters from a flat vector.
-    /// </summary>
-    /// <param name="parameters">Flat parameter vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This lets you load a precomputed set of weights
-    /// into the model, which is useful for serialization or fine-tuning.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count <= 0)
-                continue;
-
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata describing this model instance.
     /// </summary>

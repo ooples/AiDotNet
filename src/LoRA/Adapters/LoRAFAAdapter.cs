@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -39,6 +40,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - You're working with very large models
 /// </para>
 /// </remarks>
+[AutoParameters]
 public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
@@ -54,42 +56,6 @@ public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     /// and then frozen, never updated during training.
     /// </remarks>
     public bool IsMatrixAFrozen => _freezeMatrixA;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters (only matrix B).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// For LoRA-FA, only matrix B is trainable. Matrix A is frozen, so it doesn't count
-    /// toward trainable parameters. This results in approximately 50% parameter reduction
-    /// compared to standard LoRA.
-    /// </para>
-    /// <para><b>For Beginners:</b> This returns how many parameters will actually be trained.
-    /// Since matrix A is frozen, we only count matrix B's parameters. If the base layer is
-    /// also frozen (typical case), this is just matrix B. Otherwise, it's base layer + matrix B.
-    ///
-    /// For a layer with input size 1000, output size 1000, and rank 8:
-    /// - Matrix B size: rank × outputSize = 8 × 1000 = 8,000 parameters
-    /// - Matrix A size: inputSize × rank = 1000 × 8 = 8,000 parameters (but frozen, so not counted)
-    /// - Total trainable: 8,000 (50% less than standard LoRA's 16,000)
-    /// </para>
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            // CRITICAL: Return full LoRA parameter count (A + B) to match base class invariants
-            // Even though matrix A is frozen, it must be included in the parameter buffer
-            // to avoid IndexOutOfRangeException in base class private helpers
-            // The freeze logic is handled in UpdateParameters, not in buffer sizing
-            if (!_freezeBaseLayer)
-            {
-                return _baseLayer.ParameterCount + _loraLayer.ParameterCount;
-            }
-
-            return _loraLayer.ParameterCount;
-        }
-    }
 
     /// <summary>
     /// Initializes a new LoRA-FA adapter wrapping an existing layer.
@@ -144,8 +110,12 @@ public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Forward pass is identical to standard LoRA
-        // Frozen matrix A still participates in computation
-        return base.Forward(input);
+        // Frozen matrix A still participates in computation.
+        // ForwardTraced, NOT Forward: LayerBase.Forward is the non-virtual recording wrapper that
+        // dispatches to ForwardTraced, so base.Forward(input) would come straight back here and
+        // recurse until the stack overflows. LoRAAdapterBase overrides ForwardTraced, so this is the
+        // base implementation that call was always meant to reach.
+        return base.ForwardTraced(input);
     }
 
     /// <summary>
@@ -215,41 +185,6 @@ public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update the adapter's parameter vector
-        UpdateParametersFromLayers();
-    }
-
-    /// <summary>
-    /// Updates the parameter vector from the current layer states.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// CRITICAL: For LoRA-FA, this packs BOTH matrix A and B to match ParameterCount.
-    /// Even though matrix A is frozen, it must be included in the parameter buffer
-    /// to maintain base-class invariants and prevent buffer overruns.
-    /// The freeze logic is in UpdateParameters, not in buffer packing.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateParametersFromLayers()
-    {
-        int idx = 0;
-
-        // If base layer is not frozen, pack its parameters first
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
-        // Pack ALL LoRA parameters (both matrix A and B)
-        // Matrix A is frozen but must be in the buffer for base class compatibility
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
     }
 
     /// <summary>

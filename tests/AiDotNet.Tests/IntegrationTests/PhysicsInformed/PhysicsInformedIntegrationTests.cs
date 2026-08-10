@@ -161,7 +161,7 @@ public class PhysicsInformedIntegrationTests
         var predicted = new Vector<double>(new double[] { 2.0 });
         var actual = new Vector<double>(new double[] { 1.0 });
 
-        var gradient = loss.CalculateDerivative(predicted, actual);
+        var gradient = loss.ComputeGradient(predicted, actual);
 
         Assert.Single(gradient);
         // Gradient of MSE: 2*(predicted - actual)/n = 2*(2-1)/1 = 2

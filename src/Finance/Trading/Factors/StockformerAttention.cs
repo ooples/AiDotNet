@@ -119,7 +119,35 @@ public sealed class StockformerAttention<T>
     /// sentinel rather than negative infinity, because inf - inf produces NaN if an entire row is
     /// masked.
     /// </remarks>
+    /// <remarks>
+    /// CACHED per position count. The mask depends only on <paramref name="positions"/>, and it was
+    /// allocated and filled again for every asset, every layer and every training step. Keyed on the
+    /// position count because that is its only input; the tensor is never mutated after construction,
+    /// so one instance can serve every caller of that size.
+    /// </remarks>
+    private static readonly Dictionary<int, Tensor<T>> CausalBiasCache = new();
+
     private static Tensor<T> CausalBias(int positions)
+    {
+        lock (CausalBiasCache)
+        {
+            if (CausalBiasCache.TryGetValue(positions, out var cached)) return cached;
+        }
+
+        var built = BuildCausalBias(positions);
+
+        lock (CausalBiasCache)
+        {
+            // Another thread may have built the same size first; either instance is equally valid,
+            // so keep whichever landed and hand it back.
+            if (CausalBiasCache.TryGetValue(positions, out var raced)) return raced;
+            CausalBiasCache[positions] = built;
+        }
+
+        return built;
+    }
+
+    private static Tensor<T> BuildCausalBias(int positions)
     {
         var bias = new Tensor<T>(new[] { positions, positions });
         var blocked = Ops.FromDouble(-1e9);

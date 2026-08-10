@@ -54,14 +54,224 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
 
     // --- IParameterizable ---
 
-    /// <inheritdoc/>
-    public abstract Vector<T> GetParameters();
+    /// <summary>
+    /// The components this model's parameters live in, in registration order, which is also the
+    /// serialization order.
+    /// </summary>
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this model's surface. Registration order is
+    /// serialization order, so keep it stable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Register only what is TRAINED. A frozen teacher, a target copy or a cached projection is not
+    /// an independent parameter: registering one inflates the count and hands an optimizer weights
+    /// that are only ever meant to be written to.
+    /// </para>
+    /// <para>Null is tolerated, so a model may register a component a configuration did not build,
+    /// and registration is idempotent by reference.</para>
+    /// </remarks>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+    }
+
+    /// <summary>
+    /// Declare this model's trainable components here with <see cref="RegisterParameterComponent"/>.
+    /// Called once, lazily, so it runs after the constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
+    /// to refresh anything DERIVED from them.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private IReadOnlyList<IParameterSource<T>> Components
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+
+                // Latch only once something was actually registered. A model can be asked for its
+                // parameters BEFORE it has built them, and RegisterParameterComponent tolerates
+                // null, so such a call would otherwise register nothing and still mark the job
+                // done, leaving the model permanently reporting zero.
+                _componentsRegistered = _parameterComponents.Count > 0;
+
+                // Bring lazily-shaped networks into existence, once. ResolveLazyLayerShapes pins a
+                // lazy layer's shapes but allocates nothing, and the layer parameter surface
+                // refuses to materialize on a read so a bare count can never OOM. A network that
+                // has never been forwarded would otherwise report zero parameters despite a fully
+                // determined architecture -- see the QMIXAgent case on the RL base.
+                for (int i = 0; i < _parameterComponents.Count; i++)
+                {
+                    if (_parameterComponents[i] is NeuralNetworkBase<T> network)
+                        network.MaterializeParameters();
+                }
+            }
+            return _parameterComponents;
+        }
+    }
 
     /// <inheritdoc/>
-    public abstract void SetParameters(Vector<T> parameters);
+    /// <remarks>
+    /// Concatenates the registered components in registration order, so the length is
+    /// <see cref="ParameterCount"/> by construction rather than by agreement.
+    /// <para>
+    /// Virtual rather than abstract: a model that registers its components inherits all three
+    /// surfaces and writes no parameter plumbing at all. It was abstract, which FORCED every one of
+    /// the 299 types in this hierarchy to hand-write the triple -- the identical defect LayerBase
+    /// and DiffusionModelBase had, and the reason count and vector could read different sources and
+    /// silently disagree.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> GetParameters()
+    {
+        var components = Components;
+        if (components.Count == 0) return new Vector<T>(0);
+
+        var parts = new Vector<T>[components.Count];
+        int total = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            parts[i] = components[i].GetParameters();
+            total += parts[i].Length;
+        }
+
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < parts.Length; i++)
+        {
+            for (int j = 0; j < parts[i].Length; j++)
+            {
+                result[offset++] = parts[i][j];
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Whether this model's weights can be written. Override and return <c>false</c> for a model
+    /// running a loaded graph it does not own; the default is <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A model wrapping an ONNX session cannot honour a restore: the weights belong to the loaded
+    /// graph, and writing the native-side tensors would leave the model reporting new parameters
+    /// while still computing with the old graph. Hundreds of models expressed that by overriding
+    /// the parameter surfaces with <c>if (!_useNativeMode) throw new NotSupportedException(...)</c>
+    /// and hand-rolling the rest of the method around it -- the same refusal written out hundreds
+    /// of times, each free to word it differently or to guard one surface and forget another.
+    /// </para>
+    /// <para>
+    /// Stating it once here means a model declares the fact and inherits the behaviour:
+    /// <c>protected override bool SupportsParameterMutation =&gt; _useNativeMode;</c>. Read-only
+    /// access -- <see cref="ParameterCount"/> and <see cref="GetParameters"/> -- is deliberately
+    /// NOT gated: an ONNX-mode model can still be counted and inspected, it just cannot be written.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsParameterMutation => true;
+
+    /// <summary>
+    /// Throws the standard refusal when <see cref="SupportsParameterMutation"/> is <c>false</c>.
+    /// </summary>
+    protected void GuardParameterMutation()
+    {
+        if (!SupportsParameterMutation)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} is not in a mode where its parameters can be written: its weights "
+                + "belong to a loaded graph rather than to this model. Construct it in native mode "
+                + "to train, restore or otherwise mutate parameters. Reading them -- ParameterCount "
+                + "and GetParameters -- is still supported.");
+        }
+    }
 
     /// <inheritdoc/>
-    public virtual long ParameterCount => GetParameters().Length;
+    /// <remarks>
+    /// Distributes a flat vector over the same components <see cref="GetParameters"/> folds, which
+    /// is exactly what <see cref="SetParameters"/> does -- the two names are one operation. Models
+    /// used to override this because the interface demanded an answer and the base gave none; every
+    /// such override either re-sliced the vector across the same components by hand, delegated
+    /// straight back, or refused. All three are now the base's job.
+    /// </remarks>
+    public virtual void UpdateParameters(Vector<T> parameters) => SetParameters(parameters);
+
+    /// <inheritdoc/>
+    /// <remarks>The inverse of <see cref="GetParameters"/>: each component takes back the slice it
+    /// contributed, then <see cref="OnParametersRestored"/> refreshes whatever derives from them.
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        GuardParameterMutation();
+
+        var components = Components;
+        long expected = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            expected += components[i].ParameterCount;
+        }
+
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        }
+
+        int offset = 0;
+        for (int i = 0; i < components.Count; i++)
+        {
+            int n = checked((int)components[i].ParameterCount);
+            var slice = new Vector<T>(n);
+            for (int j = 0; j < n; j++)
+            {
+                slice[j] = parameters[offset++];
+            }
+            components[i].SetParameters(slice);
+        }
+
+        OnParametersRestored();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Folds the same enumeration the vector does, so the two cannot disagree. A model that has not
+    /// registered components falls back to measuring its own <see cref="GetParameters"/>, which is
+    /// what every unconverted model in this hierarchy still relies on.
+    /// </remarks>
+    public virtual long ParameterCount
+    {
+        get
+        {
+            var components = Components;
+            if (components.Count == 0) return GetParameters().Length;
+
+            long total = 0;
+            for (int i = 0; i < components.Count; i++)
+            {
+                total += components[i].ParameterCount;
+            }
+            return total;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;

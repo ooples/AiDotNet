@@ -6,6 +6,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
+using AiDotNet.ReinforcementLearning.Parameters;
+
 namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
 
 /// <summary>
@@ -55,8 +57,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
     "https://citeseerx.ist.psu.edu/doc/10.1.1.17.2539",
     Year = 1994,
     Authors = "Rummery, G. A. & Niranjan, M.")]
-public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
+public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The Q-table, padded to ActionSize per state and clamped to one row -- the same
+    /// flattening this agent used to write by hand.</remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new QTableParameterSource<T>(_qTable, _options.ActionSize));
+    }
     private SARSAOptions<T> _options;
 
     /// <inheritdoc/>
@@ -235,13 +245,6 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    // Clamp the parameter count to a minimum of one row × actionSize so
-    // GetParameters never returns a zero-length vector for a freshly
-    // constructed agent — callers (the IParameterizable contract and the
-    // generated Parameters_ShouldBeNonEmpty invariant test) expect a positive
-    // count even before any state has been visited.
-    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
-
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -274,42 +277,6 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        // Flatten Q-table into vector. Clamp the minimum to a single empty row
-        // so the result matches ParameterCount and never returns an empty
-        // vector — see ParameterCount comment.
-        int stateCount = Math.Max(_qTable.Count, 1);
-        var parameters = new Vector<T>(stateCount * _options.ActionSize);
-
-        int idx = 0;
-        foreach (var stateQValues in _qTable.Values)
-        {
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                parameters[idx++] = stateQValues[action];
-            }
-        }
-
-        return parameters;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Tabular RL methods cannot restore Q-values from parameters alone
-        // because the parameter vector contains only Q-values, not state keys.
-        //
-        // For a fresh agent (empty Q-table), state keys are unknown, so restoration fails.
-        // For proper save/load, use Serialize()/Deserialize() which preserves state mappings.
-        //
-        // This is a fundamental limitation of tabular methods - unlike neural networks,
-        // the "parameters" (Q-values) are meaningless without their state associations.
-
-        throw new NotSupportedException(
-            "Tabular SARSA agents do not support parameter restoration without state information. " +
-            "Use Serialize()/Deserialize() methods instead, which preserve state-to-Q-value mappings.");
-    }
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new SARSAAgent<T>(_options);
@@ -324,7 +291,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return clone;
     }
 
-    public override Vector<T> ComputeGradients(
+    public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
@@ -332,7 +299,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
         return GetParameters();
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tabular methods don't use gradients
     }

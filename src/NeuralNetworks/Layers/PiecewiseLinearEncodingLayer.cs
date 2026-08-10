@@ -1,4 +1,7 @@
-﻿using AiDotNet.Autodiff;
+﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
+// TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
+using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -23,7 +26,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
+// Rank 2 only, and that comes from ForwardTraced rather than from the base constructor. The base is
+// handed [numFeatures] -> [numFeatures * numBins], but the forward reads `int batchSize = input.Shape[0]`
+// and indexes `input[b * _numFeatures + f]`, so the tensor it actually consumes is [batch, features].
+// A rank-1 input would be interpreted as numFeatures separate batches of one element - not a case this
+// layer handles - so no rank-1 layout is declared.
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _numFeatures;
     private readonly int _numBins;
@@ -41,11 +52,35 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
     /// </summary>
     public int OutputDimension => _numFeatures * _numBins;
 
-    /// <inheritdoc/>
-    public override bool SupportsTraining => true;
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Hand-written rather than generated because the feature axis is REPLACED, not carried: the encoding
+    /// widens every scalar feature into <c>_numBins</c> activations. Taken straight from
+    /// <c>ForwardTraced</c>, which allocates
+    /// <c>TensorAllocator.Rent&lt;T&gt;([batchSize, _numFeatures * _numBins])</c>.
+    /// </para>
+    /// <para>
+    /// <c>Fixed</c> rather than <c>Scaled(Features, _numBins, 1)</c> on purpose. The output width does not
+    /// depend on the incoming feature count at all - the layer writes exactly
+    /// <c>_numFeatures * _numBins</c> values per row using its OWN <c>_numFeatures</c>, so a mismatched
+    /// input would be silently mis-encoded rather than produce a proportionally sized output. Fixing the
+    /// size to <see cref="OutputDimension"/> reports what the layer actually emits.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2 || _numFeatures <= 0 || _numBins <= 0) return null;
+
+        return new[]
+        {
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputDimension)),
+        };
+    }
 
     /// <inheritdoc/>
-    public override long ParameterCount => _numFeatures * (_numBins - 1);
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Initializes piecewise linear encoding.
@@ -170,12 +205,4 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
         Engine.TensorFill(_binBoundaryGradients, NumOps.Zero);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var result = new Vector<T>(_binBoundaries.Length);
-        for (int i = 0; i < _binBoundaries.Length; i++)
-            result[i] = _binBoundaries[i];
-        return result;
-    }
 }

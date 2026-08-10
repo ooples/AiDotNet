@@ -23,6 +23,10 @@ public class WaveGradOptions : VocoderOptions
         MelChannels = 80;
         HopSize = 300;
         NumDiffusionSteps = 50;
+        // Adam learning rate from the paper (Chen et al., 2021, S3.2). Inherited from
+        // TtsModelOptions, so callers can still override it; this only pins WaveGrad's own default
+        // to the published value instead of the generic TTS one.
+        LearningRate = 2e-4;
     }
 
     public int NumDownsampleBlocks { get; set; } = 4;

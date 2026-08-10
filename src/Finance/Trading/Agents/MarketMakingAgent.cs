@@ -48,8 +48,13 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Extending Deep Reinforcement Learning Frameworks in Cryptocurrency Market Making", "https://arxiv.org/abs/2004.06985")]
-public class MarketMakingAgent<T> : TradingAgentBase<T>
+public class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
+    /// <inheritdoc />
+    /// <remarks>The policy network, the only trained component this agent exposed.</remarks>
+    protected override void RegisterComponents()
+        => RegisterParameterComponent(_policyNetwork);
     #region Fields
 
     private readonly INeuralNetwork<T> _policyNetwork;
@@ -67,9 +72,6 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
 
     /// <inheritdoc/>
     public override int FeatureCount => TradingOptions.StateSize;
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _policyNetwork.ParameterCount;
 
     #endregion
 
@@ -348,26 +350,6 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override void Deserialize(byte[] data) => _policyNetwork.Deserialize(data);
 
-    /// <summary>
-    /// Executes GetParameters for the MarketMakingAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MarketMakingAgent model, GetParameters performs a supporting step in the workflow. It keeps the MarketMakingAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameters() => _policyNetwork.GetParameters();
-
-    /// <summary>
-    /// Executes SetParameters for the MarketMakingAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MarketMakingAgent model, SetParameters performs a supporting step in the workflow. It keeps the MarketMakingAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters) => _policyNetwork.SetParameters(parameters);
-
     #endregion
 
     #region Model Metadata
@@ -417,7 +399,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the MarketMakingAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the MarketMakingAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return _policyNetwork.ComputeGradients(Tensor<T>.FromVector(input), Tensor<T>.FromVector(target), lossFunction);
     }
@@ -430,7 +412,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the MarketMakingAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the MarketMakingAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _policyNetwork.ApplyGradients(gradients, learningRate);
     }

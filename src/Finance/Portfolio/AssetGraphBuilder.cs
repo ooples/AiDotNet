@@ -133,10 +133,22 @@ public class AssetGraphBuilder<T>
                 $"Series must have equal length; got {first.Length} and {second.Length}.", nameof(second));
         if (first.Length < 2)
             throw new ArgumentException("At least 2 observations are required.", nameof(first));
-
         int n = first.Length;
-        var a = DoubleCentredDistances(first, n);
-        var b = DoubleCentredDistances(second, n);
+        return DistanceCorrelationFromCentred(
+            DoubleCentredDistances(first, n), DoubleCentredDistances(second, n), n);
+    }
+
+    /// <summary>
+    /// The distance correlation of two series whose double-centred distance matrices are already in
+    /// hand.
+    /// </summary>
+    /// <remarks>
+    /// Split out so a pairwise sweep can centre each column ONCE instead of once per partner. The
+    /// centring is the expensive half -- it is O(n^2) per call and allocates an n x n array -- so
+    /// doing it inside the pair loop repeated each column's work (assets - 1) times.
+    /// </remarks>
+    private static double DistanceCorrelationFromCentred(double[] a, double[] b, int n)
+    {
 
         double dcov2 = 0.0, dvarX2 = 0.0, dvarY2 = 0.0;
         for (int i = 0; i < n * n; i++)
@@ -220,16 +232,56 @@ public class AssetGraphBuilder<T>
             for (int s = 0; s < steps; s++) column[s] = panel[(s * assets) + a];
             columns[a] = column;
         }
+        // Each column is double-centred ONCE instead of once per partner. That loop called
+        // DistanceCorrelation for every pair, and each of those calls centred BOTH of its arguments,
+        // so every column paid the O(steps^2) centring and its n x n allocation (assets - 1) times.
+        //
+        // BOUNDED, because the cache is the trade: holding every column's centred matrix costs
+        // assets * steps^2 * 8 bytes, which at 500 assets over a 250-step panel is about 250 MB and
+        // grows with the paper's ~5,000-firm scale. Columns are processed in blocks sized to a fixed
+        // memory budget, so only one block plus one partner column is resident. Every pair is still
+        // visited exactly once, and each column is centred at most (blocks) times rather than
+        // (assets - 1) times.
+        const long CentringBudgetBytes = 64L * 1024 * 1024;
+        long perColumnBytes = (long)steps * steps * sizeof(double);
+        int blockSize = perColumnBytes > 0
+            ? (int)Math.Max(1, Math.Min(assets, CentringBudgetBytes / perColumnBytes))
+            : assets;
 
         var result = new Tensor<T>(new[] { assets, assets });
-        for (int i = 0; i < assets; i++)
+        for (int i = 0; i < assets; i++) result[(i * assets) + i] = NumOps.One;   // a series is perfectly dependent on itself
+
+        for (int blockStart = 0; blockStart < assets; blockStart += blockSize)
         {
-            result[(i * assets) + i] = NumOps.One;   // a series is perfectly dependent on itself
-            for (int j = i + 1; j < assets; j++)
+            int blockEnd = Math.Min(assets, blockStart + blockSize);
+
+            var block = new double[blockEnd - blockStart][];
+            for (int i = blockStart; i < blockEnd; i++)
+                block[i - blockStart] = DoubleCentredDistances(columns[i], steps);
+
+            // Pairs inside the block: both centred matrices are already resident.
+            for (int i = blockStart; i < blockEnd; i++)
             {
-                double dcor = DistanceCorrelation(columns[i], columns[j]);
-                result[(i * assets) + j] = NumOps.FromDouble(dcor);
-                result[(j * assets) + i] = NumOps.FromDouble(dcor);
+                for (int j = i + 1; j < blockEnd; j++)
+                {
+                    double dcor = DistanceCorrelationFromCentred(
+                        block[i - blockStart], block[j - blockStart], steps);
+                    result[(i * assets) + j] = NumOps.FromDouble(dcor);
+                    result[(j * assets) + i] = NumOps.FromDouble(dcor);
+                }
+            }
+
+            // Pairs crossing into later blocks: the partner is centred once and reused against the
+            // whole resident block, so it is centred once per block rather than once per pair.
+            for (int j = blockEnd; j < assets; j++)
+            {
+                var partner = DoubleCentredDistances(columns[j], steps);
+                for (int i = blockStart; i < blockEnd; i++)
+                {
+                    double dcor = DistanceCorrelationFromCentred(block[i - blockStart], partner, steps);
+                    result[(i * assets) + j] = NumOps.FromDouble(dcor);
+                    result[(j * assets) + i] = NumOps.FromDouble(dcor);
+                }
             }
         }
 
@@ -288,7 +340,12 @@ public class AssetGraphBuilder<T>
 
         var order = new int[n];
         for (int i = 0; i < n; i++) order[i] = i;
-        Array.Sort(strength.Clone() as double[] ?? strength, order);
+        // Sort a copy: Array.Sort reorders its key array too, and `strength` is the caller's
+        // computed result. The previous `strength.Clone() as double[] ?? strength` documented the
+        // opposite intent -- the cast cannot fail for a double[], so the fallback was dead code that
+        // read as permission to sort the original in place.
+        var sortKeys = (double[])strength.Clone();
+        Array.Sort(sortKeys, order);
         Array.Reverse(order);
 
         int seedCount = Math.Min(4, n);
@@ -337,6 +394,19 @@ public class AssetGraphBuilder<T>
                         bestFace = f;
                     }
                 }
+            }
+
+            // bestFace stays -1 when every gain comparison is false, which is what a NaN weight
+            // produces: NaN > bestGain is false for every face. faces[-1] then threw
+            // ArgumentOutOfRangeException from deep inside the loop with nothing to act on.
+            // FilterTmfg is public and takes a caller-supplied matrix, so this is reachable input,
+            // not an internal invariant.
+            if (bestFace < 0 || bestNode < 0)
+            {
+                throw new ArgumentException(
+                    "No triangular face could be selected. The dependency matrix contains no finite "
+                    + "gain for any remaining asset, which happens when it holds NaN entries.",
+                    nameof(dependencies));
             }
 
             var (a, b, c) = faces[bestFace];

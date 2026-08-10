@@ -1,4 +1,4 @@
-namespace AiDotNet.Interfaces;
+﻿namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Defines the contract for neural network models with advanced architectural introspection capabilities.
@@ -55,6 +55,19 @@ public interface INeuralNetworkModel<T> : INeuralNetwork<T>, IDisposable
     /// reporting an exact count when it is knowable and this flag when it is not answers both
     /// questions without ever returning a number that contradicts
     /// <c>GetParameters()</c>.
+    /// </para>
+    /// <para>
+    /// <b>MIGRATION -- this member is new and required.</b> An existing implementation of this
+    /// interface outside the library will not compile until it supplies this property; there is no
+    /// default implementation, because <c>net471</c> is a target framework and default interface
+    /// members do not exist there. A model built only from eagerly-sized layers should return
+    /// <c>false</c>; a model that composes layers should forward the question to them, which is what
+    /// <c>NeuralNetworkBase</c> does:
+    /// <code>
+    /// public bool HasUninitializedParameters =&gt; Layers.Any(l =&gt; !l.IsShapeResolved);
+    /// </code>
+    /// Returning a constant <c>false</c> is safe for a model that has no deferred-shape layers, and
+    /// wrong the moment one is added -- so forward the question rather than answering it.
     /// </para>
     /// </remarks>
     bool HasUninitializedParameters { get; }

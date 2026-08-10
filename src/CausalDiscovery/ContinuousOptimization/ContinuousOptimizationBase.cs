@@ -240,6 +240,19 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// solution can therefore leave a small residual cycle. The standard
     /// strongest-edge projection below preserves as much of the learned weighted
     /// structure as possible while enforcing the public DAG contract.
+    ///
+    /// COST, and the variable count it is sized for: one reachability traversal runs per candidate
+    /// edge, so a dense d-node graph costs O(d^2) edges times O(d^2) traversal. That is quartic. At
+    /// d = 50 it is roughly 6 million operations and invisible next to the solver itself, which runs
+    /// hundreds of augmented-Lagrangian iterations over the same data. At d = 200 it is on the order
+    /// of 1.6 billion and would dominate.
+    ///
+    /// This is sized for the regime continuous-optimization structure learning is used in --
+    /// NOTEARS, DAGMA and MCSL are all evaluated at tens of variables, and their own inner solves are
+    /// already O(d^3) per iteration -- so the projection is not the bottleneck there. A caller who
+    /// needs hundreds of variables should expect this step to become significant, and the fix is a
+    /// union-find over a topological order or an incremental reachability matrix, either of which
+    /// removes the quartic term.
     /// </remarks>
     protected Matrix<T> EnforceAcyclic(Matrix<T> weights)
     {

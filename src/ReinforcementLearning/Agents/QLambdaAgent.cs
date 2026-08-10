@@ -246,7 +246,6 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -280,52 +279,6 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _eligibilityTraces = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.EligibilityTraces.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
         _activeTraceStates = JsonConvert.DeserializeObject<HashSet<string>>(state.ActiveTraceStates.ToString()) ?? new HashSet<string>();
         _epsilon = state.Epsilon;
-    }
-    public override Vector<T> GetParameters()
-    {
-        // Length 0 when nothing has been learned yet, matching ParameterCount. The previous
-        // `: 1` invented a parameter the agent does not have, purely to satisfy a test that
-        // asserted a freshly constructed agent has parameters. That premise was wrong for
-        // tabular RL and the padding is what desynchronised the two APIs.
-        int paramCount = checked((int)QTableEntryCount);
-        var v = new Vector<T>(paramCount);
-        int idx = 0;
-
-        foreach (var s in _qTable)
-            foreach (var a in s.Value)
-                v[idx++] = a.Value;
-
-
-        return v;
-    }
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
-        }
-
-        int expectedSize = checked((int)QTableEntryCount);
-
-        if (expectedSize == 0)
-        {
-            // Q-table is empty, nothing to set
-            return;
-        }
-
-        if (parameters.Length != expectedSize)
-        {
-            throw new ArgumentException($"Parameter vector size mismatch. Expected {expectedSize} parameters (states: {_qTable.Count}, actions: {_options.ActionSize}), but got {parameters.Length}.", nameof(parameters));
-        }
-
-        int idx = 0;
-        foreach (var s in _qTable.ToList())
-        {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                _qTable[s.Key][a] = parameters[idx++];
-            }
-        }
     }
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
@@ -362,8 +315,6 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 
         return clone;
     }
-    public override Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null) { var pred = Predict(input); var lf = lossFunction ?? LossFunction; var loss = lf.CalculateLoss(pred, target); var grad = lf.CalculateDerivative(pred, target); return grad; }
-    public override void ApplyGradients(Vector<T> gradients, T learningRate) { }
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

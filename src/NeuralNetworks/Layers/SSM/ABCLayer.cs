@@ -64,7 +64,21 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
-public partial class ABCLayer<T> : LayerBase<T>
+// Shape relations DISCOVERED by probing (LayerShapeDiscoverySweepTests): every axis is carried
+// through unchanged, at rank 2 and rank 3 alike. The ROLES, however, are read from the layer's own
+// forward rather than from the probe - discovery recovers relations, never axis names, and here the
+// positional stand-in would have been wrong. ForwardTraced computes
+// seqLen = Shape[rank-2], modelDim = Shape[rank-1], batchSize = 1 when rank < 3, so a rank-2 input is
+// [Time, Features] and NOT [Batch, Features]: the leading axis is sequence position, not batch.
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Rank 3+ folds every leading axis into the batch; sequence and model dim stay last.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDimension;
     private readonly int _numSlots;
@@ -139,6 +153,35 @@ public partial class ABCLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Shape-preserving at every rank it accepts: probing [4,4] and its per-axis variants produced an
+    /// output identical to the input in both axes, and the rank-3 form behaves the same way. Only ranks
+    /// 2 and 3 are declared because only those were MEASURED - claiming more would be the guess this
+    /// system exists to remove, and a contract that over-claims is worse than one that declines.
+    /// </remarks>
+    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        switch (inputRank)
+        {
+            case 2:
+                return new[]
+                {
+                    new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                    new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+                };
+            case 3:
+                return new[]
+                {
+                    new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                    new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
+                    new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+                };
+            default:
+                return null;
+        }
+    }
+
     /// <summary>
     /// Gets the model dimension.
     /// </summary>
@@ -158,19 +201,6 @@ public partial class ABCLayer<T> : LayerBase<T>
     /// Gets the dimension per head.
     /// </summary>
     public int HeadDimension => _headDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _slotKeys.Length +
-        _forgetGateWeights.Length + _forgetGateBias.Length +
-        _outputGateWeights.Length + _outputGateBias.Length +
-        _outputProjectionWeights.Length + _outputProjectionBias.Length;
-
-    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
-    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new ABC (Attention with Bounded-memory Control) layer.
@@ -207,7 +237,6 @@ public partial class ABCLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
@@ -545,28 +574,6 @@ public partial class ABCLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                parameters[index++] = tensor[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != ParameterCount)
-            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
-        int index = 0;
-        foreach (var tensor in GetAllTensors())
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = parameters[index++];
     }
 
     private Tensor<T>[] GetAllTensors() =>

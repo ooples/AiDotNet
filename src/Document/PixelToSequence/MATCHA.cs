@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -747,40 +747,22 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     #region NeuralNetworkBase Implementation
 
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (_useNativeMode)
-            {
-                EnsureNativeInitialized();
-            }
-
-            return base.ParameterCount;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <inheritdoc />
+    /// <remarks>
+    /// MATCHA builds its encoder and decoder lists inside EnsureNativeInitialized, so in native mode there is nothing for the base to walk until that has run.
+    /// <para>
+    /// This replaces separate ParameterCount, GetParameters and SetParameters overrides that
+    /// each ran the initializer and then called base. The base calls this hook from all of
+    /// them, so the count, the vector, the restore and the chunks cannot observe different
+    /// stages of construction.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         if (_useNativeMode)
         {
             EnsureNativeInitialized();
         }
-
-        return base.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (_useNativeMode)
-        {
-            EnsureNativeInitialized();
-        }
-
-        base.SetParameters(parameters);
     }
 
     /// <inheritdoc/>
@@ -831,20 +813,11 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
+    // implementation is virtual now and distributes a flat vector over the same enumeration
+    // GetParameters folds, which this model already exposes correctly. The throw existed
+    // because the member was ABSTRACT and demanded an answer -- 572 models answered it the
+    // same way.
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();

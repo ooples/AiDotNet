@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -60,6 +60,7 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        _options.Validate();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -76,6 +77,7 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        _options.Validate();
         _useNativeMode = true;
         // Global-norm gradient clipping. The default-constructed optimizer applied no
         // clipping at all, so a single update could move a deep CTC stack far enough to
@@ -166,7 +168,11 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             SetTrainingMode(false);
         }
     }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new()
@@ -189,8 +195,38 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             ["Language"] = _options.Language
         }
     };
+    /// <summary>
+    /// Marks a payload as carrying a version number, distinguishing it from the unversioned layout.
+    /// </summary>
+    /// <remarks>
+    /// <b>0xFF is a value the first byte of a v1 payload cannot hold.</b> That payload began with a
+    /// <see cref="bool"/>, which <see cref="BinaryWriter"/> writes as exactly 0x00 or 0x01, so a leading
+    /// 0xFF is an unambiguous discriminator rather than a guess. Without one there is no way to tell the
+    /// two layouts apart at all: both are opaque byte streams that begin with a plausible value.
+    /// </remarks>
+    private const byte SerializationVersionMarker = 0xFF;
+
+    /// <summary>
+    /// Version 2 inserted <c>NumSubBlocks</c>, <c>KernelSize</c> and <c>WidthScaling</c>.
+    /// </summary>
+    private const int SerializationVersion = 2;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>The three v2 fields were inserted MID-STREAM, not appended, which is why this needs a version
+    /// rather than a length check.</b> A v1 payload runs ... EncoderDim, NumBlocks,
+    /// SqueezeExcitationRatio, NumMels ...; reading the v2 layout against it consumes
+    /// SqueezeExcitationRatio as NumSubBlocks and then misaligns every remaining field, including the
+    /// <see cref="double"/> and the length-prefixed string. The result is not an exception -- it is a
+    /// model that loads successfully with silently wrong architecture options.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
+        w.Write(SerializationVersionMarker);
+        w.Write(SerializationVersion);
+
         w.Write(_useNativeMode);
         w.Write(_options.ModelPath ?? string.Empty);
         w.Write(_options.SampleRate);
@@ -207,9 +243,31 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         w.Write(_options.Language);
     }
 
+    /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
     {
-        _useNativeMode = r.ReadBoolean();
+        // The first byte decides the layout. 0xFF means a versioned payload; 0x00 or 0x01 is the v1
+        // bool that used to lead, and is consumed as that bool rather than re-read.
+        byte lead = r.ReadByte();
+        int version;
+        if (lead == SerializationVersionMarker)
+        {
+            version = r.ReadInt32();
+            if (version > SerializationVersion)
+            {
+                throw new InvalidOperationException(
+                    $"This ContextNet payload was written by a newer AiDotNet (serialization version " +
+                    $"{version}); this build reads up to version {SerializationVersion}. Upgrade AiDotNet " +
+                    $"to load it. Refusing rather than reading it as version {SerializationVersion}, which " +
+                    $"would load a model configured with whatever the extra bytes happened to decode to.");
+            }
+            _useNativeMode = r.ReadBoolean();
+        }
+        else
+        {
+            version = 1;
+            _useNativeMode = lead != 0;
+        }
 
         string mp = r.ReadString();
         if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
@@ -218,9 +276,16 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _options.MaxAudioLengthSeconds = r.ReadInt32();
         _options.EncoderDim = r.ReadInt32();
         _options.NumBlocks = r.ReadInt32();
-        _options.NumSubBlocks = r.ReadInt32();
-        _options.KernelSize = r.ReadInt32();
-        _options.WidthScaling = r.ReadDouble();
+
+        // Absent from v1. Left at their defaults there, which is the closest thing to the truth
+        // available: the payload was written by a build for which these were not configurable.
+        if (version >= 2)
+        {
+            _options.NumSubBlocks = r.ReadInt32();
+            _options.KernelSize = r.ReadInt32();
+            _options.WidthScaling = r.ReadDouble();
+        }
+
         _options.SqueezeExcitationRatio = r.ReadInt32();
         _options.NumMels = r.ReadInt32();
         _options.VocabSize = r.ReadInt32();
@@ -242,7 +307,33 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// as a best-effort fallback for models with Unicode-based token vocabularies.
     /// ONNX models typically include their own tokenizer; this path is for native mode.
     /// </summary>
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    /// <summary>Renders CTC token ids as text using the configured vocabulary.</summary>
+    /// <remarks>
+    /// THROUGH THE VOCABULARY, not as Unicode code points. This used to cast each id straight to a
+    /// char, which ignored <c>ContextNetOptions.Vocabulary</c> entirely: token 6 rendered as the
+    /// control character U+0006 rather than as "a". Every transcript the native path produced was
+    /// mojibake, and nothing threw. Index 0 is the CTC blank and is skipped; the word separator "|"
+    /// becomes a space; an id outside the vocabulary is skipped rather than guessed at.
+    /// </remarks>
+    private string TokensToText(List<int> tokens)
+    {
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (var t in tokens)
+        {
+            if (t <= 0 || t >= vocabulary.Length) continue;
+
+            string piece = vocabulary[t];
+            if (piece == "|") { sb.Append(' '); continue; }
+
+            // Remaining specials (<pad>, <s>, </s>, <unk>) carry no text.
+            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
+
+            sb.Append(piece);
+        }
+
+        return sb.ToString().Trim();
+    }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private string ClassifyLanguageFromTokens(List<int> _) => _options.Language;
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ContextNet<T>)); }
