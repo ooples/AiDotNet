@@ -92,7 +92,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _textTokenEmbedding;
-    private Matrix<T>? _textPositionalEmbeddings;
+    private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _outputProjection;
     private ILayer<T>? _groundingHead;
 
@@ -326,7 +326,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         // Initialize positional embeddings
         _visionClsToken = new Tensor<T>(new[] { 1, _visionHiddenDim });
         _visionPositionalEmbeddings = new Tensor<T>(new[] { numPatches + 1, _visionHiddenDim });
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
+        _textPositionalEmbeddings = new Tensor<T>([_maxSequenceLength, _lmHiddenDim]);
 
         InitializeWeights();
     }
@@ -357,9 +357,9 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _textPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _textPositionalEmbeddings.Shape[1]; j++)
                 {
                     _textPositionalEmbeddings[i, j] = NumOps.FromDouble(random.NextDouble() * scale - scale / 2);
                 }
@@ -778,11 +778,11 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         var embedded = _textTokenEmbedding.Forward(inputTensor);
 
-        if (_textPositionalEmbeddings is not null && tokenIds.Count <= _textPositionalEmbeddings.Rows)
+        if (_textPositionalEmbeddings is not null && tokenIds.Count <= _textPositionalEmbeddings.Shape[0])
         {
-            for (int i = 0; i < tokenIds.Count && i < _textPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < tokenIds.Count && i < _textPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _lmHiddenDim && j < _textPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _lmHiddenDim && j < _textPositionalEmbeddings.Shape[1]; j++)
                 {
                     embedded[i, j] = NumOps.Add(embedded[i, j], _textPositionalEmbeddings[i, j]);
                 }
@@ -1109,75 +1109,19 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
     #region NeuralNetworkBase Implementation
 
-    /// <inheritdoc/>
-    public override long ParameterCount
+    // ParameterCount is NOT overridden. It summed the layer role-lists plus the embeddings and
+    // omitted the grounding head, while GetParameters was never overridden at all and folded the
+    // base enumeration -- two different answers, 24,772 against 24,260. Both now fold Layers plus
+    // what the two hooks below declare.
+    /// <inheritdoc />
+    /// <remarks>
+    /// The grounding head, a real layer held outside <c>Layers</c>. The hand-written count left it
+    /// out and so did the vector, so it was consistent only by being invisible to both -- 132
+    /// trainable values that could not be saved, restored or optimized.
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
     {
-        get
-        {
-            if (!_useNativeMode)
-            {
-                return 0;
-            }
-
-            int count = 0;
-
-            // Vision encoder layers
-            foreach (var layer in _visionEncoderLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Projection layers
-            foreach (var layer in _projectionLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Language model layers
-            foreach (var layer in _languageModelLayers)
-            {
-                count += (int)layer.ParameterCount;
-            }
-
-            // Single layers
-            if (_patchEmbedding is not null)
-            {
-                count += (int)_patchEmbedding.ParameterCount;
-            }
-
-            if (_textTokenEmbedding is not null)
-            {
-                count += (int)_textTokenEmbedding.ParameterCount;
-            }
-
-            if (_outputProjection is not null)
-            {
-                count += (int)_outputProjection.ParameterCount;
-            }
-
-            if (_groundingHead is not null)
-            {
-                count += (int)_groundingHead.ParameterCount;
-            }
-
-            // Positional embeddings
-            if (_visionClsToken is not null)
-            {
-                count += _visionClsToken.Length;
-            }
-
-            if (_visionPositionalEmbeddings is not null)
-            {
-                count += _visionPositionalEmbeddings.Length;
-            }
-
-            if (_textPositionalEmbeddings is not null)
-            {
-                count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
-            }
-
-            return count;
-        }
+        if (_groundingHead is LayerBase<T> head) yield return head;
     }
 
     /// <inheritdoc/>
@@ -1291,6 +1235,10 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     {
         if (_visionClsToken is not null) yield return _visionClsToken;
         if (_visionPositionalEmbeddings is not null) yield return _visionPositionalEmbeddings;
+        // The text positional table too. It was a Matrix<T>, which no automatic parameter
+        // path can see, so the count included its 512 values and the vector did not --
+        // measured 24,772 against 24,260, a gap that WAS exactly this field.
+        if (_textPositionalEmbeddings is not null) yield return _textPositionalEmbeddings;
     }
 
     /// <inheritdoc/>
@@ -1409,8 +1357,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            int rows = _textPositionalEmbeddings.Rows;
-            int columns = _textPositionalEmbeddings.Columns;
+            int rows = _textPositionalEmbeddings.Shape[0];
+            int columns = _textPositionalEmbeddings.Shape[1];
             for (int i = 0; i < rows; i++)
             {
                 int rowOffset = i * columns;
@@ -1500,7 +1448,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         // post-training values genuinely differ from the seed init and MUST be carried across a clone.
         WriteTensor(writer, _visionClsToken);
         WriteTensor(writer, _visionPositionalEmbeddings);
-        WriteMatrix(writer, _textPositionalEmbeddings);
+        WriteTensor(writer, _textPositionalEmbeddings);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T>? tensor)
@@ -1659,7 +1607,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         // makes a clone (and a save/load round-trip) reproduce the trained model's predictions.
         _visionClsToken = ReadTensor(reader);
         _visionPositionalEmbeddings = ReadTensor(reader);
-        _textPositionalEmbeddings = ReadMatrix(reader);
+        _textPositionalEmbeddings = ReadTensor(reader);
     }
 
     /// <summary>

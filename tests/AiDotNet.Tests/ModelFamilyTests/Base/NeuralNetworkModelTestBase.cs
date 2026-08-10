@@ -1182,18 +1182,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
 
         long declared = network.ParameterCount;
-        int actual;
-        try
-        {
-            actual = network.GetParameters().Length;
-        }
-        catch (NotSupportedException)
-        {
-            // Some models deliberately do not expose a flat parameter vector — detection backbones
-            // round-trip weights through WriteParameters/ReadParameters instead, and say so by
-            // throwing. There is no pairing to check when one side of it does not exist.
-            return;
-        }
+        // No NotSupportedException exemption. It used to say some models "deliberately do not
+        // expose a flat parameter vector" and round-trip through WriteParameters instead. That
+        // was never a design decision, only unfinished plumbing: PyTorch has no module that
+        // declines to enumerate its parameters. Every model that refused has been wired up --
+        // the detection backbones, the necks, ConvTasNet, MATCHA, Nougat -- and a sweep of src/
+        // now finds ZERO surfaces whose body is only a throw. Nothing may refuse.
+        int actual = network.GetParameters().Length;
 
         // A model whose parameters are not sized yet legitimately reports 0 from BOTH surfaces;
         // that is consistent, so it is not what this invariant is about.
