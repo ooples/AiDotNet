@@ -89,8 +89,8 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly int _encoderDim;
     private readonly int _kernelSize;
     private readonly int _stride;
-    private T[] _encoderWeight;
-    private T[] _encoderBias;
+    private Tensor<T> _encoderWeight;
+    private Tensor<T> _encoderBias;
 
     // Separator (TCN) parameters
     private readonly int _numSources;
@@ -104,15 +104,15 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly List<TcnBlock> _tcnBlocks;
 
     // Decoder parameters
-    private T[] _decoderWeight;
+    private Tensor<T> _decoderWeight;
 
     // Mask estimation
-    private T[] _maskWeight;
-    private T[] _maskBias;
+    private Tensor<T> _maskWeight;
+    private Tensor<T> _maskBias;
 
     // Normalization layers
-    private T[] _normGamma;
-    private T[] _normBeta;
+    private Tensor<T> _normGamma;
+    private Tensor<T> _normBeta;
 
     // State for streaming
     private T[]? _encoderBuffer;
@@ -198,13 +198,13 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         LatencySamples = kernelSize;
 
         // Initialize empty arrays (not used in ONNX mode)
-        _encoderWeight = Array.Empty<T>();
-        _encoderBias = Array.Empty<T>();
-        _decoderWeight = Array.Empty<T>();
-        _maskWeight = Array.Empty<T>();
-        _maskBias = Array.Empty<T>();
-        _normGamma = Array.Empty<T>();
-        _normBeta = Array.Empty<T>();
+        _encoderWeight = new Tensor<T>([0]);
+        _encoderBias = new Tensor<T>([0]);
+        _decoderWeight = new Tensor<T>([0]);
+        _maskWeight = new Tensor<T>([0]);
+        _maskBias = new Tensor<T>([0]);
+        _normGamma = new Tensor<T>([0]);
+        _normBeta = new Tensor<T>([0]);
         _tcnBlocks = new List<TcnBlock>();
 
         // These are set for consistency
@@ -491,8 +491,9 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> LayerNorm(Tensor<T> input)
     {
-        var gammaTensor = new Tensor<T>(_normGamma, [_normGamma.Length]);
-        var betaTensor = new Tensor<T>(_normBeta, [_normBeta.Length]);
+        // _normGamma / _normBeta are already tensors -- no wrapping needed.
+        var gammaTensor = _normGamma;
+        var betaTensor = _normBeta;
         return Engine.LayerNorm(input, gammaTensor, betaTensor, 1e-5, out _, out _);
     }
 
@@ -1086,9 +1087,9 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     #region Helper Methods
 
-    private T[] InitializeWeights(int size, double initValue = double.NaN)
+    private Tensor<T> InitializeWeights(int size, double initValue = double.NaN)
     {
-        var weights = new T[size];
+        var weights = new Tensor<T>([size]);
         if (double.IsNaN(initValue))
         {
             // Xavier/Glorot initialization
@@ -1113,86 +1114,46 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     #region Abstract Method Implementations
 
-    /// <inheritdoc/>
-    public override long ParameterCount =>
-        _encoderWeight.LongLength + _encoderBias.LongLength +
-        _decoderWeight.LongLength + _maskWeight.LongLength + _maskBias.LongLength +
-        _normGamma.LongLength + _normBeta.LongLength +
-        _tcnBlocks.Sum(block => block.ParameterCount);
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var parameters = new Vector<T>(checked((int)ParameterCount));
-        int offset = 0;
-        CopyParameters(_encoderWeight, parameters, ref offset);
-        CopyParameters(_encoderBias, parameters, ref offset);
-        CopyParameters(_decoderWeight, parameters, ref offset);
-        CopyParameters(_maskWeight, parameters, ref offset);
-        CopyParameters(_maskBias, parameters, ref offset);
-        CopyParameters(_normGamma, parameters, ref offset);
-        CopyParameters(_normBeta, parameters, ref offset);
-        foreach (var block in _tcnBlocks)
-            block.CopyParametersTo(parameters, ref offset);
-        return parameters;
-    }
-
-    /// <inheritdoc/>
+    /// <summary>
+    /// Declares every weight Conv-TasNet owns: the encoder, the separation mask, the decoder, the
+    /// layer-norm affine pair, and each temporal-convolution block's seven tensors.
+    /// </summary>
     /// <remarks>
-    /// Conv-TasNet implements its signal path with model-owned arrays instead
-    /// of <see cref="Layers"/>. Surface those arrays in the same order as the
-    /// flat parameter APIs so parameter inspection observes the weights that
-    /// <see cref="Train(Tensor{T}, Tensor{T})"/> actually updates.
+    /// <para>
+    /// Conv-TasNet implements its signal path with model-owned tensors rather than
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>, so the base walk finds nothing unless they are
+    /// declared. Declared in the order the deleted GetParameters concatenated them -- encoder
+    /// weight and bias, decoder weight, mask weight and bias, norm gamma and beta, then each TCN
+    /// block -- so existing checkpoints still restore.
+    /// </para>
+    /// <para>
+    /// This replaces ParameterCount, GetParameters, GetParameterChunks and SetParameters here, four
+    /// more on TcnBlock, and the four Copy/Read helpers that moved values one element at a time.
+    /// </para>
+    /// <para>
+    /// The weights are <c>Tensor&lt;T&gt;</c> now rather than raw <c>T[]</c>, which is what the rest
+    /// of the library uses and what the trainable-parameter walk can see. A bare array cannot be
+    /// declared: a <c>Vector&lt;T&gt;</c> built over one COPIES it, so a restore driven through such
+    /// a view would have written into a temporary and been discarded.
+    /// </para>
     /// </remarks>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        yield return AsParameterTensor(_encoderWeight);
-        yield return AsParameterTensor(_encoderBias);
-        yield return AsParameterTensor(_decoderWeight);
-        yield return AsParameterTensor(_maskWeight);
-        yield return AsParameterTensor(_maskBias);
-        yield return AsParameterTensor(_normGamma);
-        yield return AsParameterTensor(_normBeta);
+        yield return _encoderWeight;
+        yield return _encoderBias;
+        yield return _decoderWeight;
+        yield return _maskWeight;
+        yield return _maskBias;
+        yield return _normGamma;
+        yield return _normBeta;
+
         foreach (var block in _tcnBlocks)
         {
-            foreach (var parameter in block.GetParameterChunks())
-                yield return parameter;
+            foreach (var tensor in block.EnumerateTensors())
+            {
+                yield return tensor;
+            }
         }
-    }
-
-    private static Tensor<T> AsParameterTensor(T[] parameters) =>
-        new Tensor<T>(parameters, new[] { parameters.Length });
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int expected = checked((int)ParameterCount);
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Expected {expected} parameters, but received {parameters.Length}.", nameof(parameters));
-
-        int offset = 0;
-        ReadParameters(parameters, _encoderWeight, ref offset);
-        ReadParameters(parameters, _encoderBias, ref offset);
-        ReadParameters(parameters, _decoderWeight, ref offset);
-        ReadParameters(parameters, _maskWeight, ref offset);
-        ReadParameters(parameters, _maskBias, ref offset);
-        ReadParameters(parameters, _normGamma, ref offset);
-        ReadParameters(parameters, _normBeta, ref offset);
-        foreach (var block in _tcnBlocks)
-            block.ReadParametersFrom(parameters, ref offset);
-    }
-
-    private static void CopyParameters(T[] source, Vector<T> destination, ref int offset)
-    {
-        for (int i = 0; i < source.Length; i++)
-            destination[offset++] = source[i];
-    }
-
-    private static void ReadParameters(Vector<T> source, T[] destination, ref int offset)
-    {
-        for (int i = 0; i < destination.Length; i++)
-            destination[i] = source[offset++];
     }
 
     // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
@@ -1292,13 +1253,13 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         private readonly int _kernelSize;
         private readonly int _dilation;
 
-        private T[] _conv1Weight;
-        private T[] _conv1Bias;
-        private T[] _conv2Weight;
-        private T[] _conv2Bias;
-        private T[] _depthwiseWeight;
-        private T[] _normGamma;
-        private T[] _normBeta;
+        private Tensor<T> _conv1Weight;
+        private Tensor<T> _conv1Bias;
+        private Tensor<T> _conv2Weight;
+        private Tensor<T> _conv2Bias;
+        private Tensor<T> _depthwiseWeight;
+        private Tensor<T> _normGamma;
+        private Tensor<T> _normBeta;
 
         private T[] _gradConv1;
         private T[] _gradConv2;
@@ -1316,13 +1277,13 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
             double scale = Math.Sqrt(2.0 / inputDim);
 
-            _conv1Weight = new T[hiddenDim * inputDim];
-            _conv1Bias = new T[hiddenDim];
-            _conv2Weight = new T[inputDim * hiddenDim];
-            _conv2Bias = new T[inputDim];
-            _depthwiseWeight = new T[hiddenDim * kernelSize];
-            _normGamma = new T[hiddenDim];
-            _normBeta = new T[hiddenDim];
+            _conv1Weight = new Tensor<T>([hiddenDim * inputDim]);
+            _conv1Bias = new Tensor<T>([hiddenDim]);
+            _conv2Weight = new Tensor<T>([inputDim * hiddenDim]);
+            _conv2Bias = new Tensor<T>([inputDim]);
+            _depthwiseWeight = new Tensor<T>([hiddenDim * kernelSize]);
+            _normGamma = new Tensor<T>([hiddenDim]);
+            _normBeta = new Tensor<T>([hiddenDim]);
 
             for (int i = 0; i < _conv1Weight.Length; i++)
             {
@@ -1473,57 +1434,22 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             }
         }
 
-        public long ParameterCount =>
-            _conv1Weight.LongLength + _conv1Bias.LongLength +
-            _conv2Weight.LongLength + _conv2Bias.LongLength +
-            _depthwiseWeight.LongLength + _normGamma.LongLength + _normBeta.LongLength;
-
-        public IEnumerable<Tensor<T>> GetParameterChunks()
+        /// <summary>The trainable tensors this block owns, in forward order.</summary>
+        /// <remarks>
+        /// Replaces this block's ParameterCount, GetParameterChunks, CopyParametersTo and
+        /// ReadParametersFrom -- four members that each listed the same seven weights in the same
+        /// order, plus a Copy/Read pair to move them element by element. ConvTasNet folds this one
+        /// enumeration for all four purposes.
+        /// </remarks>
+        internal IEnumerable<Tensor<T>> EnumerateTensors()
         {
-            yield return AsTensor(_conv1Weight);
-            yield return AsTensor(_conv1Bias);
-            yield return AsTensor(_conv2Weight);
-            yield return AsTensor(_conv2Bias);
-            yield return AsTensor(_depthwiseWeight);
-            yield return AsTensor(_normGamma);
-            yield return AsTensor(_normBeta);
-        }
-
-        private static Tensor<T> AsTensor(T[] parameters) =>
-            new Tensor<T>(parameters, new[] { parameters.Length });
-
-        public void CopyParametersTo(Vector<T> destination, ref int offset)
-        {
-            Copy(_conv1Weight, destination, ref offset);
-            Copy(_conv1Bias, destination, ref offset);
-            Copy(_conv2Weight, destination, ref offset);
-            Copy(_conv2Bias, destination, ref offset);
-            Copy(_depthwiseWeight, destination, ref offset);
-            Copy(_normGamma, destination, ref offset);
-            Copy(_normBeta, destination, ref offset);
-        }
-
-        public void ReadParametersFrom(Vector<T> source, ref int offset)
-        {
-            Read(source, _conv1Weight, ref offset);
-            Read(source, _conv1Bias, ref offset);
-            Read(source, _conv2Weight, ref offset);
-            Read(source, _conv2Bias, ref offset);
-            Read(source, _depthwiseWeight, ref offset);
-            Read(source, _normGamma, ref offset);
-            Read(source, _normBeta, ref offset);
-        }
-
-        private static void Copy(T[] source, Vector<T> destination, ref int offset)
-        {
-            for (int i = 0; i < source.Length; i++)
-                destination[offset++] = source[i];
-        }
-
-        private static void Read(Vector<T> source, T[] destination, ref int offset)
-        {
-            for (int i = 0; i < destination.Length; i++)
-                destination[i] = source[offset++];
+            yield return _conv1Weight;
+            yield return _conv1Bias;
+            yield return _conv2Weight;
+            yield return _conv2Bias;
+            yield return _depthwiseWeight;
+            yield return _normGamma;
+            yield return _normBeta;
         }
     }
 

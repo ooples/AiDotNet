@@ -81,11 +81,11 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     private readonly List<ILayer<T>> _perceiverLayers = [];
     private readonly List<ILayer<T>> _gatedCrossAttentionLayers = [];
     private readonly List<ILayer<T>> _languageModelLayers = [];
-    private Matrix<T>? _perceiverQueries;
-    private Matrix<T>? _visionPositionalEmbeddings;
+    private Tensor<T>? _perceiverQueries;
+    private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _textTokenEmbedding;
-    private Matrix<T>? _textPositionalEmbeddings;
+    private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _outputProjection;
 
     #endregion
@@ -331,15 +331,15 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         RebindNativeLayerReferences();
 
         // Initialize vision positional embeddings
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
+        _visionPositionalEmbeddings = new Tensor<T>([numPatches + 1, _visionHiddenDim]);
         InitializePositionalEmbeddings(_visionPositionalEmbeddings);
 
         // Initialize perceiver queries
-        _perceiverQueries = Matrix<T>.CreateDefault(_numPerceiverTokens, _lmHiddenDim, NumOps.Zero);
+        _perceiverQueries = new Tensor<T>([_numPerceiverTokens, _lmHiddenDim]);
         InitializePerceiverQueries(_perceiverQueries);
 
         // Text positional embeddings
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
+        _textPositionalEmbeddings = new Tensor<T>([_maxSequenceLength, _lmHiddenDim]);
         InitializePositionalEmbeddings(_textPositionalEmbeddings);
     }
 
@@ -409,26 +409,26 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         _outputProjection = Layers[idx++];
     }
 
-    private void InitializePositionalEmbeddings(Matrix<T> embeddings)
+    private void InitializePositionalEmbeddings(Tensor<T> embeddings)
     {
-        for (int i = 0; i < embeddings.Rows; i++)
+        for (int i = 0; i < embeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < embeddings.Columns; j++)
+            for (int j = 0; j < embeddings.Shape[1]; j++)
             {
-                double angle = i / Math.Pow(10000, 2.0 * (j / 2) / embeddings.Columns);
+                double angle = i / Math.Pow(10000, 2.0 * (j / 2) / embeddings.Shape[1]);
                 double value = j % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
                 embeddings[i, j] = NumOps.FromDouble(value);
             }
         }
     }
 
-    private void InitializePerceiverQueries(Matrix<T> queries)
+    private void InitializePerceiverQueries(Tensor<T> queries)
     {
         var rand = RandomHelper.CreateSeededRandom(42);
-        double scale = 1.0 / Math.Sqrt(queries.Columns);
-        for (int i = 0; i < queries.Rows; i++)
+        double scale = 1.0 / Math.Sqrt(queries.Shape[1]);
+        for (int i = 0; i < queries.Shape[0]; i++)
         {
-            for (int j = 0; j < queries.Columns; j++)
+            for (int j = 0; j < queries.Shape[1]; j++)
             {
                 double value = (rand.NextDouble() * 2 - 1) * scale;
                 queries[i, j] = NumOps.FromDouble(value);
@@ -511,7 +511,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
             for (int j = 0; j < _lmHiddenDim; j++)
             {
-                T posEmb = i < _textPositionalEmbeddings.Rows ? _textPositionalEmbeddings[i, j] : NumOps.Zero;
+                T posEmb = i < _textPositionalEmbeddings.Shape[0] ? _textPositionalEmbeddings[i, j] : NumOps.Zero;
                 embeddings[i, j] = NumOps.Add(tokenEmb[0, j], posEmb);
             }
         }
@@ -794,9 +794,9 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         int hiddenDim = patchFeatures.Shape.Length > 1 ? patchFeatures.Shape[1] : _visionHiddenDim;
 
         var features = Tensor<T>.CreateDefault([numPatches, hiddenDim], NumOps.Zero);
-        for (int i = 0; i < numPatches && i < _visionPositionalEmbeddings.Rows; i++)
+        for (int i = 0; i < numPatches && i < _visionPositionalEmbeddings.Shape[0]; i++)
         {
-            for (int j = 0; j < hiddenDim && j < _visionPositionalEmbeddings.Columns; j++)
+            for (int j = 0; j < hiddenDim && j < _visionPositionalEmbeddings.Shape[1]; j++)
             {
                 features[i, j] = NumOps.Add(patchFeatures[i, j], _visionPositionalEmbeddings[i, j]);
             }
@@ -1100,76 +1100,49 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
     #region NeuralNetworkBase Overrides
 
-    /// <inheritdoc/>
-    public override long ParameterCount
+    /// <summary>
+    /// Declares the Perceiver Resampler's latent queries and the two positional embedding tables,
+    /// which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These three tables were in NEITHER surface. ParameterCount enumerated the tower lists and
+    /// the three projections; GetParameters concatenated the same things; neither mentioned the
+    /// tables, and nothing serialized them. So they never trained through a flat-vector optimizer
+    /// and were lost on every save -- including <c>_perceiverQueries</c>, the learned latent array
+    /// the Perceiver Resampler attends the vision features into (Alayrac et al. 2022 §3.2). Those
+    /// latents are trainable in the paper; a Flamingo that cannot learn them is not Flamingo.
+    /// </para>
+    /// <para>
+    /// Declaring them ADDS to the parameter count -- deliberately. The old number was not a
+    /// smaller-but-correct total, it was a total that omitted real weights.
+    /// </para>
+    /// <para>
+    /// They are <c>Tensor&lt;T&gt;</c> now because a <c>Matrix&lt;T&gt;</c> is invisible to the
+    /// trainable-parameter walk, which is why the surfaces had to be hand-written to begin with.
+    /// The tower lists need no declaration and must not get one: <c>_visionEncoderLayers</c>,
+    /// <c>_perceiverLayers</c>, <c>_gatedCrossAttentionLayers</c>, <c>_languageModelLayers</c> and
+    /// the three projections are all filled FROM <c>Layers</c> (<c>Layers[idx++]</c> in
+    /// InitializeLayers), so they are typed views of layers the base walk already reaches and
+    /// declaring them would double-count.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        get
+        if (_visionPositionalEmbeddings is not null)
         {
-            int count = 0;
-            foreach (var layer in _visionEncoderLayers)
-                count += (int)layer.ParameterCount;
-            foreach (var layer in _perceiverLayers)
-                count += (int)layer.ParameterCount;
-            foreach (var layer in _gatedCrossAttentionLayers)
-                count += (int)layer.ParameterCount;
-            foreach (var layer in _languageModelLayers)
-                count += (int)layer.ParameterCount;
-            if (_patchEmbedding is not null)
-                count += (int)_patchEmbedding.ParameterCount;
-            if (_textTokenEmbedding is not null)
-                count += (int)_textTokenEmbedding.ParameterCount;
-            if (_outputProjection is not null)
-                count += (int)_outputProjection.ParameterCount;
-            return count;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        foreach (var layer in _visionEncoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-                allParams.Add(layerParams[i]);
+            yield return _visionPositionalEmbeddings;
         }
 
-        foreach (var layer in _perceiverLayers)
+        if (_perceiverQueries is not null)
         {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
+            yield return _perceiverQueries;
         }
 
-        foreach (var layer in _gatedCrossAttentionLayers)
+        if (_textPositionalEmbeddings is not null)
         {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
+            yield return _textPositionalEmbeddings;
         }
-
-        foreach (var layer in _languageModelLayers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-                allParams.Add(layerParams[i]);
-        }
-
-        foreach (var layer in new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection })
-        {
-            if (layer is null) continue;
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-                allParams.Add(layerParams[i]);
-        }
-
-        return new Vector<T>([.. allParams]);
     }
 
     /// <inheritdoc/>
