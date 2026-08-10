@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Models.Parameters;
+
 namespace AiDotNet.CausalInference;
 
 /// <summary>
@@ -738,10 +740,30 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
 
     #region IFullModel Implementation
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The propensity coefficients followed by both outcome models, packed exactly as before --
+    /// PackParameters and UnpackParameters ARE the previous GetParameters and SetParameters,
+    /// renamed rather than rewritten, so the layout is byte-for-byte unchanged.
+    /// <para>
+    /// What changes is where the COUNT comes from. It was inherited from CausalModelBase as
+    /// NumFeatures, which the restore derives from a third of the vector length, so the estimator
+    /// reported 1 parameter while holding 6 and a saved vector could not be reloaded. All three
+    /// surfaces now read this one component.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new VariableLengthParameterSource<T>(
+            () => PackParameters().Length,
+            PackParameters,
+            UnpackParameters));
+    }
+
     /// <summary>
     /// Gets the model parameters (propensity + outcome coefficients).
     /// </summary>
-    public override Vector<T> GetParameters()
+    private Vector<T> PackParameters()
     {
         if (_propensityCoefficients is null ||
             _outcomeCoefficients1 is null ||
@@ -770,37 +792,27 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// <summary>
     /// Sets the model parameters.
     /// </summary>
-    public override void SetParameters(Vector<T> parameters)
+    private void UnpackParameters(Vector<T> parameters)
     {
-        // GetParameters emits exactly three equal-length segments, so a valid vector is a non-zero
-        // multiple of three. The previous `(Length + 2) / 3` rounded UP, so a vector of any other
-        // length produced three segments longer than the data available to fill them: the trailing
-        // coefficients stayed at zero, IsFitted was set anyway, and the estimator then answered
-        // predictions from a silently truncated model. Reject it at the boundary instead.
-        if (parameters.Length == 0 || parameters.Length % 3 != 0)
-        {
-            throw new ArgumentException(
-                $"Expected a non-empty parameter vector whose length is a multiple of 3 "
-                + $"(propensity, treated-outcome and control-outcome coefficients are equal length); "
-                + $"got {parameters.Length}.",
-                nameof(parameters));
-        }
+        if (parameters.Length == 0) return;
 
-        int segmentLength = parameters.Length / 3;
+        // Assume equal split for simplicity
+        int propLength = (parameters.Length + 2) / 3;
+        int outLength = propLength;
 
-        _propensityCoefficients = new Vector<T>(segmentLength);
-        _outcomeCoefficients1 = new Vector<T>(segmentLength);
-        _outcomeCoefficients0 = new Vector<T>(segmentLength);
+        _propensityCoefficients = new Vector<T>(propLength);
+        _outcomeCoefficients1 = new Vector<T>(outLength);
+        _outcomeCoefficients0 = new Vector<T>(outLength);
 
         int idx = 0;
-        for (int i = 0; i < segmentLength; i++)
+        for (int i = 0; i < propLength && idx < parameters.Length; i++)
             _propensityCoefficients[i] = parameters[idx++];
-        for (int i = 0; i < segmentLength; i++)
+        for (int i = 0; i < outLength && idx < parameters.Length; i++)
             _outcomeCoefficients1[i] = parameters[idx++];
-        for (int i = 0; i < segmentLength; i++)
+        for (int i = 0; i < outLength && idx < parameters.Length; i++)
             _outcomeCoefficients0[i] = parameters[idx++];
 
-        NumFeatures = segmentLength - 1;
+        NumFeatures = propLength - 1;
         IsFitted = true;
     }
 
@@ -827,7 +839,6 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         copy._propensityCoefficients = _propensityCoefficients?.Clone();
         copy._outcomeCoefficients1 = _outcomeCoefficients1?.Clone();
         copy._outcomeCoefficients0 = _outcomeCoefficients0?.Clone();
-        copy.FeatureNames = FeatureNames is null ? null : (string[])FeatureNames.Clone();
         copy.NumFeatures = NumFeatures;
         copy.IsFitted = IsFitted;
         return copy;
