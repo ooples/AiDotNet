@@ -142,6 +142,15 @@ public class LayerStateGenerator : IIncrementalGenerator
             if (marked.Count == 0) return null;
         }
 
+        // An ABSTRACT layer is never constructed, so a factory naming it emits `new Abstract<T>(...)`
+        // and the generated code will not compile. This only began to matter once every
+        // constructor was analysed rather than only attributed ones.
+        //
+        // Likewise an arity the factory cannot register: reporting it is right when the author
+        // asked for state explicitly, and noise when the parameter was merely inferred.
+        if (type.IsAbstract && marked.Count == 0) return null;
+        if (type.TypeParameters.Length != 1 && marked.Count == 0) return null;
+
         if (type.TypeKind != TypeKind.Class || type.IsRecord || !DerivesFromLayerBase(type))
         {
             return new LayerModel
@@ -412,6 +421,13 @@ public class LayerStateGenerator : IIncrementalGenerator
            && SymbolEqualityComparer.Default.Equals(pn, mn)
            && IsAssignableTo(Unwrap(parameter), Unwrap(member));
 
+    /// <summary>Both types are sequences of layers over the same numeric type.</summary>
+    private static bool IsSameLayerSequence(ITypeSymbol member, ITypeSymbol parameter)
+        => IsLayerSequence(Unwrap(parameter), out var pn)
+           && IsLayerSequence(Unwrap(member), out var mn)
+           && pn is not null && mn is not null
+           && SymbolEqualityComparer.Default.Equals(pn, mn);
+
     /// <summary>Whether a value of <paramref name="from"/> can be stored in <paramref name="to"/>.</summary>
     private static bool IsAssignableTo(ITypeSymbol from, ITypeSymbol to)
     {
@@ -607,6 +623,14 @@ public class LayerStateGenerator : IIncrementalGenerator
                             return lf.Name;
                         case IPropertySymbol { GetMethod: not null } lp when IsSameLayer(lp.Type, p.Type):
                             return lp.Name;
+
+                        // A sequence of children is written by enumerating it and read back as a
+                        // fresh list, so the member only has to hold layers of the same numeric
+                        // type -- List<ILayer<T>> backs an IEnumerable<ILayer<T>> parameter.
+                        case IFieldSymbol sf when IsSameLayerSequence(sf.Type, p.Type):
+                            return sf.Name;
+                        case IPropertySymbol { GetMethod: not null } sp when IsSameLayerSequence(sp.Type, p.Type):
+                            return sp.Name;
 
                         case IFieldSymbol f when SameType(f.Type, p.Type):
                             memberIsNullable = IsNullableValueType(f.Type);
@@ -1018,12 +1042,23 @@ public class LayerStateGenerator : IIncrementalGenerator
                 ? "global::AiDotNet.Interfaces.IVectorActivationFunction<T>"
                 : "global::AiDotNet.Interfaces.IActivationFunction<T>";
             var source = p.IsVectorActivation ? "vectorActivation" : "scalarActivation";
-            return $"{p.Name}: {source} as {iface}";
+            // `as` yields null both when no activation was saved and when the wrong kind was. A
+            // parameter that does not accept null is told which, rather than handed the null.
+            return p.AcceptsNull
+                ? $"{p.Name}: {source} as {iface}"
+                : $"{p.Name}: global::AiDotNet.Serialization.LayerStateBag.RequireActivation<{iface}>"
+                  + $"({source}, \"{p.Name}\", \"{p.Owner}\")";
         }
 
         // THE PARAMETER'S DEFAULT, NOT THE TYPE'S. Falls back to `default!` only when the
         // declaration genuinely has no value to render.
-        if (p.UseDefault) return $"{p.Name}: {p.DefaultExpression ?? "default!"}";
+        // `null` does not convert to an unconstrained `T?`, so a null default is emitted as
+        // `default!` -- the same value, in a form that compiles for a type parameter.
+        if (p.UseDefault)
+        {
+            var rendered = p.DefaultExpression is null or "null" ? "default!" : p.DefaultExpression;
+            return $"{p.Name}: {rendered}";
+        }
         var read = ReadExpression(p);
         return $"{p.Name}: {read}";
     }

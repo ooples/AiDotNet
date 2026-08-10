@@ -213,8 +213,8 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
         int inputSize,
         int streamAOutputSize,
         int streamBOutputSize,
-        IEnumerable<ILayer<T>> streamALayers,
-        IEnumerable<ILayer<T>> streamBLayers)
+        [LayerState(Member = "_streamA")] IEnumerable<ILayer<T>> streamALayers,
+        [LayerState(Member = "_streamB")] IEnumerable<ILayer<T>> streamBLayers)
         : base([inputSize], [streamAOutputSize + streamBOutputSize])
     {
         _streamALayers = streamALayers;
