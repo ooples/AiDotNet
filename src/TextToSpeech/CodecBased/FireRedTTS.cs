@@ -188,20 +188,8 @@ public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        ThrowIfDisposed();
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    // UpdateParameters walked Layers by hand, distributing the flat vector slice by
+    // slice. That is the base implementation, restated.
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

@@ -573,32 +573,8 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         TrainWithTape(input, expectedOutput, _optimizer);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // SET each layer's parameters from the flat vector (the contract of this method — it is how
-        // Clone / deserialize restore weights). Walk `Layers` in the SAME order GetParameters emits so
-        // the slices line up. The previous version was doubly broken: it ignored `parameters` entirely
-        // and instead called layer.UpdateParameters(0.001) (a gradient STEP, not a set), and it iterated
-        // the internal sub-lists in a different order (gain last) than GetParameters — so Clone produced
-        // a model with different weights (Clone_ShouldProduceIdenticalOutput).
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-
-        // Weights just changed wholesale (Clone / deserialize restore path). Invalidate any packed
-        // inference weight caches so the next Predict rebuilds them from these params — otherwise a
-        // clone whose cache was populated during ResolveLazyLayerShapes' warm-forward (random init)
-        // keeps serving stale packed weights and predicts differently from the original
-        // (Clone_ShouldProduceIdenticalOutput).
-        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

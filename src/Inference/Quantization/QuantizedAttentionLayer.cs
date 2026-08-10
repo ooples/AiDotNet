@@ -278,9 +278,7 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     public override void UpdateParameters(float learningRate)
         => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
 
-    public override void UpdateParameters(Vector<float> parameters)
-        => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
-
+    // UpdateParameters refused unconditionally; the base implements it properly.
     public override void ResetState()
     {
         // Inference-only; no recurrent state to clear.

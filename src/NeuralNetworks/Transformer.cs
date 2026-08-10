@@ -609,41 +609,8 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDo
         return diagnostics;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Transformer network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter counts.
-    /// It's typically used during training when applying gradient updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the Transformer's internal values during training.
-    /// 
-    /// Think of parameters as the "settings" of the Transformer:
-    /// - Each layer needs a certain number of parameters to function
-    /// - During training, these parameters are constantly adjusted to improve performance
-    /// - This method takes a big list of new parameter values and gives each layer its share
-    /// 
-    /// It's like distributing updated parts to each section of a machine so it works better.
-    /// Each layer gets exactly the number of parameters it needs.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Performs a forward pass through the Transformer network to generate predictions.
     /// </summary>

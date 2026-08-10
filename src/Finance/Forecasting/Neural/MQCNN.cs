@@ -710,16 +710,8 @@ public class MQCNN<T> : ForecastingModelBase<T>
         return Engine.TensorMultiplyScalar(totalLoss, NumOps.FromDouble(1.0 / numQ));
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MQCNN model, UpdateParameters updates internal parameters or state. This keeps the MQCNN architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

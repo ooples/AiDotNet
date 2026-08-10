@@ -269,11 +269,8 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
         return x;
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TimeDiff" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "UseFutureMixup", _useFutureMixup }, { "UseAutoregressiveInit", _useAutoregressiveInit }, { "UseNativeMode", _useNativeMode } },

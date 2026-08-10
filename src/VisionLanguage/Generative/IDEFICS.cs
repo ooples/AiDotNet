@@ -270,33 +270,11 @@ public class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Sync the auxiliary streams (Q-Former / perceiver / decoder /
-        // regression head, depending on model) — see OpenFlamingo.UpdateParameters
-        // for full rationale (dual-stream split, GetExtraTrainableLayers
-        // widens the flat parameter vector to include them, so a writeback
-        // that only walks Layers leaves auxiliary streams on stale weights
-        // and the model state silently de-syncs across streams).
-        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
-        {
-            if (l is null)
-                continue;
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

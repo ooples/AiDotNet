@@ -1099,46 +1099,8 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         Engine.InvalidatePersistentTensor(_Wo);
     }
 
-    /// <summary>
-    /// Updates the layer's parameters with the provided values.
-    /// </summary>
-    /// <param name="parameters">A vector containing new parameter values.</param>
-    /// <remarks>
-    /// <para>
-    /// This method replaces the current values of the layer's weights with new values provided in the parameters vector.
-    /// It's useful for setting the layer's state to a specific configuration, such as when loading a pre-trained model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This allows you to directly set the layer's internal weights.
-    /// 
-    /// Instead of the layer learning these weights through training, you're providing them directly.
-    /// This is often used when you want to use a pre-trained attention layer or set up the layer with specific initial values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // === Vectorized Parameter Updates (Phase B: US-GPU-015) ===
-        int startIndex = 0;
-
-        // Update Wq - slice and copy
-        var wqParams = parameters.Slice(startIndex, _Wq.Length);
-        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq._shape);
-        startIndex += _Wq.Length;
-
-        // Update Wk - slice and copy
-        var wkParams = parameters.Slice(startIndex, _Wk.Length);
-        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk._shape);
-        startIndex += _Wk.Length;
-
-        // Update Wv - slice and copy
-        var wvParams = parameters.Slice(startIndex, _Wv.Length);
-        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv._shape);
-
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_Wq);
-        Engine.InvalidatePersistentTensor(_Wk);
-        Engine.InvalidatePersistentTensor(_Wv);
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override Vector<T> GetParameterGradients()
     {
         var gQ = _dWq != null ? _dWq.ToVector() : new Vector<T>(_Wq.Length);

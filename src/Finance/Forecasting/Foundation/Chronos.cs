@@ -580,21 +580,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             $"Chronos training expects rank-2 or rank-3 vocabulary logits, got rank {logits.Rank}.");
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Chronos model, UpdateParameters updates internal parameters or state. This keeps the Chronos architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-        // Throwing here broke NeuralNetworkBase.WithParameters (which calls DeepCopy + UpdateParameters)
-        // — the IParameterizable contract has to succeed for smoke tests, clone flows, and parameter
-        // sweeps even on pretrained foundation checkpoints. Leave the body empty, same convention as
-        // the rest of the Finance foundation models.
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

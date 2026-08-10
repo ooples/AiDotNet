@@ -487,23 +487,8 @@ public class DeepAR<T> : ForecastingModelBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the model's parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Vector of parameter gradients.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method applies the calculated adjustments (gradients)
-    /// to the model's weights. In DeepAR, this update is handled by the optimizer
-    /// during the training step, so this specific override is a placeholder or used
-    /// for manual parameter manipulation.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train method
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the model for serialization and inspection.
     /// </summary>

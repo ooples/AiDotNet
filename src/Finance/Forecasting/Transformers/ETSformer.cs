@@ -443,21 +443,8 @@ public class ETSformer<T> : ForecastingModelBase<T>
         base.Train(input, target);
     }
 
-    /// <summary>
-    /// Updates the model parameters using the provided gradient vector.
-    /// </summary>
-    /// <param name="gradients">The gradient vector for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Parameters are updated through the optimizer in the Train method,
-    /// so this method is intentionally empty for this model.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train method
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata describing the model.
     /// </summary>

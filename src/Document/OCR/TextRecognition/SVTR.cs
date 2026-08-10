@@ -617,18 +617,10 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         base.Train(input, expectedOutput);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        // Contract (NeuralNetworkBase.UpdateParameters): assign the supplied values AS the network's
-        // new parameters. Training is driven by the base tape loop + optimizer above, not by a manual
-        // gradient step here.
-        SetParameters(parameters);
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

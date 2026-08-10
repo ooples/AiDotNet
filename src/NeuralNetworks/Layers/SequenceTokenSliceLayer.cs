@@ -131,11 +131,8 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorSliceAxis(input, axis: 1, index: index);
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc />
     public override void ResetState()
     {

@@ -235,24 +235,8 @@ namespace AiDotNet.NeuralNetworks
             return output;
         }
 
-        /// <summary>
-        /// Updates all trainable weights in the FastText model.
-        /// </summary>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    var layerParameters = parameters.Slice(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
         /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
         /// compiled-plan replay; <see cref="Forward"/> remains the eager fallback.

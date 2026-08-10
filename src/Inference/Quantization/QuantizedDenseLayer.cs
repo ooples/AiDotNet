@@ -187,9 +187,7 @@ internal sealed partial class QuantizedDenseLayer : LayerBase<float>, IShapeCont
     public override void UpdateParameters(float learningRate)
         => throw new NotSupportedException("QuantizedDenseLayer is inference-only.");
 
-    public override void UpdateParameters(Vector<float> parameters)
-        => throw new NotSupportedException("QuantizedDenseLayer is inference-only.");
-
+    // UpdateParameters refused unconditionally; the base implements it properly.
     public override void ResetState()
     {
         // Inference-only; no recurrent state to clear.

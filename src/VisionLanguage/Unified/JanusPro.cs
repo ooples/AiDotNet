@@ -555,31 +555,11 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             _pixelDecoderOut,
         };
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Generation modules ride at the TAIL of the flat vector — same layout as
-        // GetParameters/SetParameters — so training updates reach them (same
-        // off-Layers contract as PaLME._patchEmbed and GR00TN1/Helix._tokenEmbedding).
-        foreach (var module in GenerationModules())
-        {
-            int count = (int)module.ParameterCount;
-            if (count > 0 && idx + count <= parameters.Length)
-            {
-                module.UpdateParameters(parameters.Slice(idx, count));
-                idx += count;
-            }
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

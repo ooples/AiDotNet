@@ -522,30 +522,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
         }
 
-        /// <summary>
-        /// Updates the trainable parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            if (parameters.Length != ParameterCount)
-            {
-                throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.");
-            }
-
-            int index = 0;
-            foreach (var layer in Layers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    index += layerParameterCount;
-                }
-            }
-        }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
         // GetParameters was overridden here to walk Layers and copy each layer's vector into a flat
         // buffer sized from ParameterCount. That is the base implementation, restated. The lift,
         // Fourier and projection layers are all registered into Layers at construction, and the

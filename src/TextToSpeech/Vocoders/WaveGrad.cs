@@ -215,24 +215,10 @@ public class WaveGrad<T> : VocoderBase<T>
         return Engine.ReduceMean(magnitude, allAxes, keepDims: false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        // The model-level UpdateParameters(Vector<T>) contract is a SETTER -- it receives the
-        // already-updated parameter vector. Forwarding to the layer-level UpdateParameters, which
-        // applies a gradient STEP, made every optimizer update land twice: once inside the optimizer
-        // and again here. That double-application is what blew the memorization loss from 0.6358 to
-        // 4.9003 in a single step. SetParameters is the correct sink (cf. LiteDVDNet).
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.SetParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

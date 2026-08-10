@@ -824,43 +824,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                3 * readHeads; // Read modes (backward, content, forward)
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Differentiable Neural Computer.
-    /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter vector among all the layers in the network.
-    /// Each layer receives a portion of the parameter vector corresponding to its number of parameters.
-    /// The method keeps track of the starting index for each layer's parameters in the input vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates all the internal values of the neural network at once.
-    /// 
-    /// When updating parameters:
-    /// - The input is a long list of numbers representing all values in the entire network
-    /// - The method divides this list into smaller chunks
-    /// - Each layer gets its own chunk of values
-    /// - The layers use these values to adjust their internal settings
-    /// 
-    /// This method is typically used during training or when loading a pre-trained model,
-    /// allowing all network parameters to be updated at once.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the Differentiable Neural Computer.
     /// </summary>

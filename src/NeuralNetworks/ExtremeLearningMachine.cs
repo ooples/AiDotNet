@@ -160,35 +160,7 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Extreme Learning Machine.
-    /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
-    /// <exception cref="NotImplementedException">
-    /// Always thrown because ELM does not support traditional parameter updates.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// This method is not implemented for Extreme Learning Machines because they do not use traditional parameter updates.
-    /// In an ELM, the input-to-hidden weights are randomly generated and remain fixed, while the hidden-to-output weights
-    /// are calculated analytically in a single step rather than through iterative updates.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method always throws an error because ELMs don't train like regular neural networks.
-    /// 
-    /// Extreme Learning Machines are different from standard neural networks:
-    /// - They don't use backpropagation or gradient descent
-    /// - Most of their weights stay fixed (unchangeable) after random initialization
-    /// - The output weights are calculated in one step, not iteratively updated
-    /// 
-    /// If you try to update parameters like in a regular neural network,
-    /// you'll get an error because this isn't how ELMs work.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        throw new InvalidOperationException("Extreme Learning Machines do not support direct parameter updates via this method. Input-to-hidden weights are randomly initialized and remain fixed. Only output layer weights are computed analytically via the Train method.");
-    }
-
+    // UpdateParameters refused unconditionally; the base implements it properly.
     /// <summary>
     /// Makes a prediction using the Extreme Learning Machine.
     /// </summary>

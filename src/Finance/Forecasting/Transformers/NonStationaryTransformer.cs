@@ -654,21 +654,8 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
-    /// <summary>
-    /// Updates network parameters based on gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector for parameter updates.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Parameter updates are handled by the optimizer in the Train method.
-    /// This method exists for interface compatibility.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated via the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the model.
     /// </summary>

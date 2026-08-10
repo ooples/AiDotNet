@@ -1049,22 +1049,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The
-        // previous body misread the contract — it computed
-        // `currentParams - 0.001 * input` and called SetParameters with that,
-        // which on top of Adam's own update produced a double-step that
-        // collapsed weights to near-zero. Training_ShouldChangeParameters
-        // saw no movement because the second-step output happened to equal
-        // the first-step output's hash. Forward straight to SetParameters
-        // per the base contract — Adam already produced the correct new
-        // values.
-        SetParameters(parameters);
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

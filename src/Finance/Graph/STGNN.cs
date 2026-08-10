@@ -484,20 +484,8 @@ public class STGNN<T> : ForecastingModelBase<T>
         base.Train(input, target);
     }
 
-    /// <summary>
-    /// Updates parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the STGNN model, UpdateParameters updates internal parameters or state. This keeps the STGNN architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in Train()
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the STGNN model.
     /// </summary>

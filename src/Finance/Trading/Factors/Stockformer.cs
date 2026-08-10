@@ -480,25 +480,8 @@ public class Stockformer<T> : CrossSectionalGraphModelBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Delegates to the layers in order, which is what keeps this consistent with
-    /// <c>GetParameters</c> and lets clone, save and load round-trip. Nothing lives outside a layer.
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count <= 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         => new Stockformer<T>(_options) { AssetGraph = AssetGraph, AssetEmbedding = AssetEmbedding };

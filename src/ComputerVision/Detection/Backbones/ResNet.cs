@@ -64,17 +64,7 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
             foreach (var layer in stage.EnumerateLayers()) yield return layer;
         }
     }
-    /// <inheritdoc />
-    /// <remarks>
-    /// Distributes a flat vector back over the stem and every stage layer, through the same
-    /// enumeration <see cref="GetExtraTrainableLayers"/> declares. This used to throw
-    /// NotSupportedException; UpdateParameters is abstract on NeuralNetworkBase, so every model
-    /// must supply something, and a throw is what gets written when the weights are not reachable.
-    /// They are reachable now.
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-        => SetParameters(parameters);
-
+    // UpdateParameters delegated straight to SetParameters. The base does that now.
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
