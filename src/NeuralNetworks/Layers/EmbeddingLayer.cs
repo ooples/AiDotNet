@@ -302,25 +302,27 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// <see cref="ValidateIndicesOrThrow"/> would reject a continuous tensor against.
     /// </para>
     /// </remarks>
-    public override LayerInputDomain InputDomain
+    public override LayerInputDomain GetInputDomain(int[]? inputShape)
     {
-        get
+        switch (_inputMode)
         {
-            switch (_inputMode)
-            {
-                case EmbeddingInputMode.Continuous:
-                    return LayerInputDomain.Continuous;
-                case EmbeddingInputMode.Indices:
-                    return LayerInputDomain.Indices(_vocabularySize);
-                default:
-                    int[] shape = InputShape;
-                    bool continuousByShape = shape is not null
-                        && shape.Length >= 2
-                        && shape[shape.Length - 1] == _vocabularySize;
-                    return continuousByShape
-                        ? LayerInputDomain.Continuous
-                        : LayerInputDomain.Indices(_vocabularySize);
-            }
+            case EmbeddingInputMode.Continuous:
+                return LayerInputDomain.Continuous;
+            case EmbeddingInputMode.Indices:
+                return LayerInputDomain.Indices(_vocabularySize);
+            default:
+                // THE SAME PREDICATE AS IsContinuousInput, applied to the shape the caller will
+                // actually feed. This layer constructs as base([1], [embeddingDimension]), so the
+                // InputShape field is a placeholder until the shape system resolves it; resolving
+                // against that field would answer Indices for every Auto layer, including a genuine
+                // continuous projection whose real input is [B, V]. Given the true shape, this
+                // declaration and the forward pass cannot disagree.
+                bool continuousByShape = inputShape is not null
+                    && inputShape.Length >= 2
+                    && inputShape[inputShape.Length - 1] == _vocabularySize;
+                return continuousByShape
+                    ? LayerInputDomain.Continuous
+                    : LayerInputDomain.Indices(_vocabularySize);
         }
     }
 

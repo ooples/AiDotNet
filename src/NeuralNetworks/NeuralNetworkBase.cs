@@ -3060,7 +3060,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// everywhere else. The layer already knows; this just asks it.
     /// </para>
     /// </remarks>
-    public virtual LayerInputDomain GetInputDomain()
+    /// <param name="inputShape">
+    /// The shape the caller intends to feed. A layer's own InputShape can still be an unresolved
+    /// placeholder, so the domain is resolved against the real shape instead -- which keeps this
+    /// answer identical to what the forward pass will decide for that same tensor.
+    /// </param>
+    public virtual LayerInputDomain GetInputDomain(int[]? inputShape)
     {
         var layers = Layers;
         if (layers is null || layers.Count == 0)
@@ -3087,7 +3092,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             if (!layer.PropagatesInputDomain)
             {
-                return layer.InputDomain;
+                return layer.GetInputDomain(inputShape);
             }
         }
 

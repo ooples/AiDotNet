@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -39,8 +39,8 @@ public class LayerInputDomainTests
     {
         var dense = new DenseLayer<double>(3);
 
-        Assert.False(dense.InputDomain.IsIndices);
-        Assert.Equal(LayerInputDomainKind.Continuous, dense.InputDomain.Kind);
+        Assert.False(dense.GetInputDomain(null).IsIndices);
+        Assert.Equal(LayerInputDomainKind.Continuous, dense.GetInputDomain(null).Kind);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public class LayerInputDomainTests
         var layer = NewEmbedding();
         layer.InputMode = EmbeddingInputMode.Indices;
 
-        var domain = layer.InputDomain;
+        var domain = layer.GetInputDomain(null);
 
         Assert.True(domain.IsIndices);
         Assert.Equal(0, domain.MinInclusive);
@@ -62,7 +62,7 @@ public class LayerInputDomainTests
         var layer = NewEmbedding();
         layer.InputMode = EmbeddingInputMode.Continuous;
 
-        Assert.False(layer.InputDomain.IsIndices);
+        Assert.False(layer.GetInputDomain(null).IsIndices);
     }
 
     /// <summary>
@@ -76,8 +76,8 @@ public class LayerInputDomainTests
         var layer = NewEmbedding();
 
         Assert.Equal(EmbeddingInputMode.Auto, layer.InputMode);
-        Assert.True(layer.InputDomain.IsIndices);
-        Assert.Equal(VocabularySize, layer.InputDomain.MaxExclusive);
+        Assert.True(layer.GetInputDomain(null).IsIndices);
+        Assert.Equal(VocabularySize, layer.GetInputDomain(null).MaxExclusive);
     }
 
     /// <summary>
@@ -90,17 +90,47 @@ public class LayerInputDomainTests
     {
         var layer = NewEmbedding();
 
-        var beforeAnyData = layer.InputDomain;
+        var beforeAnyData = layer.GetInputDomain(null);
 
         // Feed legal indices; the declaration must not drift.
         var indices = new Tensor<double>(new[] { 1, 4 });
         for (int i = 0; i < indices.Length; i++) indices[i] = i;
         layer.Forward(indices);
 
-        var afterIndices = layer.InputDomain;
+        var afterIndices = layer.GetInputDomain(null);
 
         Assert.Equal(beforeAnyData.Kind, afterIndices.Kind);
         Assert.Equal(beforeAnyData.MaxExclusive, afterIndices.MaxExclusive);
+    }
+
+    /// <summary>
+    /// THE DECLARATION MUST AGREE WITH THE FORWARD PASS, resolved against the shape the caller will
+    /// actually feed -- not the layer's own InputShape field.
+    /// </summary>
+    /// <remarks>
+    /// EmbeddingLayer constructs as <c>base([1], [embeddingDimension])</c>, so its InputShape is a
+    /// placeholder until the shape system resolves it. An earlier version of this feature read that
+    /// field and therefore answered Indices for EVERY Auto layer, including a genuine continuous
+    /// projection whose real input is <c>[B, V]</c> with V == vocabulary. That disagreed with what
+    /// Forward would do with the same tensor, which is precisely the drift this pins shut.
+    /// </remarks>
+    [Fact]
+    public void Embedding_InAutoMode_AgreesWithForward_ForContinuousByShapeInput()
+    {
+        var layer = NewEmbedding();
+
+        // Last axis == vocabulary size is the shape rule Forward uses to pick continuous mode.
+        int[] continuousShape = [2, VocabularySize];
+
+        Assert.False(layer.GetInputDomain(continuousShape).IsIndices);
+
+        // And Forward agrees: continuous values at this shape are projected, not rejected.
+        var rng = new Random(20260810);
+        var input = new Tensor<double>(continuousShape);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+
+        var output = layer.Forward(input);
+        Assert.Equal(EmbeddingDimension, output.Shape[output.Rank - 1]);
     }
 
     [Fact]
@@ -121,7 +151,7 @@ public class LayerInputDomainTests
     {
         var layer = NewEmbedding();
         layer.InputMode = EmbeddingInputMode.Indices;
-        var domain = layer.InputDomain;
+        var domain = layer.GetInputDomain(null);
 
         var rng = new Random(20260810);
         var input = new Tensor<double>(new[] { 1, 6 });
