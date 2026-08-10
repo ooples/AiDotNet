@@ -283,6 +283,47 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         }
     }
 
+    /// <summary>
+    /// Declares that this layer wants token indices in <c>[0, vocabularySize)</c> whenever it is
+    /// in (or will resolve to) lookup mode.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Resolution here mirrors the forward path EXACTLY, and deliberately reuses the same
+    /// shape-only rule rather than restating it: an explicit mode wins, and
+    /// <see cref="EmbeddingInputMode.Auto"/> consults the already-known input SHAPE. No tensor is
+    /// examined, so this cannot reintroduce the data-dependent output rank that value-sniffing
+    /// caused -- see the remarks on <see cref="IsContinuousInput"/>.
+    /// </para>
+    /// <para>
+    /// When the mode is Auto and no input shape has been seen yet, the answer is Indices. That is
+    /// not a guess: Auto only becomes continuous when the last axis equals the vocabulary size, so
+    /// lookup is what an unresolved Auto layer will actually enforce, and it is what
+    /// <see cref="ValidateIndicesOrThrow"/> would reject a continuous tensor against.
+    /// </para>
+    /// </remarks>
+    public override LayerInputDomain InputDomain
+    {
+        get
+        {
+            switch (_inputMode)
+            {
+                case EmbeddingInputMode.Continuous:
+                    return LayerInputDomain.Continuous;
+                case EmbeddingInputMode.Indices:
+                    return LayerInputDomain.Indices(_vocabularySize);
+                default:
+                    int[] shape = InputShape;
+                    bool continuousByShape = shape is not null
+                        && shape.Length >= 2
+                        && shape[shape.Length - 1] == _vocabularySize;
+                    return continuousByShape
+                        ? LayerInputDomain.Continuous
+                        : LayerInputDomain.Indices(_vocabularySize);
+            }
+        }
+    }
+
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

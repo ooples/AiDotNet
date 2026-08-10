@@ -3043,6 +3043,57 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Think of gradients as a recipe for improvement: "increase this weight by 0.01, decrease that one by 0.03," etc.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// What this network accepts in its INPUT tensor: continuous values, or integer token
+    /// indices in a bounded range.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only the FIRST layer consumes the network's input, so only its declaration can constrain
+    /// what a caller may feed. An embedding sitting deeper in the stack receives another layer's
+    /// output, not the caller's tensor, and must not be reported here.
+    /// </para>
+    /// <para>
+    /// This exists so a caller can build conforming input without knowing the architecture. Before
+    /// it, feeding a token model meant hand-writing a per-model override that hard-coded the
+    /// vocabulary size -- the same hand-maintained surface the parameter automation removes
+    /// everywhere else. The layer already knows; this just asks it.
+    /// </para>
+    /// </remarks>
+    public virtual LayerInputDomain GetInputDomain()
+    {
+        var layers = Layers;
+        if (layers is null || layers.Count == 0)
+        {
+            return LayerInputDomain.Continuous;
+        }
+
+        // Walk past identity pass-throughs. Most architectures open with an InputLayer placeholder,
+        // so stopping at Layers[0] would always read the placeholder's continuous default and never
+        // the embedding immediately behind it -- which is exactly how the fixture kept feeding token
+        // models float noise. A layer that TRANSFORMS values ends the walk, because from there on
+        // the tensor is no longer the caller's.
+        //
+        // Pattern-matched rather than declared on ILayer<T>: net471 has no default interface
+        // members, so adding it there would force an implementation onto every direct implementor
+        // -- the opposite of the goal. A layer outside the LayerBase hierarchy expresses no opinion
+        // and ends the walk with the continuous default.
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is not LayerBase<T> layer)
+            {
+                break;
+            }
+
+            if (!layer.PropagatesInputDomain)
+            {
+                return layer.InputDomain;
+            }
+        }
+
+        return LayerInputDomain.Continuous;
+    }
+
     public virtual Vector<T> GetParameterGradients()
     {
         // Collect gradients from all layers

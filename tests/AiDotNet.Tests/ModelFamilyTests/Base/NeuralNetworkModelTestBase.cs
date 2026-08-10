@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -632,9 +633,83 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual Tensor<T> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<T>(shape);
+        var domain = InputDomainFor(shape);
+        if (domain.IsIndices)
+        {
+            for (int i = 0; i < tensor.Length; i++)
+                tensor[i] = NumOps.FromDouble(rng.Next(domain.MinInclusive, domain.MaxExclusive));
+            return tensor;
+        }
+
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = NumOps.FromDouble(rng.NextDouble());
         return tensor;
+    }
+
+    private LayerInputDomain? _cachedInputDomain;
+
+    /// <summary>
+    /// The value domain the model under test accepts for a tensor of this shape: continuous, or
+    /// integer token indices.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// WHY THIS IS ASKED RATHER THAN HARD-CODED. The generic fixture used to fill every input with
+    /// <c>rng.NextDouble()</c>, so any model whose first layer is an embedding in lookup mode was
+    /// handed continuous noise and threw "element 0 is 0.668..., which is not a token index".
+    /// That was 41% of all failing assertions in run 31356312540. The only remedy was a per-model
+    /// override hard-coding the vocabulary size, and exactly ONE test class had written one.
+    /// </para>
+    /// <para>
+    /// The model already knows, so it is asked. New models inherit correct fixtures with no author
+    /// action, which is the point of the parameter/shape automation generally.
+    /// </para>
+    /// <para>
+    /// ONLY FOR INPUT-SHAPED TENSORS. Targets and probes flow through the same helper, and a target
+    /// is not consumed by the input layer, so constraining it to the vocabulary would be wrong.
+    /// The shape comparison against <see cref="InputShape"/> is what separates the two.
+    /// </para>
+    /// </remarks>
+    private LayerInputDomain InputDomainFor(int[] shape)
+    {
+        if (shape is null || !ShapesEqual(shape, InputShape))
+        {
+            return LayerInputDomain.Continuous;
+        }
+
+        if (_cachedInputDomain.HasValue)
+        {
+            return _cachedInputDomain.Value;
+        }
+
+        LayerInputDomain resolved = LayerInputDomain.Continuous;
+        try
+        {
+            // A model whose construction throws is a separate, already-reported failure; the
+            // fixture must not turn it into a confusing one from in here.
+            if (CreateNetwork() is NeuralNetworkBase<T> net)
+            {
+                resolved = net.GetInputDomain();
+            }
+        }
+        catch (Exception)
+        {
+            resolved = LayerInputDomain.Continuous;
+        }
+
+        _cachedInputDomain = resolved;
+        return resolved;
+    }
+
+    private static bool ShapesEqual(int[] a, int[] b)
+    {
+        if (a is null || b is null || a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i]) return false;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -658,10 +733,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
         var tensor = new Tensor<T>(shape);
-        var v = NumOps.FromDouble(value);
+        var domain = InputDomainFor(shape);
+        var v = domain.IsIndices
+            ? NumOps.FromDouble(ConstantToIndex(value, domain))
+            : NumOps.FromDouble(value);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = v;
         return tensor;
+    }
+
+    /// <summary>
+    /// Maps an arbitrary constant probe value onto a legal token index, DISTINCTLY.
+    /// </summary>
+    /// <remarks>
+    /// Distinctness is the whole requirement: truncating probe constants like 0.3 and 0.5 with
+    /// <c>(int)</c> collapses both to index 0, which silently defeats the invariants that feed two
+    /// different constants and expect two different outputs. Scaling before the modulo keeps
+    /// sub-integer probes apart, and the result is deterministic so a failure reproduces.
+    /// </remarks>
+    private static int ConstantToIndex(double value, LayerInputDomain domain)
+    {
+        int span = domain.MaxExclusive - domain.MinInclusive;
+        if (span <= 0) return domain.MinInclusive;
+
+        int scaled = (int)Math.Round(value * 1000.0, MidpointRounding.AwayFromZero);
+        int offset = scaled % span;
+        if (offset < 0) offset += span;
+        return domain.MinInclusive + offset;
     }
 
     /// <summary>
@@ -1056,9 +1154,29 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng);
+        // MULTIPLYING A TOKEN INDEX IS MEANINGLESS, and worse, it leaves the vocabulary: scaling
+        // index 85 by ten asks an embedding table sized 128 for row 850. The invariant being probed
+        // is "a DIFFERENT input produces a different output", so for an index domain the meaningful
+        // perturbation is a different legal index, not a larger number. Wrapping inside the
+        // vocabulary keeps every value legal while still changing every position.
+        var scaleDomain = InputDomainFor(InputShape);
         var scaledInput = new Tensor<T>(InputShape);
         for (int i = 0; i < input.Length; i++)
-            scaledInput[i] = NumOps.FromDouble(ConvertToDouble(input[i]) * 10.0);
+        {
+            double original = ConvertToDouble(input[i]);
+            if (scaleDomain.IsIndices)
+            {
+                int span = scaleDomain.MaxExclusive - scaleDomain.MinInclusive;
+                int shifted = (int)original + Math.Max(1, span / 2);
+                int wrapped = scaleDomain.MinInclusive
+                    + ((shifted - scaleDomain.MinInclusive) % span + span) % span;
+                scaledInput[i] = NumOps.FromDouble(wrapped);
+            }
+            else
+            {
+                scaledInput[i] = NumOps.FromDouble(original * 10.0);
+            }
+        }
 
         var output1 = network.Predict(input);
         var output2 = network.Predict(scaledInput);
