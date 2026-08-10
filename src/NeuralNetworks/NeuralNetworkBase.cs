@@ -3117,6 +3117,72 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// merely intends to agree. Layer authors write nothing.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Largest parameter count for which the streaming trainer will RETAIN gradients so the public
+    /// gradient surface can be populated. Above this, gradients are applied and released as
+    /// streaming intends, and <see cref="GetParameterGradients"/> reports that it cannot answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE POINT OF STREAMING IS NOT TO MATERIALISE THE FULL GRADIENT SET. ComputeGradientsStreaming
+    /// hands back one (source, gradient) pair at a time so a foundation-scale model never holds a
+    /// second copy of its weights; retaining every gradient unconditionally would reintroduce
+    /// exactly the allocation the streaming path exists to avoid, on models already close to their
+    /// memory envelope.
+    /// </para>
+    /// <para>
+    /// So retention is bounded rather than unconditional: small and mid-size models -- which is
+    /// nearly every model the invariant covers -- pay a copy that is negligible for them, and the
+    /// genuinely large ones keep streaming's guarantee. Raise it on a model that wants gradient
+    /// inspection and can afford the copy.
+    /// </para>
+    /// </remarks>
+    protected virtual long MaxRetainedGradientScalars => 10_000_000;
+
+    /// <summary>Gradients retained during a streaming step, or null when retention is off.</summary>
+    private Dictionary<Tensor<T>, Tensor<T>>? _retainedStreamingGrads;
+
+    /// <summary>True once a training step deliberately declined to retain gradients.</summary>
+    private bool _gradientSurfaceUnavailable;
+
+    /// <summary>
+    /// Opens gradient retention for one streaming step, if this model is small enough to afford it.
+    /// </summary>
+    private void BeginStreamingGradientRetention()
+    {
+        bool affordable = ParameterCount <= MaxRetainedGradientScalars;
+        _retainedStreamingGrads = affordable
+            ? new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance)
+            : null;
+        _gradientSurfaceUnavailable = !affordable;
+    }
+
+    /// <summary>
+    /// Copies one streaming gradient aside. The streaming optimizer applies and then reuses or
+    /// releases the buffer it was handed, so keeping the reference would leave the surface pointing
+    /// at whatever that memory became.
+    /// </summary>
+    private void RetainStreamingGradient(Tensor<T> source, Tensor<T> grad)
+    {
+        var bag = _retainedStreamingGrads;
+        if (bag is null || source is null || grad is null) return;
+
+        var copy = new Tensor<T>(grad.Shape.ToArray());
+        grad.Data.Span.CopyTo(copy.Data.Span);
+        bag[source] = copy;
+    }
+
+    /// <summary>Publishes anything retained during the step, then drops it.</summary>
+    private void EndStreamingGradientRetention()
+    {
+        var bag = _retainedStreamingGrads;
+        _retainedStreamingGrads = null;
+        if (bag is null || bag.Count == 0) return;
+
+        ScatterParameterGradientsToLayers(bag);
+        bag.Clear();
+    }
+
     protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         if (grads is null || grads.Count == 0) return 0;
@@ -7749,6 +7815,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
         bool useStreamingDefaults)
     {
+        // Decide up front whether this model can afford to keep its gradients, so every branch
+        // below (each of the streaming callbacks, and the non-streaming fallback) agrees.
+        BeginStreamingGradientRetention();
+
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
@@ -7838,6 +7908,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    RetainStreamingGradient(source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -7861,6 +7932,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
+                    if (grad is not null && grad.Length > 0) RetainStreamingGradient(source, grad);
                     if (grad is null || grad.Length == 0 || !clipSet.Contains(source)) return;
                     var span = grad.Data.Span;
                     int len = grad.Length;
@@ -7887,6 +7959,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    RetainStreamingGradient(source, grad);
                     if (scaleDown && clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -7921,6 +7994,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    RetainStreamingGradient(source, grad);
                     if (clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -7947,6 +8021,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // per-parameter gradients above and performs its global two-loop update + parameter
         // write-back now that the whole gradient is available.
         streamingOptimizer.EndStep();
+
+        // Publish the retained gradients now the step is complete.
+        EndStreamingGradientRetention();
 
         // GPU weight-cache coherence after the in-place parameter mutation. The
         // 8-bit StreamingAdam state already updated source tensors in place; without
