@@ -150,6 +150,8 @@ public class LayerStateGenerator : IIncrementalGenerator
                 info.LayerNumeric = childNumeric?.ToDisplayString(FullyQualified);
             }
 
+            info.TraceableNumeric = TraceableNumericOf(Unwrap(p.Type))?.ToDisplayString(FullyQualified);
+
             var isMarked = HasStateAttribute(p);
 
             // INFERRED, not merely marked. A constructor argument the layer stores in a field is
@@ -357,6 +359,30 @@ public class LayerStateGenerator : IIncrementalGenerator
             _ => ValueKind.Unsupported,
         };
     }
+    /// <summary>
+    /// For <c>Func&lt;ComputationNode&lt;X&gt;, ComputationNode&lt;X&gt;&gt;</c>, returns X. Such a
+    /// delegate can be described by running it once and recording the operations it performed,
+    /// which is the only description that survives a closure.
+    /// </summary>
+    private static ITypeSymbol? TraceableNumericOf(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Delegate } named) return null;
+
+        var invoke = named.DelegateInvokeMethod;
+        if (invoke is null || invoke.Parameters.Length != 1) return null;
+
+        var argument = Node(invoke.Parameters[0].Type);
+        var result = Node(invoke.ReturnType);
+
+        return argument is not null && SymbolEqualityComparer.Default.Equals(argument, result) ? argument : null;
+
+        static ITypeSymbol? Node(ITypeSymbol t)
+            => t is INamedTypeSymbol { Name: "ComputationNode", TypeArguments.Length: 1 } n
+                ? n.TypeArguments[0]
+                : null;
+    }
+
+
 
     private static bool IsActivation(ITypeSymbol type, out bool vector)
     {
@@ -515,7 +541,12 @@ public class LayerStateGenerator : IIncrementalGenerator
             .Where(m => m.IsValid)
             .GroupBy(m => m.BaseFqn)
             .Select(g => g
-                .OrderByDescending(m => m.Parameters.Count(p => p.IsState))
+                // Recoverable state first, then how much of it. Counting parameters alone picked
+                // LambdaLayer's two-opaque-delegate constructor over the traceable one, and an
+                // opaque delegate is the parameter LEAST likely to survive a save -- so the
+                // constructor with more of them scored higher while rebuilding worse.
+                .OrderByDescending(m => m.Parameters.Count(p => p.TraceableNumeric is not null))
+                .ThenByDescending(m => m.Parameters.Count(p => p.IsState))
                 .First())
             .OrderBy(m => m.BaseFqn, System.StringComparer.Ordinal)
             .ToList();
@@ -596,8 +627,16 @@ public class LayerStateGenerator : IIncrementalGenerator
             // a model arbitrary code execution (CVE-2025-9906); this refuses to.
             if (p.Kind == ValueKind.Delegate)
             {
-                sb.AppendLine($"        __metadata[\"{p.Key}\"] = "
-                    + $"global::AiDotNet.Serialization.DelegateState.Save(this.{p.BackingMember});");
+                // A traceable expression is recorded by running it, so a closure survives; anything
+                // else falls back to naming the method. Never as marshalled code: Keras writes the
+                // Lambda layer's bytecode and made loading a model arbitrary code execution
+                // (CVE-2025-9906).
+                sb.AppendLine(p.TraceableNumeric is null
+                    ? $"        __metadata[\"{p.Key}\"] = "
+                      + $"global::AiDotNet.Serialization.DelegateState.Save(this.{p.BackingMember});"
+                    : $"        __metadata[\"{p.Key}\"] = "
+                      + $"global::AiDotNet.Serialization.DelegateState.SaveTraceable<{p.TraceableNumeric}>("
+                      + $"this.{p.BackingMember}, this.GetInputShape());");
                 continue;
             }
 
@@ -885,6 +924,14 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// QuantizedDenseLayer takes a DenseLayer&lt;float&gt; whatever its own T is.
         /// </summary>
         public string? LayerNumeric;
+
+        /// <summary>
+        /// For a <c>Func&lt;ComputationNode&lt;X&gt;, ComputationNode&lt;X&gt;&gt;</c>, the X. Such a
+        /// delegate can be recorded by running it once over autodiff nodes, which is the only
+        /// description that survives a closure.
+        /// </summary>
+        public string? TraceableNumeric;
+
 
 
         public string Key = string.Empty;

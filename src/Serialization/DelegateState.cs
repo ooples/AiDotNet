@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using AiDotNet.Autodiff;
 
 namespace AiDotNet.Serialization;
 
@@ -58,6 +59,27 @@ public static class DelegateState
         // that has one records it directly. This is the fallback that works on any delegate.
         return SaveMethodReference(value) ?? string.Empty;
     }
+    /// <summary>
+    /// Describes a traceable expression by running it once and recording what it computed.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="value">The traceable expression the layer was built with.</param>
+    /// <param name="inputShape">The layer's input shape, used to make a probe tensor.</param>
+    /// <returns>The saved form, or <see cref="string.Empty"/> when it cannot be saved.</returns>
+    /// <remarks>
+    /// This is the only description that survives a closure, because it records what the delegate
+    /// DID rather than what it is called. When the graph cannot be recorded faithfully it falls
+    /// through to the weaker descriptions rather than saving a partial one.
+    /// </remarks>
+    public static string SaveTraceable<T>(Func<ComputationNode<T>, ComputationNode<T>>? value, int[]? inputShape)
+    {
+        if (value is null) return string.Empty;
+
+        var graph = GraphTrace.Trace(value, inputShape);
+        return graph is not null ? GraphScheme + graph : Save(value);
+    }
+
+
 
     /// <summary>
     /// A named static method, as its declaring type, name and parameter types.
@@ -112,10 +134,46 @@ public static class DelegateState
 
         if (saved!.StartsWith(MethodScheme, StringComparison.Ordinal))
             return LoadMethodReference<TDelegate>(saved.Substring(MethodScheme.Length), layerName, key);
+        if (saved.StartsWith(GraphScheme, StringComparison.Ordinal))
+            return LoadGraph<TDelegate>(saved.Substring(GraphScheme.Length), layerName, key);
+
 
         throw Unsaveable(layerName, key, $"its saved form '{Excerpt(saved)}' is not a form this version understands.");
     }
 
+    /// <summary>
+    /// Replays a traced graph as the delegate the constructor takes.
+    /// </summary>
+    /// <remarks>
+    /// The numeric type is read back off the delegate itself -- a
+    /// <c>Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;</c> carries its own T -- so the
+    /// caller does not have to thread it through the generated factory.
+    /// </remarks>
+    private static TDelegate LoadGraph<TDelegate>(string graph, string layerName, string key)
+        where TDelegate : Delegate
+    {
+        var argument = typeof(TDelegate).IsGenericType
+            ? typeof(TDelegate).GetGenericArguments().FirstOrDefault()
+            : null;
+
+        var numeric = argument is not null && argument.IsGenericType
+            && argument.GetGenericTypeDefinition() == typeof(ComputationNode<>)
+                ? argument.GetGenericArguments()[0]
+                : null;
+
+        if (numeric is null)
+            throw Unsaveable(layerName, key,
+                $"it was saved as a traced graph, which only rebuilds a {typeof(ComputationNode<>).Name} "
+                + $"expression, not a {typeof(TDelegate).Name}.");
+
+        var compile = typeof(GraphTrace)
+            .GetMethod(nameof(GraphTrace.Compile), BindingFlags.Public | BindingFlags.Static)!
+            .MakeGenericMethod(numeric);
+
+        return (TDelegate)compile.Invoke(null, [graph, layerName, key])!;
+    }
+
+    /// <summary>Rebuilds a delegate from a reference to a named static method.</summary>
     private static TDelegate LoadMethodReference<TDelegate>(string reference, string layerName, string key)
         where TDelegate : Delegate
     {
