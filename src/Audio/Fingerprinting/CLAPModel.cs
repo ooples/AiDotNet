@@ -55,6 +55,14 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://doi.org/10.1109/ICASSP49357.2023.10095969",
     Year = 2023,
     Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
+// The inherited [Batch, Features] input is CORRECT - CLAP takes raw audio, per EncodeAudio's own
+// contract of "[samples] or [batch, samples]". What the declared-input check saw is the log-mel front
+// end: EncodeAudio calls PreprocessAudio BEFORE folding the stack, so Layers[0] - a
+// PatchEmbeddingLayer over Swin blocks, rank 3 or 4 - receives a spectrogram image and never the
+// waveform. Both declarations describe different tensors, so the exemption is the honest fix here; an
+// override claiming a spectrogram input would advertise a shape Predict does not accept.
+[PreprocessesInput("PreprocessAudio converts the waveform to a log-mel spectrogram image before the "
+    + "audio stack runs, so Layers[0] never sees the raw samples - see EncodeAudio.")]
 public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
 
