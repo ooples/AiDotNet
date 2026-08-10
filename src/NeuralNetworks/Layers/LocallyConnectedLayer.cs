@@ -397,9 +397,9 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int outputChannels,
-        int kernelSize,
-        int stride,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride,
         IActivationFunction<T>? activationFunction = null)
         : base(
             [-1, -1, -1],
@@ -452,9 +452,9 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public LocallyConnectedLayer(
-        int outputChannels,
-        int kernelSize,
-        int stride,
+        [LayerState] int outputChannels,
+        [LayerState] int kernelSize,
+        [LayerState] int stride,
         IVectorActivationFunction<T> vectorActivationFunction)
         : base(
             [-1, -1, -1],

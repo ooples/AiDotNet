@@ -249,7 +249,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     /// is carefully chosen to prevent vanishing or exploding gradients during training.
     /// </para>
     /// </remarks>
-    public MemoryReadLayer(int memoryDimension, int outputDimension, IActivationFunction<T>? activationFunction = null)
+    public MemoryReadLayer([LayerState] int memoryDimension, [LayerState] int outputDimension, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1 }, new[] { outputDimension }, activationFunction ?? new IdentityActivation<T>())
     {
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
@@ -259,6 +259,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         _lastAttentionSparsityLoss = NumOps.Zero;
 
         _memoryDimension = memoryDimension;
+        _outputDimension = outputDimension;
         _keyWeights = new Tensor<T>([0, 0]);
         _valueWeights = new Tensor<T>([memoryDimension, outputDimension]);
         _outputWeights = new Tensor<T>([outputDimension, outputDimension]);
@@ -266,6 +267,16 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     }
 
     private int _memoryDimension;
+
+    /// <summary>
+    /// The size of the output vector the constructor was given.
+    /// </summary>
+    /// <remarks>
+    /// Backing store for the <c>[LayerState]</c> on <c>outputDimension</c>. Both dimensions are
+    /// declared, since the key weights are sized <c>[inputDimension, memoryDimension]</c> only at
+    /// first forward and cannot be read back before then.
+    /// </remarks>
+    private readonly int _outputDimension;
 
     /// <summary>
     /// Resolves input feature size from input.Shape on first forward and allocates key weights.
@@ -320,7 +331,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     /// that consider the relationships between different outputs in your memory reading operation.
     /// </para>
     /// </remarks>
-    public MemoryReadLayer(int memoryDimension, int outputDimension, IVectorActivationFunction<T> activationFunction)
+    public MemoryReadLayer([LayerState] int memoryDimension, [LayerState] int outputDimension, IVectorActivationFunction<T> activationFunction)
         : base(new[] { -1 }, new[] { outputDimension }, activationFunction ?? new IdentityActivation<T>())
     {
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
@@ -330,6 +341,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         _lastAttentionSparsityLoss = NumOps.Zero;
 
         _memoryDimension = memoryDimension;
+        _outputDimension = outputDimension;
         _keyWeights = new Tensor<T>([0, 0]);
         _valueWeights = new Tensor<T>([memoryDimension, outputDimension]);
         _outputWeights = new Tensor<T>([outputDimension, outputDimension]);

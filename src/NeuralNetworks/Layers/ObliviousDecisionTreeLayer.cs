@@ -114,6 +114,13 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
+    /// <remarks>
+    /// Not marked <c>[LayerState]</c>; the lazy overload below carries the annotation. The generator
+    /// takes one constructor per type, first by source order, and this one takes <c>inputDim</c>,
+    /// whose backing field is <c>-1</c> on a lazily-built layer that has not yet forwarded. The lazy
+    /// overload re-resolves <c>inputDim</c> from the first input and so restores layers built
+    /// either way.
+    /// </remarks>
     public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
         : base([inputDim], [outputDim])
     {
@@ -153,7 +160,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
-    public ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01)
+    public ObliviousDecisionTreeLayer([LayerState] int depth = 6, [LayerState] int outputDim = 1, [LayerState] double initScale = 0.01)
         : base([-1], [outputDim])
     {
         if (depth <= 0 || depth > 30)
@@ -226,16 +233,37 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
             throw new InvalidOperationException(
                 "ObliviousDecisionTreeLayer cannot initialize until OnFirstForward has resolved the input dimension from input shape.");
 
-        _featureSelectionWeights = AllocateLazyWeight([_depth, _inputDim]);
-        _thresholds = AllocateLazyWeight([_depth]);
-        _leafValues = AllocateLazyWeight([_numLeaves, _outputDim]);
+        // Idempotent allocation: correctly-shaped parameters are already present when a deserialize
+        // installed them or a copy-on-write clone shared them, and re-initializing would replace
+        // trained weights with fresh noise (#1221 Clone_AfterTraining). See ConvolutionalLayer. A
+        // freshly-constructed lazy layer holds the constructor's [0, 0] placeholders, which cannot
+        // match a positive _depth, so it still initializes.
+        bool weightsAlreadyValid =
+            _featureSelectionWeights is { Rank: 2 } fs && fs.Shape[0] == _depth && fs.Shape[1] == _inputDim
+            && _thresholds is { Rank: 1 } th && th.Shape[0] == _depth
+            && _leafValues is { Rank: 2 } lv && lv.Shape[0] == _numLeaves && lv.Shape[1] == _outputDim;
+
+        if (!weightsAlreadyValid)
+        {
+            _featureSelectionWeights = AllocateLazyWeight([_depth, _inputDim]);
+            _thresholds = AllocateLazyWeight([_depth]);
+            _leafValues = AllocateLazyWeight([_numLeaves, _outputDim]);
+        }
+
         // Gradient buffers don't go through the streaming pool — they
         // mirror the weight shapes but are owned by the autograd tape,
-        // not registered with the pool. Plain new Tensor here.
+        // not registered with the pool. Plain new Tensor here. Allocated
+        // unconditionally, since a restore installs weights but never
+        // gradients.
         _featureSelectionGrad = new Tensor<T>([_depth, _inputDim]);
         _thresholdsGrad = new Tensor<T>([_depth]);
         _leafValuesGrad = new Tensor<T>([_numLeaves, _outputDim]);
-        InitializeParameters(_initScale);
+
+        if (!weightsAlreadyValid)
+        {
+            InitializeParameters(_initScale);
+        }
+
         _isInitialized = true;
     }
 
