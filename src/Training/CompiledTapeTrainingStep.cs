@@ -446,6 +446,52 @@ public static class CompiledTapeTrainingStep<T>
     /// </para>
     /// </remarks>
     /// <returns><c>true</c> when the fused compiled step ran successfully.</returns>
+    /// <summary>
+    /// Hands the compiled plan's gradients to <paramref name="onGradients"/>, keyed by the
+    /// parameter tensor each one belongs to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pairing is POSITIONAL, exactly as <c>UpdateParametersSGD</c> pairs them: the plan is compiled
+    /// against <paramref name="parameters"/> and allocates one gradient buffer per traced tensor in
+    /// that order. A length disagreement therefore means the plan was compiled against a different
+    /// parameter set than the one supplied, so nothing is published rather than publishing a
+    /// mis-keyed map -- gradients attributed to the wrong parameters would be far worse than the
+    /// absent ones this replaces.
+    /// </para>
+    /// <para>
+    /// Buffers are handed over by reference, not copied. They are pre-allocated per plan and
+    /// overwritten on the next step, so a consumer that needs them beyond this step copies them --
+    /// which is what the scatter on the model side does.
+    /// </para>
+    /// </remarks>
+    private static void PublishFusedGradients(
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
+        Tensor<T>[] parameters,
+        ICompiledTrainingPlan<T> plan)
+    {
+        if (onGradients is null) return;
+
+        var gradients = plan.Gradients;
+        if (gradients is null || parameters is null) return;
+        if (gradients.Length != parameters.Length)
+        {
+            Fd($"gradient publish skipped: {parameters.Length} parameters vs {gradients.Length} gradients");
+            return;
+        }
+
+        var map = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var p = parameters[i];
+            var g = gradients[i];
+            if (p is null || g is null) continue;
+            map[p] = g;
+        }
+
+        if (map.Count > 0) onGradients(map);
+    }
+
     internal static bool TryStepWithFusedOptimizer(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
@@ -463,7 +509,8 @@ public static class CompiledTapeTrainingStep<T>
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
         bool useBf16Moments = false,
-        IReadOnlyList<Tensor<T>>? extraTensors = null)
+        IReadOnlyList<Tensor<T>>? extraTensors = null,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -897,6 +944,15 @@ public static class CompiledTapeTrainingStep<T>
                 FdStep($"model-parameters={parameters.Length} loss-length={lossOutput.Length} " +
                        $"loss={reportedLoss} optimizer={optimizerType}");
             }
+            // Hand the freshly-computed gradients back before returning. The fused kernel does the
+            // parameter update in-replay, but it does NOT discard the gradients: CompiledTrainingPlan
+            // pre-allocates a buffer per traced tensor and exposes them, index-aligned with the
+            // parameters it was compiled against (the same pairing UpdateParametersSGD relies on).
+            // Publishing them keeps the model's gradient surface truthful WITHOUT giving up fusion,
+            // which is strictly better than framework baseline -- PyTorch keeps param.grad populated
+            // only because its fused optimizers leave backward as a separate phase.
+            PublishFusedGradients(onGradients, parameters, plan);
+
             lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
             // Signal successful fused engagement so tests/diagnostics can
             // assert the compiled path actually ran — distinguishing it from

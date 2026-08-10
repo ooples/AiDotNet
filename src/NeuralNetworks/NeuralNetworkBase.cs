@@ -3183,6 +3183,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bag.Clear();
     }
 
+    /// <summary>
+    /// Receives the fused kernel's gradients and publishes them to the layer surface.
+    /// </summary>
+    /// <remarks>
+    /// No copy is taken here on purpose. The plan hands over its pre-allocated buffers by reference
+    /// and overwrites them on the next step, but the scatter READS the scalars into each layer's own
+    /// vector rather than retaining the tensors, so the published surface is already independent of
+    /// the plan's buffers by the time this returns.
+    /// </remarks>
+    private void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        ScatterParameterGradientsToLayers(grads);
+    }
+
     protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         if (grads is null || grads.Count == 0) return 0;
@@ -9555,7 +9569,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
-                eagerOptimizer: resolvedOptimizer);
+                eagerOptimizer: resolvedOptimizer,
+                // Publish the fused kernel's gradients onto the layer surface. The fused path
+                // updates parameters in-replay and returns without ever passing through the eager
+                // gradient code below, which is why the surface stayed empty for every model that
+                // engages fusion -- the largest single cause of the all-zero gradient reports.
+                onGradients: ScatterFusedGradients);
         }
         finally
         {
