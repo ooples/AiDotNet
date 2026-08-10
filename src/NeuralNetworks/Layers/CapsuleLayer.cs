@@ -209,7 +209,12 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     /// helps decide if they should be grouped together as a face.
     /// </para>
     /// </remarks>
-    public CapsuleLayer(int numCapsules, int capsuleDimension, int numRoutingIterations, IActivationFunction<T>? activationFunction = null)
+    // [LayerState] on all three: the transformation matrix is allocated lazily as
+    // [inputCapsules, inputDimension, numCapsules, capsuleDimension], so a deferred layer cannot be
+    // reconstructed to the right SIZE without the last two, and numRoutingIterations changes the
+    // routing result rather than the shape -- a clone that loses it resolves to the correct size and
+    // still predicts differently, which is the failure C1 reports.
+    public CapsuleLayer([LayerState] int numCapsules, [LayerState] int capsuleDimension, [LayerState] int numRoutingIterations, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1, -1 }, new[] { numCapsules, capsuleDimension }, activationFunction ?? new SquashActivation<T>())
     {
         if (numRoutingIterations < 1)

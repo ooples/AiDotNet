@@ -390,7 +390,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// ```
     /// </para>
     /// </remarks>
-    public DilatedConvolutionalLayer(int outputDepth, int kernelSize, int dilation, int stride = 1, int padding = 0,
+    public DilatedConvolutionalLayer([LayerState] int outputDepth, [LayerState] int kernelSize, [LayerState] int dilation, [LayerState] int stride = 1, [LayerState] int padding = 0,
                                      IActivationFunction<T>? activation = null,
                                      IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
@@ -444,7 +444,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// For most basic uses, the regular constructor is sufficient.
     /// </para>
     /// </remarks>
-    public DilatedConvolutionalLayer(int outputDepth, int kernelSize, int dilation, int stride, int padding,
+    public DilatedConvolutionalLayer([LayerState] int outputDepth, [LayerState] int kernelSize, [LayerState] int dilation, [LayerState] int stride, [LayerState] int padding,
                                      IVectorActivationFunction<T> vectorActivation)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
                vectorActivation ?? new ReLUActivation<T>())
