@@ -56,6 +56,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private const string RegisterHook = "RegisterComponents";
     private const string RegisterCall = "RegisterParameterComponent";
+    private const string ExtraTensorsHook = "GetExtraTrainableTensors";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -88,30 +89,52 @@ public class ModelParameterGenerator : IIncrementalGenerator
             if (model.GetDeclaredSymbol(classDecl) is not INamedTypeSymbol classSymbol) continue;
             if (classSymbol.IsAbstract) continue;
 
-            // The registry must be inherited, not merely named. A type that declares its own
-            // RegisterComponents owns its registration and generating a second one would be a
-            // duplicate-member error -- and would silently fight the author's ordering, which IS
-            // the serialization order.
-            if (!InheritsRegistry(classSymbol)) continue;
-            if (DeclaresOwn(classSymbol, RegisterHook)) continue;
-
             var elem = ElementTypeParam(classSymbol);
             if (elem is null) continue;
 
+            // Two trunks, two hooks.
+            //
+            // ModelBase and its descendants have the component registry, which takes a source per
+            // field and so can carry tensors, matrices and vectors alike.
+            //
+            // NeuralNetworkBase has no registry; it has GetExtraTrainableTensors(), and that hook is
+            // ALREADY consumed in fourteen places -- ParameterCount, GetParameters, SetParameters,
+            // serialization, cloning, gradient collection, GPU mirroring. Bolting a second registry
+            // onto that base would mean threading it through every one of them, and missing one is
+            // precisely how a weight goes quiet. Emitting into the hook that is already wired costs
+            // nothing and cannot miss a site. Its element type is Tensor<T>, so only tensor fields
+            // are automated there; matrices and vectors on that trunk stay reported.
+            bool hasRegistry = InheritsRegistry(classSymbol) && !DeclaresOwn(classSymbol, RegisterHook);
+            bool hasExtraTensors = !hasRegistry
+                                   && InheritsExtraTensorsHook(classSymbol)
+                                   && !DeclaresOwn(classSymbol, ExtraTensorsHook);
+            if (!hasRegistry && !hasExtraTensors) continue;
+
             if (!processed.Add(classSymbol.ToDisplayString())) continue;
+
+            if (hasExtraTensors)
+            {
+                var tensors = new List<string>();
+                foreach (var member in classSymbol.GetMembers())
+                {
+                    if (member is not IFieldSymbol tf) continue;
+                    if (!IsRegisterableField(tf, scratchSymbol, bufferSymbol)) continue;
+                    if (SourceFor(tf.Type, elem) != "TensorFieldParameterSource") continue;
+                    tensors.Add(tf.Name);
+                }
+
+                if (tensors.Count == 0) continue;
+                context.AddSource(
+                    HintName(classSymbol) + ".ModelExtraTensors.g.cs",
+                    GenerateExtraTensorsSource(classSymbol, elem, tensors));
+                continue;
+            }
 
             var fields = new List<(string Name, string SourceType)>();
             foreach (var member in classSymbol.GetMembers())
             {
                 if (member is not IFieldSymbol f) continue;
-                if (f.IsStatic || f.IsConst) continue;
-                // Auto-property backing fields have names that are not valid C# to emit.
-                if (f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) continue;
-                if (HasAttr(f, scratchSymbol) || HasAttr(f, bufferSymbol)) continue;
-                // A gradient accumulator is sized like a weight and is not one. The layer path uses
-                // the same suffix convention.
-                if (f.Name.EndsWith("Gradient", System.StringComparison.Ordinal) ||
-                    f.Name.EndsWith("Gradients", System.StringComparison.Ordinal)) continue;
+                if (!IsRegisterableField(f, scratchSymbol, bufferSymbol)) continue;
 
                 var src = SourceFor(f.Type, elem);
                 if (src is null) continue;
@@ -120,11 +143,103 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
             if (fields.Count == 0) continue;
 
-            context.AddSource(
-                classSymbol.ToDisplayString().Replace('.', '_').Replace('<', '_').Replace('>', '_')
-                    + ".ModelParameters.g.cs",
-                GenerateSource(classSymbol, elem, fields));
+            context.AddSource(HintName(classSymbol) + ".ModelParameters.g.cs",
+                              GenerateSource(classSymbol, elem, fields));
         }
+    }
+
+    private static string HintName(INamedTypeSymbol t) =>
+        t.ToDisplayString().Replace('.', '_').Replace('<', '_').Replace('>', '_');
+
+    /// <summary>Field-level gates shared by both emission paths.</summary>
+    private static bool IsRegisterableField(IFieldSymbol f,
+                                            INamedTypeSymbol? scratchSymbol,
+                                            INamedTypeSymbol? bufferSymbol)
+    {
+        if (f.IsStatic || f.IsConst) return false;
+        // Auto-property backing fields have names that are not valid C# to emit.
+        if (f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) return false;
+        if (HasAttr(f, scratchSymbol) || HasAttr(f, bufferSymbol)) return false;
+        // A gradient accumulator is sized like a weight and is not one. The layer path uses the
+        // same suffix convention.
+        if (f.Name.EndsWith("Gradient", System.StringComparison.Ordinal) ||
+            f.Name.EndsWith("Gradients", System.StringComparison.Ordinal)) return false;
+        return true;
+    }
+
+    /// <summary>An overridable <c>GetExtraTrainableTensors()</c> is reachable on a base type.</summary>
+    private static bool InheritsExtraTensorsHook(INamedTypeSymbol type)
+    {
+        for (var c = type.BaseType; c is not null; c = c.BaseType)
+        {
+            foreach (var m in c.GetMembers(ExtraTensorsHook))
+            {
+                if (m is IMethodSymbol ms && ms.Parameters.Length == 0 &&
+                    (ms.IsVirtual || ms.IsOverride || ms.IsAbstract)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
+                                                     List<string> tensors)
+    {
+        var sb = OpenPartial(classSymbol, out var closers);
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Auto-generated: surfaces this model's tensor weights that live outside Layers,");
+        sb.AppendLine("    /// in declaration order, after whatever the base already yields.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    /// <remarks>");
+        sb.AppendLine("    /// Fields marked [Scratch] or [Buffer] are excluded, and a null field is skipped");
+        sb.AppendLine("    /// rather than yielded -- an unfitted model has no weights there yet. Declare");
+        sb.AppendLine($"    /// {ExtraTensorsHook}() by hand to take ownership and this disappears.");
+        sb.AppendLine("    /// </remarks>");
+        sb.AppendLine($"    protected override global::System.Collections.Generic.IEnumerable<Tensor<{elem}>> {ExtraTensorsHook}()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        foreach (var __t in base.{ExtraTensorsHook}()) yield return __t;");
+        foreach (var name in tensors)
+        {
+            sb.AppendLine($"        if ({name} is not null) yield return {name};");
+        }
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        for (int i = 0; i < closers; i++) sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    private static StringBuilder OpenPartial(INamedTypeSymbol classSymbol, out int closers)
+    {
+        var ns = classSymbol.ContainingNamespace.ToDisplayString();
+        var typeParams = classSymbol.TypeParameters.Length > 0
+            ? "<" + string.Join(", ", classSymbol.TypeParameters.Select(tp => tp.Name)) + ">"
+            : "";
+
+        var containing = new List<INamedTypeSymbol>();
+        for (var outer = classSymbol.ContainingType; outer is not null; outer = outer.ContainingType)
+            containing.Insert(0, outer);
+        closers = containing.Count;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated />");
+        sb.AppendLine("// Generated by ModelParameterGenerator");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+        sb.AppendLine("using AiDotNet.Models.Parameters;");
+        sb.AppendLine("using AiDotNet.Tensors.LinearAlgebra;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {ns};");
+        sb.AppendLine();
+        foreach (var ct in containing)
+        {
+            var ctp = ct.TypeParameters.Length > 0
+                ? "<" + string.Join(", ", ct.TypeParameters.Select(tp => tp.Name)) + ">"
+                : "";
+            sb.AppendLine($"partial class {ct.Name}{ctp}");
+            sb.AppendLine("{");
+        }
+        sb.AppendLine($"partial class {classSymbol.Name}{typeParams}");
+        sb.AppendLine("{");
+        return sb;
     }
 
     /// <summary>The registry is present when both the call and the overridable hook are reachable.</summary>

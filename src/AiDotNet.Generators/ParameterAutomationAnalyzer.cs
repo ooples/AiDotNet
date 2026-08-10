@@ -183,10 +183,16 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         // exactly the weights automation CANNOT reach -- collections and arrays with
                         // no author-agreed ordering, tensors over some other element type, and types
                         // on a root that has no registry yet.
-                        bool generatorWillRegister = !type.IsAbstract
-                                                     && IsPartial(type)
-                                                     && !declares
-                                                     && InheritsRegistry(type);
+                        bool automatable = !type.IsAbstract && IsPartial(type) && !declares;
+
+                        // The registry path carries tensors, matrices and vectors alike.
+                        bool generatorWillRegister = automatable && InheritsRegistry(type);
+
+                        // The NeuralNetworkBase trunk has no registry, only GetExtraTrainableTensors(),
+                        // whose element type is Tensor<T>. Only tensor fields are automated there; a
+                        // matrix or vector on that trunk stays reported, correctly -- nothing collects it.
+                        bool generatorWillYieldTensors = automatable && !generatorWillRegister
+                                                         && InheritsExtraTensorsHook(type);
 
                         if (!declares)
                         {
@@ -196,6 +202,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                 if (HasAnyAttribute(f, "BufferAttribute", "Buffer", "ScratchAttribute", "Scratch")) continue;
                                 if (!IsWeightCapableType(f.Type)) continue;
                                 if (generatorWillRegister && GeneratorHandles(f, type)) continue;
+                                if (generatorWillYieldTensors && GeneratorHandles(f, type)
+                                    && IsTensorType(f.Type)) continue;
 
                                 var fl = f.Locations.FirstOrDefault(l => l.IsInSource);
                                 if (fl is not null)
@@ -400,6 +408,20 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         {
             if (r.GetSyntax() is ClassDeclarationSyntax c &&
                 c.Modifiers.Any(m => m.Text == "partial")) return true;
+        }
+        return false;
+    }
+
+    /// <summary>An overridable GetExtraTrainableTensors() is reachable on a base type.</summary>
+    private static bool InheritsExtraTensorsHook(INamedTypeSymbol type)
+    {
+        for (var c = type.BaseType; c is not null; c = c.BaseType)
+        {
+            foreach (var m in c.GetMembers("GetExtraTrainableTensors"))
+            {
+                if (m is IMethodSymbol ms && ms.Parameters.Length == 0 &&
+                    (ms.IsVirtual || ms.IsOverride || ms.IsAbstract)) return true;
+            }
         }
         return false;
     }

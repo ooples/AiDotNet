@@ -1409,8 +1409,96 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
 
+    // --- Parameter component registry -------------------------------------------------------
+    //
+    // A time series model's coefficients live in its own fields -- _arCoefficients, _maCoefficients,
+    // _seasonalComponents. ModelParameters is a PACKED COPY that training writes and nothing reads
+    // back: no derived class overrides SetParameters to redistribute it, and the base's own version
+    // only ever wrote into the packed copy. Restoring a checkpoint into ARIMA, SARIMA, TBATS,
+    // STLDecomposition, SpectralAnalysisModel, InterventionAnalysisModel or TransferFunctionModel
+    // therefore left Predict running on the coefficients it was already holding -- the vector
+    // round-tripped and the model ignored it.
+    //
+    // Registering the fields makes the surface describe the LIVE coefficients, so a restore reaches
+    // what Predict reads. Registration order is serialization order.
+    //
+    // ModelParameters stays for the feature-index and importance machinery that indexes into it,
+    // and remains the surface for any model that registers nothing -- so an unconverted model
+    // behaves exactly as it did.
+
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this model's surface. Registration order is
+    /// serialization order, so keep it stable. Null is tolerated and registration is idempotent by
+    /// reference.
+    /// </summary>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+    }
+
+    /// <summary>
+    /// Declare this model's trainable components here with <see cref="RegisterParameterComponent"/>.
+    /// Called once, lazily, so it runs after the constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>
+    /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
+    /// to refresh anything DERIVED from them.
+    /// </summary>
+    protected virtual void OnParametersRestored()
+    {
+    }
+
+    private IReadOnlyList<IParameterSource<T>> Components
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+                // Latch only once something registered. A model can be asked for its parameters
+                // before it is fitted, and the field sources tolerate a null field, so an early
+                // call would otherwise register nothing and still mark the job done -- leaving the
+                // model permanently reporting zero.
+                _componentsRegistered = _parameterComponents.Count > 0;
+            }
+            return _parameterComponents;
+        }
+    }
+
     public virtual Vector<T> GetParameters()
     {
+        var components = Components;
+        if (components.Count > 0)
+        {
+            var parts = new Vector<T>[components.Count];
+            int total = 0;
+            for (int i = 0; i < components.Count; i++)
+            {
+                parts[i] = components[i].GetParameters();
+                total += parts[i].Length;
+            }
+
+            var folded = new Vector<T>(total);
+            int at = 0;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                for (int j = 0; j < parts[i].Length; j++) folded[at++] = parts[i][j];
+            }
+            return folded;
+        }
+
         if (!IsTrained && (ModelParameters == null || ModelParameters.Length == 0))
         {
             throw new InvalidOperationException("Cannot get parameters for an untrained model.");
@@ -1703,6 +1791,35 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
+        // Components first, when the model has any. This is the half that was missing: the block
+        // below writes the packed ModelParameters copy, which no derived model reads back, so a
+        // restore never reached the coefficients Predict actually uses.
+        var components = Components;
+        if (components.Count > 0)
+        {
+            long expected = 0;
+            for (int i = 0; i < components.Count; i++) expected += components[i].ParameterCount;
+            if (parameters.Length != expected)
+            {
+                throw new ArgumentException(
+                    $"Expected {expected} parameters, but got {parameters.Length}", nameof(parameters));
+            }
+
+            int at = 0;
+            for (int i = 0; i < components.Count; i++)
+            {
+                int n = (int)components[i].ParameterCount;
+                var slice = new Vector<T>(n);
+                for (int j = 0; j < n; j++) slice[j] = parameters[at++];
+                components[i].SetParameters(slice);
+            }
+
+            // Keep the packed copy consistent for the feature-index machinery that indexes it.
+            ModelParameters = parameters.Clone();
+            OnParametersRestored();
+            return;
+        }
+
         // If model is untrained (empty parameters), resize to accept the new parameters
         // This allows optimizers to initialize untrained models with random parameters
         if (ModelParameters.Length == 0 && parameters.Length > 0)
@@ -2088,7 +2205,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
     public virtual long ParameterCount
     {
-        get { return ModelParameters.Length; }
+        get
+        {
+            var components = Components;
+            if (components.Count == 0) return ModelParameters.Length;
+
+            long total = 0;
+            for (int i = 0; i < components.Count; i++) total += components[i].ParameterCount;
+            return total;
+        }
     }
 
     /// <inheritdoc/>
