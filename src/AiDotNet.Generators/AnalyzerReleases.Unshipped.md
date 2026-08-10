@@ -63,3 +63,4 @@ ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A t
 ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
 ADNSHAPE004 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing (Warning until the #1789 conversion completes; the final slice raises it to Error)
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
+AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them

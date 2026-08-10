@@ -97,7 +97,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Snell, J., Swersky, K., & Zemel, R.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ProtoNetsOptions<T, TInput, TOutput> _protoNetsOptions;
 
