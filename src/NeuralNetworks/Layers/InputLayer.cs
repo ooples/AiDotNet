@@ -60,6 +60,12 @@ public partial class InputLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool SupportsTraining => false;
 
+    /// <summary>
+    /// An input layer is an identity placeholder, so whatever the caller supplies reaches the NEXT
+    /// layer untouched and must satisfy that layer's domain, not this one's.
+    /// </summary>
+    public override bool PropagatesInputDomain => true;
+
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
 

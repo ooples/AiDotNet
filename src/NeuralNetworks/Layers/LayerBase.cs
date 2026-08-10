@@ -259,6 +259,38 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// What this layer accepts in its input tensor: continuous values, or integer indices in
+    /// a bounded range. Defaults to continuous, which is right for almost every layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A layer that only accepts integer indices -- an embedding table doing a lookup -- overrides
+    /// this so callers can produce conforming data WITHOUT inspecting the layer's type or
+    /// duplicating its rules. It is the declarative counterpart to shape-only mode resolution:
+    /// the mode is never inferred from the values, so the values are instead derived from the
+    /// declared mode.
+    /// </para>
+    /// <para>
+    /// This is a DECLARATION, not an inspection. It reports what the layer would accept and
+    /// never looks at a tensor to decide, so nothing here can make an output shape depend on data.
+    /// </para>
+    /// </remarks>
+    public virtual LayerInputDomain InputDomain => LayerInputDomain.Continuous;
+
+    /// <summary>
+    /// True when this layer hands its input to the NEXT layer without altering the values, so the
+    /// caller's tensor must satisfy that next layer's domain rather than this one's.
+    /// </summary>
+    /// <remarks>
+    /// Only an identity pass-through may set this. <see cref="InputLayer{T}"/> is the case it exists
+    /// for: it is a shape placeholder at the head of most architectures, so asking only
+    /// <c>Layers[0]</c> for the domain would always find the placeholder and never the embedding
+    /// sitting behind it. A layer that transforms values -- an activation, a projection -- must NOT
+    /// set this, because the caller's input is no longer what reaches the next layer.
+    /// </remarks>
+    public virtual bool PropagatesInputDomain => false;
+
+    /// <summary>
     /// Gets the output shape for this layer.
     /// </summary>
     /// <remarks>
