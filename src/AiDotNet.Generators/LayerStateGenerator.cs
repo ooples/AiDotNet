@@ -187,6 +187,13 @@ public class LayerStateGenerator : IIncrementalGenerator
         {
             var info = new ParamModel { Name = p.Name, TypeFqn = p.Type.ToDisplayString(FullyQualified) };
 
+            if (IsLayer(Unwrap(p.Type), out var childNumeric)
+                || IsLayerSequence(Unwrap(p.Type), out childNumeric))
+            {
+                info.LayerNumeric = childNumeric?.ToDisplayString(FullyQualified);
+            }
+
+
             if (HasStateAttribute(p))
             {
                 info.IsState = true;
@@ -331,13 +338,38 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         return false;
     }
-
-    /// <summary>Both types are layers over the same numeric type.</summary>
+    /// <summary>
+    /// The member holds the layer the parameter was given: both are layers over the same numeric
+    /// type, AND the parameter is assignable to the member's declared type.
+    /// </summary>
+    /// <remarks>
+    /// Assignability is what keeps this from being too loose. "Both are layers over T" alone would
+    /// let a GroupedQueryAttentionLayer&lt;float&gt; parameter bind to a
+    /// MultiHeadAttentionLayer&lt;float&gt; field -- a DIFFERENT child, silently read back in place
+    /// of the one the constructor was given. The case this exists for is the reverse and is safe:
+    /// a LayerBase&lt;T&gt; parameter stored in an ILayer&lt;T&gt; field is the same object seen
+    /// through a wider type.
+    /// </remarks>
     private static bool IsSameLayer(ITypeSymbol member, ITypeSymbol parameter)
         => IsLayer(Unwrap(parameter), out var pn)
            && IsLayer(Unwrap(member), out var mn)
            && pn is not null && mn is not null
-           && SymbolEqualityComparer.Default.Equals(pn, mn);
+           && SymbolEqualityComparer.Default.Equals(pn, mn)
+           && IsAssignableTo(Unwrap(parameter), Unwrap(member));
+
+    /// <summary>Whether a value of <paramref name="from"/> can be stored in <paramref name="to"/>.</summary>
+    private static bool IsAssignableTo(ITypeSymbol from, ITypeSymbol to)
+    {
+        if (SameType(from, to)) return true;
+
+        for (var b = (from as INamedTypeSymbol)?.BaseType; b is not null; b = b.BaseType)
+        {
+            if (SameType(b, to)) return true;
+        }
+
+        return from is INamedTypeSymbol named && named.AllInterfaces.Any(i => SameType(i, to));
+    }
+
 
     private static string? StateKey(IParameterSymbol p)
     {
@@ -353,6 +385,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (type.TypeKind == TypeKind.Enum) return ValueKind.Enum;
 
         // A pluggable strategy: record which implementation was used and rebuild that one.
+        // Before the interface check: ILayer<T> would otherwise be claimed as a Component, which
+        // rebuilds by parameterless Activator.CreateInstance -- losing every argument the child
+        // was built with, silently and without failing.
+        if (IsLayer(type, out _)) return ValueKind.Layer;
+        if (IsLayerSequence(type, out _)) return ValueKind.LayerList;
+
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
 
         if (type is IArrayTypeSymbol { Rank: 1 } arr)
@@ -602,6 +640,26 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("        base.WriteConstructionState(__metadata);");
         foreach (var p in model.Parameters.Where(p => p.IsState))
         {
+            // A child layer records its OWN construction state under a nested key namespace, so a
+            // composite layer is rebuildable exactly as far as its children are. Writing only the
+            // child's type name would rebuild it by parameterless construction, silently dropping
+            // every argument it was given.
+            if (p.Kind == ValueKind.Layer)
+            {
+                var num = p.LayerNumeric ?? "T";
+                sb.AppendLine($"        global::AiDotNet.Serialization.LayerStateBag.WriteNested<{num}>("
+                    + $"__metadata, \"{p.Key}\", this.{p.BackingMember} as global::AiDotNet.NeuralNetworks.Layers.LayerBase<{num}>);");
+                continue;
+            }
+
+            if (p.Kind == ValueKind.LayerList)
+            {
+                var num = p.LayerNumeric ?? "T";
+                sb.AppendLine($"        global::AiDotNet.Serialization.LayerStateBag.WriteNestedRange<{num}>("
+                    + $"__metadata, \"{p.Key}\", this.{p.BackingMember});");
+                continue;
+            }
+
             if (p.Kind == ValueKind.Component)
             {
                 sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatType(this.{p.BackingMember});");
@@ -681,6 +739,48 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <param name=\"vectorActivation\">Restored vector activation, when the constructor takes one.</param>");
         sb.AppendLine("    /// <param name=\"layer\">The rebuilt layer.</param>");
         sb.AppendLine("    /// <returns><c>true</c> when a factory exists for the type.</returns>");
+        // The recursion lives in generated code because only generated code can call TryCreate;
+        // putting it in LayerStateBag would make a hand-written type depend on generated output.
+        sb.AppendLine("    /// <summary>Rebuilds the child layer saved under <paramref name=\"key\"/>.</summary>");
+        sb.AppendLine("    /// <param name=\"state\">The parent's saved metadata.</param>");
+        sb.AppendLine("    /// <param name=\"key\">The constructor parameter the child was passed as.</param>");
+        sb.AppendLine("    /// <returns>The rebuilt child, or <c>null</c> when none was saved.</returns>");
+        sb.AppendLine("    internal static object? RebuildNested(global::AiDotNet.Serialization.LayerStateBag state, string key)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var type = state.NestedType(key);");
+        sb.AppendLine("        if (type is null) return null;");
+        sb.AppendLine();
+        sb.AppendLine("        var nested = state.Nested(key);");
+        sb.AppendLine("        var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;");
+        sb.AppendLine("        return TryCreate(");
+        sb.AppendLine("            definition,");
+        sb.AppendLine("            nested,");
+        sb.AppendLine("            nested.Component<global::AiDotNet.Interfaces.IActivationFunction<T>>(\"ScalarActivationType\"),");
+        sb.AppendLine("            nested.Component<global::AiDotNet.Interfaces.IVectorActivationFunction<T>>(\"VectorActivationType\"),");
+        sb.AppendLine("            out var child) ? child : null;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Rebuilds the child layers saved under <paramref name=\"key\"/>, in order.</summary>");
+        sb.AppendLine("    /// <typeparam name=\"TChild\">The element type the constructor takes.</typeparam>");
+        sb.AppendLine("    /// <param name=\"state\">The parent's saved metadata.</param>");
+        sb.AppendLine("    /// <param name=\"key\">The constructor parameter the children were passed as.</param>");
+        sb.AppendLine("    /// <returns>The rebuilt children.</returns>");
+        sb.AppendLine("    internal static global::System.Collections.Generic.List<TChild> RebuildNestedRange<TChild>(");
+        sb.AppendLine("        global::AiDotNet.Serialization.LayerStateBag state, string key) where TChild : class");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var count = state.NestedCount(key);");
+        sb.AppendLine("        var items = new global::System.Collections.Generic.List<TChild>(count < 0 ? 0 : count);");
+        sb.AppendLine("        for (var i = 0; i < count; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // A child that will not rebuild is dropped rather than left as a null element:");
+        sb.AppendLine("            // a null layer in an expert list faults on the first forward pass, far from here.");
+        sb.AppendLine("            if (RebuildNested(state, key + \".\" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture)) is TChild c)");
+        sb.AppendLine("                items.Add(c);");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return items;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
         sb.AppendLine("    internal static bool TryCreate(");
         sb.AppendLine("        global::System.Type genericDefinition,");
         sb.AppendLine("        global::AiDotNet.Serialization.LayerStateBag state,");
@@ -695,7 +795,14 @@ public class LayerStateGenerator : IIncrementalGenerator
             var closed = model.ClosedFqn;
             var required = model.Parameters
                 .Where(p => p.IsState)
-                .Select(p => "\"" + p.Key + "\"")
+                // Nested state is not stored under the bare parameter name, so the "is this state
+                // even mine" guard has to look for the key that is actually written.
+                .Select(p => "\"" + p.Key + p.Kind switch
+                {
+                    ValueKind.Layer => ".$type",
+                    ValueKind.LayerList => ".count",
+                    _ => string.Empty,
+                } + "\"")
                 .ToList();
 
             sb.AppendLine($"        if (genericDefinition == typeof({model.OpenGenericFqn}))");
@@ -736,7 +843,36 @@ public class LayerStateGenerator : IIncrementalGenerator
         // THE PARAMETER'S DEFAULT, NOT THE TYPE'S. Falls back to `default!` only when the
         // declaration genuinely has no value to render.
         if (p.UseDefault) return $"{p.Name}: {p.DefaultExpression ?? "default!"}";
+        var read = ReadExpression(p);
+        return $"{p.Name}: {read}";
+    }
 
+    /// <summary>
+    /// Rebuilds a sequence of child layers into the collection type the constructor declared.
+    /// </summary>
+    /// <remarks>
+    /// The children come back as a <c>List&lt;TChild&gt;</c>; an array parameter needs ToArray() and
+    /// an IEnumerable/IReadOnlyList parameter takes the list as it is.
+    /// </remarks>
+    private static string LayerListArgument(ParamModel p)
+    {
+        var declared = p.TypeFqn.TrimEnd('?');
+        var rebuilt = $"RebuildNestedRange<{ElementFqn(declared)}>(state, \"{p.Key}\")";
+        return declared.EndsWith("[]", System.StringComparison.Ordinal) ? $"{rebuilt}.ToArray()" : rebuilt;
+    }
+
+    /// <summary>The element type of a declared array or single-argument generic collection.</summary>
+    private static string ElementFqn(string declared)
+    {
+        if (declared.EndsWith("[]", System.StringComparison.Ordinal))
+            return declared.Substring(0, declared.Length - 2);
+
+        var open = declared.IndexOf('<');
+        return open < 0 ? declared : declared.Substring(open + 1, declared.Length - open - 2);
+    }
+
+    private static string ReadExpression(ParamModel p)
+    {
         var read = p.Kind switch
         {
             ValueKind.Int32 => $"state.Int32(\"{p.Key}\")",
@@ -752,12 +888,14 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
             ValueKind.StringInt32Map => $"state.StringInt32Map(\"{p.Key}\")",
             ValueKind.StringPairMap => $"state.StringPairMap(\"{p.Key}\")",
+            ValueKind.Layer => $"({p.TypeFqn.TrimEnd('?')})RebuildNested(state, \"{p.Key}\")!",
+            ValueKind.LayerList => LayerListArgument(p),
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             ValueKind.Component => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             _ => "default!",
         };
 
-        return $"{p.Name}: {read}";
+        return read;
     }
 
     private static readonly SymbolDisplayFormat FullyQualified =
@@ -796,6 +934,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         Int32Jagged,
         StringInt32Map,
         StringPairMap,
+        Layer,
+        LayerList,
         Component,
     }
 
@@ -915,6 +1055,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         public string? DefaultExpression;
         public bool NeedsConvert;
         public ValueKind Kind;
+
+        /// <summary>
+        /// For a child layer or a sequence of them, the numeric type argument to write and rebuild
+        /// through. Usually the parent's own T, but a layer may name a closed child type.
+        /// </summary>
+        public string? LayerNumeric;
     }
 
     /// <summary>A location reduced to primitives, so it neither roots a Compilation nor breaks equality.</summary>

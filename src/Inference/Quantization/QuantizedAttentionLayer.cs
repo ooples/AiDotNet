@@ -116,7 +116,9 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     /// <param name="source">The source GQA layer to quantize.</param>
     /// <param name="mode">The quantization format to use (default: INT8).</param>
     public QuantizedAttentionLayer(
-        [LayerState(Member = "_sourceGrouped")] GroupedQueryAttentionLayer<float> source,
+        // Not [LayerState]: this layer is non-generic, and ADN0055 reports that the factory only
+        // builds layers with one type parameter, so marking its arguments cannot produce one.
+        GroupedQueryAttentionLayer<float> source,
         InferenceQuantizationMode mode = InferenceQuantizationMode.WeightOnlyInt8)
         : base(
             inputShape: source.GetInputShape(),

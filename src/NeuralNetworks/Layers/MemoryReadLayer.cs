@@ -222,9 +222,6 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>Construction state: the 'outputDimension' the layer was built with.</summary>
-    private readonly int _outputDimension;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="MemoryReadLayer{T}"/> class with the specified dimensions
     /// and a scalar activation function.
