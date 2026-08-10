@@ -58,11 +58,8 @@ namespace AiDotNet.Audio.Fingerprinting;
 public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The text tower. CLAP is dual-encoder: the audio layers are this model's own
-    /// Layers and the text layers are a second stack, and both are trained.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => TextEncoderLayers.Cast<LayerBase<T>?>();
+    // TextEncoderLayers is yielded by AudioNeuralNetworkBase.GetExtraTrainableLayers for every audio
+    // model that owns a text tower, so this override restated the base. Removed under AIDN082.
 
     /// <inheritdoc />
     /// <remarks>The learned logit scale (CLIP's temperature), a single value the contrastive
