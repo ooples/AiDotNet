@@ -88,6 +88,23 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                      "and therefore agree on a wrong answer. InformerModel reported 1,688 parameters " +
                      "against a real 167,640 this way: every Q/K/V/O projection, FFN weight and LayerNorm " +
                      "gain it owned was readonly, so nothing counted, saved or trained them.");
+    private static readonly DiagnosticDescriptor MissingPartialForAutomation = new(
+        id: "AIDN085",
+        title: "Model must be partial for its weights to be registered automatically",
+        messageFormat: "'{0}' owns weights outside Layers but is not declared 'partial', so the "
+                     + "parameter generator cannot register them and they reach no ParameterCount, "
+                     + "no checkpoint and no optimizer",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Add 'partial' to the class declaration. That is the entire fix -- the generator "
+                   + "emits the registration into a second partial declaration, so there is no hook "
+                   + "to write, maintain or forget, and 'partial' changes no semantics on its own. "
+                   + "This exists because a source generator cannot add the keyword to a declaration "
+                   + "it does not own, and it is the one prerequisite the automation cannot supply "
+                   + "for itself. Without it the weights are silently absent, which looks exactly "
+                   + "like a model that has none.");
+
     private static readonly DiagnosticDescriptor UndeclaredModelWeight = new(
         id: "AIDN084",
         title: "Model holds weights it never declares to the parameter walk",
@@ -184,6 +201,28 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         // no author-agreed ordering, tensors over some other element type, and types
                         // on a root that has no registry yet.
                         bool automatable = !type.IsAbstract && IsPartial(type) && !declares;
+
+                        // AIDN085: the one prerequisite of the automation that a source generator
+                        // cannot supply for itself. C# does not let a generator add `partial` to
+                        // someone else's declaration, so the build has to ask -- and asking is enough,
+                        // because the keyword is the entire fix and is inert on its own.
+                        //
+                        // Reported only when the class OWNS something the generator would register
+                        // and is otherwise eligible, so it never fires on a model that declares its
+                        // surface by hand or holds nothing to register.
+                        if (!type.IsAbstract && !declares && !IsPartial(type)
+                            && (InheritsRegistry(type) || InheritsExtraTensorsHook(type))
+                            && type.GetMembers().OfType<IFieldSymbol>().Any(f =>
+                                   !f.IsStatic && !f.IsImplicitlyDeclared
+                                   && f.AssociatedSymbol is null
+                                   && !HasAnyAttribute(f, "BufferAttribute", "Buffer",
+                                                          "ScratchAttribute", "Scratch")
+                                   && IsWeightCapableType(f.Type))
+                            && modelLoc is not null)
+                        {
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                MissingPartialForAutomation, modelLoc, type.Name));
+                        }
 
                         // The registry path carries tensors, matrices and vectors alike.
                         bool generatorWillRegister = automatable && InheritsRegistry(type);
