@@ -51,7 +51,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models", "https://doi.org/10.48550/arXiv.2109.10282", Year = 2022, Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
-public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly TrOCROptions _options;
 
@@ -84,8 +84,10 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T>? _decoderWordEmbeddings;
 
     // Cached outputs
+    [Scratch]
     private Tensor<T>? _lastCharacterProbabilities;
 #pragma warning disable CS0649 // Field is never assigned - attention weights are computed but not yet stored
+    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
 #pragma warning restore CS0649
 

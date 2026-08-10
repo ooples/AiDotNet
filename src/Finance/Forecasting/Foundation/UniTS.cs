@@ -216,7 +216,9 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// UniTS normalizes each input series before the embedding and restores the
     /// level on the output so distinct input scales produce distinct forecasts.
     /// </summary>
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

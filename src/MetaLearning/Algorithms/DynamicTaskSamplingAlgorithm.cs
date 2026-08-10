@@ -58,6 +58,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     private readonly int _paramDim;
 
     /// <summary>Running difficulty estimate per task slot in meta-batch.</summary>
+    [Scratch]
     private Vector<T> _taskDifficulty;
 
     /// <summary>Visit count per task slot (for UCB exploration).</summary>

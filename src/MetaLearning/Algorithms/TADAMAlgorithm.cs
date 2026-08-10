@@ -102,7 +102,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Oreshkin, B. N., Rodriguez, P., & Lacoste, A.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -116,6 +116,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     private T _temperature;
 
     // Task embedding for current episode
+    [Scratch]
     private Tensor<T>? _currentTaskEmbedding;
 
     /// <summary>

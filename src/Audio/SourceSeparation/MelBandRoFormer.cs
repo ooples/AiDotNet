@@ -58,6 +58,7 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;

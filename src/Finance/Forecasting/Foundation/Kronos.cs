@@ -91,7 +91,9 @@ public class Kronos<T> : TimeSeriesFoundationModelBase<T>
     // multivariate OHLCV series [contextLength, numFeatures]; each feature is
     // normalized over the time axis and the forecast is denormalized with the
     // same per-feature stats so level-shifted inputs yield distinct forecasts.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

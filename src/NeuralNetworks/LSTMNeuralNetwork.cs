@@ -1280,6 +1280,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Dictionary to store activations and states from the forward pass.
     /// </summary>
+    [Scratch]
     private Dictionary<string, Tensor<T>> _storedActivations = new Dictionary<string, Tensor<T>>();
 
     /// <summary>

@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Understanding and Simplifying One-Shot Architecture Search", "https://arxiv.org/abs/1810.03522")]
-    public class SuperNet<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+    public partial class SuperNet<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         private readonly SearchSpaceBase<T> _searchSpace;
         private readonly int _numNodes;
@@ -59,7 +59,9 @@ namespace AiDotNet.NeuralNetworks
         private readonly Dictionary<string, Vector<T>> _weights;
 
         // Gradients
+        [Scratch]
         private readonly List<Matrix<T>> _architectureGradients;
+        [Scratch]
         private readonly Dictionary<string, Vector<T>> _weightGradients;
 
         // Model metadata
@@ -68,6 +70,7 @@ namespace AiDotNet.NeuralNetworks
 
         // IInterpretableModel fields
         private readonly HashSet<InterpretationMethod> _enabledMethods = new();
+        [Buffer]
         private Vector<int>? _sensitiveFeatures;
         private readonly List<FairnessMetric> _fairnessMetrics = new();
         private IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>>? _baseModel;

@@ -53,6 +53,7 @@ public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
     private readonly CombinationMethod _combination;
     private List<IAnomalyDetector<T>>? _baseDetectors;
     private List<int[]>? _featureSubsets;
+    [Buffer]
     private Matrix<T>? _trainingData;
 
     /// <summary>

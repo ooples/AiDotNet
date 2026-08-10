@@ -137,6 +137,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     // MFA gradient flow tracking
     private readonly List<int> _blockOutputLengths = [];
+    [Scratch]
     private Tensor<T>? _lastTdnnOutput;
 
     #endregion

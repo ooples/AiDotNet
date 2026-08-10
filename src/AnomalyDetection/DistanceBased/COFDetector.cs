@@ -26,8 +26,10 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 public class COFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
+    [Buffer]
     private Matrix<T>? _trainingData;
     private T[,]? _trainingDistanceMatrix;
+    [Buffer]
     private Vector<T>? _chainingDistances;
 
     /// <summary>

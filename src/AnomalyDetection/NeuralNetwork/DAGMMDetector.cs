@@ -54,7 +54,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
     "https://openreview.net/forum?id=BJJLHbb0-",
     Year = 2018,
     Authors = "Bo Zong, Qi Song, Martin Renqiang Min, Wei Cheng, Cristian Lumezanu, Daeki Cho, Haifeng Chen")]
-public class DAGMMDetector<T> : AnomalyDetectorBase<T>
+public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;
     private readonly int _hiddenDim;
@@ -89,7 +89,9 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
     private int _zDim; // latent + reconstruction features
 
     // Normalization parameters
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     /// <summary>

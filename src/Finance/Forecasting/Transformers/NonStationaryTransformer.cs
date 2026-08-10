@@ -143,6 +143,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// before processing and de-normalize after.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
@@ -154,6 +155,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// the data to unit variance before processing.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     /// <summary>

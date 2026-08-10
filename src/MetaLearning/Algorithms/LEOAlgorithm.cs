@@ -75,7 +75,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Andrei A. Rusu, Dushyant Rao, Jakub Sygnowski, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly LEOOptions<T, TInput, TOutput> _leoOptions;
 

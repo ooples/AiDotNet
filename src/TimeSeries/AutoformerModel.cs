@@ -88,7 +88,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting", "https://arxiv.org/abs/2106.13008", Year = 2021, Authors = "Haixu Wu, Jiehui Xu, Jianmin Wang, Mingsheng Long")]
-public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
+public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -100,6 +100,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
     private readonly AutoformerOptions<T> _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Series decomposition components
@@ -107,6 +108,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
 
     // Input embedding
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
+    [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
     // Host-side copy of the (constant) positional encoding. The forward assembles a per-window PE tensor from
     // it every step; indexing _positionalEncoding[i] on a GPU-resident tensor would sync per element (seqLen*dim

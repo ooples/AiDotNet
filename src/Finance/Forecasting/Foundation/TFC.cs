@@ -82,7 +82,9 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     // window silently produces 129 complex bins (a 256-point FFT) instead of 101.
     // Explicit DFT projections preserve the exact n-point transform while keeping
     // the operation visible to the gradient tape through TensorMatMul.
+    [Scratch]
     private Tensor<T>? _dftRealBasis;
+    [Scratch]
     private Tensor<T>? _dftImaginaryBasis;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -108,11 +110,13 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// <summary>Per-instance mean captured by <see cref="ApplyInstanceNormalization"/>,
     /// consumed by <see cref="DenormalizeForecast"/>. Tensor-shaped [B, 1] so it broadcasts
     /// against the forecast. NULL when no forward has run yet.</summary>
+    [Scratch]
     private Tensor<T>? _revinMeanTensor;
 
     /// <summary>Per-instance standard deviation captured by <see cref="ApplyInstanceNormalization"/>,
     /// consumed by <see cref="DenormalizeForecast"/>. Tensor-shaped [B, 1]. NULL when no forward
     /// has run yet.</summary>
+    [Scratch]
     private Tensor<T>? _revinStdTensor;
 
     #endregion

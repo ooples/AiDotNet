@@ -47,7 +47,9 @@ public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
     private const double MAD_SCALE_FACTOR = 0.6745;
 
     private readonly double _modifiedZThreshold;
+    [Buffer]
     private Vector<T>? _medians;
+    [Buffer]
     private Vector<T>? _mads;
     private int _nFeatures;
 

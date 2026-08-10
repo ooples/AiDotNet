@@ -98,6 +98,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
     // Cached values for proper gradient flow in MFA
     private readonly List<int> _blockOutputLengths = [];
+    [Scratch]
     private Tensor<T>? _lastTdnnOutput;
 
     // Language mapping

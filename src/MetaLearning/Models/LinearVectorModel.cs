@@ -40,7 +40,7 @@ namespace AiDotNet.MetaLearning.Models;
 [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>, ICloneable
+public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>, ICloneable
 {
     private Vector<double> _parameters;
     private readonly int _inputDim;

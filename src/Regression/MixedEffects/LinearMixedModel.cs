@@ -69,7 +69,7 @@ namespace AiDotNet.Regression.MixedEffects;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Linear Mixed Models for Longitudinal Data", "https://doi.org/10.1007/b98969")]
-public class LinearMixedModel<T> : RegressionBase<T>
+public partial class LinearMixedModel<T> : RegressionBase<T>
 {
     /// <summary>
     /// Numeric operations for type T.

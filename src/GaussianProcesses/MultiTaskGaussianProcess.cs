@@ -41,7 +41,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Multi-task Gaussian Process Prediction", "https://doi.org/10.5555/2981562.2981672", Year = 2008, Authors = "Edwin V. Bonilla, Kian Ming A. Chai, Christopher K. I. Williams")]
-public class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
+public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The base kernel for input similarity.
@@ -51,11 +51,13 @@ public class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The training input data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The training target values (multi-output).
     /// </summary>
+    [Buffer]
     private Matrix<T> _Y;
 
     /// <summary>
@@ -71,16 +73,19 @@ public class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Cholesky factor of the task covariance.
     /// </summary>
+    [Buffer]
     private Matrix<T> _taskCovCholesky;
 
     /// <summary>
     /// The combined kernel matrix.
     /// </summary>
+    [Buffer]
     private Matrix<T> _K;
 
     /// <summary>
     /// The alpha vector for predictions (K^(-1) * y).
     /// </summary>
+    [Buffer]
     private Vector<T> _alpha;
 
     /// <summary>

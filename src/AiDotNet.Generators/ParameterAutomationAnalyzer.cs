@@ -169,6 +169,25 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         bool declares = type.GetMembers().Any(m =>
                             m.Name is "GetExtraTrainableTensors" or "GetExtraTrainableLayers"
                                    or "RegisterComponents" or "GetParameterChunks");
+
+                        // ModelParameterGenerator registers a model's weight fields for it, and this
+                        // analyzer cannot see that: generated trees are not in the compilation the
+                        // analyzer runs against, so the generated RegisterComponents is invisible and
+                        // every automatically-handled field would be reported anyway. Rather than
+                        // depend on generator/analyzer ordering, ask the same question the generator
+                        // asks. The two must agree or the build contradicts itself -- so the predicate
+                        // below is deliberately the same shape as ModelParameterGenerator.SourceFor
+                        // and its surrounding gates.
+                        //
+                        // The point of AIDN084 survives, and sharpens: what remains reported is
+                        // exactly the weights automation CANNOT reach -- collections and arrays with
+                        // no author-agreed ordering, tensors over some other element type, and types
+                        // on a root that has no registry yet.
+                        bool generatorWillRegister = !type.IsAbstract
+                                                     && IsPartial(type)
+                                                     && !declares
+                                                     && InheritsRegistry(type);
+
                         if (!declares)
                         {
                             foreach (var f in type.GetMembers().OfType<IFieldSymbol>())
@@ -176,6 +195,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                 if (f.IsStatic || f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) continue;
                                 if (HasAnyAttribute(f, "BufferAttribute", "Buffer", "ScratchAttribute", "Scratch")) continue;
                                 if (!IsWeightCapableType(f.Type)) continue;
+                                if (generatorWillRegister && GeneratorHandles(f, type)) continue;
 
                                 var fl = f.Locations.FirstOrDefault(l => l.IsInSource);
                                 if (fl is not null)
@@ -366,5 +386,69 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             }
         }
         return false;
+    }
+
+    // ---- Mirror of ModelParameterGenerator's gates -------------------------------------------
+    // These answer "will the generator register this?" so AIDN084 stays silent about work already
+    // automated. They must track ModelParameterGenerator; if the two drift, the build either nags
+    // about fields that are handled or goes quiet about ones that are not.
+
+    /// <summary>The generator only emits into a partial declaration.</summary>
+    private static bool IsPartial(INamedTypeSymbol type)
+    {
+        foreach (var r in type.DeclaringSyntaxReferences)
+        {
+            if (r.GetSyntax() is ClassDeclarationSyntax c &&
+                c.Modifiers.Any(m => m.Text == "partial")) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Both the registry call and an overridable hook must be inherited.</summary>
+    private static bool InheritsRegistry(INamedTypeSymbol type)
+    {
+        bool call = false, hook = false;
+        for (var c = type.BaseType; c is not null; c = c.BaseType)
+        {
+            foreach (var m in c.GetMembers())
+            {
+                if (m is not IMethodSymbol ms) continue;
+                if (ms.Name == "RegisterParameterComponent" && ms.Parameters.Length == 1) call = true;
+                else if (ms.Name == "RegisterComponents" && ms.Parameters.Length == 0 &&
+                         (ms.IsVirtual || ms.IsOverride || ms.IsAbstract)) hook = true;
+            }
+            if (call && hook) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// A Tensor/Matrix/Vector over the model's own element type, which is what the generator has a
+    /// field source for. Collections, arrays and tensors over another element type are excluded --
+    /// the generator cannot infer an ordering for them, so they stay reported.
+    /// </summary>
+    private static bool GeneratorHandles(IFieldSymbol f, INamedTypeSymbol type)
+    {
+        if (f.Name.EndsWith("Gradient", System.StringComparison.Ordinal) ||
+            f.Name.EndsWith("Gradients", System.StringComparison.Ordinal)) return false;
+
+        string? elem = null;
+        for (var c = type; c is not null && elem is null; c = c.ContainingType)
+        {
+            foreach (var tp in c.TypeParameters)
+            {
+                if (tp.Name == "T") { elem = tp.Name; break; }
+            }
+        }
+        if (elem is null && type.TypeParameters.Length > 0) elem = type.TypeParameters[0].Name;
+        if (elem is null) return false;
+
+        if (f.Type is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return false;
+        if (named.TypeArguments[0].ToDisplayString() != elem) return false;
+
+        var open = named.OriginalDefinition.ToDisplayString();
+        return open.StartsWith("AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal)
+            || open.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal)
+            || open.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
     }
 }

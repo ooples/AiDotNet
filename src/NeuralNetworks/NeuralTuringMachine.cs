@@ -117,16 +117,19 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <summary>
     /// The external memory matrices used by the Neural Turing Machine, one per batch element.
     /// </summary>
+    [Scratch]
     private List<Matrix<T>> _memories;
 
     /// <summary>
     /// The current reading weights for each batch element.
     /// </summary>
+    [Scratch]
     private List<Vector<T>> _readWeights;
 
     /// <summary>
     /// The current writing weights for each batch element.
     /// </summary>
+    [Scratch]
     private List<Vector<T>> _writeWeights;
 
     /// <summary>
@@ -138,6 +141,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// becomes non-deterministic (and unbounded — the writes lack the
     /// clamping needed to keep retainAmount in [0, 1]).
     /// </summary>
+    [Buffer]
     private Matrix<T>? _initialMemoryTemplate;
 
     /// <summary>
@@ -150,6 +154,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// loops that detached the read result from the tape — see
     /// <see cref="ForwardTape"/>.
     /// </summary>
+    [Buffer]
     private Tensor<T>? _initialMemoryTensor;
 
     /// <summary>

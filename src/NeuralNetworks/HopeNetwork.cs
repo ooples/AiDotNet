@@ -60,6 +60,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     private readonly IAssociativeMemory<T> _associativeMemory;
 
     // Self-referential optimization state
+    [Buffer]
     private Vector<T>? _metaState;
     private int _adaptationStep;
     private T _selfModificationRate;

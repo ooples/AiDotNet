@@ -107,6 +107,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// backcast and forecast heads.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Tensor<T>> _cachedBlockHiddenOutputs = [];
 
     /// <summary>

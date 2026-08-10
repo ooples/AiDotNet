@@ -92,7 +92,9 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
     // VisionTS normalizes each input series before the ViT and restores the level
     // on the output so distinct input scales produce distinct forecasts.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

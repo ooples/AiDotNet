@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("PLS-Regression: A Basic Tool of Chemometrics", "https://doi.org/10.1016/S0169-7439(01)00155-1")]
-public class PartialLeastSquaresRegression<T> : RegressionBase<T>
+public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the partial least squares regression model.
@@ -108,6 +108,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A vector containing the mean value of each predictor variable.
     /// </value>
+    [Buffer]
     private Vector<T> _xMean;
 
     /// <summary>
@@ -124,6 +125,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A vector containing the standard deviation of each predictor variable.
     /// </value>
+    [Buffer]
     private Vector<T> _xStd;
 
     /// <summary>

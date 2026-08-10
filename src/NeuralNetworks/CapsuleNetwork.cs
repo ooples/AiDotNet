@@ -71,11 +71,13 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last capsule outputs for reconstruction loss computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastCapsuleOutputs;
 
     /// <summary>
     /// Stores the last input for reconstruction loss computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

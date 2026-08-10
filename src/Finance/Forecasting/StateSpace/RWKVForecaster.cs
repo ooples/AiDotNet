@@ -101,7 +101,9 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     // RWKVForecaster normalizes each input series before the embedding and
     // restores the level on the output so distinct input scales produce
     // distinct forecasts.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
     #endregion
 

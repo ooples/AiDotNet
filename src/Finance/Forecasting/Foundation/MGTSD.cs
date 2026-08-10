@@ -89,16 +89,23 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     private double _guidanceWeight;
 
     // DDPM noise schedule (precomputed)
+    [Buffer]
     private Vector<T> _betas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
 
     // Diffusion-training scratch state. Train() samples (timestep, noise) and the
     // normalized target before each base.Train() call so ForwardForTraining can build
     // x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε and run the denoising network as an x0-predictor.
+    [Scratch]
     private Tensor<T>? _trainX0;
+    [Scratch]
     private Tensor<T>? _trainNoise;
     private int _trainTimestep;
     private int _trainStepCounter;

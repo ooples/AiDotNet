@@ -117,6 +117,7 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
     }
 
     // SAM's own promptable state. _imageEmbedding and _imageSet live on PromptableSegmentationBase.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
 
     #endregion

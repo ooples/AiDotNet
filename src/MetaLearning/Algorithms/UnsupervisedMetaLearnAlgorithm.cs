@@ -53,7 +53,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Hsu, K., Levine, S., & Finn, C.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -66,6 +66,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     private Vector<T>[] _centroids;
 
     /// <summary>Per-cluster count for EMA weighting.</summary>
+    [Buffer]
     private Vector<T> _clusterCounts;
 
     /// <inheritdoc/>

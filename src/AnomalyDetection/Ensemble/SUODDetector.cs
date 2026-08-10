@@ -49,7 +49,9 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
     private readonly bool _useRandomProjection;
     private readonly int _nProjectedFeatures;
     private List<IAnomalyDetector<T>>? _baseDetectors;
+    [Buffer]
     private Matrix<T>? _projectionMatrix;
+    [Buffer]
     private Matrix<T>? _trainingData;
 
     /// <summary>

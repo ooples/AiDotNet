@@ -375,6 +375,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// unchanged. During training this is populated from RANDOMLY SAMPLED hotwords (§3.1, §4.2), which
     /// is how the bias parameters receive gradient without altering inference behaviour.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _activeHotwordIds;
 
     /// <summary>
@@ -385,6 +386,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// forward needs Y. <c>ForwardNativeForTraining</c> receives only the input, so the target is stashed
     /// here by <see cref="Train"/> for the duration of the step and cleared in its finally block.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _currentTarget;
     /// <summary>
     /// Trains the parameter group selected by <see cref="SeACoOptions.TrainingStage"/>.

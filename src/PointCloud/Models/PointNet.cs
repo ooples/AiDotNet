@@ -91,6 +91,7 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
     private int[] _inputTransformFcChannels;
     private int[] _featureTransformMlpChannels;
     private int[] _featureTransformFcChannels;
+    [Scratch]
     private Vector<T>? _globalFeatures;
     private readonly List<ILayer<T>> _classificationHeadLayers;
 

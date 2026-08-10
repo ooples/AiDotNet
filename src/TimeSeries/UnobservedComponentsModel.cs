@@ -67,7 +67,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis by State Space Methods", "https://doi.org/10.1093/acprof:oso/9780199641178.001.0001", Year = 2012, Authors = "James Durbin, Siem Jan Koopman")]
-public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
+public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Unobserved Components Model.
@@ -90,6 +90,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// the data is generally headed over the long run, ignoring seasonal
     /// fluctuations and short-term noise.
     /// </remarks>
+    [Buffer]
     private Vector<T> _trend;
 
     /// <summary>
@@ -102,6 +103,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// the model can determine if it has "settled down" enough to stop
     /// its calculations (convergence).
     /// </remarks>
+    [Scratch]
     private Vector<T> _previousTrend;
 
     /// <summary>
@@ -112,6 +114,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// This stores the actual data you're analyzing, like daily sales numbers
     /// or monthly temperature readings.
     /// </remarks>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
@@ -124,6 +127,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// energy usage might be higher during summer and winter months.
     /// These patterns repeat at fixed intervals (like weekly, monthly, or yearly).
     /// </remarks>
+    [Buffer]
     private Vector<T> _seasonal;
 
     /// <summary>
@@ -136,6 +140,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// in duration and intensity. Business cycles or economic booms and busts
     /// are examples of cyclical patterns.
     /// </remarks>
+    [Buffer]
     private Vector<T> _cycle;
 
     /// <summary>
@@ -148,6 +153,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// These might be caused by one-time events, measurement errors, or
     /// truly random variations.
     /// </remarks>
+    [Buffer]
     private Vector<T> _irregular;
 
     /// <summary>
@@ -184,6 +190,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// ingredients (components) to mix together and in what proportions to get the
     /// final dish (observed value).
     /// </remarks>
+    [Buffer]
     private Matrix<T> _observationModel;
 
     /// <summary>
@@ -220,6 +227,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// It's like a snapshot of the model's current understanding of what's
     /// happening in your time series.
     /// </remarks>
+    [Buffer]
     private Vector<T> _state;
 
     /// <summary>
@@ -233,6 +241,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// this uncertainty typically decreases as the model becomes more sure
     /// of its estimates.
     /// </remarks>
+    [Buffer]
     private Matrix<T> _stateCovariance;
 
     /// <summary>
@@ -255,6 +264,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// using only the data available up to that point. It's like making the
     /// best guess possible at each step without peeking into the future.
     /// </remarks>
+    [Buffer]
     private List<Vector<T>> _filteredState;
 
     /// <summary>
@@ -266,6 +276,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     /// at each time point. These uncertainty measures are crucial for the
     /// smoother, which will later refine these estimates using future information.
     /// </remarks>
+    [Buffer]
     private List<Matrix<T>> _filteredCovariance;
 
     /// <summary>

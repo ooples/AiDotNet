@@ -37,7 +37,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Forecasting at Scale", "https://doi.org/10.1080/00031305.2017.1380080", Year = 2018, Authors = "Sean J. Taylor, Benjamin Letham")]
-public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
+public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// The number of potential trend changepoints laid out across the history when the caller has
@@ -108,6 +108,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// fitting (placed uniformly over the first 80% of the training range, or taken from the options) and the
     /// magnitude of each trend change is learned into <see cref="_delta"/>.
     /// </summary>
+    [Buffer]
     private Vector<T> _changepointTimes;
 
     /// <summary>

@@ -152,7 +152,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Instant Neural Graphics Primitives with a Multiresolution Hash Encoding", "https://doi.org/10.1145/3528223.3530127", Year = 2022, Authors = "Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller")]
-public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
+public partial class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
     private readonly InstantNGPOptions<T> _options;
 
@@ -191,6 +191,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     private DenseLayer<T>? _colorOutputLayer;
 
     // Occupancy grid for efficient sampling
+    [Buffer]
     private Tensor<T>? _occupancyGrid;
     private uint[]? _occupancyBitfield;
     private readonly int _occupancyGridResolution;
@@ -198,10 +199,15 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadi
     private readonly double[] _sceneMax = new double[3];
     private readonly double[] _sceneSize = new double[3];
     private readonly double[] _sceneInvSize = new double[3];
+    [Scratch]
     private Tensor<T>? _lastPositions;
+    [Scratch]
     private Tensor<T>? _lastDirections;
+    [Scratch]
     private Tensor<T>? _lastDensityRaw;
+    [Scratch]
     private Tensor<T>? _lastRgbRaw;
+    [Scratch]
     private Tensor<T>? _lastHashFeatureGradients;
 
     public override bool SupportsTraining => true;

@@ -66,6 +66,7 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, T>> _eligibilityTraces;
     private double _epsilon;
+    [Scratch]
     private Vector<T> _lastState;
     private int _lastAction;
 

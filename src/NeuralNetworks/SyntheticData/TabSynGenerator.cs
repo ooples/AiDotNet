@@ -111,6 +111,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private readonly List<ILayer<T>> _diffMLPLayers = new();
     private FullyConnectedLayer<T>? _timestepProjection;
 
+    [Scratch]
     private Tensor<T>? _lastEncoderOutput;
 
     // Whether custom layers are being used (disables default encoder logic)

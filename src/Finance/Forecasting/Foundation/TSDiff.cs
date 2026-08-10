@@ -88,10 +88,15 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
     private double _guidanceScale;
 
     // DDPM noise schedule (precomputed as generic vectors)
+    [Buffer]
     private Vector<T> _betas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
 
     #endregion

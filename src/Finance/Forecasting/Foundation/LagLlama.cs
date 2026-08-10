@@ -174,7 +174,9 @@ public class LagLlama<T> : ForecastingModelBase<T>
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
     // Lag-Llama's RMSNorm blocks are scale-invariant, so without restoring the
     // input level the predicted location (mu) ignores the input's magnitude.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
     private int[] _lagIndices;
     private double _dropout;

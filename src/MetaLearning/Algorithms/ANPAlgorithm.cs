@@ -28,7 +28,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Hyunjik Kim, Andriy Mnih, Jonathan Schwarz, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ANPOptions<T, TInput, TOutput> _anpOptions;
     private Vector<T> _latentEncoderParams;

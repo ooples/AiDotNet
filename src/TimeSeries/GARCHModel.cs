@@ -50,7 +50,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Generalized Autoregressive Conditional Heteroskedasticity", "https://doi.org/10.1016/0304-4076(86)90063-1", Year = 1986, Authors = "Tim Bollerslev")]
-public class GARCHModel<T> : TimeSeriesModelBase<T>
+public partial class GARCHModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// The configuration options for the GARCH model.
@@ -179,6 +179,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// but the actual price was $103, the residual would be $3.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Vector<T> _residuals;
 
     /// <summary>
@@ -200,6 +201,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     /// differ from our prediction?" at each point in time.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Vector<T> _conditionalVariances;
 
     /// <summary>

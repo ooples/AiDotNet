@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting", "https://arxiv.org/abs/1912.09363", Year = 2021, Authors = "Bryan Lim, Sercan O. Arik, Nicolas Loeff, Tomas Pfister")]
-public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
+public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 {
     private readonly TemporalFusionTransformerOptions<T> _options;
     private readonly Random _random;
@@ -59,6 +59,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private Tensor<T> _inputEmbeddingBias;   // [hiddenSize]
 
     // Sinusoidal positional encoding [maxLen, hiddenSize] (replaces the LSTM scan).
+    [Buffer]
     private Tensor<T> _positionalEncoding;
     // Host-side copy of the (constant) positional encoding. The forward assembles the per-batch PE from it
     // every step; indexing the tensor per element syncs the GPU batch*seq*dim times per forward.
@@ -82,6 +83,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private Tensor<T> _forecastBias;   // [forecastHorizon * numQuantiles]
 
     // Training state.
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private T _normMean;
     private T _normStd;

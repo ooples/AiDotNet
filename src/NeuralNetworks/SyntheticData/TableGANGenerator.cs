@@ -102,11 +102,15 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private FullyConnectedLayer<T>? _classOutput;
 
     // Cached pre-activations for proper backward passes
+    [Scratch]
     private readonly List<Tensor<T>> _genPreActivations = new();
+    [Scratch]
     private readonly List<Tensor<T>> _discPreActivations = new();
 
     // Real data statistics for information loss
+    [Buffer]
     private Vector<T>? _realMean;
+    [Buffer]
     private Vector<T>? _realVar;
 
     private int _numClasses;
@@ -395,6 +399,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         return current;
     }
 
+    [Scratch]
     private Tensor<T>? _lastClassOutput;
 
     private Vector<T> ClassifierForward(Vector<T> input)

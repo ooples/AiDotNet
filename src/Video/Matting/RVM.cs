@@ -80,6 +80,7 @@ public class RVM<T> : NeuralNetworkBase<T>
     private readonly int _imageWidth;
 
     // Recurrent hidden state
+    [Scratch]
     private Tensor<T>? _hiddenState;
 
     #endregion

@@ -115,6 +115,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 
     private readonly List<EdgeConvLayer<T>> _edgeConvLayers;
     private readonly List<ILayer<T>> _classificationHeadLayers;
+    [Scratch]
     private Vector<T>? _globalFeatures;
 
     /// <summary>

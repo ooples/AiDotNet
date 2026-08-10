@@ -139,6 +139,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// as they can store and retrieve information as needed throughout a sequence of operations.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Matrix<T> _memory;
 
     /// <summary>

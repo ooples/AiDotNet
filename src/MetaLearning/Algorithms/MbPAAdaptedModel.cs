@@ -51,7 +51,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ResearchPaper("Memory-based Parameter Adaptation", "https://arxiv.org/abs/1802.10542", Year = 2018)]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Evaluation)]
-public class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
     private readonly MbPAEpisodicMemory<T> _memory;
     private readonly MbPAOptions<T, TInput, TOutput> _options;

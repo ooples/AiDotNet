@@ -43,6 +43,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 public class KNNDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
+    [Buffer]
     private Matrix<T>? _trainingData;
     private int _nFeatures;
 

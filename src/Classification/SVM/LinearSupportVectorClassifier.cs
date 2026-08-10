@@ -72,7 +72,7 @@ namespace AiDotNet.Classification.SVM;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("A Training Algorithm for Optimal Margin Classifiers", "https://doi.org/10.1145/130385.130401")]
-public class LinearSupportVectorClassifier<T> : SVMBase<T>
+public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
 {
     /// <summary>
     /// Weight vector for linear classification.

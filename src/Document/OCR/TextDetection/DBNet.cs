@@ -78,8 +78,11 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     private readonly List<ILayer<T>> _thresholdHead = [];
 
     // Cached outputs for inspection
+    [Scratch]
     private Tensor<T>? _lastProbabilityMap;
+    [Scratch]
     private Tensor<T>? _lastThresholdMap;
+    [Scratch]
     private Tensor<T>? _lastBinaryMap;
 
     #endregion

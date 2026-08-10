@@ -51,16 +51,19 @@ namespace AiDotNet.AnomalyDetection.Linear;
 // reconstruction error in feature space -- is Hoffmann's, and that is the rule the scoring
 // semantics have to be judged against.
 [ResearchPaper("Kernel PCA for Novelty Detection", "https://doi.org/10.1016/j.patcog.2006.07.009", Year = 2007, Authors = "Heiko Hoffmann")]
-public class KernelPCADetector<T> : AnomalyDetectorBase<T>
+public partial class KernelPCADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _gamma;
     private readonly double _varianceRatio;
     private readonly KernelType _kernel;
+    [Buffer]
     private Matrix<T>? _trainingData;
+    [Buffer]
     private Matrix<T>? _kernelMatrix;
     private Matrix<T>? _alphas; // Eigenvectors in kernel space (nComponents x n)
     private Vector<T>? _lambdas; // Eigenvalues
     private int _nComponents;
+    [Buffer]
     private Vector<T>? _mean; // For centering
 
     /// <summary>

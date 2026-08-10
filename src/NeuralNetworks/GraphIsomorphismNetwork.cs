@@ -114,6 +114,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Cached adjacency matrix for forward/backward passes.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
 
     /// <summary>

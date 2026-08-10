@@ -79,6 +79,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly SEALOptions<T, TInput, TOutput> _sealOptions;
+    [Buffer]
     private readonly Dictionary<string, Vector<T>>? _adaptiveLearningRateState;
 
     /// <summary>

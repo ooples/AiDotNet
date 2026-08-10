@@ -78,7 +78,7 @@ public enum VisionScanPattern
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Lianghui Zhu, Bencheng Liao, Qian Zhang, Xinlong Wang, Wenyu Liu, Xinggang Wang")]
-public class VisionMambaModel<T> : NeuralNetworkBase<T>
+public partial class VisionMambaModel<T> : NeuralNetworkBase<T>
 {
     private readonly VisionMambaOptions _options;
     private readonly int _imageHeight;

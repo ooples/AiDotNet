@@ -90,7 +90,9 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
     // FlowState normalizes each input series before the SSM; without restoring
     // the level the forecast ignores the input's magnitude.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

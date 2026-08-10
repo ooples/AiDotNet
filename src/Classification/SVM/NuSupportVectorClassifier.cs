@@ -77,16 +77,18 @@ namespace AiDotNet.Classification.SVM;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("New Support Vector Algorithms", "https://doi.org/10.1162/089976600300015565", Year = 2000, Authors = "Bernhard Scholkopf, Alex J. Smola, Robert C. Williamson, Peter L. Bartlett")]
-public class NuSupportVectorClassifier<T> : SVMBase<T>
+public partial class NuSupportVectorClassifier<T> : SVMBase<T>
 {
     /// <summary>
     /// Stored training features.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _xTrain;
 
     /// <summary>
     /// Stored training labels (converted to +1/-1).
     /// </summary>
+    [Buffer]
     private Vector<T>? _yTrain;
 
     /// <summary>

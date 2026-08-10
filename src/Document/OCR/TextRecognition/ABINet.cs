@@ -55,7 +55,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Read Like Humans: Autonomous, Bidirectional and Iterative Language Modeling for Scene Text Recognition", "https://doi.org/10.48550/arXiv.2103.06495", Year = 2021, Authors = "Shancheng Fang, Hongtao Xie, Yuxin Wang, Zhendong Mao, Yongdong Zhang")]
-public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly ABINetOptions _options;
 

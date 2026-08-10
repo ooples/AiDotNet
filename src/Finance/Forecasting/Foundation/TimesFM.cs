@@ -209,7 +209,9 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     // patch embedding and reverses the transform on the output, so the decoder
     // only ever sees a zero-mean unit-std series and the forecast is restored to
     // the input's level. Per-instance stats keyed by batch row.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

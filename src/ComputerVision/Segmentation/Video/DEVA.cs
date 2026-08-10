@@ -355,9 +355,12 @@ public class DEVA<T> : Common.VideoSegmentationBase<T>
     // Tracking memory that is genuinely DEVA's own. The frame counter, the tracked-id list, the
     // initialized flag and the object-count validation now live on VideoSegmentationBase, which
     // wraps each of these Internal hooks.
+    [Scratch]
     private Tensor<T>? _trackingFeatures;
+    [Scratch]
     private Tensor<T>? _trackingMasks;
     private int[]? _trackedIds;
+    [Scratch]
     private readonly Dictionary<int, Tensor<T>> _corrections = [];
 
     /// <inheritdoc/>

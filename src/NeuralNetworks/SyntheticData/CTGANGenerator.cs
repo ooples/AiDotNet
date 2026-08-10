@@ -117,24 +117,38 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
 
     // Cached pre-activations for proper backward passes
+    [Scratch]
     private readonly List<Tensor<T>> _genPreActivations = new();
+    [Scratch]
     private readonly List<Tensor<T>> _discPreActivations = new();
 
     // Whether custom layers are being used (disables residual connection logic)
     private bool _usingCustomLayers;
 
     // Pre-allocated training buffers to eliminate per-row GC pressure
+    [Scratch]
     private Tensor<T>? _oneGrad;
+    [Scratch]
     private Tensor<T>? _negOneGrad;
+    [Scratch]
     private Vector<T>? _packedRealBuf;
+    [Scratch]
     private Vector<T>? _packedFakeBuf;
+    [Scratch]
     private Vector<T>? _noiseBuf;
+    [Scratch]
     private Vector<T>? _genInputBuf;
+    [Scratch]
     private Vector<T>? _realSingleBuf;
+    [Scratch]
     private Vector<T>? _fakeSingleBuf;
+    [Scratch]
     private Vector<T>? _realRowBuf;
+    [Scratch]
     private Vector<T>? _fakeRowBuf;
+    [Scratch]
     private Vector<T>? _interpolatedBuf;
+    [Scratch]
     private Tensor<T>? _sampleGradBuf;
 
     /// <summary>

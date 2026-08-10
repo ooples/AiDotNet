@@ -108,6 +108,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 
     private readonly List<SetAbstractionLayer<T>> _setAbstractionLayers;
     private readonly List<ILayer<T>> _classificationHeadLayers;
+    [Scratch]
     private Vector<T>? _globalFeatures;
 
     /// <summary>
