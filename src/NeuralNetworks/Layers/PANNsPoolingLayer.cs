@@ -11,7 +11,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// the training tape. This layer is internal because it is an architectural detail
 /// of the PANNs factory rather than a general channels-last global-pooling variant.
 /// </remarks>
-internal sealed class PANNsPoolingLayer<T> : LayerBase<T>
+internal sealed partial class PANNsPoolingLayer<T> : LayerBase<T>
 {
     public PANNsPoolingLayer()
         : base(new[] { -1, -1, -1 }, new[] { -1 })

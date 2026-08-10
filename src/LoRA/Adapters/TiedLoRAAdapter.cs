@@ -57,7 +57,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// we capture most of the adaptation capability with minimal parameters.
 /// </para>
 /// </remarks>
-public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared trainable matrix A (inputSize × rank) used by all Tied-LoRA adapters.

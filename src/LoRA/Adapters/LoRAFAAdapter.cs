@@ -39,7 +39,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - You're working with very large models
 /// </para>
 /// </remarks>
-public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
+public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Whether matrix A is frozen (always true for LoRA-FA).

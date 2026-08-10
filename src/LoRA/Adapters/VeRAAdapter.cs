@@ -45,7 +45,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - When LoRA is still too expensive
 /// </para>
 /// </remarks>
-public class VeRAAdapter<T> : LoRAAdapterBase<T>
+public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared frozen random matrix A (inputSize × rank) used by all VeRA adapters.

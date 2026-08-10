@@ -50,7 +50,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - You've observed overfitting with standard LoRA
 /// </para>
 /// </remarks>
-public class LoRADropAdapter<T> : LoRAAdapterBase<T>
+public partial class LoRADropAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Dropout rate (probability of dropping a component during training).

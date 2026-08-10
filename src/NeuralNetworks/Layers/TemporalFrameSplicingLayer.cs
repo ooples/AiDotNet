@@ -12,7 +12,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Slicing and reshaping remain connected to the gradient tape through the
 /// tensor engine.
 /// </remarks>
-internal sealed class TemporalFrameSplicingLayer<T> : LayerBase<T>
+internal sealed partial class TemporalFrameSplicingLayer<T> : LayerBase<T>
 {
     private readonly int _factor;
 

@@ -104,7 +104,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Key Innovation: Parameter count O(r²) instead of O(dr), enabling extreme efficiency
 /// </para>
 /// </remarks>
-public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
+public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Frozen left singular vectors (U_r) from SVD of pretrained weights.

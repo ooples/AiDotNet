@@ -63,7 +63,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Key Insight: SVD-based initialization > random initialization for low-rank adaptation
 /// </para>
 /// </remarks>
-public class PiSSAAdapter<T> : LoRAAdapterBase<T>
+public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// The frozen residual weights after removing top-r principal components.

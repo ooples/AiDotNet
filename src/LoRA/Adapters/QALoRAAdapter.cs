@@ -71,7 +71,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Fine-tuning for deployment on specific hardware (TPUs, specialized accelerators)
 /// </para>
 /// </remarks>
-public class QALoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class QALoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Number of bits to use for quantization (e.g., 4, 8).

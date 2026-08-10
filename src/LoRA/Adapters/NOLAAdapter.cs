@@ -47,7 +47,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// (Koohpayegani et al., ICLR 2024) - https://arxiv.org/abs/2310.02556
 /// </para>
 /// </remarks>
-public class NOLAAdapter<T> : LoRAAdapterBase<T>
+public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Random number generator with fixed seed for reproducible basis generation.

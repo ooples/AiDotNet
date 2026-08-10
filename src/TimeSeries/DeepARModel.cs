@@ -906,7 +906,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// through it (BPTT) and the Adam optimizer updates the registered weights from tape
 /// gradients. Activations are column-major <c>[hiddenSize, batch]</c>.
 /// </summary>
-internal class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _inputSize;
     private readonly int _hiddenSize;

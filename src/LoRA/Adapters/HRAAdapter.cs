@@ -66,7 +66,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// Reference: Based on "Hybrid Rank Adaptation" research combining low-rank and sparse full-rank approaches
 /// </para>
 /// </remarks>
-public class HRAAdapter<T> : LoRAAdapterBase<T>
+public partial class HRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Sparse full-rank update matrix storing only non-zero entries.

@@ -72,7 +72,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// January 2024
 /// </para>
 /// </remarks>
-public class RoSAAdapter<T> : LoRAAdapterBase<T>
+public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Sparse weight matrix that captures specific/rare patterns.

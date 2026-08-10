@@ -30,7 +30,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// (frozen) reduces trainable parameters from 1,000,000 to just 16,000!
 /// </para>
 /// </remarks>
-public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Initializes a new Dense LoRA adapter wrapping an existing Dense or FullyConnected layer.

@@ -39,7 +39,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// while adapting to domain-specific patterns.
 /// </para>
 /// </remarks>
-public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Matrix storing the cumulative weight deltas (changes over time).

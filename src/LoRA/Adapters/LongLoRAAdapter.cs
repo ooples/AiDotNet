@@ -60,7 +60,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2309.12307
 /// </para>
 /// </remarks>
-public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class LongLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// The original context length that the base model was trained on.

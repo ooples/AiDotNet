@@ -30,7 +30,7 @@ namespace AiDotNet.TimeSeries;
 /// Multiple blocks work together, with each one focusing on different aspects of the data.
 /// </para>
 /// </remarks>
-internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _lookbackWindow;
     private readonly int _forecastHorizon;

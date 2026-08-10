@@ -58,7 +58,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2402.09353
 /// </para>
 /// </remarks>
-public class DoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Magnitude component of the decomposed weights (scalar per output neuron).

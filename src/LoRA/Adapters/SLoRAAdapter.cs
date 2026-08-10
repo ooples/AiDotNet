@@ -72,7 +72,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - S-LoRA: Multiple adapters, optimized for concurrent serving, memory pooling
 /// </para>
 /// </remarks>
-public class SLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class SLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Represents an adapter entry in the memory pool.

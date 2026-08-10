@@ -64,7 +64,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// select the patterns relevant to each individual.
 /// </para>
 /// </remarks>
-public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class VBLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Global bank of column vectors for matrix A, shared across all VB-LoRA instances.

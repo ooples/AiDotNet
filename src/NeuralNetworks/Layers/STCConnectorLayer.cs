@@ -379,7 +379,7 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
     /// It follows timm's default RegStage bottleneck ratio/group-width behavior: 1x1 projection,
     /// depthwise 3x3 spatial convolution, 1x1 projection, LayerNorm2d, SiLU, and a residual path.
     /// </summary>
-    private sealed class RegStageBlock : LayerBase<T>
+    private sealed partial class RegStageBlock : LayerBase<T>
     {
         private readonly int _inputChannels;
         private readonly int _outputChannels;

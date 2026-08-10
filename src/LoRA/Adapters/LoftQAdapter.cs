@@ -99,7 +99,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Both have identical runtime memory and speed characteristics
 /// </para>
 /// </remarks>
-public class LoftQAdapter<T> : LoRAAdapterBase<T>
+public partial class LoftQAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Specifies the type of 4-bit quantization to use for base layer weights.

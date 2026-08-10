@@ -49,7 +49,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Rank=8 for desktops (90% parameter reduction, best quality)
 /// </para>
 /// </remarks>
-public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Maximum rank for the LoRA decomposition.

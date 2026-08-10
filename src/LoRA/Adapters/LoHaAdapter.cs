@@ -51,7 +51,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// LoHa uses MORE parameters than LoRA but models element-wise weight interactions via Hadamard products.
 /// </para>
 /// </remarks>
-public class LoHaAdapter<T> : LoRAAdapterBase<T>
+public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Low-rank matrices A with dimensions (rank, inputSize, outputSize).

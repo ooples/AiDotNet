@@ -67,8 +67,11 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         var candidates = context.SyntaxProvider
             .CreateSyntaxProvider(
-                static (node, _) => node is ConstructorDeclarationSyntax c
-                    && c.ParameterList.Parameters.Any(p => p.AttributeLists.Count > 0),
+                // Every constructor on a type with a base list. Requiring an attributed parameter
+                // here meant a layer with no [LayerState] at all never reached Analyze, so the
+                // ADN0053 rule that is supposed to reject an unrestorable layer could only fire on
+                // layers that had already opted in.
+                static (node, _) => node is ConstructorDeclarationSyntax { Parent: ClassDeclarationSyntax { BaseList: not null } },
                 static (ctx, _) => Analyze(ctx))
             .Where(static m => m is not null)
             .Select(static (m, _) => m!);
@@ -76,15 +79,28 @@ public class LayerStateGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(candidates.Collect(), Emit);
     }
 
+    /// <summary>Determines whether a type is a layer, by base chain.</summary>
+    private static bool DerivesFromLayerBase(INamedTypeSymbol type)
+    {
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            if (b.Name == "LayerBase") return true;
+        }
+
+        return false;
+    }
+
     private static LayerModel? Analyze(GeneratorSyntaxContext ctx)
     {
         var syntax = (ConstructorDeclarationSyntax)ctx.Node;
         if (ctx.SemanticModel.GetDeclaredSymbol(syntax) is not IMethodSymbol ctor) return null;
 
-        var marked = ctor.Parameters.Where(HasStateAttribute).ToList();
-        if (marked.Count == 0) return null;
-
         var type = ctor.ContainingType;
+        if (type.IsAbstract || !DerivesFromLayerBase(type)) return null;
+
+        // A private constructor is not how the layer is built, so it is not the one to rebuild it.
+        if (ctor.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal)) return null;
+
         var model = new LayerModel
         {
             Namespace = type.ContainingNamespace.IsGlobalNamespace
@@ -111,7 +127,24 @@ public class LayerStateGenerator : IIncrementalGenerator
         {
             var info = new ParamModel { Name = p.Name, TypeFqn = p.Type.ToDisplayString(FullyQualified) };
 
-            if (HasStateAttribute(p))
+            var isMarked = HasStateAttribute(p);
+
+            // INFERRED, not merely marked. A constructor argument the layer stores in a field is
+            // construction state whether or not anyone wrote the attribute -- that is what the
+            // field is for. Requiring the attribute made correctness opt-in, which is why 76 of
+            // 321 layers had no factory and nothing reported it.
+            //
+            // The attribute is still honoured, and still the way to override the metadata key or
+            // to claim a parameter inference would decline.
+            var inferredKind = isMarked ? ValueKind.Unsupported : Classify(p.Type);
+            string? inferredMember = null;
+            bool inferredConvert = false;
+            if (!isMarked && inferredKind != ValueKind.Unsupported && !IsActivation(p.Type, out _))
+            {
+                inferredMember = FindBackingMember(type, p, out inferredConvert);
+            }
+
+            if (isMarked)
             {
                 info.IsState = true;
                 info.Key = StateKey(p) ?? p.Name;
@@ -133,6 +166,17 @@ public class LayerStateGenerator : IIncrementalGenerator
                         type.Name, p.Name, Pascal(p.Name), p.Type.ToDisplayString()));
                     return model;
                 }
+            }
+            else if (inferredMember is not null)
+            {
+                // Inferred state covers optional parameters too. An optional argument that the
+                // layer stored was previously rebuilt from its DEFAULT, silently discarding a
+                // configured value -- the same silent-loss failure this work exists to remove.
+                info.IsState = true;
+                info.Key = p.Name;
+                info.Kind = inferredKind;
+                info.BackingMember = inferredMember;
+                info.NeedsConvert = inferredConvert;
             }
             else if (IsActivation(p.Type, out var vector))
             {
@@ -163,7 +207,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         {
             model.Diagnostics.Add(Diagnostic.Create(
                 HandWrittenMetadata, model.Location, type.Name,
-                string.Join(", ", marked.Select(p => p.Name))));
+                string.Join(", ", model.Parameters.Where(p => p.IsState).Select(p => p.Name))));
         }
 
         model.IsValid = true;
@@ -278,18 +322,30 @@ public class LayerStateGenerator : IIncrementalGenerator
             spc.ReportDiagnostic(d);
         }
 
-        // One constructor per type: if a layer annotates several, the first by source order wins so
-        // the generated factory is deterministic.
+        // One constructor per type, choosing the one that carries the MOST construction state. With
+        // state inferred rather than annotated, a layer commonly has several constructors and taking
+        // the first by source order would pick whichever happened to be declared first -- often a
+        // convenience overload that omits the very arguments a rebuild needs. Ties break on source
+        // order so the output stays deterministic.
         var byType = models
             .Where(m => m.IsValid)
             .GroupBy(m => m.BaseFqn)
-            .Select(g => g.First())
+            .Select(g => g
+                .OrderByDescending(m => m.Parameters.Count(p => p.IsState))
+                .First())
             .OrderBy(m => m.BaseFqn, System.StringComparer.Ordinal)
             .ToList();
 
         foreach (var model in byType)
         {
-            spc.AddSource($"{model.TypeName}.LayerState.g.cs", SourceText(EmitWriter(model)));
+            // Qualified by namespace: the short name is not unique. Two distinct MaxPoolingLayer
+            // types live in different namespaces, and keying the generated file on TypeName alone
+            // made the second one collide with the first and abort the whole generator.
+            var hint = model.Namespace is null
+                ? model.TypeName
+                : model.Namespace.Replace('.', '_') + "_" + model.TypeName;
+
+            spc.AddSource($"{hint}.LayerState.g.cs", SourceText(EmitWriter(model)));
         }
 
         spc.AddSource("GeneratedLayerFactories.g.cs", SourceText(EmitFactories(byType)));

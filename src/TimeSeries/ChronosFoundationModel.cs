@@ -1119,7 +1119,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
 /// Now uses Tensor<T> and proper backpropagation.
 /// </summary>
-internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private int _embeddingDim;
     private int _numHeads;

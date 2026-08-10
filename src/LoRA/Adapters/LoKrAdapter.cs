@@ -46,7 +46,7 @@ namespace AiDotNet.LoRA.Adapters;
 ///   (where 50×20 = 1000 for both dimensions)
 /// </para>
 /// </remarks>
-public class LoKrAdapter<T> : LoRAAdapterBase<T>
+public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// First Kronecker factor matrix A with dimensions (m × n).

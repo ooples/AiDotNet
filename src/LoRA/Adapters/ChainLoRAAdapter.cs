@@ -98,7 +98,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// </code>
 /// </para>
 /// </remarks>
-public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// The chain of LoRA adapters applied sequentially.

@@ -42,7 +42,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2303.10512
 /// </para>
 /// </remarks>
-public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Static random number generator for thread-safe initialization.

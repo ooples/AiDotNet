@@ -66,7 +66,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// 3. Paged optimizers to handle memory spikes during gradient checkpointing
 /// </para>
 /// </remarks>
-public class QLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Specifies the type of 4-bit quantization to use for base layer weights.

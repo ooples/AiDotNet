@@ -75,7 +75,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - DVoRA: Combines both techniques for optimal efficiency and performance
 /// </para>
 /// </remarks>
-public class DVoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Shared frozen random matrix A (inputSize × rank) used by all DVoRA adapters.

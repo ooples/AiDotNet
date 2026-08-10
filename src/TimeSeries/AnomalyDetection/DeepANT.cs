@@ -594,7 +594,7 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 /// Supports training via analytical Backward pass with stored kernel/bias gradients.
 /// Weights are initialized using Xavier/Glorot initialization.</para>
 /// </remarks>
-internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private int _outputChannels;
     private int _kernelSize;

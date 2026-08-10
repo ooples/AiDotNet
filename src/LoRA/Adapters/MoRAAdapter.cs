@@ -106,7 +106,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// learning to reason about medical cases using existing knowledge.
 /// </para>
 /// </remarks>
-public class MoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Square matrix M for high-rank adaptation (r×r dimensions).

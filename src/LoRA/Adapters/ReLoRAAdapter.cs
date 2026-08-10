@@ -53,7 +53,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2307.05695
 /// </para>
 /// </remarks>
-public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Number of training steps between restart operations.

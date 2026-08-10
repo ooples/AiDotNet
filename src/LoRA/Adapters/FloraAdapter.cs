@@ -22,7 +22,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// the memory efficiency of LoRA.
 /// </para>
 /// </remarks>
-public class FloraAdapter<T> : LoRAAdapterBase<T>
+public partial class FloraAdapter<T> : LoRAAdapterBase<T>
 {
     private readonly int _resamplingInterval;
     private readonly int _rank;

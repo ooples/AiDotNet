@@ -911,7 +911,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// The spectral convolution is key: it's a global operation that couples
     /// all spatial points, allowing the network to capture long-range dependencies.
     /// </remarks>
-    public class FourierLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+    public partial class FourierLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     {
         private readonly INumericOperations<T> _numOps;
         private readonly int _width;

@@ -50,7 +50,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Any layer implementing IGraphConvolutionLayer
 /// </para>
 /// </remarks>
-public class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGraphConvolutionLayer<T>
+public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGraphConvolutionLayer<T>
 {
     /// <summary>
     /// The graph-aware base layer being adapted.
