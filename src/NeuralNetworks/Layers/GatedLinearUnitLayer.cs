@@ -386,7 +386,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// Other activations can be used for specialized gating behavior.
     /// </para>
     /// </remarks>
-    public GatedLinearUnitLayer(int outputDimension, IActivationFunction<T>? gateActivation = null)
+    public GatedLinearUnitLayer([LayerState] int outputDimension, IActivationFunction<T>? gateActivation = null)
         : base(new[] { -1 }, new[] { outputDimension }, gateActivation ?? new SigmoidActivation<T>())
     {
         if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
@@ -452,7 +452,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// choice for GLU layers because its 0-1 range makes it ideal for gating.
     /// </para>
     /// </remarks>
-    public GatedLinearUnitLayer(int outputDimension, IVectorActivationFunction<T> gateActivation)
+    public GatedLinearUnitLayer([LayerState] int outputDimension, IVectorActivationFunction<T> gateActivation)
         : base(new[] { -1 }, new[] { outputDimension }, gateActivation ?? new SigmoidActivation<T>())
     {
         if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));

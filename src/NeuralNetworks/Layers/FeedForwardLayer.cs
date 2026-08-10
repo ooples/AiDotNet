@@ -498,7 +498,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// starting values to begin training.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
+    public FeedForwardLayer([LayerState] int outputSize, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
         if (outputSize <= 0)
@@ -559,7 +559,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// which is perfect for classification tasks.
     /// </para>
     /// </remarks>
-    public FeedForwardLayer(int outputSize, IVectorActivationFunction<T> activationFunction)
+    public FeedForwardLayer([LayerState] int outputSize, IVectorActivationFunction<T> activationFunction)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
         if (outputSize <= 0)
