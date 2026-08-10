@@ -111,13 +111,27 @@ public static class LayerCloning
 
         var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
 
+        // The generated table first -- it is compile-checked and names the constructor directly.
+        // Then the registry, which is the only way a layer defined in ANOTHER assembly can take
+        // part: its generated class lives there and this one cannot name it. Then reflection, so a
+        // hand-written layer works without its author registering anything at all.
         if (!GeneratedLayerFactories<T>.TryCreate(
                 definition, bag, source.ScalarActivation, source.VectorActivation, out var rebuilt)
-            || rebuilt is not LayerBase<T> layer)
+            && !LayerFactoryRegistry<T>.TryCreate(
+                type, definition, bag, source.ScalarActivation, source.VectorActivation, out rebuilt))
         {
             throw new NotSupportedException(
-                $"{type.Name} has no generated factory, so it cannot be rebuilt. Mark its "
-                + "constructor's required arguments with [LayerState] and it will gain one.");
+                $"{type.Name} cannot be rebuilt: no generated factory, no registered factory, and its "
+                + "constructor could not be satisfied from the saved state. If this layer lives "
+                + "outside AiDotNet, register a factory with "
+                + $"LayerFactoryRegistry<{typeof(T).Name}>.Register, or make sure each constructor "
+                + "argument is stored in a field of the same name so it is written at save time.");
+        }
+
+        if (rebuilt is not LayerBase<T> layer)
+        {
+            throw new NotSupportedException(
+                $"{type.Name} was rebuilt as {rebuilt?.GetType().Name ?? "null"}, which is not a layer.");
         }
 
         return layer;
