@@ -656,9 +656,6 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
         return probs;
     }
 
-    /// <inheritdoc />
-    /// <remarks>The inherited NumFeatures * NumClasses formula reported 10 against a 6-element vector -- not merely stale but a different quantity entirely.</remarks>
-    public override long ParameterCount => GetParameters().Length;
 
     /// <summary>
     /// Gets all model parameters as a single vector (coefficients + thresholds).

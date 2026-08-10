@@ -259,45 +259,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         return Math.Sqrt(dist);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (_priorProbs is null) return new Vector<T>(0);
 
-        int k = _options.KNeighbors;
-        int size = NumLabels + NumLabels * (k + 1) * 2;
-        var parameters = new Vector<T>(size);
-
-        int idx = 0;
-        for (int l = 0; l < NumLabels; l++)
-        {
-            parameters[idx++] = NumOps.FromDouble(_priorProbs[l]);
-        }
-
-        for (int l = 0; l < NumLabels; l++)
-        {
-            for (int j = 0; j <= k; j++)
-            {
-                parameters[idx++] = NumOps.FromDouble(_condProbsPos[l, j]);
-            }
-        }
-
-        for (int l = 0; l < NumLabels; l++)
-        {
-            for (int j = 0; j <= k; j++)
-            {
-                parameters[idx++] = NumOps.FromDouble(_condProbsNeg[l, j]);
-            }
-        }
-
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Parameters alone are insufficient - need training data for k-NN
-    }
 
     /// <inheritdoc/>
     public override byte[] Serialize()

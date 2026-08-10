@@ -457,32 +457,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return new GraphNeuralOperator<T>(Architecture, _numMessagePassingLayers, _hiddenDim, null, _inputDim, _normalizeAdjacency);
         }
 
-        /// <summary>
-        /// Gets the total number of parameters across graph layers.
-        /// </summary>
-        public override long ParameterCount => (int)_graphLayers.Sum(layer => layer.ParameterCount);
 
-        /// <summary>
-        /// Gets the operator parameters as a flattened vector.
-        /// </summary>
-        public override Vector<T> GetParameters()
-        {
-            var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-            int index = 0;
-
-            foreach (var layer in _graphLayers)
-            {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameters.Length; i++)
-                {
-                    parameters[index + i] = layerParameters[i];
-                }
-
-                index += layerParameters.Length;
-            }
-
-            return parameters;
-        }
 
         public Tensor<T> Forward(Tensor<T> nodeFeatures, Tensor<T> adjacencyMatrix)
         {

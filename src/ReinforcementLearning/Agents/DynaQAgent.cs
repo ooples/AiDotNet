@@ -247,7 +247,6 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
-    public override long ParameterCount => QTableEntryCount;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -313,28 +312,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         return entries;
     }
 
-    public override Vector<T> GetParameters()
-    {
-        var entries = OrderedQTableEntries();
-        var v = new Vector<T>(entries.Count);
-        for (int i = 0; i < entries.Count; i++) v[i] = _qTable[entries[i].State][entries[i].Action];
-        return v;
-    }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        var entries = OrderedQTableEntries();
-
-        if (parameters.Length != entries.Count)
-        {
-            throw new ArgumentException(
-                $"Expected {entries.Count} parameters for the Q-table's stored (state, action) "
-                + $"entries; got {parameters.Length}.", nameof(parameters));
-        }
-
-        for (int i = 0; i < entries.Count; i++)
-            _qTable[entries[i].State][entries[i].Action] = parameters[i];
-    }
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

@@ -900,23 +900,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         public override ILossFunction<T> DefaultLossFunction =>
             new MeanSquaredErrorLoss<T>();
 
-        /// <inheritdoc/>
-        public override Vector<T> GetParameters()
-        {
-            if (_discoveredEquation is null)
-            {
-                return new Vector<T>(0);
-            }
-
-            var constants = new List<SymbolicExpressionNode<T>>();
-            CollectConstantNodes(_discoveredEquation.Root, constants);
-            var parameters = new Vector<T>(constants.Count);
-            for (int i = 0; i < constants.Count; i++)
-            {
-                parameters[i] = constants[i].Constant;
-            }
-            return parameters;
-        }
 
         /// <inheritdoc/>
         public override IEnumerable<int> GetActiveFeatureIndices()
@@ -949,32 +932,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             CollectVariableIndices(node.Right, indices);
         }
 
-        /// <inheritdoc/>
-        public override void SetParameters(Vector<T> parameters)
-        {
-            if (_discoveredEquation is null)
-            {
-                if (parameters.Length == 0)
-                {
-                    return;
-                }
-                throw new InvalidOperationException("Cannot set symbolic constants before an equation is discovered.");
-            }
-
-            var constants = new List<SymbolicExpressionNode<T>>();
-            CollectConstantNodes(_discoveredEquation.Root, constants);
-            if (parameters.Length != constants.Count)
-            {
-                throw new ArgumentException(
-                    $"Expected {constants.Count} symbolic constants, got {parameters.Length}.",
-                    nameof(parameters));
-            }
-
-            for (int i = 0; i < constants.Count; i++)
-            {
-                constants[i].Constant = parameters[i];
-            }
-        }
 
         private static void CollectConstantNodes(
             SymbolicExpressionNode<T>? node,
