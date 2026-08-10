@@ -2109,7 +2109,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private static bool LayerHasUninitializedParameters(ILayer<T> layer)
     {
-        if (layer is Layers.LayerBase<T> lb && lb.HasUninitializedParameters) return true;
+        if (layer is Layers.LayerBase<T> lb)
+        {
+            if (lb.HasUninitializedParameters) return true;
+
+            // A layer can be deferred in a SECOND way that the property above does not cover.
+            // HasUninitializedParameters answers "am I still waiting to learn my shape"; a layer
+            // that already knows its shape but has not allocated storage answers no -- and yet its
+            // weights do not exist either. That is exactly the state EnsureParametersMaterialized
+            // acts on (!IsInitialized && IsShapeResolved), and it is the state a freshly
+            // constructed ConvolutionalNeuralNetwork, LSTM, GRU or RNN sits in: fully sized, zero
+            // allocated, 110,634 parameters the instant anything asks for them.
+            //
+            // Reporting "nothing pending" there made a healthy model indistinguishable from a
+            // genuinely parameter-free one, which is what the Parameters_ShouldBeNonEmpty invariant
+            // trips over. Both forms are "deferred until first forward", so both belong here. This
+            // stays allocation-free -- it reads two flags and never materializes -- which is the
+            // whole reason that invariant avoids GetParameters() at VGG16BN / DiT scale.
+            if (lb.IsShapeResolved && !lb.IsInitialized) return true;
+        }
 
         // Composite layers hold their children out of the top-level list, so the walk has to
         // descend the same way parameter collection does.
