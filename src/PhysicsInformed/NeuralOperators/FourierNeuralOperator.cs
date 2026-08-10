@@ -546,27 +546,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
         }
 
-        /// <summary>
-        /// Gets the trainable parameters as a flattened vector.
-        /// </summary>
-        public override Vector<T> GetParameters()
-        {
-            var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-            int index = 0;
-
-            foreach (var layer in Layers)
-            {
-                var layerParameters = layer.GetParameters();
-                for (int i = 0; i < layerParameters.Length; i++)
-                {
-                    parameters[index + i] = layerParameters[i];
-                }
-
-                index += layerParameters.Length;
-            }
-
-            return parameters;
-        }
+        // GetParameters was overridden here to walk Layers and copy each layer's vector into a flat
+        // buffer sized from ParameterCount. That is the base implementation, restated. The lift,
+        // Fourier and projection layers are all registered into Layers at construction, and the
+        // spectral and pointwise weights belong to FourierLayer, which registers them itself -- so
+        // there was never anything here the base walk could not reach.
 
         public override Vector<T> GetGradients()
         {
@@ -595,15 +579,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
         }
 
-        /// <summary>
-        /// Gets the total parameter count for lift, Fourier, and projection layers.
-        /// Fourier layers are registered in the base Layers collection, so no separate sum needed.
-        /// </summary>
-        public override long ParameterCount =>
-            // Sum<long>; the previous (int) cast wrapped before the
-            // property returned long, defeating ToFlatVectorSize on
-            // multi-billion-parameter operator configs.
-            Layers.Sum(layer => layer.ParameterCount);
+        // ParameterCount was overridden here as Layers.Sum(layer => layer.ParameterCount) -- exactly
+        // what the base already computes. Deleted along with the matching GetParameters above.
 
         /// <summary>
         /// Performs a basic supervised training step using MSE loss.
