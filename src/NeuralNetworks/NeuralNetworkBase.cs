@@ -3099,6 +3099,43 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return LayerInputDomain.Continuous;
     }
 
+    /// <summary>
+    /// Publishes tape-computed gradients onto every layer's gradient surface.
+    /// </summary>
+    /// <param name="grads">Tape gradients, keyed by parameter tensor reference.</param>
+    /// <returns>The number of scalars filled from a real gradient, across all layers.</returns>
+    /// <remarks>
+    /// <para>
+    /// THE MISSING HALF OF THE AUTOMATION. Parameters are derived from registered components, but
+    /// gradients never were: training moved to the tape, which hands a tensor-keyed dictionary
+    /// straight to the optimizer, and only 1 of ~200 layers still wrote the per-layer field the
+    /// public accessor reads. Every other model reported manufactured zeros.
+    /// </para>
+    /// <para>
+    /// Each layer scatters its own slice by walking the SAME structure its parameter fill walks, so
+    /// gradients line up with parameters by construction rather than by a second ordering that
+    /// merely intends to agree. Layer authors write nothing.
+    /// </para>
+    /// </remarks>
+    protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        if (grads is null || grads.Count == 0) return 0;
+
+        var layers = Layers;
+        if (layers is null || layers.Count == 0) return 0;
+
+        int matched = 0;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is LayerBase<T> layer)
+            {
+                matched += layer.ScatterParameterGradients(grads);
+            }
+        }
+
+        return matched;
+    }
+
     public virtual Vector<T> GetParameterGradients()
     {
         // Collect gradients from all layers
@@ -8409,6 +8446,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (allGrads.TryGetValue(param, out var grad))
                     grads[param] = grad;
             }
+
+            // Publish the tape's gradients onto the per-layer surface BEFORE the optimizer runs.
+            // The optimizer consumes `grads` directly and never writes them back, so without this
+            // GetParameterGradients() had nothing to report and manufactured zeros instead --
+            // 24% of every CI failure in run 31356312540. Scattering off the same dictionary the
+            // optimizer is about to use means the reported gradients are exactly the ones actually
+            // applied, rather than a second, separately-derived answer that could disagree.
+            ScatterParameterGradientsToLayers(allGrads);
 
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;

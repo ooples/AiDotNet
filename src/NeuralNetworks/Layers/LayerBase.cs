@@ -1868,9 +1868,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual Vector<T> GetParameterGradients()
     {
-        if (ParameterGradients == null || ParameterGradients.Length != ParameterCount)
+        // EMPTY MEANS "NEVER COMPUTED", AND MUST NOT BE FAKED. This used to allocate a fresh zero
+        // vector on read, so a gradient that was never written was indistinguishable from one that
+        // genuinely came out zero. Training moved to the autodiff tape and only 1 of ~200 layers
+        // still wrote this field, so the accessor answered manufactured zeros for essentially every
+        // model -- 612 assertions, 24% of every CI failure in run 31356312540, all reporting
+        // "ALL EXACTLY ZERO after a training step". Callers now get an honest empty vector, and
+        // ScatterParameterGradients fills it from the tape after each backward pass.
+        if (ParameterGradients is null)
         {
-            ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+            return new Vector<T>(0);
         }
 
         return ParameterGradients;
@@ -4281,6 +4288,133 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
 
         return offset;
+    }
+
+    /// <summary>
+    /// Fills this layer's slice of the flat GRADIENT vector from tape-computed gradients, walking
+    /// the exact same structure <see cref="FillParameters"/> walks.
+    /// </summary>
+    /// <param name="dest">Destination, or <c>null</c> to count without writing.</param>
+    /// <param name="offset">Where this layer's slice starts.</param>
+    /// <param name="grads">Tape gradients, keyed by parameter tensor reference.</param>
+    /// <param name="matched">Incremented by the number of scalars filled from a REAL gradient.</param>
+    /// <returns>The next free index.</returns>
+    /// <remarks>
+    /// <para>
+    /// MIRRORS <see cref="FillParameters"/> DELIBERATELY, rather than building its own ordering.
+    /// The gradient vector has to line up scalar-for-scalar with the parameter vector, and the only
+    /// way to guarantee that is to visit the same members in the same order in the same shape of
+    /// code. A separate walk that merely intends to agree will drift the first time either side
+    /// gains a member, and misaligned gradients are far worse than the missing ones they replace:
+    /// every parameter would be updated by some other parameter's derivative.
+    /// </para>
+    /// <para>
+    /// Positions with no tape entry are left at zero and NOT counted in <paramref name="matched"/>.
+    /// That distinction is the whole point -- it is what lets the caller tell "this really is a zero
+    /// gradient" from "nothing ever wrote here", which is precisely what the old accessor destroyed
+    /// by allocating a fresh zero vector on read.
+    /// </para>
+    /// </remarks>
+    private int FillParameterGradients(
+        Vector<T>? dest,
+        int offset,
+        IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
+        ref int matched)
+    {
+        // The legacy flat store. It is not a tape tensor, so no gradient can be keyed to it; the
+        // slice stays zero and uncounted.
+        offset += Parameters.Length;
+
+        var trainable = GetTrainableParametersUnmaterialized();
+        if (trainable is not null)
+        {
+            for (int i = 0; i < trainable.Count; i++)
+            {
+                var t = trainable[i];
+                if (t is null) continue;
+                int n = TrainableScalarCount(t);
+                if (dest is null) { offset += n; continue; }
+
+                if (grads.TryGetValue(t, out var g) && g is not null && TrainableScalarCount(g) == n)
+                {
+                    for (int j = 0; j < n; j++)
+                        dest[offset++] = ReadTrainableScalar(g, j);
+                    matched += n;
+                }
+                else
+                {
+                    offset += n;
+                }
+            }
+        }
+
+        // Buffers are running statistics, not tape leaves, so they never carry a gradient. They
+        // still occupy space in the parameter vector, so their slice must be stepped over to keep
+        // the two vectors aligned.
+        var bufs = GetRegisteredBuffers();
+        if (bufs is not null)
+        {
+            for (int i = 0; i < bufs.Count; i++)
+            {
+                var b = bufs[i].Tensor;
+                if (b is null) continue;
+                offset += TrainableScalarCount(b);
+            }
+        }
+
+        var subs = GetSubLayers();
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var sub = subs[i];
+                if (sub is null) continue;
+                if (IsSubLayerParameterFrozen(sub)) continue;
+                if (sub is LayerBase<T> lb)
+                {
+                    offset = lb.FillParameterGradients(dest, offset, grads, ref matched);
+                }
+                else
+                {
+                    // Same fallback FillParameters uses: only the interface is guaranteed for a
+                    // third-party layer, and it exposes no gradient slice, so step over it.
+                    offset += sub.GetParameters().Length;
+                }
+            }
+        }
+
+        return offset;
+    }
+
+    /// <summary>
+    /// Populates this layer's gradient surface from tape-computed gradients.
+    /// </summary>
+    /// <param name="grads">Tape gradients, keyed by parameter tensor reference.</param>
+    /// <returns>The number of scalars filled from a real gradient.</returns>
+    /// <remarks>
+    /// Sized by a counting pass over the same walk that fills it, never by
+    /// <see cref="ParameterCount"/> -- for the reason spelled out on <see cref="GetParameters"/>:
+    /// that count is virtual and cached, and any disagreement with the walk wrote past the buffer.
+    /// Two passes over one walk cannot disagree with each other.
+    /// </remarks>
+    public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        if (grads is null || grads.Count == 0) return 0;
+
+        int ignored = 0;
+        int total = FillParameterGradients(null, 0, grads, ref ignored);
+        if (total <= 0) return 0;
+
+        var filled = new Vector<T>(total);
+        int matched = 0;
+        FillParameterGradients(filled, 0, grads, ref matched);
+
+        // Nothing keyed to this layer: leave the surface unpopulated so it keeps reporting
+        // "never computed" rather than a vector of manufactured zeros.
+        if (matched == 0) return 0;
+
+        ParameterGradients = filled;
+        return matched;
     }
 
     /// <summary>
