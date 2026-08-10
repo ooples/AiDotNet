@@ -32,7 +32,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// LayerCategory.Embedding as broadcast-input; the fit detector returns
 /// empty calibration with a Trace warning instead of throwing.
 /// </summary>
-public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
+public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 {
     // ====================================================================
     // ISSUE #1321 — TransformerArchitecture.ValidateInputDimensions
@@ -573,7 +573,7 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
     /// review on PR #1324) is what's recognising it — not the
     /// category-based path.
     /// </summary>
-    private sealed class NameOnlyEmbeddingLayer : LayerBase<float>
+    private sealed partial class NameOnlyEmbeddingLayer : LayerBase<float>
     {
         private readonly int _vocabSize;
 
@@ -691,7 +691,7 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         }
     }
 
-    private sealed class CustomTokenEmbeddingLayer : LayerBase<float>
+    private sealed partial class CustomTokenEmbeddingLayer : LayerBase<float>
     {
         private readonly int _vocabSize;
         private readonly int _embeddingDim;

@@ -13,7 +13,7 @@ namespace AiDotNetTests.IntegrationTests.MixedPrecision;
 /// Tests the full workflow of mixed-precision training including loss scaling,
 /// context management, and precision conversions.
 /// </summary>
-public class MixedPrecisionIntegrationTests
+public partial class MixedPrecisionIntegrationTests
 {
     private const double Tolerance = 1e-5;
 
@@ -1634,7 +1634,7 @@ public class MixedPrecisionIntegrationTests
     /// <summary>
     /// Test layer for verifying mixed precision integration.
     /// </summary>
-    private class TestLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<float>
+    private partial class TestLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<float>
     {
         private readonly string? _customName;
 

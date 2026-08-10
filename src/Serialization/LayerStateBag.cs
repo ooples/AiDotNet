@@ -572,4 +572,68 @@ public readonly struct LayerStateBag
     /// </remarks>
     public static string Format<TValue>(TValue? value) where TValue : struct
         => value.HasValue ? Convert.ToString(value.Value, CultureInfo.InvariantCulture) ?? string.Empty : string.Empty;
+
+    /// <inheritdoc cref="Format(int)"/>
+    /// <remarks>Flattened to key, value, key, value on the unit separator.</remarks>
+    public static string Format(Dictionary<string, int>? value)
+        => value is null
+            ? string.Empty
+            : string.Join("", value.OrderBy(k => k.Key, StringComparer.Ordinal)
+                .SelectMany(kvp => new[] { kvp.Key, kvp.Value.ToString(CultureInfo.InvariantCulture) }));
+
+    /// <inheritdoc cref="Format(int)"/>
+    /// <remarks>Flattened to key, first, second triples on the unit separator.</remarks>
+    public static string Format(Dictionary<string, (string SourceType, string TargetType)>? value)
+        => value is null
+            ? string.Empty
+            : string.Join("", value.OrderBy(k => k.Key, StringComparer.Ordinal)
+                .SelectMany(kvp => new[] { kvp.Key, kvp.Value.SourceType, kvp.Value.TargetType }));
+
+    /// <summary>Reads a required map of names to integers.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored map.</returns>
+    public Dictionary<string, int> StringInt32Map(string key)
+    {
+        const string wanted = "alternating names and integers";
+        if (!TryRaw(key, out var v)) throw Missing(key, wanted);
+        if (v is Dictionary<string, int> existing) return existing;
+
+        var text = AsText(v);
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (text.Length == 0) return result;
+
+        var parts = text.Split('');
+        if (parts.Length % 2 != 0) throw Unparseable(key, v, wanted);
+        for (var i = 0; i < parts.Length; i += 2)
+        {
+            if (!int.TryParse(parts[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                throw Unparseable(key, v, wanted);
+            result[parts[i]] = parsed;
+        }
+
+        return result;
+    }
+
+    /// <summary>Reads a required map of names to a pair of names.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored map.</returns>
+    public Dictionary<string, (string SourceType, string TargetType)> StringPairMap(string key)
+    {
+        const string wanted = "name, source, target triples";
+        if (!TryRaw(key, out var v)) throw Missing(key, wanted);
+        if (v is Dictionary<string, (string, string)> existing) return existing;
+
+        var text = AsText(v);
+        var result = new Dictionary<string, (string SourceType, string TargetType)>(StringComparer.Ordinal);
+        if (text.Length == 0) return result;
+
+        var parts = text.Split('');
+        if (parts.Length % 3 != 0) throw Unparseable(key, v, wanted);
+        for (var i = 0; i < parts.Length; i += 3)
+        {
+            result[parts[i]] = (parts[i + 1], parts[i + 2]);
+        }
+
+        return result;
+    }
 }

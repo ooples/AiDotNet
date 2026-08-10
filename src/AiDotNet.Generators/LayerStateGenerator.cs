@@ -334,6 +334,11 @@ public class LayerStateGenerator : IIncrementalGenerator
         // A plain configuration object: no behaviour, just settable values. Its properties are
         // construction state as much as a scalar parameter is, and rebuilding it by parameterless
         // construction alone would silently restore every one of them to its default.
+        // A graph layer's schema: which node and edge types it was built over. As much construction
+        // state as a dimension is -- a layer built over different node types is a different layer.
+        if (IsMap(type, SpecialType.System_Int32)) return ValueKind.StringInt32Map;
+        if (IsPairMap(type)) return ValueKind.StringPairMap;
+
         if (SettingsOf(type) is not null) return ValueKind.Settings;
         if (IsLayerSequence(type, out _)) return ValueKind.LayerList;
 
@@ -892,8 +897,10 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
             ValueKind.Layer => $"({p.TypeFqn.TrimEnd('?')})RebuildNested(state, \"{p.Key}\")!",
             ValueKind.LayerList => LayerListArgument(p),
-
+            ValueKind.StringInt32Map => $"state.StringInt32Map(\"{p.Key}\")",
+            ValueKind.StringPairMap => $"state.StringPairMap(\"{p.Key}\")",
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+
             // A parameter that does not accept null must not be handed one. Component() returns
             // null both when nothing was saved and when the saved type will not load, so a
             // non-nullable parameter reads through the variant that says so instead.
@@ -905,6 +912,20 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         return $"{p.Name}: {read}";
     }
+
+    /// <summary>A <c>Dictionary&lt;string, TValue&gt;</c> over the given value type.</summary>
+    private static bool IsMap(ITypeSymbol type, SpecialType value)
+        => type is INamedTypeSymbol { Name: "Dictionary", TypeArguments.Length: 2 } map
+           && map.TypeArguments[0].SpecialType == SpecialType.System_String
+           && map.TypeArguments[1].SpecialType == value;
+
+    /// <summary>A <c>Dictionary&lt;string, (string, string)&gt;</c>, however the tuple is named.</summary>
+    private static bool IsPairMap(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "Dictionary", TypeArguments.Length: 2 } map
+           && map.TypeArguments[0].SpecialType == SpecialType.System_String
+           && map.TypeArguments[1] is INamedTypeSymbol { IsTupleType: true } tuple
+           && tuple.TupleElements.Length == 2
+           && tuple.TupleElements.All(e => e.Type.SpecialType == SpecialType.System_String);
 
     /// <summary>
     /// Rebuilds a settings object through an object initializer, or leaves it null when none was
@@ -977,6 +998,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         BooleanArray,
         Delegate,
         StringArray,
+        StringInt32Map,
+        StringPairMap,
         Settings,
         Int32Jagged,
         Layer,
@@ -1007,6 +1030,8 @@ public class LayerStateGenerator : IIncrementalGenerator
                 ValueKind.DoubleArray => $"state.DoubleArray(\"{key}\")",
                 ValueKind.BooleanArray => $"state.BooleanArray(\"{key}\")",
                 ValueKind.StringArray => $"state.StringArray(\"{key}\")",
+                ValueKind.StringInt32Map => $"state.StringInt32Map(\"{key}\")",
+                ValueKind.StringPairMap => $"state.StringPairMap(\"{key}\")",
                 _ => $"state.Enum<{TypeFqn.TrimEnd('?')}>(\"{key}\")",
             };
         }

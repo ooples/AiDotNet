@@ -26,7 +26,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// declares the same shape contract as HarmonicEngine's <c>HreReadoutLayer</c>,
 /// which is what surfaces the validator regression.</para>
 /// </summary>
-public class HrePaperAChainShapeValidatorTests
+public partial class HrePaperAChainShapeValidatorTests
 {
     /// <summary>
     /// Validator runs at chain-construction time and rejects the chain if any
@@ -227,7 +227,7 @@ public class HrePaperAChainShapeValidatorTests
     /// validator-only regression tests. Forward is identity so we can run a
     /// real <c>Predict</c> through the chain without depending on HRE math.
     /// </summary>
-    private sealed class FixedShapeRank2Layer : LayerBase<float>
+    private sealed partial class FixedShapeRank2Layer : LayerBase<float>
     {
         public FixedShapeRank2Layer(int[] inputShape, int[] outputShape)
             : base(inputShape, outputShape)
