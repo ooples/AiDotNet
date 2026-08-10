@@ -1913,4 +1913,26 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             );
         }
     }
+    /// <summary>
+    /// Declares the output projection, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
+    /// nothing declared them -- so they were never counted, never handed out, never restored,
+    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
+    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
+    /// weights.
+    /// </para>
+    /// <para>
+    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
+    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
+    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        yield return _outputWeights;
+    }
+
 }
