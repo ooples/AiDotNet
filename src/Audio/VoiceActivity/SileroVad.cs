@@ -9,7 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using System.Collections.Generic;
 
 namespace AiDotNet.Audio.VoiceActivity;
 
@@ -742,6 +743,29 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         finally
         {
             SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Surfaces the convolutional and LSTM stacks to the parameter walk.
+    /// </summary>
+    /// <remarks>
+    /// SileroVad builds both stacks outside <c>Layers</c>. The base call is kept so the audio base's TextEncoderLayers still flow through. Walking it inside UpdateParameters, as this model used to, fixed only the write path:
+    /// ParameterCount and GetParameters still described <c>Layers</c> alone, so the count and the
+    /// vector agreed with each other while both understated the model. Yielding here fixes the
+    /// count, the vector and the checkpoint together.
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        foreach (var l in base.GetExtraTrainableLayers())
+            yield return l;
+        foreach (var layer in _convLayers)
+        {
+            if (layer is LayerBase<T> lb) yield return lb;
+        }
+        foreach (var layer in _lstmLayers)
+        {
+            if (layer is LayerBase<T> lb) yield return lb;
         }
     }
 

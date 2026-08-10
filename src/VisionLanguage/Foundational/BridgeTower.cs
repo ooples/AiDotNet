@@ -272,30 +272,7 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Bridge-fusion stream is part of the trainable graph (registered via
-        // RegisterAuxiliaryEncoderStream in InitializeLayers and surfaced
-        // through GetExtraTrainableLayers), so its parameter slices live
-        // alongside the vision encoder's in the flat parameter vector. Walk
-        // it here so the writeback covers every trainable parameter the
-        // model exposes.
-        foreach (var l in _bridgeFusionLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

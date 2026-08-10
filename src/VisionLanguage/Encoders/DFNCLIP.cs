@@ -333,29 +333,7 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Text encoder is part of the trainable graph (surfaced via
-        // GetExtraTrainableLayers), so its parameter slices live alongside
-        // the vision encoder's in the flat parameter vector. Walk it here
-        // so flat-vector round-trips don't leave _textEncoderLayers on
-        // stale weights.
-        foreach (var l in _textEncoderLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <summary>
     /// Surface the text-encoder stack to streaming-offload / weight-registry
     /// hooks (NeuralNetworkBase.GetExtraTrainableLayers contract). Both this
