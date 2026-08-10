@@ -41,7 +41,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Variational Learning of Inducing Variables in Sparse Gaussian Processes", "https://doi.org/10.48550/arXiv.0905.3486", Year = 2009, Authors = "Michalis K. Titsias")]
-public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
+public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines similarity between data points.
@@ -51,16 +51,19 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The matrix of input features from the training data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The vector of target values from the training data.
     /// </summary>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
     /// The kernel matrix computed from training data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _K;
 
     /// <summary>
@@ -125,6 +128,7 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Cholesky factor of the kernel matrix for efficient computation.
     /// </summary>
+    [Buffer]
     private Matrix<T> _LK;
 
     /// <summary>
@@ -134,6 +138,7 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// of through the bare, near-singular kernel Gram K. Null until a Gaussian
     /// fit has run.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _KPlusNoise;
 
     /// <summary>
@@ -141,6 +146,7 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// likelihood fit, used for the stable predictive mean k*ᵀα. Null until a
     /// Gaussian fit has run.
     /// </summary>
+    [Buffer]
     private Vector<T>? _alpha;
 
     /// <summary>

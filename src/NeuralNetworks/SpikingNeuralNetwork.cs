@@ -133,6 +133,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// processing capability - neurons remember their recent inputs via this potential.
     /// </para>
     /// </remarks>
+    [Buffer]
     private List<Vector<T>> _membranePotentials;
 
     /// <summary>
@@ -179,6 +180,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// stronger signals before they respond.
     /// </para>
     /// </remarks>
+    [Buffer]
     private List<Vector<T>> _firingThresholds;
 
     // Adam optimizer state per Zenke 2018 §3.2 — supervised SNN training
@@ -188,7 +190,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     // direction stops being informative). Per-layer first / second
     // moment vectors keyed by layer index; step counter shared so bias
     // correction is consistent across layers.
+    [Buffer]
     private Dictionary<int, Vector<T>> _adamM = new Dictionary<int, Vector<T>>();
+    [Buffer]
     private Dictionary<int, Vector<T>> _adamV = new Dictionary<int, Vector<T>>();
     private int _adamStep = 0;
     private const double AdamBeta1 = 0.9;

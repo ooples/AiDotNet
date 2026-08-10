@@ -56,7 +56,7 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DocGCN: Heterogeneous Graph Convolutional Networks for Document Layout Analysis", "https://doi.org/10.48550/arXiv.2208.10970", Year = 2022, Authors = "Siwen Luo, Josiah Poon, Soyeon Caren Han")]
-public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
+public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
     private readonly DocGCNOptions _options;
 

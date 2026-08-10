@@ -65,6 +65,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// Cached Hann window for the STFT preprocessing step. Built once on the
     /// first <see cref="PreprocessAudio"/> call and reused across batches.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _hannWindow;
 
     /// <inheritdoc/>

@@ -62,6 +62,7 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
 
     private readonly double _alpha;
     private readonly int _kMax;
+    [Buffer]
     private Matrix<T>? _trainingData;
 
     private T _maxRadius;

@@ -48,10 +48,11 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Enhancing the Effectiveness of Clustering-Based Outlier Detection", "https://goldstein.center/publications.html", Year = 2012, Authors = "Mennatallah Amer, Markus Goldstein")]
-public class LDCOFDetector<T> : AnomalyDetectorBase<T>
+public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numClusters;
     private readonly int _numNeighbors;
+    [Buffer]
     private Matrix<T>? _trainingData;
     private Matrix<T>? _clusterCenters;
     private int[]? _clusterAssignments;

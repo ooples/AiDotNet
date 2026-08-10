@@ -202,7 +202,9 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// TimeGPT normalizes each input series before the embedding and restores the
     /// level on the output so distinct input scales produce distinct forecasts.
     /// </summary>
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     /// <summary>

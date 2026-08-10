@@ -467,6 +467,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// tape-connected so <see cref="FactorVAEObjective{T}"/> can add it to the reconstruction term and
     /// have the gradient reach BOTH heads.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastKlDivergence;
 
     /// <summary>
@@ -563,6 +564,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private const int DefaultSamplingSeed = 42;
 
     /// <summary>Realized returns for the current training step, consumed by the posterior branch.</summary>
+    [Scratch]
     private Tensor<T>? _posteriorReturns;
 
     /// <summary>

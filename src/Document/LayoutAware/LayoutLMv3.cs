@@ -67,7 +67,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://doi.org/10.48550/arXiv.2204.08387", Year = 2022, Authors = "Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei")]
-public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
+public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutLMv3Options _options;
 
@@ -100,8 +100,11 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     private Tensor<T>? _segmentEmbeddings;
 
     // Gradient storage
+    [Scratch]
     private Tensor<T>? _position1DEmbeddingsGradients;
+    [Scratch]
     private Tensor<T>? _position2DXEmbeddingsGradients;
+    [Scratch]
     private Tensor<T>? _position2DYEmbeddingsGradients;
 
     #endregion

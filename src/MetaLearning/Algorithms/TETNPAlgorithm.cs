@@ -44,7 +44,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Matthew Ashman, Cristiana Diaconu, Eric Langezaal, Adrian Weller, Richard E. Turner")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TETNPOptions<T, TInput, TOutput> _algoOptions;
     private Vector<T> _relPosParams;

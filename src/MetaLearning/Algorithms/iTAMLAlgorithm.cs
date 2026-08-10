@@ -62,6 +62,7 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     private readonly int _paramDim;
 
     /// <summary>Teacher model parameters (EMA of student).</summary>
+    [Buffer]
     private Vector<T> _teacherParams;
 
     /// <inheritdoc/>

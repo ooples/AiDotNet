@@ -385,6 +385,7 @@ public class SEEM<T> : Common.PromptableSegmentationBase<T>
     // _imageEmbedding, _imageSet, SetImage and SupportsPoint/Box/MaskPrompts (all true) come from
     // PromptableSegmentationBase; only the text-prompt capability and SEEM's cached class
     // probabilities are model-specific.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
 
     /// <inheritdoc/>

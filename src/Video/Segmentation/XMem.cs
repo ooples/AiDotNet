@@ -96,8 +96,11 @@ public class XMem<T> : NeuralNetworkBase<T>
     private readonly int _longTermMemorySize;
 
     // Memory banks (three-tier system)
+    [Scratch]
     private readonly List<Tensor<T>> _sensoryMemory;
+    [Scratch]
     private readonly List<Tensor<T>> _workingMemory;
+    [Scratch]
     private readonly List<Tensor<T>> _longTermMemory;
 
     #endregion

@@ -54,7 +54,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiT: Self-supervised Pre-training for Document Image Transformer", "https://doi.org/10.48550/arXiv.2203.02378", Year = 2022, Authors = "Junlong Li, Yiheng Xu, Tengchao Lv, Lei Cui, Cha Zhang, Furu Wei")]
-public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
+public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
     private readonly DiTOptions _options;
 

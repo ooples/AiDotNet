@@ -59,13 +59,21 @@ public class CRNN<T> : OCRBase<T>
     private readonly int _sequenceFeatureDim;
 
     // LSTM state tracking
+    [Scratch]
     private Tensor<T>? _lstm1FwHidden;
+    [Scratch]
     private Tensor<T>? _lstm1FwCell;
+    [Scratch]
     private Tensor<T>? _lstm1BwHidden;
+    [Scratch]
     private Tensor<T>? _lstm1BwCell;
+    [Scratch]
     private Tensor<T>? _lstm2FwHidden;
+    [Scratch]
     private Tensor<T>? _lstm2FwCell;
+    [Scratch]
     private Tensor<T>? _lstm2BwHidden;
+    [Scratch]
     private Tensor<T>? _lstm2BwCell;
 
     /// <inheritdoc/>

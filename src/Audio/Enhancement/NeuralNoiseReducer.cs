@@ -193,11 +193,13 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Input buffer for streaming mode.
     /// </summary>
+    [Scratch]
     private Vector<T> _inputBuffer = new Vector<T>(0);
 
     /// <summary>
     /// Output buffer for overlap-add.
     /// </summary>
+    [Scratch]
     private Vector<T> _outputBuffer = new Vector<T>(0);
 
     /// <summary>
@@ -208,6 +210,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Window function for STFT.
     /// </summary>
+    [Buffer]
     private Vector<T> _window = new Vector<T>(0);
 
     /// <summary>

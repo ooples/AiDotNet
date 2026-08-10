@@ -62,6 +62,7 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private readonly int _paramDim;
 
     /// <summary>Domain-specific gradient momentum buffers.</summary>
+    [Buffer]
     private readonly Vector<T>[] _domainBuffers;
 
     /// <inheritdoc/>

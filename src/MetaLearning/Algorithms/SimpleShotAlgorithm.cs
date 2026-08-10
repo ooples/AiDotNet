@@ -98,6 +98,7 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// <summary>
     /// Cached feature mean for CL2N normalization, computed from training features.
     /// </summary>
+    [Buffer]
     private Vector<T>? _featureMean;
 
     /// <inheritdoc/>

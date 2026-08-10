@@ -128,11 +128,13 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// rather than a hardcoded estimate.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastSigma;
 
     /// <summary>
     /// Instance normalization scale for denormalization.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _scaleStd;
 
     #endregion

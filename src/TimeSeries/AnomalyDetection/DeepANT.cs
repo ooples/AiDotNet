@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DeepAnT: A Deep Learning Approach for Unsupervised Anomaly Detection in Time Series", "https://doi.org/10.1109/ACCESS.2018.2886457", Year = 2019, Authors = "Mohsin Munir, Shoaib Ahmed Siddiqui, Andreas Dengel, Sheraz Ahmed")]
-public class DeepANT<T> : TimeSeriesModelBase<T>
+public partial class DeepANT<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepANTOptions<T> _options;
 
@@ -60,11 +60,14 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
     // Fully connected layer (Tensor-based)
     private Tensor<T> _fcWeights;      // [1, numChannels]
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private Tensor<T> _fcBias;         // [1]
 
     // Gradient accumulators for batch training
+    [Scratch]
     private Tensor<T> _fcWeightsGrad;
+    [Scratch]
     private Tensor<T> _fcBiasGrad;
 
     // Anomaly detection threshold

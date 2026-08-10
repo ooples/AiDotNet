@@ -109,6 +109,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Cached adjacency matrix for forward/backward passes.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
 
     /// <summary>

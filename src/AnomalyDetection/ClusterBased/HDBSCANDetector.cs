@@ -50,6 +50,7 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _minClusterSize;
     private readonly int _minSamples;
+    [Buffer]
     private Matrix<T>? _trainingData;
     private int[]? _labels;
     private T[]? _outlierScores;

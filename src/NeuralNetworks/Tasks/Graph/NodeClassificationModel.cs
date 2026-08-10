@@ -86,6 +86,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>, AiDotNet.Interfa
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
     // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
     // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a

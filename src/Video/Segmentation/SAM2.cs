@@ -91,6 +91,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     // Memory bank for tracking
+    [Scratch]
     private readonly List<Tensor<T>> _memoryBank;
     private readonly List<int> _memoryFrameIndices;
 

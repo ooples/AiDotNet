@@ -129,11 +129,13 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance mean for RevIN normalization.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance standard deviation for RevIN normalization.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion

@@ -46,8 +46,11 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
     private readonly int _maxOutliers;
+    [Buffer]
     private Vector<T>? _means;
+    [Buffer]
     private Vector<T>? _stds;
+    [Buffer]
     private Vector<T>? _criticalValues;
     private int _fittedN;
     private int _nFeatures;

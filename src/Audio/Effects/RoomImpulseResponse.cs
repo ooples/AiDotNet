@@ -101,6 +101,7 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     /// would fail for a reason that has nothing to do with the learned weights. Serialized with the
     /// model so a reload reproduces the same response.
     /// </remarks>
+    [Buffer]
     private Tensor<T>? _noiseSignal;
 
     #endregion

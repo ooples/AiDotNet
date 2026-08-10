@@ -86,12 +86,18 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
     private double _sigmaMax;
 
     // DDPM noise schedule (precomputed) - CCDM also uses beta schedule for discrete steps
+    [Buffer]
     private Vector<T> _betas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
     // Continuous sigma schedule (geometric interpolation from sigmaMax to sigmaMin)
+    [Buffer]
     private Vector<T> _sigmas = Vector<T>.Empty();
 
     #endregion

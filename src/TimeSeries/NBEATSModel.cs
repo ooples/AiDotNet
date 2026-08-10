@@ -74,6 +74,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 
     private readonly NBEATSModelOptions<T> _options;
     private readonly List<NBEATSBlock<T>> _blocks;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Normalization statistics computed during training

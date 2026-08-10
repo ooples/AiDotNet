@@ -97,9 +97,13 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     private bool _lowFidelityFrozen;
 
     // Training data
+    [Buffer]
     private Tensor<T>? _lowFidelityInputs;
+    [Buffer]
     private Tensor<T>? _lowFidelityOutputs;
+    [Buffer]
     private Tensor<T>? _highFidelityInputs;
+    [Buffer]
     private Tensor<T>? _highFidelityOutputs;
 
     /// <summary>

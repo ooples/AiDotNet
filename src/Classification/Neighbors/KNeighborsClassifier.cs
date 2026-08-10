@@ -63,11 +63,13 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Stored training features.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _xTrain;
 
     /// <summary>
     /// Stored training labels.
     /// </summary>
+    [Buffer]
     private Vector<T>? _yTrain;
 
     /// <summary>

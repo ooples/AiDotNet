@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TOTEM: TOkenized Time Series EMbeddings", "https://arxiv.org/abs/2402.16412")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
+public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -101,7 +101,9 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     // The VQ bottleneck snaps the encoder output to a discrete codebook entry, so
     // constant inputs of different levels map to the same token and decode
     // identically — restoring the input level keeps the forecast input-dependent.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

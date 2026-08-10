@@ -48,7 +48,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Deep One-Class Classification", "https://doi.org/10.48550/arXiv.1802.04365", Year = 2018, Authors = "Lukas Ruff, Robert A. Vandermeulen, Nico Görnitz, Lucas Deecke, Shoaib A. Siddiqui, Alexander Binder, Emmanuel Müller, Marius Kloft")]
-public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
+public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _hiddenDim;
     private readonly int _outputDim;
@@ -64,11 +64,14 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _b3;
 
     // Hypersphere center
+    [Buffer]
     private Vector<T>? _center;
     private int _inputDim;
 
     // Normalization parameters
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     /// <summary>

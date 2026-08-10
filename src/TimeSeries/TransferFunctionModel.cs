@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
+public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options specific to the Transfer Function Model.
@@ -77,16 +77,19 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Residuals (errors) from the model fit.
     /// </summary>
+    [Buffer]
     private Vector<T> _residuals;
 
     /// <summary>
     /// Fitted values from the model.
     /// </summary>
+    [Scratch]
     private Vector<T> _fitted;
 
     /// <summary>
     /// The original output time series data.
     /// </summary>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>

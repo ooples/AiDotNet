@@ -134,7 +134,9 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     // way out. Without the reverse step the forecast head emits in normalized space, so the
     // series' own scale is discarded — a constant-valued input normalizes to all-zeros and
     // every such series yields a bit-identical forecast.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
     private int _contextLength;
     private int _forecastHorizon;

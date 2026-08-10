@@ -74,7 +74,9 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
+    [Buffer]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;

@@ -302,6 +302,7 @@ public class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
     #region IPromptableSegmentation Implementation
     // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment and the four Supports*Prompts
     // flags all arrive from PromptableSegmentationBase with identical values.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
 
     /// <inheritdoc />

@@ -99,25 +99,44 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private const int DefaultNumFlowBlocks = 3;
 
     // Activation cache for backward pass
+    [Scratch]
     private Tensor<T>? _cachedConcatenatedFrames;
+    [Scratch]
     private Tensor<T>? _cachedFrame1;
+    [Scratch]
     private Tensor<T>? _cachedFrame2;
+    [Scratch]
     private Tensor<T>? _cachedFlow;
+    [Scratch]
     private Tensor<T>? _cachedFlow_0_1;
+    [Scratch]
     private Tensor<T>? _cachedFlow_1_0;
+    [Scratch]
     private Tensor<T>? _cachedFusionMask;
+    [Scratch]
     private Tensor<T>? _cachedFlow_t_0;
+    [Scratch]
     private Tensor<T>? _cachedFlow_t_1;
+    [Scratch]
     private Tensor<T>? _cachedFrame1Warped;
+    [Scratch]
     private Tensor<T>? _cachedFrame2Warped;
+    [Scratch]
     private Tensor<T>? _cachedContext;
+    [Scratch]
     private Tensor<T>? _cachedFusionInput;
+    [Scratch]
     private Tensor<T>? _cachedFused;
     private double _cachedTimestep;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedEncoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowDecoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedContextEncoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowBlockInputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowBlockOutputs;
 
     #endregion

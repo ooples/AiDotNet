@@ -53,7 +53,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LayoutLM: Pre-training of Text and Layout for Document Image Understanding", "https://doi.org/10.1145/3394486.3403172", Year = 2020, Authors = "Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou")]
-public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
+public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
     private readonly LayoutLMOptions _options;
 

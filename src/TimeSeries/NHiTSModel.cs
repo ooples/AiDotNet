@@ -82,6 +82,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
     public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
 
     private readonly NHiTSOptions<T> _options;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private readonly List<NHiTSStackTensor<T>> _stacks;
     private readonly Random _random;

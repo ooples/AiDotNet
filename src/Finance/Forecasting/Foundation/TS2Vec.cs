@@ -93,7 +93,9 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     // the forecast head output must be denormalized with the same stats so the
     // forecast tracks the input's level. Without the reverse step, level-shifted
     // (e.g. constant) inputs collapse to an identical normalized forecast.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

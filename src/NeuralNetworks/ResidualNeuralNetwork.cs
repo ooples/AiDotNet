@@ -114,6 +114,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     private readonly List<int> _auxiliaryClassifierPositions = new();
     private List<List<ILayer<T>>> _auxiliaryClassifierLayers = new();
     #pragma warning disable CS0649
+    [Scratch]
     private Vector<T>? _lastExpectedOutput;
     #pragma warning restore CS0649
 

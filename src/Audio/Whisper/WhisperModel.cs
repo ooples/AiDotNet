@@ -181,6 +181,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// training optimizes. It is announced rather than silent; see the method.</item>
     /// </list>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _teacherForcingTokens;
 
     /// <summary>Serializes native training steps, so their teacher-forcing state cannot interleave.</summary>

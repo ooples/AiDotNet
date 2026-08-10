@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis by State Space Methods", "https://doi.org/10.1093/acprof:oso/9780199641178.001.0001", Year = 2012, Authors = "James Durbin, Siem Jan Koopman")]
-public class StateSpaceModel<T> : TimeSeriesModelBase<T>
+public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -81,6 +81,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The initial state vector at time t=0.
     /// </summary>
+    [Buffer]
     private Vector<T> _initialState;
 
     /// <summary>
@@ -111,11 +112,13 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The transition matrix from the previous iteration, used to check convergence.
     /// </summary>
+    [Scratch]
     private Matrix<T> _previousTransitionMatrix;
 
     /// <summary>
     /// The observation matrix from the previous iteration, used to check convergence.
     /// </summary>
+    [Scratch]
     private Matrix<T> _previousObservationMatrix;
 
     /// <summary>
@@ -126,6 +129,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The smoothed states from training, used for in-sample predictions.
     /// </summary>
+    [Buffer]
     private List<Vector<T>> _smoothedStates;
 
     /// <summary>

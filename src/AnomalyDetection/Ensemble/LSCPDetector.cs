@@ -51,7 +51,9 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
     private readonly int _nEstimators;
     private readonly int _localRegionSize;
     private List<IAnomalyDetector<T>>? _baseDetectors;
+    [Buffer]
     private Matrix<T>? _trainingData;
+    [Buffer]
     private Vector<T>[]? _detectorScores;
 
     /// <summary>

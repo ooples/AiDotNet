@@ -66,6 +66,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepAROptions<T> _options;
     private readonly Random _random;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tape-trainable LSTM cells (one per layer) and the pluggable predictive-distribution head

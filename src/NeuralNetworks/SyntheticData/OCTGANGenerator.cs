@@ -107,8 +107,10 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     // Cached pre-activations for proper backward passes
 
     // SVDD center in embedding space
+    [Buffer]
     private Tensor<T>? _svddCenter;
 
+    [Buffer]
     private Matrix<T>? _minorityData;
     private bool _usingCustomLayers;
 

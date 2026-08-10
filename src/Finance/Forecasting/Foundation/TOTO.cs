@@ -89,7 +89,9 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     // Per-feature RevIN statistics (Kim et al. 2022) captured during
     // ApplyInstanceNormalization, used to denormalize the forecast back to the
     // input's scale so level-shifted inputs yield distinct forecasts.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

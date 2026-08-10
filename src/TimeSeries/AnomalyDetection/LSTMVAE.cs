@@ -65,6 +65,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     // Anomaly threshold
     private T _reconstructionThreshold;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>

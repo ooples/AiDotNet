@@ -243,31 +243,37 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRadianceFi
     /// <summary>
     /// Cached positions from last forward pass (for backpropagation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPositions;
 
     /// <summary>
     /// Cached directions from last forward pass (for backpropagation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastDirections;
 
     /// <summary>
     /// Cached position encoding from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPositionEncoding;
 
     /// <summary>
     /// Cached direction encoding from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastDirectionEncoding;
 
     /// <summary>
     /// Cached raw density output from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastDensityRaw;
 
     /// <summary>
     /// Cached raw RGB output from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastRgbRaw;
 
     /// <summary>

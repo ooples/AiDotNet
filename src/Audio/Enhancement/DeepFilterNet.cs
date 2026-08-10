@@ -158,13 +158,17 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <summary>
     /// Cached complex STFT from preprocessing, used for audio reconstruction.
     /// </summary>
+    [Scratch]
     private Tensor<Complex<T>>? _cachedComplexStft;
 
     // Cached constants for the differentiable STFT/ERB pipeline (built lazily once numFreqs is known).
     // These are non-trainable leaf tensors, so building them with scalar fills is fine — only the
     // OPERATIONS wiring trainable params to the loss must be tape-tracked IEngine ops.
+    [Buffer]
     private Tensor<T>? _analysisWindow;   // Hann window [frameLen]
+    [Buffer]
     private Tensor<T>? _erbPoolMatrix;    // [numFreqs, numErbBands]  magnitude -> ERB-band pooling
+    [Buffer]
     private Tensor<T>? _erbExpandMatrix;  // [numErbBands, numFreqs]  ERB-band gain -> per-bin gain
     private int _cachedNumFreqs = -1;
     private bool _lazyShapesWarmed;

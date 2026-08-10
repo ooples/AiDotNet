@@ -65,7 +65,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OCR-free Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2111.15664", Year = 2022, Authors = "Geewook Kim, Teakgyu Hong, Moonbin Yim, JeongYeon Nam, Jinyoung Park, Jinyeong Yim, Wonseok Hwang, Sangdoo Yun, Dongyoon Han, Seunghyun Park")]
-public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<T>
+public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<T>
 {
     private readonly DonutOptions _options;
 
@@ -111,6 +111,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     private Tensor<T>? _decoderPositionEmbeddings;
 
     // Gradient storage
+    [Scratch]
     private Tensor<T>? _decoderPositionEmbeddingsGradients;
     private bool _nativeLayersInitialized;
     #pragma warning disable CS0414

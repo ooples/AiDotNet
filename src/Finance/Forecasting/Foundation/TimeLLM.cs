@@ -209,7 +209,9 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// the level on the output so distinct input scales produce distinct
     /// forecasts. Keyed per instance (batch row).
     /// </summary>
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

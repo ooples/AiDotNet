@@ -933,12 +933,14 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// Trains the model on input data.
     /// </summary>
     // Stored target for teacher forcing during ForwardForTraining
+    [Scratch]
     private Tensor<T>? _teacherForcingTarget;
 
     /// <summary>
     /// The decoder's mel output BEFORE the post-net residual, captured on the teacher-forced forward
     /// so the loss can supervise it directly alongside the refined output.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPrePostnetMel;
 
     /// <summary>

@@ -73,6 +73,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private int _rnnLayers;
     private string _charset;
 
+    [Scratch]
     private Tensor<T>? _lastCharacterProbs;
 
     // Native mode layers

@@ -57,7 +57,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LayoutXLM: Multimodal Pre-training for Multilingual Visually-rich Document Understanding", "https://doi.org/10.48550/arXiv.2104.08836", Year = 2022, Authors = "Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Furu Wei")]
-public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
+public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutXLMOptions _options;
 

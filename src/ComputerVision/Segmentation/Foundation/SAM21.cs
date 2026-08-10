@@ -83,9 +83,11 @@ public class SAM21<T> : Common.PromptableSegmentationBase<T>
     private readonly int _memoryBankSize;
 
     // Memory bank for video tracking
+    [Buffer]
     private readonly List<Tensor<T>> _memoryBank;
 
     // SAM 2.1's own promptable state.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
 
     #endregion

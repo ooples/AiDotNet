@@ -136,11 +136,13 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// <summary>
     /// Stores the last computed mean vector from the encoder for auxiliary loss computation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _lastMean;
 
     /// <summary>
     /// Stores the last computed log variance vector from the encoder for auxiliary loss computation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _lastLogVariance;
 
     /// <summary>

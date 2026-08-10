@@ -62,6 +62,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// Cached Hann window for the STFT preprocessing step. Built once on the
     /// first <see cref="PreprocessAudio"/> call and reused.
     /// </summary>
+    [Buffer]
     private Tensor<T>? _hannWindow;
 
     /// <inheritdoc/>
