@@ -185,13 +185,24 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         foreach (var p in ctor.Parameters)
         {
-            var info = new ParamModel { Name = p.Name, TypeFqn = p.Type.ToDisplayString(FullyQualified) };
+            var info = new ParamModel
+            {
+                Name = p.Name,
+                TypeFqn = p.Type.ToDisplayString(FullyQualified),
+                Owner = type.Name,
+            };
 
             if (IsLayer(Unwrap(p.Type), out var childNumeric)
                 || IsLayerSequence(Unwrap(p.Type), out childNumeric))
             {
                 info.LayerNumeric = childNumeric?.ToDisplayString(FullyQualified);
             }
+
+            info.AcceptsNull = p.Type.NullableAnnotation == NullableAnnotation.Annotated
+                || p.NullableAnnotation == NullableAnnotation.Annotated;
+            info.TraceableNumeric = TraceableNumericOf(Unwrap(p.Type))?.ToDisplayString(FullyQualified);
+            info.ExpressionDelegate = ExpressionDelegateOf(Unwrap(p.Type));
+            info.Settings = SettingsOf(Unwrap(p.Type)) ?? new List<SettingModel>();
 
 
             if (HasStateAttribute(p))
@@ -391,6 +402,69 @@ public class LayerStateGenerator : IIncrementalGenerator
         return from is INamedTypeSymbol named && named.AllInterfaces.Any(i => SameType(i, to));
     }
 
+    /// <summary>
+    /// For <c>Func&lt;ComputationNode&lt;X&gt;, ComputationNode&lt;X&gt;&gt;</c>, returns X.
+    /// </summary>
+    private static ITypeSymbol? TraceableNumericOf(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Delegate } named) return null;
+
+        var invoke = named.DelegateInvokeMethod;
+        if (invoke is null || invoke.Parameters.Length != 1) return null;
+
+        var argument = Node(invoke.Parameters[0].Type);
+        var result = Node(invoke.ReturnType);
+        return argument is not null && SymbolEqualityComparer.Default.Equals(argument, result) ? argument : null;
+
+        static ITypeSymbol? Node(ITypeSymbol t)
+            => t is INamedTypeSymbol { Name: "ComputationNode", TypeArguments.Length: 1 } n ? n.TypeArguments[0] : null;
+    }
+
+    /// <summary>For <c>Expression&lt;TDelegate&gt;</c>, returns TDelegate as C# source.</summary>
+    private static string? ExpressionDelegateOf(ITypeSymbol type)
+        => type is INamedTypeSymbol { Name: "Expression", TypeArguments.Length: 1 } expression
+           && expression.TypeArguments[0].TypeKind == TypeKind.Delegate
+            ? expression.TypeArguments[0].ToDisplayString(FullyQualified)
+            : null;
+
+    /// <summary>
+    /// The settable public properties of a plain settings object, when it can be constructed
+    /// without arguments and every one of them is a value the metadata can carry. Anything else is
+    /// not a settings object and keeps reporting ADN0053 rather than round-tripping partially.
+    /// </summary>
+    private static List<SettingModel>? SettingsOf(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class } named || named.IsAbstract) return null;
+
+        if (!named.InstanceConstructors.Any(c => c.Parameters.Length == 0
+            && c.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal))
+            return null;
+
+        var settings = new List<SettingModel>();
+        foreach (var property in named.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (property.IsStatic || property.IsIndexer) continue;
+            if (property.DeclaredAccessibility != Accessibility.Public) continue;
+            if (property.GetMethod is null || property.SetMethod is null) continue;
+            if (property.SetMethod.DeclaredAccessibility != Accessibility.Public) continue;
+
+            var kind = Classify(property.Type);
+            if (kind is ValueKind.Unsupported or ValueKind.Settings or ValueKind.Layer
+                or ValueKind.LayerList or ValueKind.Delegate or ValueKind.Expression or ValueKind.Component)
+                return null;
+
+            settings.Add(new SettingModel
+            {
+                Name = property.Name,
+                Kind = kind,
+                TypeFqn = property.Type.ToDisplayString(FullyQualified),
+            });
+        }
+
+        return settings.Count > 0 ? settings : null;
+    }
+
+
 
     private static string? StateKey(IParameterSymbol p)
     {
@@ -409,8 +483,18 @@ public class LayerStateGenerator : IIncrementalGenerator
         // Before the interface check: ILayer<T> would otherwise be claimed as a Component, which
         // rebuilds by parameterless Activator.CreateInstance -- losing every argument the child
         // was built with, silently and without failing.
+        // A delegate and an expression tree each have their own description path, and an
+        // Expression<T> is a class, so both are decided before the checks below.
+        if (type.TypeKind == TypeKind.Delegate) return ValueKind.Delegate;
+        if (ExpressionDelegateOf(type) is not null) return ValueKind.Expression;
+
         if (IsLayer(type, out _)) return ValueKind.Layer;
         if (IsLayerSequence(type, out _)) return ValueKind.LayerList;
+
+        // A plain configuration object: no behaviour, just settable values. Its properties are
+        // construction state as much as a scalar is, and rebuilding it by parameterless
+        // construction alone would silently restore every one of them to its default.
+        if (SettingsOf(type) is not null) return ValueKind.Settings;
 
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
 
@@ -594,6 +678,15 @@ public class LayerStateGenerator : IIncrementalGenerator
             // constructors could generate a different factory between builds. Ordering on the
             // constructor's own location also makes "first by source order" true.
             .Select(g => g
+                // Recoverable state first. Ranking by state-parameter count alone picked
+                // LambdaLayer's two-opaque-delegate constructor over its traceable one: an opaque
+                // delegate is the parameter LEAST likely to survive a save, so the constructor that
+                // rebuilt worst scored highest. Source order still breaks the remaining ties, so the
+                // choice stays deterministic across partial files.
+                .OrderByDescending(m => m.Parameters.Count(
+                    p => p.TraceableNumeric is not null || p.ExpressionDelegate is not null))
+                .ThenByDescending(m => m.Parameters.Count(p => p.IsState))
+                .ThenBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
                 .OrderBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
                 .ThenBy(m => m.Location.Start)
                 .First())
@@ -678,6 +771,43 @@ public class LayerStateGenerator : IIncrementalGenerator
                 var num = p.LayerNumeric ?? "T";
                 sb.AppendLine($"        global::AiDotNet.Serialization.LayerStateBag.WriteNestedRange<{num}>("
                     + $"__metadata, \"{p.Key}\", this.{p.BackingMember});");
+                continue;
+            }
+
+            // A delegate is described rather than written down -- a traced graph, an expression
+            // tree, or a named method by reference. Never marshalled code: Keras writes the Lambda
+            // layer's bytecode and made loading a model arbitrary code execution (CVE-2025-9906).
+            if (p.Kind == ValueKind.Delegate)
+            {
+                sb.AppendLine(p.TraceableNumeric is null
+                    ? $"        __metadata[\"{p.Key}\"] = "
+                      + $"global::AiDotNet.Serialization.DelegateState.Save(this.{p.BackingMember});"
+                    : $"        __metadata[\"{p.Key}\"] = "
+                      + $"global::AiDotNet.Serialization.DelegateState.SaveTraceable<{p.TraceableNumeric}>("
+                      + $"this.{p.BackingMember}, this.GetInputShape());");
+                continue;
+            }
+
+            if (p.Kind == ValueKind.Expression)
+            {
+                sb.AppendLine($"        __metadata[\"{p.Key}\"] = "
+                    + $"global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
+                continue;
+            }
+
+            // A settings object is written property by property under its own key namespace, so it
+            // rebuilds through an object initializer the compiler checks rather than by reflection.
+            if (p.Kind == ValueKind.Settings)
+            {
+                sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __metadata[\"{p.Key}.$set\"] = \"true\";");
+                foreach (var s in p.Settings)
+                {
+                    sb.AppendLine($"            __metadata[\"{p.Key}.{s.Name}\"] = "
+                        + $"global::AiDotNet.Serialization.LayerStateBag.Format(this.{p.BackingMember}.{s.Name});");
+                }
+                sb.AppendLine("        }");
                 continue;
             }
 
@@ -875,6 +1005,18 @@ public class LayerStateGenerator : IIncrementalGenerator
     /// The children come back as a <c>List&lt;TChild&gt;</c>; an array parameter needs ToArray() and
     /// an IEnumerable/IReadOnlyList parameter takes the list as it is.
     /// </remarks>
+    /// <summary>
+    /// Rebuilds a settings object through an object initializer, or leaves it null when none was
+    /// saved. Compile-checked property assignments rather than reflection, so a renamed property
+    /// breaks the build instead of silently restoring a default.
+    /// </summary>
+    private static string SettingsArgument(ParamModel p)
+    {
+        var assignments = string.Join(", ", p.Settings.Select(s => $"{s.Name} = {s.Read(p.Key)}"));
+        var created = $"new {p.TypeFqn.TrimEnd('?')} {{ {assignments} }}";
+        return p.AcceptsNull ? $"state.Has(\"{p.Key}.$set\") ? {created} : null" : created;
+    }
+
     private static string LayerListArgument(ParamModel p)
     {
         var declared = p.TypeFqn.TrimEnd('?');
@@ -912,7 +1054,17 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.Layer => $"({p.TypeFqn.TrimEnd('?')})RebuildNested(state, \"{p.Key}\")!",
             ValueKind.LayerList => LayerListArgument(p),
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
-            ValueKind.Component => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            ValueKind.Delegate => $"global::AiDotNet.Serialization.DelegateState.Load<{p.TypeFqn.TrimEnd('?')}>("
+                + $"state.String(\"{p.Key}\"), \"{p.Owner}\", \"{p.Key}\")",
+            ValueKind.Expression => $"global::AiDotNet.Serialization.ExpressionState.Load<{p.ExpressionDelegate}>("
+                + $"state.String(\"{p.Key}\"), \"{p.Owner}\", \"{p.Key}\")",
+            ValueKind.Settings => SettingsArgument(p),
+
+            // A parameter that does not accept null must not be handed one: Component() returns
+            // null both when nothing was saved and when the saved type will not load.
+            ValueKind.Component => p.AcceptsNull
+                ? $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")"
+                : $"state.ComponentRequired<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             _ => "default!",
         };
 
@@ -957,6 +1109,9 @@ public class LayerStateGenerator : IIncrementalGenerator
         StringPairMap,
         Layer,
         LayerList,
+        Delegate,
+        Expression,
+        Settings,
         Component,
     }
 
@@ -1056,6 +1211,37 @@ public class LayerStateGenerator : IIncrementalGenerator
         };
     }
 
+    /// <summary>One property of a settings object, and how a rebuild reads it back.</summary>
+    private sealed class SettingModel
+    {
+        public string Name = string.Empty;
+        public ValueKind Kind;
+        public string TypeFqn = string.Empty;
+
+        /// <summary>The accessor call that reads this property out of the saved state.</summary>
+        public string Read(string parameterKey)
+        {
+            var key = parameterKey + "." + Name;
+            return Kind switch
+            {
+                ValueKind.Int32 => $"state.Int32(\"{key}\")",
+                ValueKind.Int64 => $"state.Int64(\"{key}\")",
+                ValueKind.Double => $"state.Double(\"{key}\")",
+                ValueKind.Single => $"state.Single(\"{key}\")",
+                ValueKind.Boolean => $"state.Boolean(\"{key}\")",
+                ValueKind.String => $"state.String(\"{key}\")",
+                ValueKind.Int32Array => $"state.Int32Array(\"{key}\")",
+                ValueKind.DoubleArray => $"state.DoubleArray(\"{key}\")",
+                ValueKind.BooleanArray => $"state.BooleanArray(\"{key}\")",
+                ValueKind.StringArray => $"state.StringArray(\"{key}\")",
+                ValueKind.Int32Jagged => $"state.Int32Jagged(\"{key}\")",
+                ValueKind.StringInt32Map => $"state.StringInt32Map(\"{key}\")",
+                ValueKind.StringPairMap => $"state.StringPairMap(\"{key}\")",
+                _ => $"state.Enum<{TypeFqn.TrimEnd('?')}>(\"{key}\")",
+            };
+        }
+    }
+
     private sealed class ParamModel
     {
         public string Name = string.Empty;
@@ -1082,6 +1268,25 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// through. Usually the parent's own T, but a layer may name a closed child type.
         /// </summary>
         public string? LayerNumeric;
+
+        /// <summary>The layer that declares this parameter, named in any rebuild failure.</summary>
+        public string Owner = string.Empty;
+
+        /// <summary>Whether the parameter itself accepts a null argument.</summary>
+        public bool AcceptsNull;
+
+        /// <summary>
+        /// For a <c>Func&lt;ComputationNode&lt;X&gt;, ComputationNode&lt;X&gt;&gt;</c>, the X. Such a
+        /// delegate is described by running it once and recording what it did, which is the only
+        /// description that survives a closure.
+        /// </summary>
+        public string? TraceableNumeric;
+
+        /// <summary>For an <c>Expression&lt;TDelegate&gt;</c>, the TDelegate.</summary>
+        public string? ExpressionDelegate;
+
+        /// <summary>For a settings object, the properties that carry its state.</summary>
+        public List<SettingModel> Settings = new();
     }
 
     /// <summary>A location reduced to primitives, so it neither roots a Compilation nor breaks equality.</summary>
