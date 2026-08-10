@@ -72,15 +72,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets", "https://arxiv.org/abs/1606.03657", Year = 2016, Authors = "Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, Pieter Abbeel")]
-public class InfoGAN<T> : NeuralNetworkBase<T>
+public partial class InfoGAN<T> : NeuralNetworkBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Generator, discriminator, then the Q network that recovers the latent code -- the order the hand-written concatenation used. The Q network is trained jointly to maximise mutual information between the code and the output, so it belongs in the surface.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => Generator.Layers.Cast<LayerBase<T>?>()
-            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>())
-            .Concat(QNetwork.Layers.Cast<LayerBase<T>?>());
+    // Generator, Discriminator and QNetwork are discovered as sub-network members, in declaration
+    // order, which is the order this hook used and therefore the serialization order.
+    // Removed under AIDN082.
     private readonly InfoGANOptions _options;
 
     /// <inheritdoc/>

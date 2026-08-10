@@ -70,15 +70,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Style-Based Generator Architecture for Generative Adversarial Networks", "https://arxiv.org/abs/1812.04948", Year = 2019, Authors = "Tero Karras, Samuli Laine, Timo Aila")]
-public class StyleGAN<T> : NeuralNetworkBase<T>
+public partial class StyleGAN<T> : NeuralNetworkBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Mapping network, synthesis network, then discriminator -- the order ParameterCount summed them. Same fix: measured 68,265 against a vector of length 0.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => MappingNetwork.Layers.Cast<LayerBase<T>?>()
-            .Concat(SynthesisNetwork.Layers.Cast<LayerBase<T>?>())
-            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
+    // MappingNetwork, SynthesisNetwork and Discriminator are discovered as sub-network members, in
+    // declaration order, which is the order this hook used and therefore the serialization order.
+    // Removed under AIDN082.
     private readonly StyleGANOptions _options;
 
     /// <inheritdoc/>

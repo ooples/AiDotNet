@@ -58,14 +58,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Image-to-Image Translation with Conditional Adversarial Networks", "https://arxiv.org/abs/1611.07004", Year = 2017, Authors = "Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, Alexei A. Efros")]
-public class Pix2Pix<T> : NeuralNetworkBase<T>
+public partial class Pix2Pix<T> : NeuralNetworkBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Generator then discriminator, and the same fix as ACGAN: measured 49,345 against a vector of length 0 before this.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => Generator.Layers.Cast<LayerBase<T>?>()
-            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
+    // Generator then Discriminator are discovered as sub-network members, in declaration order,
+    // which is the order this hook used and therefore the serialization order. Removed under AIDN082.
     private readonly Pix2PixOptions _options;
 
     /// <inheritdoc/>

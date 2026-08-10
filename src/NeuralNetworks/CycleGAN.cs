@@ -62,16 +62,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
-public class CycleGAN<T> : NeuralNetworkBase<T>
+public partial class CycleGAN<T> : NeuralNetworkBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Both generators then both discriminators, the order the hand-written concatenation walked them. All four are trained: CycleGAN optimises the A->B and B->A mappings jointly against a discriminator per domain.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => GeneratorAtoB.Layers.Cast<LayerBase<T>?>()
-            .Concat(GeneratorBtoA.Layers.Cast<LayerBase<T>?>())
-            .Concat(DiscriminatorA.Layers.Cast<LayerBase<T>?>())
-            .Concat(DiscriminatorB.Layers.Cast<LayerBase<T>?>());
+    // The four sub-networks are discovered as members and their layers surfaced in declaration
+    // order -- GeneratorAtoB, GeneratorBtoA, DiscriminatorA, DiscriminatorB -- which is the order
+    // this hook used and therefore the serialization order. Removed under AIDN082.
     private readonly CycleGANOptions _options;
 
     /// <inheritdoc/>
