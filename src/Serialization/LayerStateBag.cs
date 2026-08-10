@@ -73,6 +73,113 @@ public readonly struct LayerStateBag
     /// <summary><c>true</c> when a value is present for <paramref name="key"/>.</summary>
     public bool Has(string key) => TryRaw(key, out _);
 
+    /// <summary>The key under which a nested layer's concrete type is recorded.</summary>
+    /// <remarks>
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.LayerBase{T}"/>'s own metadata records the types of
+    /// its activations but not of the layer itself, because until now nothing rebuilt a layer from
+    /// inside another layer's state.
+    /// </remarks>
+    public const string TypeKey = "$type";
+
+    /// <summary>
+    /// The state of one nested value, as its own bag with the prefix removed.
+    /// </summary>
+    /// <param name="key">The parameter the nested state was written under.</param>
+    /// <returns>A bag over just that parameter's keys.</returns>
+    /// <remarks>
+    /// A composite layer records a child under a <c>child.</c> key namespace, so the child's factory
+    /// reads its own parameter names unchanged. Previously a wrapper passed its OWN metadata down,
+    /// so a child factory could be handed a dictionary that never described it -- which is what
+    /// <see cref="HasAll"/> exists to detect and what this removes the need for.
+    /// </remarks>
+    public LayerStateBag Nested(string key)
+    {
+        var prefix = key + ".";
+        var sub = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        if (_values is not null)
+        {
+            foreach (var kvp in _values)
+            {
+                if (kvp.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    sub[kvp.Key.Substring(prefix.Length)] = kvp.Value;
+            }
+        }
+
+        return new LayerStateBag(sub, _layerName + "." + key);
+    }
+
+    /// <summary>The concrete type recorded for a nested layer, if one was saved and can be loaded.</summary>
+    /// <param name="key">The parameter the nested layer was written under.</param>
+    /// <returns>The child's type, or <c>null</c>.</returns>
+    public Type? NestedType(string key)
+    {
+        if (!TryRaw(key + "." + TypeKey, out var v)) return null;
+        var name = AsText(v);
+        return name.Length == 0 ? null : Type.GetType(name, throwOnError: false);
+    }
+
+    /// <summary>How many elements were saved for a nested collection.</summary>
+    /// <param name="key">The parameter the collection was written under.</param>
+    /// <returns>The element count, or -1 when nothing was saved.</returns>
+
+    /// <summary>Records a child layer's own construction state under a nested key namespace.</summary>
+    /// <typeparam name="TNum">The child's numeric type.</typeparam>
+    /// <param name="metadata">The parent's metadata, written in place.</param>
+    /// <param name="key">The constructor parameter the child was passed as.</param>
+    /// <param name="child">The child layer, or <c>null</c>.</param>
+    /// <remarks>
+    /// The child's concrete type goes in explicitly because a layer's own metadata does not record
+    /// it -- it records its activations' types, which was enough while nothing rebuilt a layer from
+    /// inside another's state. Everything else is the child's own <c>GetMetadata</c>, so a composite
+    /// layer stays rebuildable exactly as far as its children are, with no separate mechanism to
+    /// keep in step.
+    /// </remarks>
+    public static void WriteNested<TNum>(
+        Dictionary<string, string> metadata,
+        string key,
+        AiDotNet.NeuralNetworks.Layers.LayerBase<TNum>? child)
+    {
+        if (child is null) return;
+
+        var type = child.GetType();
+        metadata[key + "." + TypeKey] = type.AssemblyQualifiedName ?? type.FullName ?? string.Empty;
+        foreach (var kvp in child.GetMetadata())
+        {
+            metadata[key + "." + kvp.Key] = kvp.Value;
+        }
+    }
+
+    /// <summary>Records a sequence of child layers, plus the count a rebuild reads back.</summary>
+    /// <typeparam name="TNum">The children's numeric type.</typeparam>
+    /// <param name="metadata">The parent's metadata, written in place.</param>
+    /// <param name="key">The constructor parameter the children were passed as.</param>
+    /// <param name="children">The child layers, or <c>null</c>.</param>
+    /// <remarks>
+    /// The count is written even when zero: how many children the layer was built with is itself
+    /// construction state, and a mixture-of-experts rebuilt with a different expert count is wrong
+    /// in a way no later shape check would catch.
+    /// </remarks>
+    public static void WriteNestedRange<TNum>(
+        Dictionary<string, string> metadata,
+        string key,
+        System.Collections.Generic.IEnumerable<object?>? children)
+    {
+        if (children is null) return;
+
+        var index = 0;
+        foreach (var child in children)
+        {
+            WriteNested(metadata, key + "." + index.ToString(CultureInfo.InvariantCulture),
+                child as AiDotNet.NeuralNetworks.Layers.LayerBase<TNum>);
+            index++;
+        }
+
+        metadata[key + ".count"] = index.ToString(CultureInfo.InvariantCulture);
+    }
+
+    public int NestedCount(string key) => Has(key + ".count") ? Int32(key + ".count") : -1;
+
+
     private bool TryRaw(string key, out object value)
     {
         value = null!;
