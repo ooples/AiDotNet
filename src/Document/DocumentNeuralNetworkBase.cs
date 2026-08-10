@@ -1,3 +1,8 @@
+using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -33,8 +38,55 @@ namespace AiDotNet.Document;
 /// 2. Build and train a new model from scratch
 /// </para>
 /// </remarks>
-public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
+    Direction = TensorLayoutDirection.Input,
+    Note = "A page or line image.")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Classes,
+    Direction = TensorLayoutDirection.Output,
+    Note = "One class distribution per decode step: MaxSequenceLength steps, OutputClassCount "
+         + "classes. Both are model constants, so neither spatial axis reaches the output.")]
+public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The number of classes this model emits per decode step, or 0 for "not stated".
+    /// </summary>
+    /// <remarks>
+    /// Per-model rather than on the base, because it is the CHARSET size and every recognizer carries
+    /// its own - and it is the charset PLUS ONE, for the CTC blank. ABINet and CRNN both end at
+    /// <c>[MaxSequenceLength, _charset.Length + 1]</c>, which is where this law was read from.
+    /// </remarks>
+    protected virtual int OutputClassCount => 0;
+
+    /// <summary>
+    /// The document family's law: <c>[Batch, MaxSequenceLength, OutputClassCount]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// MEASURED by probing, and the striking part is what does NOT appear. ABINet answered
+    /// <c>[1,3,8,8] -&gt; [1,256,96]</c> and CRNN <c>[1,3,8,8] -&gt; [1,32,96]</c>, and moving EITHER
+    /// spatial axis - <c>[1,3,12,8]</c>, <c>[1,3,8,12]</c> - left the output unchanged. A recognizer
+    /// decodes a fixed number of steps regardless of how large the page it was handed is, so neither
+    /// Height nor Width reaches the output at all. Only the batch axis is carried.
+    /// </para>
+    /// <para>
+    /// Both constants are model configuration rather than literals: the step count is
+    /// <see cref="MaxSequenceLength"/> on this base, and the class count is the model's own charset.
+    /// Recording the probed 256 and 96 would have been right for one construction and wrong for any
+    /// other - the error that made three vision-language contracts wrong.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        int classes = OutputClassCount;
+        if (inputRank != 4 || classes <= 0 || MaxSequenceLength <= 0) return null;
+        return
+        [
+            new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+            new OutputAxisContract(TensorAxis.Time, AxisRelation.Fixed(MaxSequenceLength)),
+            new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(classes)),
+        ];
+    }
+
     #region Document-Specific Properties
 
     /// <summary>
