@@ -697,18 +697,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
         }
 
-        /// <inheritdoc/>
-        public override Vector<T> GetParameters()
-        {
-            var allParams = new List<Vector<T>>();
-
-            foreach (var network in _scaleNetworks)
-            {
-                allParams.Add(network.GetParameters());
-            }
-
-            return Vector<T>.Concatenate(allParams.ToArray());
-        }
+        // ParameterCount and GetParameters were overridden here to fold the scale sub-networks
+        // directly. InitializeLayers already does Layers.AddRange(scaleNet.Layers) for every scale,
+        // and each scale network is a FeedForwardNeuralNetwork whose parameters ARE its layers, so
+        // the base walk over Layers covers exactly the same tensors in exactly the same order.
+        // GetGradients below still folds the sub-networks, and stays consistent with that order.
 
         /// <inheritdoc/>
         public override Vector<T> GetGradients()
@@ -723,8 +716,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return Vector<T>.Concatenate(allGradients.ToArray());
         }
 
-        /// <inheritdoc/>
-        public override long ParameterCount => _scaleNetworks.Sum(n => n.GetParameterCount());
+        // ParameterCount summed _scaleNetworks.GetParameterCount() -- the SHADOWING accessor, whose
+        // result depends on the static type of the reference. Deleted with GetParameters above.
 
         /// <inheritdoc/>
         public override ModelMetadata<T> GetModelMetadata()
