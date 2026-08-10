@@ -160,10 +160,17 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        throw new InvalidOperationException("Extreme Learning Machines do not support direct parameter updates via this method. Input-to-hidden weights are randomly initialized and remain fixed. Only output layer weights are computed analytically via the Train method.");
-    }
+    /// <summary>
+    /// An ELM's parameters cannot be written: the input-to-hidden weights are randomly initialized
+    /// and stay fixed by construction, and the output weights are solved analytically by Train.
+    /// </summary>
+    /// <remarks>
+    /// Stated as the capability rather than as a throw inside one method. The base refuses every
+    /// mutating entry point from this one declaration, so the refusal cannot be applied to
+    /// UpdateParameters and forgotten on SetParameters -- and reading, ParameterCount and
+    /// GetParameters, keeps working, which a throw in the setter never distinguished.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => false;
     /// <summary>
     /// Makes a prediction using the Extreme Learning Machine.
     /// </summary>
