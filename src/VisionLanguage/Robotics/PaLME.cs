@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2023,
     Authors = "Driess et al."
 )]
-public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PaLMEOptions _options;
 
@@ -461,15 +461,8 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return result;
     }
 
-    /// <summary>
-    /// Surfaces _patchEmbed (which lives outside Layers) to the base
-    /// weight-registry walker so its trainable tensors land in the
-    /// streaming pool when ConfigureWeightLifetime is called.
-    /// </summary>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        yield return _patchEmbed;
-    }
+    // _patchEmbed is discovered as a single-layer member and surfaced automatically.
+    // Removed under AIDN082.
 
     /// <summary>
     /// Lazily creates _patchEmbed when the incoming parameter vector is

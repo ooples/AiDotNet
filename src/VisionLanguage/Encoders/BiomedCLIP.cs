@@ -65,7 +65,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhang et al."
 )]
-public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     // NO SHAPE CONTRACT, and the reason is measured rather than assumed.
     //
@@ -355,20 +355,8 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         }
     }
 
-    /// <summary>
-    /// Surfaces the text-encoder stack to the base weight-registry walker
-    /// (streaming-offload / weight-pool hooks) without extending the flat
-    /// parameter APIs (GetParameters / ParameterCount / SetParameters) —
-    /// those keep the SCOPE CONTRACT (= Layers only, which now includes
-    /// the vision patch-embed too) so flat-vector consumers don't
-    /// accidentally double-count.
-    /// </summary>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        foreach (var layer in _textEncoderLayers)
-            if (layer is LayerBase<T> lb)
-                yield return lb;
-    }
+    // _textEncoderLayers is discovered as a layer collection and surfaced automatically.
+    // Removed under AIDN082.
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

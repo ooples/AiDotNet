@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2023, Authors = "Podell et al.")]
-public class SDXLVAEModel<T> : VAEModelBase<T>
+public partial class SDXLVAEModel<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written

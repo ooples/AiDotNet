@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2024,
     Authors = "Wang et al."
 )]
-public class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
+public partial class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly Emu3Options _options;
 
@@ -264,10 +264,8 @@ public class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

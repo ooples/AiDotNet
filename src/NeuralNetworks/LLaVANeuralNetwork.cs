@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Visual Instruction Tuning", "https://arxiv.org/abs/2304.08485", Year = 2023, Authors = "Haotian Liu, Chunyuan Li, Qingyang Wu, Yong Jae Lee")]
-public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
+public partial class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 {
     private readonly LLaVAOptions _options;
 
@@ -1109,20 +1109,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
     #region NeuralNetworkBase Implementation
 
-    // ParameterCount is NOT overridden. It summed the layer role-lists plus the embeddings and
-    // omitted the grounding head, while GetParameters was never overridden at all and folded the
-    // base enumeration -- two different answers, 24,772 against 24,260. Both now fold Layers plus
-    // what the two hooks below declare.
-    /// <inheritdoc />
-    /// <remarks>
-    /// The grounding head, a real layer held outside <c>Layers</c>. The hand-written count left it
-    /// out and so did the vector, so it was consistent only by being invisible to both -- 132
-    /// trainable values that could not be saved, restored or optimized.
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        if (_groundingHead is LayerBase<T> head) yield return head;
-    }
+    // _groundingHead is discovered as a single-layer member and surfaced automatically.
+    // Removed under AIDN082.
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
