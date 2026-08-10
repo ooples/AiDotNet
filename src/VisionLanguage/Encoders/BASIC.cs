@@ -267,31 +267,7 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // After the dual-stream split (vision in Layers, text in
-        // TextEncoderLayers via VisionLanguageModelBase), text encoder
-        // weights live outside Layers but ParameterCount / GetParameters
-        // include them. Apply the trailing parameter slice to the text
-        // stream too — without this, SetParameters-style flows leave the
-        // text encoder on its old weights and the model state silently
-        // de-syncs across the two streams.
-        foreach (var layer in TextEncoderLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

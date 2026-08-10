@@ -611,34 +611,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Ensure lazy layer shapes are resolved BEFORE assigning parameters. On a freshly-created clone
-        // the encoder/decoder conv layers are still deferred (InputDepth=-1, ParameterCount=0), so a bare
-        // Layers walk would see 0 parameters, skip every layer, and leave the clone on its own random
-        // initialization — diverging from the original (Clone_ShouldProduceIdenticalOutput). The one-shot
-        // STFT-shaped warm forward resolves every layer so the slices below actually land.
-        ResolveLazyLayerShapes();
-
-        // SET each layer's parameters from the flat vector, walking Layers in the SAME order the base
-        // GetParameters emits them so the slices line up. This is the Clone / deserialize restore contract
-        // (a value SET, not a gradient step). The previous version iterated internal sub-lists
-        // (_encoder/_lstm/_decoder) — which omits the mask layer and can differ from GetParameters' order —
-        // producing clones with the wrong weights (Clone_ShouldProduceIdenticalOutput).
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-
-        // Weights changed wholesale — invalidate any packed inference-weight caches so the next Predict
-        // rebuilds them from these params (otherwise a clone keeps serving stale packed weights and
-        // predicts differently from the original — Clone_ShouldProduceIdenticalOutput).
-        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Returns per-layer activations. DCCRN's forward is grouped (STFT front-end -> encoder / LSTM /
     /// decoder / mask), not a flat <see cref="NeuralNetworkBase{T}.Layers"/> walk, so the base

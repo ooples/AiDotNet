@@ -907,28 +907,18 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         return Engine.ReduceMean(squared, allAxes, keepDims: false);
     }
 
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+
     /// <summary>
-    /// Installs an explicit parameter vector, as the base contract requires: the argument is the new
-    /// weights, not a gradient.
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
     /// </summary>
     /// <remarks>
-    /// This override previously treated its argument as a GRADIENT and ran an optimizer step on it,
-    /// which inverted the base contract (<c>WithParameters</c> and the clone path both call this to
-    /// INSTALL weights). Restoring a trained parameter vector therefore applied an Adam update on top
-    /// of it, so a round-tripped clone predicted differently from the model it was copied from.
-    /// Training does not go through here — it runs the optimizer via TrainWithTape — so nothing else
-    /// depended on the old behaviour.
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
     /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        SetParameters(parameters);
-    }
-
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on input data.
     /// </summary>

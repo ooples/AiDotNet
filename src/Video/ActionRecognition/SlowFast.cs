@@ -660,31 +660,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     #region Serialization
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-
-        int offset = 0;
-
-        // Layers now contains [slow... | fast... | fusion...] (see InitializeLayers).
-        // A single walk covers all three pathways in the same partition order
-        // base.GetParameters / TapeTrainingStep.CollectParameters use, so the
-        // serialized layout matches what the optimizer round-trips through.
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Gets metadata about this model for serialization.
     /// </summary>

@@ -332,28 +332,7 @@ public class MixedQueryTransformer<T> : Common.PanopticSegmentationBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int totalRequired = 0;
-        foreach (var l in Layers)
-            totalRequired += l.GetParameters().Length;
-
-        if (parameters.Length < totalRequired)
-            throw new ArgumentException(
-                $"Parameter vector length {parameters.Length} is less than required {totalRequired}.",
-                nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = layer.GetParameters().Length;
-            var newParams = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-                newParams[i] = parameters[offset + i];
-            layer.UpdateParameters(newParams);
-            offset += count;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <summary>
     /// Collects metadata describing this MixedQueryTransformer model's configuration.
     /// </summary>

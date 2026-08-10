@@ -360,30 +360,7 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Sync the text-encoder stream too — GetExtraTrainableLayers
-        // (above) surfaces TextEncoderLayers to the base weight-registry
-        // walker, which means ParameterCount / GetParameters include the
-        // text-stream slice. Writing back only into Layers would leave
-        // the text encoder on stale weights and the streams would
-        // de-sync.
-        foreach (var layer in TextEncoderLayers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

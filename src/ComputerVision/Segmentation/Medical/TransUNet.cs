@@ -258,24 +258,7 @@ public class TransUNet<T> : Common.MedicalSegmentationBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int totalRequired = 0;
-        foreach (var l in Layers) totalRequired += l.GetParameters().Length;
-        if (parameters.Length < totalRequired)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {totalRequired}.", nameof(parameters));
-
-        int o = 0;
-        foreach (var l in Layers)
-        {
-            var p = l.GetParameters();
-            int c = p.Length;
-            var n = new Vector<T>(c);
-            for (int i = 0; i < c; i++) n[i] = parameters[o + i];
-            l.UpdateParameters(n);
-            o += c;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>

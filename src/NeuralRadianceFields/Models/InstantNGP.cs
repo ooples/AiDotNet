@@ -1791,44 +1791,7 @@ public partial class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, Ne
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-        {
-            throw new ArgumentNullException(nameof(parameters));
-        }
-
-        int layerParameterCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        int hashParameterCount = _numLevels * _hashTableSize * _featuresPerLevel;
-        if (parameters.Length != layerParameterCount &&
-            parameters.Length != layerParameterCount + hashParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {layerParameterCount} or {layerParameterCount + hashParameterCount} parameters, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        if (layerParameterCount > 0)
-        {
-            SetParameters(parameters.GetSubVector(0, layerParameterCount));
-        }
-
-        if (parameters.Length == layerParameterCount + hashParameterCount)
-        {
-            int offset = layerParameterCount;
-            for (int level = 0; level < _numLevels; level++)
-            {
-                var data = new T[_hashTableSize * _featuresPerLevel];
-                for (int i = 0; i < data.Length; i++)
-                {
-                    data[i] = parameters[offset++];
-                }
-
-                _hashTables[level] = new Tensor<T>(data, [_hashTableSize, _featuresPerLevel]);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata()
     {
         int hashParameterCount = _numLevels * _hashTableSize * _featuresPerLevel;

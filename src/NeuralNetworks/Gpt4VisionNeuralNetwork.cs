@@ -1581,28 +1581,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         return new Vector<T>([.. gradients]);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (gradients.Length != expectedCount)
-        {
-            throw new ArgumentException($"Expected {expectedCount} gradients but got {gradients.Length}");
-        }
-
-        if (!_useNativeMode) return;
-
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent update: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        // Set the updated parameters
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
