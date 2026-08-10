@@ -133,6 +133,17 @@ public class LayerStateGenerator : IIncrementalGenerator
                 },
             };
         }
+        // Materialized so the "no override at all" case can be answered separately below: All over
+        // an empty sequence is true, which would report a layer that never overrides GetMetadata as
+        // one whose override fails to call base.
+        var metadataOverrides = type.GetMembers("GetMetadata")
+            .OfType<IMethodSymbol>()
+            .Where(m => m.Parameters.Length == 0)
+            .SelectMany(m => m.DeclaringSyntaxReferences)
+            .Select(r => r.GetSyntax())
+            .OfType<MethodDeclarationSyntax>()
+            .ToList();
+
         var model = new LayerModel
         {
             Namespace = type.ContainingNamespace.IsGlobalNamespace
@@ -147,19 +158,14 @@ public class LayerStateGenerator : IIncrementalGenerator
                 .Select(r => r.GetSyntax())
                 .OfType<TypeDeclarationSyntax>()
                 .Any(d => d.Modifiers.Any(SyntaxKind.PartialKeyword)),
-            HasHandWrittenMetadata = type.GetMembers("GetMetadata")
-                .OfType<IMethodSymbol>()
-                .Where(m => m.Parameters.Length == 0)
-                .SelectMany(m => m.DeclaringSyntaxReferences)
-                .Select(r => r.GetSyntax())
-                .OfType<MethodDeclarationSyntax>()
+            HasHandWrittenMetadata = metadataOverrides.Count > 0
                 // SEMANTIC, NOT SUBSTRING. Scanning the method's full text for
                 // "base.GetMetadata" fired on the string appearing in a comment or a string
                 // literal, and MISSED a real call written `base . GetMetadata()`. Both
                 // directions are wrong for a diagnostic whose whole job is telling the author
                 // their metadata will silently not be written. Now an actual invocation of a
                 // member access on `base` named GetMetadata.
-                .All(d => !d.DescendantNodes()
+                && metadataOverrides.All(d => !d.DescendantNodes()
                     .OfType<InvocationExpressionSyntax>()
                     .Any(inv => inv.Expression is MemberAccessExpressionSyntax
                     {
@@ -167,6 +173,15 @@ public class LayerStateGenerator : IIncrementalGenerator
                         Name.Identifier.ValueText: "GetMetadata",
                     })),
         };
+
+        // One restored activation per kind, because TryCreate only receives one of each: the
+        // activation metadata records the function handed to base(...), and there is only ever one
+        // of those. So the FIRST activation parameter of a kind takes the restored value and any
+        // further one falls back to its own default -- LSTMLayer's `recurrentActivation` (sigmoid
+        // gates) must not be handed `activation` (tanh cell state). A required second activation
+        // slot has no value to fall back to and is reported by ADN0053.
+        var scalarActivationBound = false;
+        var vectorActivationBound = false;
 
         foreach (var p in ctor.Parameters)
         {
@@ -185,7 +200,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                     return model;
                 }
 
-                info.BackingMember = FindBackingMember(type, p, out var needsConvert);
+                info.BackingMember = FindBackingMember(type, p, out var needsConvert, out var memberIsNullable);
                 info.NeedsConvert = needsConvert;
                 if (info.BackingMember is null)
                 {
@@ -194,11 +209,31 @@ public class LayerStateGenerator : IIncrementalGenerator
                         type.Name, p.Name, Pascal(p.Name), p.Type.ToDisplayString()));
                     return model;
                 }
+
+                // An `int?` parameter is fine when the layer stores it as a plain `int`, which is the
+                // common case. A nullable BACKING member is not: LayerStateBag.Format has no nullable
+                // overload and the format cannot express null.
+                if (memberIsNullable)
+                {
+                    model.Diagnostics.Add(new PendingDiagnostic(
+                        UnsupportedType, SpanFor(p, model),
+                        type.Name, p.Name, p.Type.ToDisplayString()));
+                    return model;
+                }
             }
-            else if (IsActivation(p.Type, out var vector))
+            else if (IsActivation(p.Type, out var vector)
+                && !(vector ? vectorActivationBound : scalarActivationBound))
             {
                 info.IsActivation = true;
                 info.IsVectorActivation = vector;
+                if (vector)
+                {
+                    vectorActivationBound = true;
+                }
+                else
+                {
+                    scalarActivationBound = true;
+                }
             }
             else if (p.IsOptional)
             {
@@ -285,9 +320,10 @@ public class LayerStateGenerator : IIncrementalGenerator
         return vector || fqn == "AiDotNet.Interfaces.IActivationFunction";
     }
 
-    private static string? FindBackingMember(INamedTypeSymbol type, IParameterSymbol p, out bool needsConvert)
+    private static string? FindBackingMember(INamedTypeSymbol type, IParameterSymbol p, out bool needsConvert, out bool memberIsNullable)
     {
         needsConvert = false;
+        memberIsNullable = false;
         var candidates = new[] { p.Name, "_" + p.Name, "m_" + p.Name, Pascal(p.Name), "_" + Pascal(p.Name) };
 
         for (var t = type; t is not null; t = t.BaseType)
@@ -305,8 +341,10 @@ public class LayerStateGenerator : IIncrementalGenerator
                     switch (member)
                     {
                         case IFieldSymbol f when SameType(f.Type, p.Type):
+                            memberIsNullable = IsNullableValueType(f.Type);
                             return f.Name;
                         case IPropertySymbol { GetMethod: not null } prop when SameType(prop.Type, p.Type):
+                            memberIsNullable = IsNullableValueType(prop.Type);
                             return prop.Name;
 
                         // Layers routinely keep a numeric constructor argument converted to their
@@ -349,6 +387,10 @@ public class LayerStateGenerator : IIncrementalGenerator
 
     private static bool SameType(ITypeSymbol a, ITypeSymbol b)
         => Unwrap(a).ToDisplayString(FullyQualified) == Unwrap(b).ToDisplayString(FullyQualified);
+
+    /// <summary>True for <c>Nullable&lt;T&gt;</c>, whose null the metadata format cannot represent.</summary>
+    private static bool IsNullableValueType(ITypeSymbol type)
+        => type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T };
 
     /// <summary>Strips <c>Nullable&lt;T&gt;</c> so an <c>int?</c> parameter matches an <c>int</c> field.</summary>
     private static ITypeSymbol Unwrap(ITypeSymbol type)
