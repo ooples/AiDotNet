@@ -86,7 +86,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2209.15421",
     Year = 2023,
     Authors = "Akim Kotelnikov, Dmitry Baranchuk, Ivan Rubachev, Artem Babenko")]
-public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly AutoDiffTabOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

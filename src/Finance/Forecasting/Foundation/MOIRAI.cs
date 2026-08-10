@@ -77,7 +77,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unified Training of Universal Time Series Forecasting Transformers", "https://arxiv.org/abs/2402.02592", Year = 2024, Authors = "Gerald Woo, Chenghao Liu, Akshat Kumar, Caiming Xiong, Silvio Savarese, Doyen Sahoo")]
-public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
+public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 

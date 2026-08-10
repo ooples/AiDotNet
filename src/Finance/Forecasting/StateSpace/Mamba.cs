@@ -69,7 +69,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mamba: Linear-Time Sequence Modeling with Selective State Spaces", "https://arxiv.org/abs/2312.00752", Year = 2023, Authors = "Albert Gu, Tri Dao")]
-public class Mamba<T> : ForecastingModelBase<T>
+public partial class Mamba<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

@@ -89,7 +89,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Graph WaveNet for Deep Spatial-Temporal Graph Modeling", "https://arxiv.org/abs/1906.00121", Year = 2019, Authors = "Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Chengqi Zhang")]
-public class GraphWaveNet<T> : ForecastingModelBase<T>
+public partial class GraphWaveNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;

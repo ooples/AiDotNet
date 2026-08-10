@@ -43,7 +43,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Du et al."
 )]
-public class APNet2<T> : VocoderBase<T>
+public partial class APNet2<T> : VocoderBase<T>
 {
     private readonly APNet2Options _options;
 

@@ -73,7 +73,7 @@ namespace AiDotNet.Video;
     "https://arxiv.org/abs/2107.10833",
     Year = 2021,
     Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]
-public class RealESRGAN<T> : VideoSuperResolutionBase<T>
+public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
 {
     private readonly RealESRGANOptions _options;
 

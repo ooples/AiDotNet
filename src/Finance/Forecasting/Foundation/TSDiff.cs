@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Predict, Refine, Synthesize: Self-Guiding Diffusion Models for Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2307.11494", Year = 2023, Authors = "Marcel Kollovieh, Abdul Fatir Ansari, Michael Bohlke-Schneider, Jasper Zschiegner, Hao Wang, Yuyang Wang")]
-public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
+public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

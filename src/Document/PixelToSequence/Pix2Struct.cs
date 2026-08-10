@@ -53,7 +53,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding", "https://doi.org/10.48550/arXiv.2210.03347", Year = 2023, Authors = "Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw, Ming-Wei Chang, Kristina Toutanova")]
-public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
+public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly Pix2StructOptions _options;
 

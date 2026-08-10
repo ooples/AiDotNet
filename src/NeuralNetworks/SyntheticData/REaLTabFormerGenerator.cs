@@ -77,7 +77,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2302.02041",
     Year = 2023,
     Authors = "Aivin V. Solatorio, Olivier Dupriez")]
-public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly REaLTabFormerOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

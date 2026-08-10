@@ -88,7 +88,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("T-GCN: A Temporal Graph Convolutional Network for Traffic Prediction", "https://arxiv.org/abs/1811.05320", Year = 2020, Authors = "Ling Zhao, Yujiao Song, Chao Zhang, Yu Liu, Pu Wang, Tao Lin, Min Deng, Haifeng Li")]
-public class TemporalGCN<T> : ForecastingModelBase<T>
+public partial class TemporalGCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;

@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Time Series is Worth 64 Words: Long-term Forecasting with Transformers", "https://arxiv.org/abs/2211.14730", Year = 2023, Authors = "Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
-public class PatchTST<T> : ForecastingModelBase<T>
+public partial class PatchTST<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
 

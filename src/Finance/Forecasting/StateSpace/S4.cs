@@ -80,7 +80,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficiently Modeling Long Sequences with Structured State Spaces", "https://arxiv.org/abs/2111.00396", Year = 2022, Authors = "Albert Gu, Karan Goel, Christopher Re")]
-public class S4<T> : ForecastingModelBase<T>
+public partial class S4<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private bool _useNativeMode;

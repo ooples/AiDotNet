@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Long Short-Term Memory", "https://doi.org/10.1162/neco.1997.9.8.1735", Year = 1997, Authors = "Sepp Hochreiter, Jürgen Schmidhuber")]
-public class LSTMDetector<T> : AnomalyDetectorBase<T>
+public partial class LSTMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _hiddenDim;
     private readonly int _seqLength;

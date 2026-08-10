@@ -63,7 +63,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2309.03897",
     Year = 2023,
     Authors = "Shangchen Zhou, Chongyi Li, Kelvin C.K. Chan, Chen Change Loy")]
-public class ProPainter<T> : VideoInpaintingBase<T>
+public partial class ProPainter<T> : VideoInpaintingBase<T>
 {
     private readonly ProPainterOptions _options;
 

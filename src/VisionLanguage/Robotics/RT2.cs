@@ -77,7 +77,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2023,
     Authors = "Brohan et al."
 )]
-public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly RT2Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

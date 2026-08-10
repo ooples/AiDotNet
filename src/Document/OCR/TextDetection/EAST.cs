@@ -53,7 +53,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EAST: An Efficient and Accurate Scene Text Detector", "https://doi.org/10.48550/arXiv.1704.03155", Year = 2017, Authors = "Xinyu Zhou, Cong Yao, He Wen, Yuzhi Wang, Shuchang Zhou, Weiran He, Jiajun Liang")]
-public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
+public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly EASTOptions _options;
 

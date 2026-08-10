@@ -73,7 +73,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2309.01472",
     Year = 2023,
     Authors = "Timur Sattarov, Marco Schreyer, Damian Borth")]
-public class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly FinDiffOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

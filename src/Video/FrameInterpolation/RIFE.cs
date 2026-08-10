@@ -66,7 +66,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2011.06294",
     Year = 2022,
     Authors = "Zhewei Huang, Tianyuan Zhang, Wen Heng, Boxin Shi, Shuchang Zhou")]
-public class RIFE<T> : FrameInterpolationBase<T>
+public partial class RIFE<T> : FrameInterpolationBase<T>
 {
     private readonly RIFEOptions _options;
 

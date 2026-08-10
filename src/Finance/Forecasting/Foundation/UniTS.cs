@@ -82,7 +82,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniTS: A Unified Multi-Task Time Series Model", "https://arxiv.org/abs/2403.00131", Year = 2024, Authors = "Shanghua Gao, Teddy Koker, Owen Queen, Thomas Hartvigsen, Theodoros Tsiligkaridis, Marinka Zitnik")]
-public class UniTS<T> : ForecastingModelBase<T>
+public partial class UniTS<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

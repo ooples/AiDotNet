@@ -61,7 +61,7 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1603.01360",
     Year = 2016,
     Authors = "Guillaume Lample, Miguel Ballesteros, Sandeep Subramanian, Kazuya Kawakami, Chris Dyer")]
-public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
+public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
 {
     private readonly BiLSTMCRFOptions _options;
     // Not readonly: deserialization rebuilds the encoder from the persisted vocabularies so a

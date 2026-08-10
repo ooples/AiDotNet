@@ -133,7 +133,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators", "https://doi.org/10.1038/s42256-021-00302-5", Year = 2021, Authors = "Lu Lu, Pengzhan Jin, Guofei Pang, Zhongqiang Zhang, George Em Karniadakis")]
-    public class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
+    public partial class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
 
         // InitializeLayers already does Layers.AddRange(_branchNet.Layers) followed by Layers.AddRange(_trunkNet.Layers), so the base walk over Layers ALREADY produces the branch-then-trunk parameters the hand-written surfaces rebuilt by hand, in the same order.

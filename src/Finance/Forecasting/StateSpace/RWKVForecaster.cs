@@ -66,7 +66,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RWKV: Reinventing RNNs for the Transformer Era", "https://arxiv.org/abs/2305.13048", Year = 2023, Authors = "Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho")]
-public class RWKVForecaster<T> : ForecastingModelBase<T>
+public partial class RWKVForecaster<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private bool _useNativeMode;

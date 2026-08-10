@@ -84,7 +84,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Timer: Generative Pre-trained Transformers Are Large Time Series Models", "https://arxiv.org/abs/2402.02368", Year = 2024, Authors = "Yong Liu, Haoran Zhang, Chenyu Li, Xiangdong Huang, Jianmin Wang, Mingsheng Long")]
-public class Timer<T> : TimeSeriesFoundationModelBase<T>
+public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 

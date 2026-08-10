@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Improved Training of Wasserstein GANs", "https://arxiv.org/abs/1704.00028", Year = 2017, Authors = "Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, Aaron Courville")]
-public class WGANGP<T> : NeuralNetworkBase<T>
+public partial class WGANGP<T> : NeuralNetworkBase<T>
 {
 
     // ParameterCount was Generator.GetParameterCount() + Critic.GetParameterCount(), which the

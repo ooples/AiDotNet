@@ -55,7 +55,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An End-to-End Trainable Neural Network for Image-based Sequence Recognition and Its Application to Scene Text Recognition", "https://doi.org/10.48550/arXiv.1507.05717", Year = 2017, Authors = "Baoguang Shi, Xiang Bai, Cong Yao")]
-public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly CRNNOptions _options;
 

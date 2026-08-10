@@ -75,7 +75,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Shaojie Bai, J. Zico Kolter, Vladlen Koltun")]
-public class TCN<T> : ForecastingModelBase<T>
+public partial class TCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

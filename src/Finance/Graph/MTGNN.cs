@@ -89,7 +89,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Connecting the Dots: Multivariate Time Series Forecasting with Graph Neural Networks", "https://arxiv.org/abs/2005.11650", Year = 2020, Authors = "Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Xiaojun Chang, Chengqi Zhang")]
-public class MTGNN<T> : ForecastingModelBase<T>
+public partial class MTGNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;

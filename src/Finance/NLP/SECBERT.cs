@@ -57,7 +57,7 @@ namespace AiDotNet.Finance.NLP;
 // markets from data as a World Agent" (ICAIF'22) — an unrelated paper. SEC-BERT is introduced in
 // Loukas et al., "FiNER: Financial Numeric Entity Recognition for XBRL Tagging" (ACL 2022).
 [ResearchPaper("FiNER: Financial Numeric Entity Recognition for XBRL Tagging (introduces SEC-BERT)", "https://doi.org/10.18653/v1/2022.acl-long.303", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
-public class SECBERT<T> : FinancialNLPModelBase<T>
+public partial class SECBERT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
 

@@ -49,7 +49,7 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Multimodal Anomaly Detector for Robot-Assisted Feeding Using an LSTM-Based Variational Autoencoder", "https://arxiv.org/abs/1711.00614", Year = 2018, Authors = "Daehyung Park, Yuuna Hoshi, Charles C. Kemp")]
-public class LSTMVAE<T> : TimeSeriesModelBase<T>
+public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
 {
     private readonly LSTMVAEOptions<T> _options;
 

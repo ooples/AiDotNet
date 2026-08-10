@@ -83,7 +83,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
     "https://arxiv.org/abs/1811.00241",
     Year = 2019,
     Authors = "Zhiping Zeng, Yerbolat Khassanov, Van Tung Pham, Haihua Xu, Eng Siong Chng, Haizhou Li")]
-public class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CodeSwitchingASROptions _options;
     public override ModelOptions GetOptions() => _options;

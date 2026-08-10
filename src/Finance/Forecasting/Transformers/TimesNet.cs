@@ -68,7 +68,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TimesNet: Temporal 2D-Variation Modeling for General Time Series Analysis", "https://arxiv.org/abs/2210.02186", Year = 2023, Authors = "Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, Mingsheng Long")]
-public class TimesNet<T> : ForecastingModelBase<T>
+public partial class TimesNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

@@ -38,7 +38,7 @@ namespace AiDotNet.ComputerVision.OCR.Recognition;
     "https://arxiv.org/abs/1507.05717",
     Year = 2017,
     Authors = "Baoguang Shi, Xiang Bai, Cong Yao")]
-public class CRNN<T> : OCRBase<T>
+public partial class CRNN<T> : OCRBase<T>
 {
     private readonly Conv2D<T> _conv1;
     private readonly Conv2D<T> _conv2;

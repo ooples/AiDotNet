@@ -61,7 +61,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2202.04901",
     Year = 2022,
     Authors = "Fitsum Reda, Janne Kontkanen, Eric Tabellion, Deqing Sun, Caroline Pantofaru, Brian Curless")]
-public class FILM<T> : FrameInterpolationBase<T>
+public partial class FILM<T> : FrameInterpolationBase<T>
 {
     private readonly FILMOptions _options;
 

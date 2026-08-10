@@ -61,7 +61,7 @@ namespace AiDotNet.Audio.Effects;
     "https://arxiv.org/abs/2107.07503",
     Year = 2021,
     Authors = "Christian J. Steinmetz, Vamsi Krishna Ithapu, Paul Calamia")]
-public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields
 

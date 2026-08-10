@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2204.02663",
     Year = 2022,
     Authors = "Zhen Li, Cheng-Ze Lu, Jianhua Qin, Chun-Le Guo, Ming-Ming Cheng")]
-public class E2FGVI<T> : VideoInpaintingBase<T>
+public partial class E2FGVI<T> : VideoInpaintingBase<T>
 {
     private readonly E2FGVIOptions _options;
 

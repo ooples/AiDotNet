@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2404.09117",
     Year = 2024,
     Authors = "Ao Luo, Xin Li, Fan Fang, Jiangyu Liu, Haoqiang Fan, Shuaicheng Liu")]
-public class FlowDiffuser<T> : OpticalFlowBase<T>
+public partial class FlowDiffuser<T> : OpticalFlowBase<T>
 {
     private readonly FlowDiffuserOptions _options;
 

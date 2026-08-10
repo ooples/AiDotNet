@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Motion;
     "https://ojs.aaai.org/index.php/AAAI/article/view/28224",
     Year = 2024,
     Authors = "Henrique Morimitsu, Xiaobin Zhu, Xiangyang Ji, Xu-Cheng Yin")]
-public class RPKNet<T> : OpticalFlowBase<T>
+public partial class RPKNet<T> : OpticalFlowBase<T>
 {
     private readonly RPKNetOptions _options;
 

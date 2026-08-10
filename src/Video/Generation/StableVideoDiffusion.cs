@@ -70,7 +70,7 @@ namespace AiDotNet.Video.Generation;
     "https://arxiv.org/abs/2311.15127",
     Year = 2023,
     Authors = "Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, Varun Jampani, Robin Rombach")]
-public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
+public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 {
     private readonly StableVideoDiffusionOptions _options;
 

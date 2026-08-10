@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2405.14793",
     Year = 2024,
     Authors = "Yihan Wang, Lahav Lipson, Jia Deng")]
-public class SEARAFT<T> : OpticalFlowBase<T>
+public partial class SEARAFT<T> : OpticalFlowBase<T>
 {
     private readonly SEARAFTOptions _options;
 

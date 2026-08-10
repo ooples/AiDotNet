@@ -69,7 +69,7 @@ namespace AiDotNet.PointCloud.Models;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation", "https://doi.org/10.48550/arXiv.1612.00593", Year = 2017, Authors = "Charles R. Qi, Hao Su, Kaichun Mo, Leonidas J. Guibas")]
-public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>
+public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>
 {
     private readonly PointNetModelOptions _options;
 

@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Flow-Based Generative Models for Financial Time Series", "https://arxiv.org/abs/2312.01236")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FlowState<T> : TimeSeriesFoundationModelBase<T>
+public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

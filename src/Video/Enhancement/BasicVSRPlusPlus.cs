@@ -81,7 +81,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2104.13371",
     Year = 2022,
     Authors = "Kelvin C.K. Chan, Shangchen Zhou, Xiangyu Xu, Chen Change Loy")]
-public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
+public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 {
     private readonly BasicVSRPlusPlusOptions _options;
 

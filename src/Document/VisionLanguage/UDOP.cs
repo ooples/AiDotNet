@@ -57,7 +57,7 @@ namespace AiDotNet.Document.VisionLanguage;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unifying Vision, Text, and Layout for Universal Document Processing", "https://arxiv.org/abs/2212.02623", Year = 2023, Authors = "Zineng Tang, Ziyi Yang, Guoxin Wang, Yuwei Fang, Yang Liu, Chenguang Zhu, Michael Zeng, Cha Zhang, Mohit Bansal")]
-public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>, IDocumentClassifier<T>
+public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>, IDocumentClassifier<T>
 {
     private readonly UDOPOptions _options;
 
