@@ -410,7 +410,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// can detect more varieties of patterns.
     /// </para>
     /// </remarks>
-    public SeparableConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0, IActivationFunction<T>? scalarActivation = null)
+    public SeparableConvolutionalLayer([LayerState] int outputDepth, [LayerState] int kernelSize, [LayerState] int stride = 1, [LayerState] int padding = 0, IActivationFunction<T>? scalarActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, outputDepth },
                scalarActivation ?? new IdentityActivation<T>())
     {
@@ -459,7 +459,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// for their neural networks.
     /// </para>
     /// </remarks>
-    public SeparableConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IVectorActivationFunction<T> vectorActivation)
+    public SeparableConvolutionalLayer([LayerState] int outputDepth, [LayerState] int kernelSize, [LayerState] int stride, [LayerState] int padding, IVectorActivationFunction<T> vectorActivation)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, outputDepth },
                vectorActivation ?? new IdentityActivation<T>())
     {

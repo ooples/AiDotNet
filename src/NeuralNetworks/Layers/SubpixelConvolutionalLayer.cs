@@ -490,7 +490,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// call (<see cref="OnFirstForward"/>); only outputDepth/upscaleFactor/kernelSize
     /// are required at construction since they don't depend on input spatial dims.
     /// </summary>
-    public SubpixelConvolutionalLayer(int outputDepth, int upscaleFactor, int kernelSize,
+    public SubpixelConvolutionalLayer([LayerState] int outputDepth, [LayerState] int upscaleFactor, [LayerState] int kernelSize,
                                     IActivationFunction<T>? activation = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
             activation ?? new ReLUActivation<T>())
@@ -540,7 +540,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// Lazy ctor with vector activation — see the scalar-activation overload above.
     /// </summary>
-    public SubpixelConvolutionalLayer(int outputDepth, int upscaleFactor, int kernelSize,
+    public SubpixelConvolutionalLayer([LayerState] int outputDepth, [LayerState] int upscaleFactor, [LayerState] int kernelSize,
                                     IVectorActivationFunction<T>? vectorActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
             vectorActivation ?? new ReLUActivation<T>())

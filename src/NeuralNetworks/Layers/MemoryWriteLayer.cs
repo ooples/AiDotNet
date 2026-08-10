@@ -274,7 +274,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// is carefully chosen to prevent training issues like vanishing or exploding gradients.
     /// </para>
     /// </remarks>
-    public MemoryWriteLayer(int memoryDimension, IActivationFunction<T>? activationFunction = null)
+    public MemoryWriteLayer([LayerState] int memoryDimension, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1 }, new[] { memoryDimension }, activationFunction ?? new IdentityActivation<T>())
     {
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
@@ -345,7 +345,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// that consider the relationships between different outputs in your memory writing operation.
     /// </para>
     /// </remarks>
-    public MemoryWriteLayer(int memoryDimension, IVectorActivationFunction<T> activationFunction)
+    public MemoryWriteLayer([LayerState] int memoryDimension, IVectorActivationFunction<T> activationFunction)
         : base(new[] { -1 }, new[] { memoryDimension }, activationFunction ?? new IdentityActivation<T>())
     {
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));

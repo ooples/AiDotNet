@@ -308,10 +308,12 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when parameters are non-positive.</exception>
     public DiffusionConvLayer(
-        int outputChannels,
-        int numTimeScales = 4,
-        int numEigenvectors = 128,
+        [LayerState] int outputChannels,
+        [LayerState] int numTimeScales = 4,
+        [LayerState] int numEigenvectors = 128,
         IActivationFunction<T>? activation = null,
+        // Not [LayerState]: the backing field is bool? and the metadata format cannot represent
+        // null, so this restores to its default of automatic (ADN0052).
         bool? preferSpectralDiffusion = null)
         : base(
             new[] { -1, -1 },
@@ -348,10 +350,12 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// true = always compute, false = use direct Laplacian method.
     /// </param>
     public DiffusionConvLayer(
-        int outputChannels,
-        int numTimeScales,
-        int numEigenvectors,
+        [LayerState] int outputChannels,
+        [LayerState] int numTimeScales,
+        [LayerState] int numEigenvectors,
         IVectorActivationFunction<T> vectorActivation,
+        // Not [LayerState]: the backing field is bool? and the metadata format cannot represent
+        // null, so this restores to its default of automatic (ADN0052).
         bool? preferSpectralDiffusion = null)
         : base(
             new[] { -1, -1 },

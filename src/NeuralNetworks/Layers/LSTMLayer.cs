@@ -804,7 +804,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="activation">Cell-state activation (default tanh).</param>
     /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
     public LSTMLayer(
-        int hiddenSize,
+        [LayerState] int hiddenSize,
         IActivationFunction<T>? activation = null,
         IActivationFunction<T>? recurrentActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
@@ -843,7 +843,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// <see cref="LSTMLayer{T}(int, IActivationFunction{T}?, IActivationFunction{T}?)"/>
     /// overload for the rest of the contract.
     /// </summary>
-    public LSTMLayer(int hiddenSize,
+    public LSTMLayer([LayerState] int hiddenSize,
         IVectorActivationFunction<T> vectorActivation,
         IVectorActivationFunction<T>? recurrentActivation = null)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)

@@ -117,6 +117,15 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _weights;
 
     /// <summary>
+    /// The number of output neurons the constructor was given.
+    /// </summary>
+    /// <remarks>
+    /// Backing store for the <c>[LayerState]</c> on <c>outputSize</c>, which the generated writer
+    /// resolves through a member named after the parameter rather than off <c>OutputShape</c>.
+    /// </remarks>
+    private readonly int _outputSize;
+
+    /// <summary>
     /// The bias values for each output neuron.
     /// </summary>
     /// <remarks>
@@ -305,12 +314,13 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// values that help training converge effectively.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
+    public FullyConnectedLayer([LayerState] int outputSize, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
+        _outputSize = outputSize;
         _weights = new Tensor<T>([0, 0]);
         _biases = new Tensor<T>([outputSize]);
     }
@@ -334,6 +344,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
+        _outputSize = outputSize;
         _weights = new Tensor<T>([outputSize, inputSize]);
         _biases = new Tensor<T>([outputSize]);
         InitializeParameters();
@@ -408,12 +419,13 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// which is perfect for classification tasks where outputs represent class probabilities.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer(int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
+    public FullyConnectedLayer([LayerState] int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
         : base(new[] { -1 }, new[] { outputSize }, vectorActivationFunction ?? new ReLUActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
+        _outputSize = outputSize;
         _weights = new Tensor<T>([0, 0]);
         _biases = new Tensor<T>([outputSize]);
     }

@@ -417,7 +417,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// which works well for predicting transformation parameters.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int outputHeight, int outputWidth, IActivationFunction<T>? activationFunction = null, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
+    public SpatialTransformerLayer([LayerState] int outputHeight, [LayerState] int outputWidth, IActivationFunction<T>? activationFunction = null, [LayerState] SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
         : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, activationFunction ?? new TanhActivation<T>())
     {
         if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));
@@ -463,7 +463,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// for their neural networks. For most cases, the basic constructor is sufficient.
     /// </para>
     /// </remarks>
-    public SpatialTransformerLayer(int outputHeight, int outputWidth, IVectorActivationFunction<T> vectorActivationFunction, SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
+    public SpatialTransformerLayer([LayerState] int outputHeight, [LayerState] int outputWidth, IVectorActivationFunction<T> vectorActivationFunction, [LayerState] SpatialTransformerDataFormat dataFormat = SpatialTransformerDataFormat.ChannelsFirst)
         : base(new[] { -1, -1 }, new[] { outputHeight, outputWidth }, vectorActivationFunction ?? new TanhActivation<T>())
     {
         if (outputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(outputHeight));
