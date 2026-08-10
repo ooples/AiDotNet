@@ -200,6 +200,9 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public int DtRank => _dtRank;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Mamba block.
     /// </summary>
@@ -254,6 +257,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

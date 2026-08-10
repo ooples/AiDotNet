@@ -121,6 +121,12 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'charEmbeddingDim' the layer was built with.</summary>
+    private readonly int _charEmbeddingDim;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Initializes a new <see cref="WordCharEmbeddingLayer{T}"/>.
     /// </summary>
@@ -144,6 +150,8 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, wordEmbeddingDim + charHiddenDim],
             (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
+        _charEmbeddingDim = charEmbeddingDim;
         if (wordVocabSize <= 0) throw new ArgumentOutOfRangeException(nameof(wordVocabSize));
         if (wordEmbeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(wordEmbeddingDim));
         if (charVocabSize <= 0) throw new ArgumentOutOfRangeException(nameof(charVocabSize));

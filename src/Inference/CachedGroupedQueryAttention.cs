@@ -115,6 +115,9 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
         set => _layerIndex = value;
     }
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new cached GQA layer.
     /// </summary>
@@ -132,6 +135,7 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % numHeads != 0)
             throw new ArgumentException($"Embedding dimension ({embeddingDimension}) must be divisible by numHeads ({numHeads}).");
         if (numHeads % numKVHeads != 0)

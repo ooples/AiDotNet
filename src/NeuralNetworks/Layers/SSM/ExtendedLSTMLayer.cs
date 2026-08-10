@@ -183,6 +183,9 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int HeadDimension => _headDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Extended LSTM (xLSTM) layer using the mLSTM (matrix memory) variant.
     /// </summary>
@@ -208,6 +211,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

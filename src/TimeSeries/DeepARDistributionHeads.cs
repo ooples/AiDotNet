@@ -47,9 +47,17 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
     private readonly List<Tensor<T>> _params = new();
     protected readonly int Hidden;
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
+    /// <summary>Construction state: the 'outputDim' the layer was built with.</summary>
+    private readonly int _outputDim;
+
     protected DeepARDistributionHead(int hiddenSize, int outputDim)
         : base(new[] { hiddenSize }, new[] { outputDim })
     {
+        _outputDim = outputDim;
+        _hiddenSize = hiddenSize;
         Hidden = hiddenSize;
     }
 
@@ -227,9 +235,13 @@ internal sealed partial class DeepARGaussianHead<T> : DeepARDistributionHead<T>,
         };
     }
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
     public DeepARGaussianHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
     {
+        _hiddenSize = hiddenSize;
         var random = RandomHelper.CreateSeededRandom(seed);
         (_meanW, _meanB) = AddProjection(1, random);
         (_scaleW, _scaleB) = AddProjection(1, random);
@@ -331,9 +343,17 @@ internal sealed partial class DeepARStudentTHead<T> : DeepARDistributionHead<T>,
         };
     }
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
+    /// <summary>Construction state: the 'degreesOfFreedom' the layer was built with.</summary>
+    private readonly double _degreesOfFreedom;
+
     public DeepARStudentTHead(int hiddenSize, double degreesOfFreedom, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
     {
+        _degreesOfFreedom = degreesOfFreedom;
+        _hiddenSize = hiddenSize;
         // ν must exceed 2 for a finite variance (so predictive std is defined). Clamp defensively.
         _nu = degreesOfFreedom > 2.0001 ? degreesOfFreedom : 2.0001;
         var random = RandomHelper.CreateSeededRandom(seed);
@@ -453,9 +473,13 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
         };
     }
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
     public DeepARSplineHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: Grid.Length)
     {
+        _hiddenSize = hiddenSize;
         var random = RandomHelper.CreateSeededRandom(seed);
         (_knotW, _knotB) = AddProjection(Grid.Length, random);
     }

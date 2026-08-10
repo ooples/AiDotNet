@@ -323,6 +323,9 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'inputDimension' the layer was built with.</summary>
+    private readonly int _inputDimension;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="HighwayLayer{T}"/> class with the specified dimensions and element-wise activation functions.
     /// </summary>
@@ -352,6 +355,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
+        _inputDimension = inputDimension;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGateBalanceLoss = NumOps.Zero;
 
@@ -399,6 +403,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     public HighwayLayer(int inputDimension, IVectorActivationFunction<T>? transformActivation = null, IVectorActivationFunction<T>? gateActivation = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
+        _inputDimension = inputDimension;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastGateBalanceLoss = NumOps.Zero;
 

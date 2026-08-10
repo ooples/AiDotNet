@@ -358,6 +358,9 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new RWKV-7 block.
     /// </summary>
@@ -379,6 +382,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         // Theorem 1 (arXiv 2503.14456, Appendix C) is stated for c in (0, 1 + u); outside that range
         // the eigenvalue bound it proves no longer applies, so reject rather than silently accept.
         if (globalIclrMultiplier <= 0.0 || globalIclrMultiplier >= 1.0 + DecayClampLowerBound)

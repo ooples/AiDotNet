@@ -162,6 +162,9 @@ public partial class HGRN2Layer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int HeadDimension => _headDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new HGRN2 layer with state expansion.
     /// </summary>
@@ -197,6 +200,7 @@ public partial class HGRN2Layer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

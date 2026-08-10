@@ -141,6 +141,9 @@ public partial class DeltaFormerLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Gets whether this layer uses the delta rule (true) or standard attention (false).</summary>
     public bool UseDeltaRule => _useDeltaRule;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new DeltaFormer layer.
     /// </summary>
@@ -174,6 +177,7 @@ public partial class DeltaFormerLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

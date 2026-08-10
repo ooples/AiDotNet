@@ -189,6 +189,9 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Grouped-Query Attention layer.
     /// </summary>
@@ -214,6 +217,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         // With an explicit head dimension the projection widths are numHeads*headDim (which may differ
         // from embeddingDimension, e.g. Gemma-style decoders), so embeddingDimension need not be divisible
         // by numHeads. Only the default (headDim = embeddingDimension/numHeads) requires that divisibility.

@@ -964,9 +964,13 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
         return metadata;
     }
 
+    /// <summary>Construction state: the 'numBlocks' the layer was built with.</summary>
+    private readonly int _numBlocks;
+
     public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
         : base(new[] { inputLength }, new[] { outputLength })
     {
+        _numBlocks = numBlocks;
         _inputLength = inputLength;
         _outputLength = outputLength;
         _hiddenSize = hiddenSize;

@@ -179,6 +179,9 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public T Regularization => _regularization;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new MesaNet layer implementing locally optimal test-time training.
     /// </summary>
@@ -213,6 +216,7 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

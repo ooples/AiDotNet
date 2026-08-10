@@ -1183,10 +1183,14 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'seed' the layer was built with.</summary>
+    private readonly int _seed;
+
     public AutoformerEncoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
         : base(new[] { embeddingDim }, new[] { embeddingDim * 2 })
     {
+        _seed = seed;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _movingAvgKernel = movingAvgKernel;
@@ -1391,10 +1395,14 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'seed' the layer was built with.</summary>
+    private readonly int _seed;
+
     public AutoformerDecoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
         : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim * 2 })
     {
+        _seed = seed;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _movingAvgKernel = movingAvgKernel;

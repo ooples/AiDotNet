@@ -67,6 +67,9 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
     public int LocalInputSize => _localInputSize;
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
     public RowParallelLinear(
         ICommunicationBackend<T> backend,
         int inputSize,
@@ -76,6 +79,7 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
                [outputSize],
                activationFunction ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
+        _inputSize = inputSize;
         _backend = backend;
         _g = new ReduceFromTensorParallelRegion<T>(backend);
         _fullInputSize = inputSize;

@@ -147,6 +147,9 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int HeadDimension => _headDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new ReBased linear attention layer.
     /// </summary>
@@ -175,6 +178,7 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

@@ -81,6 +81,9 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public int ActivationRank => _activationAdaptation.Rank;
 
+    /// <summary>Construction state: the 'weightRank' the layer was built with.</summary>
+    private readonly int _weightRank;
+
     /// <summary>
     /// Initializes a new GLoRA adapter with the specified parameters.
     /// </summary>
@@ -121,6 +124,7 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         bool freezeBaseLayer = true)
         : base(baseLayer, weightRank, weightAlpha, freezeBaseLayer)
     {
+        _weightRank = weightRank;
         // Default activation rank to weight rank if not specified
         int actualActivationRank = activationRank > 0 ? activationRank : weightRank;
 

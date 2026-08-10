@@ -161,6 +161,9 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int InnerDimension => _innerDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new S4D (Diagonal State Space) layer.
     /// </summary>
@@ -194,6 +197,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

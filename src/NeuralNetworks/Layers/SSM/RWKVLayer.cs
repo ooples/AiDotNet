@@ -224,6 +224,9 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int HeadDimension => _headDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new RWKV layer.
     /// </summary>
@@ -259,6 +262,7 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

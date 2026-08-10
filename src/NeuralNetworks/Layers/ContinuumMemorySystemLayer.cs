@@ -53,6 +53,9 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'hiddenDim' the layer was built with.</summary>
+    private readonly int _hiddenDim;
+
     /// <summary>
     /// Creates a CMS layer as a chain of MLP blocks.
     /// </summary>
@@ -71,6 +74,7 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
         IEngine? engine = null)
         : base(inputShape, new[] { hiddenDim })
     {
+        _hiddenDim = hiddenDim;
 
         // Validate inputs
         if (inputShape == null || inputShape.Length == 0)

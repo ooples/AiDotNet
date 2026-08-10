@@ -51,6 +51,9 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
 
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'numFrames' the layer was built with.</summary>
+    private readonly int _numFrames;
+
     public TimeSformerBlockLayer(
         int hiddenSize,
         int numHeads,
@@ -59,6 +62,7 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
         IActivationFunction<T>? ffnActivation = null)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
+        _numFrames = numFrames;
         if (hiddenSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(hiddenSize));
         if (numHeads <= 0)

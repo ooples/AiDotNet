@@ -146,6 +146,9 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public double ForgetBias => _forgetBias;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new HGRN (Hierarchically Gated Recurrent Neural Network) layer.
     /// </summary>
@@ -182,6 +185,7 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

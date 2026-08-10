@@ -164,6 +164,9 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public int StateDimension => _stateDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new S5 (Simplified State Space) layer.
     /// </summary>
@@ -193,6 +196,7 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

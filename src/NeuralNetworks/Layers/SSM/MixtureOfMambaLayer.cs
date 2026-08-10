@@ -156,6 +156,9 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Gets the SSM state dimension per expert.</summary>
     public int StateDimension => _stateDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Mixture-of-Mamba layer.
     /// </summary>
@@ -193,6 +196,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

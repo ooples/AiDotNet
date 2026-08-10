@@ -180,6 +180,9 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public T InnerLearningRate => _innerLearningRate;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new TTT (Test-Time Training) layer implementing the TTT-Linear variant.
     /// </summary>
@@ -216,6 +219,7 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

@@ -148,6 +148,9 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
         set => _layerIndex = value;
     }
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new cached multi-head attention layer.
     /// </summary>
@@ -171,6 +174,7 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(

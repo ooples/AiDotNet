@@ -127,6 +127,12 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private Tensor<T>? _lastInput;
 
+    /// <summary>Construction state: the 'numberOfExperts' the layer was built with.</summary>
+    private readonly int _numberOfExperts;
+
+    /// <summary>Construction state: the 'expertRank' the layer was built with.</summary>
+    private readonly int _expertRank;
+
     /// <summary>
     /// Initializes a new X-LoRA adapter with the specified parameters.
     /// </summary>
@@ -168,6 +174,8 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
         bool freezeBaseLayer = true)
         : base(baseLayer, expertRank, alpha, freezeBaseLayer)
     {
+        _expertRank = expertRank;
+        _numberOfExperts = numberOfExperts;
         if (numberOfExperts < 2)
         {
             throw new ArgumentException("Number of experts must be at least 2", nameof(numberOfExperts));

@@ -94,8 +94,15 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         var candidates = context.SyntaxProvider
             .CreateSyntaxProvider(
-                static (node, _) => node is ConstructorDeclarationSyntax c
-                    && c.ParameterList.Parameters.Any(p => p.AttributeLists.Count > 0),
+                // EVERY constructor on a type with a base list, not just ones that already carry an
+                // attribute. Requiring an attributed parameter here meant a layer with no
+                // [LayerState] at all never reached Analyze -- so inference could not see it, no
+                // factory was generated for it, and the ADN0053 rule that exists to reject an
+                // unrestorable layer could only fire on layers that had already opted in.
+                static (node, _) => node is ConstructorDeclarationSyntax
+                {
+                    Parent: ClassDeclarationSyntax { BaseList: not null },
+                },
                 static (ctx, _) => Analyze(ctx))
             .Where(static m => m is not null)
             .Select(static (m, _) => m!);
@@ -109,7 +116,13 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (ctx.SemanticModel.GetDeclaredSymbol(syntax) is not IMethodSymbol ctor) return null;
 
         var marked = ctor.Parameters.Where(HasStateAttribute).ToList();
-        if (marked.Count == 0) return null;
+
+        // NO marked-count gate. Dropping a constructor with no [LayerState] made the whole feature
+        // opt-IN a second time, below the syntax predicate: inference lives further down this
+        // method, so a layer that stored every argument in a field but wrote no attribute was
+        // discarded here, got no factory, and could not be cloned -- while the build stayed green,
+        // because ADN0053 also never ran for it. Marked parameters are still read below; they are
+        // just no longer the price of admission.
 
         var type = ctor.ContainingType;
 
@@ -120,6 +133,15 @@ public class LayerStateGenerator : IIncrementalGenerator
         // compiler error pointing INTO generated source -- an error about code the author
         // never wrote and cannot open. Refused here with a diagnostic on the declaration
         // instead.
+        if (type.TypeKind != TypeKind.Class || type.IsRecord || !DerivesFromLayerBase(type))
+        {
+            // Only an EXPLICIT claim is worth a diagnostic here. Now that every constructor on a
+            // type with a base list is analysed, this branch also sees ordinary classes that never
+            // mentioned [LayerState] -- reporting those told 7,525 authors their type "marks
+            // constructor parameters [LayerState]" when it does no such thing.
+            if (marked.Count == 0) return null;
+        }
+
         if (type.TypeKind != TypeKind.Class || type.IsRecord || !DerivesFromLayerBase(type))
         {
             return new LayerModel

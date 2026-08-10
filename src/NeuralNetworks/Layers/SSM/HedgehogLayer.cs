@@ -170,6 +170,9 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int FeatureMapHiddenDim => _featureMapHiddenDim;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Hedgehog layer with trainable feature maps for linear attention.
     /// </summary>
@@ -205,6 +208,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

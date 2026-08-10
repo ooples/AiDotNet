@@ -144,6 +144,9 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <param name="kvHeadCount">
     /// Number of key/value heads for grouped-query attention. 0 (the default) means "same as
     /// <paramref name="headCount"/>" — standard multi-head attention. When smaller, K/V project to
@@ -161,6 +164,7 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(

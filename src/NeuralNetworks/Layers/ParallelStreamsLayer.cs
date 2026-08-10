@@ -172,6 +172,15 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly int _splitSize;
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
+    /// <summary>Construction state: the 'streamAOutputSize' the layer was built with.</summary>
+    private readonly int _streamAOutputSize;
+
+    /// <summary>Construction state: the 'streamBOutputSize' the layer was built with.</summary>
+    private readonly int _streamBOutputSize;
+
     /// <summary>
     /// Creates a parallel streams layer that splits input features and processes each half independently.
     /// </summary>
@@ -205,6 +214,9 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
         IEnumerable<ILayer<T>> streamBLayers)
         : base([inputSize], [streamAOutputSize + streamBOutputSize])
     {
+        _streamBOutputSize = streamBOutputSize;
+        _streamAOutputSize = streamAOutputSize;
+        _inputSize = inputSize;
         // Fail fast at the boundary on bad inputs so misuse surfaces here, not deep in
         // the forward pass where the error message would be cryptic shape mismatches.
         if (inputSize <= 0)

@@ -214,6 +214,9 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public int ChunkSize => _chunkSize;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Mamba-2 block with State Space Duality (SSD) computation.
     /// </summary>
@@ -258,6 +261,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

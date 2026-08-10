@@ -159,6 +159,9 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int ExpansionFactor => _expansionFactor;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new minGRU layer.
     /// </summary>
@@ -190,6 +193,7 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

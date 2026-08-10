@@ -219,6 +219,12 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'attentionSize' the layer was built with.</summary>
+    private readonly int _attentionSize;
+
+    /// <summary>Construction state: the 'feedForwardSize' the layer was built with.</summary>
+    private readonly int _feedForwardSize;
+
     /// <summary>
     /// Initializes a new instance of the DecoderLayer class with scalar activation.
     /// </summary>
@@ -230,6 +236,8 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     public DecoderLayer(int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
+        _feedForwardSize = feedForwardSize;
+        _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 
@@ -353,6 +361,8 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     public DecoderLayer(int attentionSize, int feedForwardSize, IVectorActivationFunction<T> activation)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
+        _feedForwardSize = feedForwardSize;
+        _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 

@@ -170,6 +170,9 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public int StateDimension => _stateDimension;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Linear Recurrent Unit (LRU) layer.
     /// </summary>
@@ -200,6 +203,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)
