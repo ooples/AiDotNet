@@ -3143,7 +3143,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
         {
-            allGradients.Add(layer.GetParameterGradients());
+            // PREFER THE TAPE-SCATTERED SLICE over the layer's own accessor. 170 files override
+            // GetParameterGradients, and most of those overrides pre-date the autodiff tape and
+            // hand back a freshly allocated zero vector, so asking them returns manufactured zeros
+            // however good the tape's gradients were. Reading the scattered field first bypasses
+            // all of them; a layer the scatter never reached still falls back to its own accessor,
+            // so nothing that works today regresses.
+            var scattered = (layer as LayerBase<T>)?.ScatteredParameterGradients;
+            allGradients.Add(scattered ?? layer.GetParameterGradients());
         }
 
         // Concatenate all gradients into a single vector
