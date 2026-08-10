@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/2004.10934",
     Year = 2020,
     Authors = "Alexey Bochkovskiy, Chien-Yao Wang, Hong-Yuan Mark Liao")]
-public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
+public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 
 

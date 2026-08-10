@@ -83,7 +83,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2025,
     Authors = "Figure AI"
 )]
-public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly HelixOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

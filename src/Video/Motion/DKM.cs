@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2202.00667",
     Year = 2023,
     Authors = "Johan Edstedt, Ioannis Athanasiadis, Marten Wadenbäck, Michael Felsberg")]
-public class DKM<T> : OpticalFlowBase<T>
+public partial class DKM<T> : OpticalFlowBase<T>
 {
     private readonly DKMOptions _options;
 

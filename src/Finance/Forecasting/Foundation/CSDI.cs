@@ -62,7 +62,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CSDI: Conditional Score-based Diffusion Models for Probabilistic Time Series Imputation", "https://arxiv.org/abs/2107.03502", Year = 2021, Authors = "Yusuke Tashiro, Jiaming Song, Yang Song, Stefano Ermon")]
-public class CSDI<T> : TimeSeriesFoundationModelBase<T>
+public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

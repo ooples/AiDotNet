@@ -72,7 +72,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2210.06280",
     Year = 2023,
     Authors = "Vadim Borisov, Kathrin Seßler, Tobias Leemann, Martin Pawelczyk, Gjergji Kasneci")]
-public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TabLLMGenOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

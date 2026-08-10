@@ -64,7 +64,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2111.13680",
     Year = 2022,
     Authors = "Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, Dacheng Tao")]
-public class GMFlow<T> : OpticalFlowBase<T>
+public partial class GMFlow<T> : OpticalFlowBase<T>
 {
     private readonly GMFlowOptions _options;
 

@@ -65,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
-public class NBEATSFinance<T> : ForecastingModelBase<T>
+public partial class NBEATSFinance<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

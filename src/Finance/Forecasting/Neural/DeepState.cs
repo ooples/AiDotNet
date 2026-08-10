@@ -88,7 +88,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
     "https://proceedings.neurips.cc/paper/2018/hash/5cf68969fb67aa6082363a6d4e6468e2-Abstract.html",
     Year = 2018,
     Authors = "Syama Sundar Rangapuram, Matthias Seeger, Jan Gasthaus, Lorenzo Stella, Yuyang Wang, Tim Januschowski")]
-public class DeepState<T> : ForecastingModelBase<T>
+public partial class DeepState<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

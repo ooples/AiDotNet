@@ -75,7 +75,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1806.03384",
     Year = 2018,
     Authors = "Noseong Park, Mahmoud Mohammadi, Kshitij Gorde, Sushil Jajodia, Hongkyu Park, Youngmin Kim")]
-public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TableGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).

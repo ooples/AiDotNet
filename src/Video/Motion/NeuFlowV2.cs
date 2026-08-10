@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2408.10161",
     Year = 2024,
     Authors = "Zhiyong Zhang, Anurag Ranjan, Huaizu Jiang")]
-public class NeuFlowV2<T> : OpticalFlowBase<T>
+public partial class NeuFlowV2<T> : OpticalFlowBase<T>
 {
     private readonly NeuFlowV2Options _options;
 

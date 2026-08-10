@@ -99,7 +99,7 @@ namespace AiDotNet.Audio.Emotion;
     "https://doi.org/10.1109/PlatCon.2017.7883728",
     Year = 2017,
     Authors = "Abdul Malik Badshah, Jamil Ahmad, Nasir Rahim, Sung Wook Baik")]
-public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
+public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Execution Mode
 

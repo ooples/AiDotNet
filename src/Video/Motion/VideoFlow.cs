@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2303.08340",
     Year = 2023,
     Authors = "Xiaoyu Shi, Zhaoyang Huang, Weikang Bian, Dasong Li, Manyuan Zhang, Ka Chun Cheung, Simon See, Hongwei Qin, Jifeng Dai, Hongsheng Li")]
-public class VideoFlow<T> : OpticalFlowBase<T>
+public partial class VideoFlow<T> : OpticalFlowBase<T>
 {
     private readonly VideoFlowOptions _options;
 

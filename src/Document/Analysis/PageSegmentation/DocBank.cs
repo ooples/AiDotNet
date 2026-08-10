@@ -58,7 +58,7 @@ namespace AiDotNet.Document.Analysis.PageSegmentation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DocBank: A Benchmark for Document Layout Analysis", "https://doi.org/10.48550/arXiv.2006.01038", Year = 2020, Authors = "Minghao Li, Yiheng Xu, Lei Cui, Shaohan Huang, Furu Wei, Zhoujun Li, Ming Zhou")]
-public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
+public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 {
     private readonly DocBankOptions _options;
 

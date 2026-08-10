@@ -91,7 +91,7 @@ namespace AiDotNet.Video.Motion;
     "https://hmorimitsu.com/publication/2024-icra-rapidflow/2024-icra-rapidflow.pdf",
     Year = 2024,
     Authors = "Henrique Morimitsu")]
-public class RAPIDFlow<T> : OpticalFlowBase<T>
+public partial class RAPIDFlow<T> : OpticalFlowBase<T>
 {
     private readonly RAPIDFlowOptions _options;
 

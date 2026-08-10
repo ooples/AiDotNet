@@ -78,7 +78,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
     Authors = "Chung-Cheng Chiu, Anshuman Tripathi, Katherine Chou, Chris Co, Navdeep Jaitly, " +
               "Diana Jaunzeikare, Anjuli Kannan, Patrick Nguyen, Hasim Sak, Ananth Sankar, " +
               "Justin Tansuwan, Nathan Wan, Yonghui Wu, Xuedong Zhang")]
-public class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly MedicalASROptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;

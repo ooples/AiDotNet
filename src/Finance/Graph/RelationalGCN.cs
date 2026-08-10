@@ -89,7 +89,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Modeling Relational Data with Graph Convolutional Networks", "https://arxiv.org/abs/1703.06103", Year = 2018, Authors = "Michael Schlichtkrull, Thomas N. Kipf, Peter Bloem, Rianne van den Berg, Ivan Titov, Max Welling")]
-public class RelationalGCN<T> : ForecastingModelBase<T>
+public partial class RelationalGCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;

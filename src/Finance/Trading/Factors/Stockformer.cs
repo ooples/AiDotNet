@@ -79,7 +79,7 @@ namespace AiDotNet.Finance.Trading.Factors;
     "https://arxiv.org/abs/2401.06139",
     Year = 2025,
     Authors = "Bohan Ma, Yushan Xue, Yuan Lu, Jing Chen")]
-public class Stockformer<T> : CrossSectionalGraphModelBase<T>
+public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 

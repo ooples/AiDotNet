@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2503.14880",
     Year = 2025,
     Authors = "Henrique Morimitsu, Xiaobin Zhu, Roberto M. Cesar Jr., Xiangyang Ji, Xu-Cheng Yin")]
-public class DPFlow<T> : OpticalFlowBase<T>
+public partial class DPFlow<T> : OpticalFlowBase<T>
 {
     private readonly DPFlowOptions _options;
 

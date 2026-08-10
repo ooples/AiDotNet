@@ -101,7 +101,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1902.09599",
     Year = 2019,
     Authors = "Steven Cheng-Xian Li, Bo Jiang, Benjamin Marlin")]
-public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly MisGANOptions<T> _options;
     // One dedicated optimizer per sub-network (Li et al. 2019 MisGAN trains four:

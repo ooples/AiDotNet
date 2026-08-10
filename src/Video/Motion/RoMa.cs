@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2305.15404",
     Year = 2024,
     Authors = "Johan Edstedt, Qiyu Sun, Georg Bökman, Marten Wadenbäck, Michael Felsberg")]
-public class RoMa<T> : OpticalFlowBase<T>
+public partial class RoMa<T> : OpticalFlowBase<T>
 {
     private readonly RoMaOptions _options;
 

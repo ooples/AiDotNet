@@ -63,7 +63,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2003.12039",
     Year = 2020,
     Authors = "Zachary Teed, Jia Deng")]
-public class RAFT<T> : OpticalFlowBase<T>
+public partial class RAFT<T> : OpticalFlowBase<T>
 {
     private readonly RAFTOptions _options;
 

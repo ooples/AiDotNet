@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Siamese Neural Networks for One-shot Image Recognition", "https://www.cs.cmu.edu/~rsalakhu/oneshot/papers/Siamese%20Neural%20Networks%20for%20One-Shot%20Image%20Recognition.pdf")]
-public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly SiameseNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

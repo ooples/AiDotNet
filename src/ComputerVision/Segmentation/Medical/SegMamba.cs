@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", "https://arxiv.org/abs/2401.13560", Year = 2024, Authors = "Xing et al.")]
-public class SegMamba<T> : Common.MedicalSegmentationBase<T>
+public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>

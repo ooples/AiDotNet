@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Fast Learning Algorithm for Deep Belief Nets", "https://www.cs.toronto.edu/~hinton/absps/fastnc.pdf", Year = 2006, Authors = "Geoffrey E. Hinton, Simon Osindero, Yee-Whye Teh")]
-public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
+public partial class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBeliefNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

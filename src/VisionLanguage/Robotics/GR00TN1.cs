@@ -84,7 +84,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2025,
     Authors = "NVIDIA"
 )]
-public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

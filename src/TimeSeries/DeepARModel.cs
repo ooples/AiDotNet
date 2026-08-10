@@ -62,7 +62,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
-public class DeepARModel<T> : TimeSeriesModelBase<T>
+public partial class DeepARModel<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepAROptions<T> _options;
     private readonly Random _random;

@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BloombergGPT: A Large Language Model for Finance", "https://arxiv.org/abs/2303.17564", Year = 2023, Authors = "Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann, Prabhanjan Kambadur, David Rosenberg, Gideon Mann")]
-public class BloombergGPT<T> : FinancialNLPModelBase<T>
+public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
 

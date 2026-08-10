@@ -58,7 +58,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Diffusion Variational Autoencoder for Tackling Stochasticity in Multi-Step Regression Stock Price Prediction", "https://arxiv.org/abs/2309.00073")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class CCDM<T> : TimeSeriesFoundationModelBase<T>
+public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 

@@ -59,7 +59,7 @@ namespace AiDotNet.Video.ActionRecognition;
     "https://arxiv.org/abs/1812.03982",
     Year = 2019,
     Authors = "Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, Kaiming He")]
-public class SlowFast<T> : NeuralNetworkBase<T>
+public partial class SlowFast<T> : NeuralNetworkBase<T>
 {
     private readonly SlowFastOptions _options;
 

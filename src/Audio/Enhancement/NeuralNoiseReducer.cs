@@ -79,7 +79,7 @@ namespace AiDotNet.Audio.Enhancement;
     "https://doi.org/10.1109/TASLP.2014.2364452",
     Year = 2015,
     Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
-public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>

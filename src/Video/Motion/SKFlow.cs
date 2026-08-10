@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2205.14623",
     Year = 2022,
     Authors = "Shangkun Sun, Yuanqi Chen, Yu Zhu, Guodong Guo, Ge Li")]
-public class SKFlow<T> : OpticalFlowBase<T>
+public partial class SKFlow<T> : OpticalFlowBase<T>
 {
     private readonly SKFlowOptions _options;
 

@@ -48,7 +48,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models", "https://arxiv.org/abs/1908.10063")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FinancialBERT<T> : FinancialNLPModelBase<T>
+public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
 

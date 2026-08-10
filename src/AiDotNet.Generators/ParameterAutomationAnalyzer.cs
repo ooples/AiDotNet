@@ -207,17 +207,28 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         // someone else's declaration, so the build has to ask -- and asking is enough,
                         // because the keyword is the entire fix and is inert on its own.
                         //
-                        // Reported only when the class OWNS something the generator would register
-                        // and is otherwise eligible, so it never fires on a model that declares its
-                        // surface by hand or holds nothing to register.
+                        // Covers weight FIELDS and LAYER-BEARING members alike. The layer case was
+                        // first attempted as a separate diagnostic that tried to prove the layers
+                        // were unreachable -- never added to Layers, surfaced by nothing. That does
+                        // not work: reachability is a runtime aliasing property and the idioms are
+                        // many. Autoformer writes `_encoderLayers.Add(Layers[i])`, making the field a
+                        // VIEW INTO Layers rather than a separate stack; another model registers by
+                        // a nameof(...) list. Both were accused, both were fine.
+                        //
+                        // Asking for `partial` needs no such proof. The generated hook seeds Layers
+                        // into its seen-set and deduplicates by reference, so discovering a member
+                        // whose layers are ALREADY reachable yields nothing at all. The keyword is
+                        // therefore correct whether or not the layers were orphaned -- which is why
+                        // this can be demanded without ever having to decide which case it is.
                         if (!type.IsAbstract && !declares && !IsPartial(type)
                             && (InheritsRegistry(type) || InheritsExtraTensorsHook(type))
-                            && type.GetMembers().OfType<IFieldSymbol>().Any(f =>
-                                   !f.IsStatic && !f.IsImplicitlyDeclared
-                                   && f.AssociatedSymbol is null
-                                   && !HasAnyAttribute(f, "BufferAttribute", "Buffer",
+                            && type.GetMembers().Any(m =>
+                                   !m.IsStatic && !m.IsImplicitlyDeclared
+                                   && !HasAnyAttribute(m, "BufferAttribute", "Buffer",
                                                           "ScratchAttribute", "Scratch")
-                                   && IsWeightCapableType(f.Type))
+                                   && ((m is IFieldSymbol f && f.AssociatedSymbol is null
+                                        && IsWeightCapableType(f.Type))
+                                       || LayerBearingType(m) is not null))
                             && modelLoc is not null)
                         {
                             spc.ReportDiagnostic(Diagnostic.Create(
@@ -439,6 +450,62 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
     // These answer "will the generator register this?" so AIDN084 stays silent about work already
     // automated. They must track ModelParameterGenerator; if the two drift, the build either nags
     // about fields that are handled or goes quiet about ones that are not.
+
+    /// <summary>
+    /// The displayed type of a member carrying trainable layers, or null. Mirrors
+    /// ModelParameterGenerator.LayerAccessorFor -- a single layer, a collection of layers, or a
+    /// sub-network -- so what the build DEMANDS and what the generator SUPPLIES stay one set.
+    /// </summary>
+    private static string? LayerBearingType(ISymbol member)
+    {
+        ITypeSymbol? t = member switch
+        {
+            IFieldSymbol f when f.AssociatedSymbol is null => f.Type,
+            IPropertySymbol p when p.GetMethod is not null => p.Type,
+            _ => null,
+        };
+        if (t is null) return null;
+        var bare = t.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        for (var c = bare as INamedTypeSymbol; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                return t.ToDisplayString();
+        }
+        if (IsLayerLike(bare)) return t.ToDisplayString();
+
+        ITypeSymbol? element = null;
+        if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
+        else if (bare is INamedTypeSymbol named && named.TypeArguments.Length == 1)
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal))
+                element = named.TypeArguments[0];
+        }
+        if (element is not null &&
+            IsLayerLike(element.WithNullableAnnotation(NullableAnnotation.NotAnnotated)))
+            return t.ToDisplayString();
+
+        return null;
+    }
+
+    private static bool IsLayerLike(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named) return false;
+        if (named.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.Interfaces.ILayer<", System.StringComparison.Ordinal)) return true;
+        for (var c = named; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.Layers.LayerBase<", System.StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>The generator only emits into a partial declaration.</summary>
     private static bool IsPartial(INamedTypeSymbol type)

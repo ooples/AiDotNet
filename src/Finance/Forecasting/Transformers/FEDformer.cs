@@ -65,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FEDformer: Frequency Enhanced Decomposed Transformer for Long-term Series Forecasting", "https://arxiv.org/abs/2201.12740", Year = 2022, Authors = "Tian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, Rong Jin")]
-public class FEDformer<T> : ForecastingModelBase<T>
+public partial class FEDformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.Volatility;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generalized Autoregressive Conditional Heteroskedasticity", "https://doi.org/10.1016/0304-4076(86)90063-1", Year = 1986, Authors = "Tim Bollerslev")]
-public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
+public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {
     #region Native Mode Fields
 

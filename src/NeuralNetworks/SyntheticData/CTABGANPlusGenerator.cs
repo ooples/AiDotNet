@@ -87,7 +87,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2204.00401",
     Year = 2023,
     Authors = "Zilong Zhao, Aditya Kunar, Robert Birke, Lydia Y. Chen")]
-public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly CTABGANPlusOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

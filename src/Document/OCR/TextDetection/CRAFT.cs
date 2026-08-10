@@ -55,7 +55,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Character Region Awareness for Text Detection", "https://doi.org/10.48550/arXiv.1904.01941", Year = 2019, Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]
-public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
+public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly CRAFTOptions _options;
 

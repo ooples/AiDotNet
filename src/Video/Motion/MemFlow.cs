@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2404.04808",
     Year = 2024,
     Authors = "Qiaole Dong, Yanwei Fu")]
-public class MemFlow<T> : OpticalFlowBase<T>
+public partial class MemFlow<T> : OpticalFlowBase<T>
 {
     private readonly MemFlowOptions _options;
 

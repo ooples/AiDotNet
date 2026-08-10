@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TimeMachine: A Time Series is Worth 4 Mambas for Long-term Forecasting", "https://arxiv.org/abs/2403.09898")]
-public class TimeMachine<T> : ForecastingModelBase<T>
+public partial class TimeMachine<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private bool _useNativeMode;

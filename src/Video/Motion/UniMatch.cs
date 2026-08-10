@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2211.05783",
     Year = 2023,
     Authors = "Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, Fisher Yu, Dacheng Tao, Andreas Geiger")]
-public class UniMatch<T> : OpticalFlowBase<T>
+public partial class UniMatch<T> : OpticalFlowBase<T>
 {
     private readonly UniMatchOptions _options;
 
