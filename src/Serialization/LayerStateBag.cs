@@ -215,6 +215,61 @@ public readonly struct LayerStateBag
         return result;
     }
 
+    /// <summary>Reads a required array of doubles.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored values.</returns>
+    public double[] DoubleArray(string key)
+    {
+        const string wanted = "a comma-separated list of numbers";
+        if (!TryRaw(key, out var v)) throw Missing(key, wanted);
+        if (v is double[] arr) return arr;
+
+        var text = AsText(v);
+        if (text.Length == 0) return [];
+
+        var parts = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var result = new double[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out result[i]))
+                throw Unparseable(key, v, wanted);
+        }
+        return result;
+    }
+
+    /// <summary>Reads a required jagged array of integers, such as one shape per input.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored rows.</returns>
+    /// <remarks>
+    /// Rows are separated by ';' and values within a row by ','. The row count is meaningful on its
+    /// own -- a merge layer's input count is its outer length -- so an empty row is preserved as an
+    /// empty row rather than dropped.
+    /// </remarks>
+    public int[][] Int32Jagged(string key)
+    {
+        const string wanted = "semicolon-separated rows of comma-separated integers";
+        if (!TryRaw(key, out var v)) throw Missing(key, wanted);
+        if (v is int[][] jagged) return jagged;
+
+        var text = AsText(v);
+        if (text.Length == 0) return [];
+
+        var rows = text.Split(';');
+        var result = new int[rows.Length][];
+        for (int r = 0; r < rows.Length; r++)
+        {
+            var parts = rows[r].Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+            result[r] = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], NumberStyles.Integer, CultureInfo.InvariantCulture, out result[r][i]))
+                    throw Unparseable(key, v, wanted);
+            }
+        }
+        return result;
+    }
+
+
     /// <summary>Reads an integer array, or <paramref name="fallback"/> when it was not saved.</summary>
     /// <param name="key">The metadata key.</param>
     /// <param name="fallback">Value to use when the key is absent.</param>
@@ -342,6 +397,15 @@ public readonly struct LayerStateBag
 
     /// <inheritdoc cref="Format(int)"/>
     public static string Format(int[]? value) => value is null ? string.Empty : string.Join(",", value);
+
+    /// <inheritdoc cref="Format(int)"/>
+    public static string Format(double[]? value)
+        => value is null ? string.Empty : string.Join(",", value.Select(d => d.ToString("R", CultureInfo.InvariantCulture)));
+
+    /// <inheritdoc cref="Format(int)"/>
+    /// <remarks>Rows joined by ';', values within a row by ',' -- an empty row stays empty.</remarks>
+    public static string Format(int[][]? value)
+        => value is null ? string.Empty : string.Join(";", value.Select(row => row is null ? string.Empty : string.Join(",", row)));
 
     /// <summary>Formats a nullable value whose constructor parameter is not itself nullable.</summary>
     /// <typeparam name="TValue">The underlying value type.</typeparam>

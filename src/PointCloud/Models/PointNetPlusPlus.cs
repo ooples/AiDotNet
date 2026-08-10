@@ -1110,16 +1110,23 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
 
     /// <summary>Construction state: the 'searchRadius' the layer was built with.</summary>
     private readonly double _searchRadius;
+    // The two constructors take mlpDimensions as int[] and int[][], which cannot share one field,
+    // so each names its own via [LayerState(Member = ...)].
+    private readonly int[] _mlpDimensionsSingleScale = [];
+    private readonly int[][] _mlpDimensionsMultiScale = [];
+    private readonly double[] _radii = [];
+
 
     public SetAbstractionLayer(
         int numPoints,
         double searchRadius,
         int inputChannels,
-        int[] mlpDimensions,
+        [LayerState(Member = "_mlpDimensionsSingleScale")] int[] mlpDimensions,
         int neighborSamples)
         : base([0, inputChannels], [0, mlpDimensions[^1]])
     {
         _searchRadius = searchRadius;
+        _mlpDimensionsSingleScale = mlpDimensions;
         if (numPoints <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(numPoints), "Number of points must be positive.");
@@ -1141,10 +1148,12 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
         int numPoints,
         double[] radii,
         int inputChannels,
-        int[][] mlpDimensions,
+        [LayerState(Member = "_mlpDimensionsMultiScale")] int[][] mlpDimensions,
         int[] neighborSamples)
         : base([0, inputChannels], [0, CalculateOutputChannels(mlpDimensions)])
     {
+        _mlpDimensionsMultiScale = mlpDimensions;
+        _radii = radii;
         if (numPoints <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(numPoints), "Number of points must be positive.");

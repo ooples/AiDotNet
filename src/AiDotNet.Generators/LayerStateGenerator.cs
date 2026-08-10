@@ -239,6 +239,14 @@ public class LayerStateGenerator : IIncrementalGenerator
         return string.IsNullOrWhiteSpace(named) ? null : named;
     }
 
+    /// <summary>The member named by <c>[LayerState(Member = "...")]</c>, if any.</summary>
+    private static string? StateMember(IParameterSymbol p)
+    {
+        var attr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
+        var named = attr?.NamedArguments.FirstOrDefault(n => n.Key == "Member").Value.Value as string;
+        return string.IsNullOrWhiteSpace(named) ? null : named;
+    }
+
     private static ValueKind Classify(ITypeSymbol type)
     {
         type = Unwrap(type);
@@ -248,8 +256,21 @@ public class LayerStateGenerator : IIncrementalGenerator
         // A pluggable strategy: record which implementation was used and rebuild that one.
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
 
-        if (type is IArrayTypeSymbol { Rank: 1 } arr && arr.ElementType.SpecialType == SpecialType.System_Int32)
-            return ValueKind.Int32Array;
+        if (type is IArrayTypeSymbol { Rank: 1 } arr)
+        {
+            // A shape list is as much construction state as a scalar dimension, and rebuilding one
+            // from the declared input shape is exactly the inference this generator removes.
+            if (arr.ElementType.SpecialType == SpecialType.System_Int32) return ValueKind.Int32Array;
+            if (arr.ElementType.SpecialType == SpecialType.System_Double) return ValueKind.DoubleArray;
+
+            // int[][]: the per-input shapes a merge layer (Add, Concatenate, Multiply) was built
+            // with, where the outer length is the number of inputs.
+            if (arr.ElementType is IArrayTypeSymbol { Rank: 1 } inner
+                && inner.ElementType.SpecialType == SpecialType.System_Int32)
+                return ValueKind.Int32Jagged;
+
+            return ValueKind.Unsupported;
+        }
 
         return type.SpecialType switch
         {
@@ -273,7 +294,13 @@ public class LayerStateGenerator : IIncrementalGenerator
     private static string? FindBackingMember(INamedTypeSymbol type, IParameterSymbol p, out bool needsConvert)
     {
         needsConvert = false;
-        var candidates = new[] { p.Name, "_" + p.Name, "m_" + p.Name, Pascal(p.Name), "_" + Pascal(p.Name) };
+        // [LayerState(Member = "...")] wins outright. Without it the attribute could not rescue a
+        // layer that stored the argument under any other name, because ADN0051 applied the same
+        // five-name rule to marked parameters too.
+        var named = StateMember(p);
+        var candidates = named is not null
+            ? new[] { named }
+            : new[] { p.Name, "_" + p.Name, "m_" + p.Name, Pascal(p.Name), "_" + Pascal(p.Name) };
 
         for (var t = type; t is not null; t = t.BaseType)
         {
@@ -588,6 +615,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.Boolean => $"state.Boolean(\"{p.Key}\")",
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
+            ValueKind.DoubleArray => $"state.DoubleArray(\"{p.Key}\")",
+            ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             // A parameter that does not accept null must not be handed one. Component() returns
             // null both when nothing was saved and when the saved type will not load, so a

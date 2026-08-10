@@ -48,4 +48,20 @@ public sealed class LayerStateAttribute : Attribute
     /// <c>"InputChannels"</c> key without needing this.
     /// </remarks>
     public string? Key { get; set; }
+
+    /// <summary>
+    /// Names the field or property holding this parameter, when it is not one the generator
+    /// would look for on its own.
+    /// </summary>
+    /// <remarks>
+    /// Inference looks for <c>name</c>, <c>_name</c>, <c>m_name</c>, <c>Name</c> or <c>_Name</c> of
+    /// the parameter's type. A layer that stores the argument anywhere else could not be rescued by
+    /// the attribute either, because the same five-name rule applied to it. Two cases needed this:
+    /// <c>EdgeConditionalConvolutionalLayer</c> keeps <c>int edgeFeatures</c> in
+    /// <c>_edgeFeaturesCount</c> because <c>_edgeFeatures</c> is already a cached tensor, and
+    /// <c>SetAbstractionLayer</c> has <c>int[]</c> and <c>int[][]</c> overloads of the same
+    /// parameter that cannot share one field. The named member is still type-checked.
+    /// </remarks>
+    public string? Member { get; set; }
+
 }
