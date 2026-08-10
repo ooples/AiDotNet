@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Sun et al."
 )]
-public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly EVACLIPOptions _options;
 
@@ -264,10 +264,8 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

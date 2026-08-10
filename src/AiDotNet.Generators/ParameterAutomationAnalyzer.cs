@@ -220,15 +220,24 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         // whose layers are ALREADY reachable yields nothing at all. The keyword is
                         // therefore correct whether or not the layers were orphaned -- which is why
                         // this can be demanded without ever having to decide which case it is.
-                        if (!type.IsAbstract && !declares && !IsPartial(type)
+                        // NOT gated on `declares`. A class that declares the TENSORS hook can
+                        // still hold LAYER members needing automation -- LLaVANeuralNetwork does,
+                        // and the wholesale check silenced the demand for its grounding head.
+                        // Each member kind is gated on the hook that would actually cover it.
+                        bool coversFields = DeclaresAnyOf(type, "RegisterComponents",
+                                                          "GetExtraTrainableTensors",
+                                                          "GetParameterChunks");
+                        bool coversLayers = DeclaresAnyOf(type, "GetExtraTrainableLayers");
+                        if (!type.IsAbstract && !IsPartial(type)
                             && (InheritsRegistry(type) || InheritsExtraTensorsHook(type))
                             && type.GetMembers().Any(m =>
                                    !m.IsStatic && !m.IsImplicitlyDeclared
                                    && !HasAnyAttribute(m, "BufferAttribute", "Buffer",
                                                           "ScratchAttribute", "Scratch")
-                                   && ((m is IFieldSymbol f && f.AssociatedSymbol is null
+                                   && ((!coversFields && m is IFieldSymbol f
+                                        && f.AssociatedSymbol is null
                                         && IsWeightCapableType(f.Type))
-                                       || LayerBearingType(m) is not null))
+                                       || (!coversLayers && LayerBearingType(m) is not null)))
                             && modelLoc is not null)
                         {
                             spc.ReportDiagnostic(Diagnostic.Create(
@@ -503,6 +512,15 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             if (c.OriginalDefinition.ToDisplayString()
                  .StartsWith("AiDotNet.NeuralNetworks.Layers.LayerBase<", System.StringComparison.Ordinal))
                 return true;
+        }
+        return false;
+    }
+
+    private static bool DeclaresAnyOf(INamedTypeSymbol type, params string[] names)
+    {
+        foreach (var n in names)
+        {
+            if (type.GetMembers(n).OfType<IMethodSymbol>().Any()) return true;
         }
         return false;
     }

@@ -56,7 +56,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2308.06721", Year = 2023, Authors = "Ye et al.")]
-public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
+public partial class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

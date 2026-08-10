@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072", Year = 2024, Authors = "Yang et al.")]
-public class Causal3DVAE<T> : VAEModelBase<T>
+public partial class Causal3DVAE<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>The order the previous GetParameters built its parts array in.</remarks>

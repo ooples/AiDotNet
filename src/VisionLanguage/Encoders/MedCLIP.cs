@@ -53,7 +53,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Wang et al."
 )]
-public class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly MedCLIPOptions _options;
 
@@ -246,10 +246,8 @@ public class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

@@ -49,7 +49,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2019,
     Authors = "Tan and Bansal"
 )]
-public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly LXMERTOptions _options;
 
@@ -330,10 +330,8 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

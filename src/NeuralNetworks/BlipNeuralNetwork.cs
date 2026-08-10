@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation", "https://arxiv.org/abs/2201.12086", Year = 2022, Authors = "Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi")]
-public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
+public partial class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 {
     private readonly BlipOptions _options;
 

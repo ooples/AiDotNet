@@ -70,7 +70,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Fang et al."
 )]
-public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DFNCLIPOptions _options;
 
@@ -333,20 +333,10 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <summary>
-    /// Surface the text-encoder stack to streaming-offload / weight-registry
-    /// hooks (NeuralNetworkBase.GetExtraTrainableLayers contract). Both this
-    /// and UpdateParameters / GetParameters / ParameterCount walk
-    /// Layers + _textEncoderLayers in lockstep so the flat-vector contract
-    /// covers every trainable parameter the model exposes.
-    /// </summary>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        foreach (var layer in _textEncoderLayers)
-            if (layer is LayerBase<T> lb)
-                yield return lb;
-    }
+    // _textEncoderLayers is discovered as a layer collection and surfaced automatically. The
+    // generated hook also deduplicates against Layers by reference, which the hand-written one did
+    // not -- so the double-counting its remark worried about is now impossible rather than avoided
+    // by keeping the stack out of the surface. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

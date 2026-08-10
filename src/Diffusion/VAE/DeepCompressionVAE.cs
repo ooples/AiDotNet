@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Compression Autoencoder for Efficient High-Resolution Diffusion Models", "https://arxiv.org/abs/2410.10733", Year = 2024, Authors = "Chen et al.")]
-public class DeepCompressionVAE<T> : VAEModelBase<T>
+public partial class DeepCompressionVAE<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written

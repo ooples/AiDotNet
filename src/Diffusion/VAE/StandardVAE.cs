@@ -67,7 +67,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114")]
-public class StandardVAE<T> : VAEModelBase<T>
+public partial class StandardVAE<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Same layers, same order, as the previous GetParameters walked. The two preamble

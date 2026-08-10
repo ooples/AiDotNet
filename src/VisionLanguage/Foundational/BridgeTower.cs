@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2023,
     Authors = "Xu et al."
 )]
-public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly BridgeTowerOptions _options;
 
@@ -272,10 +272,8 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

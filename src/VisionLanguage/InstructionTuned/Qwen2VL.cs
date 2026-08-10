@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Wang et al."
 )]
-public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Qwen2VLOptions _options;
 
@@ -291,10 +291,8 @@ public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

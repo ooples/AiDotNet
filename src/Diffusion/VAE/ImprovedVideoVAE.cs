@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072")]
-public class ImprovedVideoVAE<T> : VAEModelBase<T>
+public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written

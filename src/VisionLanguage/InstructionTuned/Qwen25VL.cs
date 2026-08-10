@@ -72,7 +72,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 // dual-stream UpdateParameters / Architecture.Layers throw / Train
 // optimizer-wiring fixes in PR #1274), the same change is applied
 // across the four siblings in one commit.
-public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Qwen25VLOptions _options;
 
@@ -307,10 +307,8 @@ public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         }
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

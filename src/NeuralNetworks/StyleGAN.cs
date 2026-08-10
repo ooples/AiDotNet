@@ -82,15 +82,24 @@ public partial class StyleGAN<T> : NeuralNetworkBase<T>
     public override ModelOptions GetOptions() => _options;
 
     // MappingNetwork optimizer state
+    // Adam moment estimates, not weights. [Buffer] keeps them persistent and out of the trainable
+    // surface: registering optimizer state as a parameter both inflates ParameterCount and hands
+    // the optimizer its own moments to step on. Deleting StyleGAN's hand-written layer hook is what
+    // exposed these -- AIDN084 skips a type that declares ANY surface, so the hook had been masking
+    // them.
+    [Buffer]
     private Vector<T> _mappingMomentum;
+    [Buffer]
     private Vector<T> _mappingSecondMoment;
 
-    // SynthesisNetwork optimizer state
+    [Buffer]
     private Vector<T> _synthesisMomentum;
+    [Buffer]
     private Vector<T> _synthesisSecondMoment;
 
-    // Discriminator optimizer state
+    [Buffer]
     private Vector<T> _discMomentum;
+    [Buffer]
     private Vector<T> _discSecondMoment;
 
     private readonly double _initialLearningRate;
