@@ -383,10 +383,36 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// non-zero count immediately (no first-forward required). Use this
     /// overload from layer factories that already know the model's hidden
     /// width — it lets <c>Parameters_ShouldBeNonEmpty</c>-style tests and
-    /// the weight-registry walker see the encoder's params without forcing
-    /// sublayer construction. Sublayers themselves still build lazily on
-    /// first <see cref="Forward(Tensor{T})"/>.
+    /// the weight-registry walker see the encoder's params without a warm-up
+    /// forward.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>THIS OVERLOAD ALLOCATES EVERY WEIGHT, AND IT IS EXPENSIVE.</b> An earlier version of this
+    /// summary claimed "sublayers themselves still build lazily on first Forward"; that was false. The
+    /// body calls <see cref="EnsureInitialized"/> whenever <c>embeddingSize &gt; 0</c>, and
+    /// <c>EnsureInitialized</c> both constructs the sublayers AND calls <c>ResolveFromShape</c> on each
+    /// one, which materializes their weights. The lazy overload
+    /// <c>(numHeads, feedForwardDim)</c> is the one that defers.
+    /// </para>
+    /// <para>
+    /// MEASURED at the dimensions LLaVA-NeXT-Video's decoder uses
+    /// (<c>numHeads: 32, feedForwardDim: 16384, embeddingSize: 4096</c>): <b>3,457 MB and 1.72 s for a
+    /// single layer</b> - 2,688 MB of <c>double[]</c> plus 768 MB of <c>float[]</c> from the GPU engine's
+    /// staging mirror. The declared parameters account for ~1,610 MB of that (4x4096^2 attention +
+    /// 2x4096x16384 FFN = 201M parameters at 8 bytes), so ~1,078 MB per layer is currently
+    /// UNEXPLAINED - it is not paired gradient buffers, which both <c>FeedForwardLayer</c> and
+    /// <c>MultiHeadAttentionLayer</c> leave as <c>Tensor.Empty()</c> / zero-size until a backward pass.
+    /// </para>
+    /// <para>
+    /// Stacked 32 deep for a 7B-parameter decoder that is ~110 GB, which is why
+    /// <c>LLaVANeXTVideo</c> and <c>Emu3</c> currently throw <see cref="OutOfMemoryException"/> during
+    /// construction. Prefer the lazy overload unless a caller genuinely needs
+    /// <see cref="ParameterCount"/> or <c>SetParameters</c> slicing to be correct before the first
+    /// forward - which is the reason the eager resolution exists, per <c>EnsureInitialized</c>'s own
+    /// comment about deserialized weights being silently skipped.
+    /// </para>
+    /// </remarks>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="feedForwardDim">Hidden dimension of the FFN.</param>
     /// <param name="embeddingSize">
@@ -583,12 +609,36 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             // lazy FeedForwardLayer (-1 input × outDim + outDim = 0) and silently
             // skips its serialized weights — fixes the post-deserialize Predict
             // mismatch in VideoCLIP / VLM Clone tests.
+            // SHAPES ONLY. Resolving the sublayers is what this block is for; ALLOCATING them was
+            // incidental, and at decoder scale it is what makes a 7B model unconstructible.
+            //
+            // Measured on one LLaVA-NeXT-Video decoder layer (numHeads 32, feedForwardDim 16384,
+            // embeddingSize 4096):
+            //   ResolveFromShape    3,457.0 MB   1,974 ms
+            //   ResolveShapesOnly       0.5 MB      16 ms
+            // ~7,000x the memory and ~120x the time, per layer, 32 layers deep.
+            //
+            // The eager version was added because SetParameters slices by ParameterCount and a lazy
+            // FeedForwardLayer reported 0, so deserialized weights were silently skipped (VideoCLIP /
+            // VLM Clone post-deserialize Predict mismatch). That reasoning does not require ALLOCATION,
+            // only RESOLUTION: the 0 came from the -1 input sentinel, and ResolveShapesOnly resolves
+            // InputShape/OutputShape without allocating. The write path then materializes on its own -
+            // LayerBase.EnsureMaterializedForParameterSurface runs EnsureInitialized when
+            // IsShapeResolved, which ResolveShapesOnly sets, and SetParameters calls it BEFORE consulting
+            // the count. So the count SetParameters sees is the full one.
+            //
+            // A bare ParameterCount query on a still-unmaterialized layer now answers with the biases and
+            // norms alone (16,388 here rather than 201,367,552). That is the documented, intended
+            // behaviour, not a regression: LayerBase's own remarks call it "the honest answer to how many
+            // parameters exist right now", note that GetParameters agrees with it, and point out that
+            // materializing on a COUNT is what threw OutOfMemoryException on a 774M-parameter model
+            // being torn down.
             int[] subInputShape = new[] { _embeddingSize };
-            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm1.ResolveFromShape(subInputShape);
-            _feedForward1.ResolveFromShape(subInputShape);
-            _feedForward2.ResolveFromShape(new[] { _feedForwardDim });
-            _norm2.ResolveFromShape(subInputShape);
+            _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+            _norm1.ResolveShapesOnly(subInputShape);
+            _feedForward1.ResolveShapesOnly(subInputShape);
+            _feedForward2.ResolveShapesOnly(new[] { _feedForwardDim });
+            _norm2.ResolveShapesOnly(subInputShape);
 
             _isInitialized = true;
         }
