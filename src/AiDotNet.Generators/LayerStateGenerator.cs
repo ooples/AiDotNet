@@ -228,6 +228,27 @@ public class LayerStateGenerator : IIncrementalGenerator
                     return model;
                 }
             }
+
+            // INFERRED, not merely marked. A constructor argument the layer stores in a field is
+            // construction state whether or not anyone wrote the attribute -- that is what the
+            // field is for. Requiring the attribute made correctness opt-IN, which is why 76 of
+            // 321 layers had no factory and nothing reported it.
+            //
+            // The attribute is still honoured, and is still how to override the metadata key, name
+            // the backing member, or claim a parameter inference would decline.
+            else if (!IsActivation(p.Type, out _)
+                && Classify(p.Type) is var inferredKind and not ValueKind.Unsupported
+                && FindBackingMember(type, p, out var inferredConvert, out var inferredNullable) is { } inferredMember
+                // A nullable backing member DECLINES inference rather than erroring, unlike the
+                // marked path: an unmarked parameter that cannot round-trip is simply not state.
+                && !inferredNullable)
+            {
+                info.IsState = true;
+                info.Key = p.Name;
+                info.Kind = inferredKind;
+                info.BackingMember = inferredMember;
+                info.NeedsConvert = inferredConvert;
+            }
             else if (IsActivation(p.Type, out var vector)
                 && !(vector ? vectorActivationBound : scalarActivationBound))
             {
