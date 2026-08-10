@@ -30,6 +30,49 @@ public static class LayerFactoryRegistry<T>
     private static readonly ConcurrentDictionary<Type, Func<LayerStateBag, object?, object?, object?>> Registered =
         new();
 
+    /// <summary>
+    /// Every generated factory table visible in this process, closed over <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// A consumer's compilation emits its own <c>GeneratedLayerFactories</c> into THEIR assembly,
+    /// under the same name -- which this assembly cannot reference, so the table is discovered
+    /// rather than named. Scanned once, lazily, and never again; an assembly whose types cannot be
+    /// loaded is skipped rather than failing the clone.
+    /// </remarks>
+    private static readonly Lazy<List<MethodInfo>> DiscoveredTables = new(() =>
+    {
+        var found = new List<MethodInfo>();
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            Type[] types;
+            try
+            {
+                types = assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException e)
+            {
+                types = e.Types.Where(t => t is not null).ToArray()!;
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            foreach (var type in types)
+            {
+                if (type is not { IsGenericTypeDefinition: true, Name: "GeneratedLayerFactories`1" }) continue;
+                if (type == typeof(GeneratedLayerFactories<>)) continue;
+
+                var method = type.MakeGenericType(typeof(T))
+                    .GetMethod("TryCreate", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+
+                if (method is not null) found.Add(method);
+            }
+        }
+
+        return found;
+    });
+
     /// <summary>Registers a factory for a layer this assembly cannot name.</summary>
     /// <param name="genericDefinition">The layer's open generic type, or the type itself if not generic.</param>
     /// <param name="factory">Builds the layer from its saved state and restored activations.</param>
@@ -69,6 +112,19 @@ public static class LayerFactoryRegistry<T>
         {
             layer = registered;
             return true;
+        }
+
+        // A consumer's own generated table, if their compilation produced one. It has the same
+        // name in THEIR assembly, which this one cannot reference, so it is found rather than
+        // named. Discovery happens once and the closed TryCreate is cached as a delegate.
+        foreach (var table in DiscoveredTables.Value)
+        {
+            var args = new object?[] { genericDefinition, state, scalarActivation, vectorActivation, null };
+            if (table.Invoke(null, args) is true && args[4] is { } fromTable)
+            {
+                layer = fromTable;
+                return true;
+            }
         }
 
         return TryReflect(closedType, state, scalarActivation, vectorActivation, out layer);
