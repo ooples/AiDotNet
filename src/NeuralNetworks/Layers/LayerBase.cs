@@ -275,7 +275,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// never looks at a tensor to decide, so nothing here can make an output shape depend on data.
     /// </para>
     /// </remarks>
-    public virtual LayerInputDomain InputDomain => LayerInputDomain.Continuous;
+    /// <param name="inputShape">
+    /// The shape the caller intends to feed. Required because a layer's own <c>InputShape</c> is a
+    /// PLACEHOLDER until the shape system resolves it -- EmbeddingLayer constructs with
+    /// <c>base([1], ...)</c> -- so resolving against the layer's field would answer for a shape the
+    /// model will never see. Pass the real shape and the answer provably matches what the forward
+    /// pass will do with it.
+    /// </param>
+    public virtual LayerInputDomain GetInputDomain(int[]? inputShape) => LayerInputDomain.Continuous;
 
     /// <summary>
     /// True when this layer hands its input to the NEXT layer without altering the values, so the

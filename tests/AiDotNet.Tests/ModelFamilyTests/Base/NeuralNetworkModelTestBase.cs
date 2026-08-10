@@ -689,7 +689,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // fixture must not turn it into a confusing one from in here.
             if (CreateNetwork() is NeuralNetworkBase<T> net)
             {
-                resolved = net.GetInputDomain();
+                resolved = net.GetInputDomain(shape);
             }
         }
         catch (Exception)
