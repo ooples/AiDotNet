@@ -15,7 +15,8 @@ using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Validation;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using System.Collections.Generic;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -1230,6 +1231,25 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             copy.SetTrainingMode(IsTrainingMode);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Surfaces the vision encoder tower to the parameter walk.
+    /// </summary>
+    /// <remarks>
+    /// Flamingo keeps its vision tower outside <c>Layers</c>; on NeuralNetworkBase this hook is the only route into the parameter walk. Walking it inside UpdateParameters, as this model used to, fixed only the write path:
+    /// ParameterCount and GetParameters still described <c>Layers</c> alone, so the count and the
+    /// vector agreed with each other while both understated the model. Yielding here fixes the
+    /// count, the vector and the checkpoint together.
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        foreach (var l in base.GetExtraTrainableLayers())
+            yield return l;
+        foreach (var layer in _visionEncoderLayers)
+        {
+            if (layer is LayerBase<T> lb) yield return lb;
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)

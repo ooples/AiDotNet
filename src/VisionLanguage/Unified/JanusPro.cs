@@ -11,7 +11,8 @@ using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
+using System.Collections.Generic;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -555,30 +556,26 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             _pixelDecoderOut,
         };
 
-    public override void UpdateParameters(Vector<T> parameters)
+    /// <summary>
+    /// Surfaces the generation modules to the parameter walk.
+    /// </summary>
+    /// <remarks>
+    /// JanusPro's generation head lives outside <c>Layers</c> and is reachable only through a helper, so no base walk reached it. Walking it inside UpdateParameters, as this model used to, fixed only the write path:
+    /// ParameterCount and GetParameters still described <c>Layers</c> alone, so the count and the
+    /// vector agreed with each other while both understated the model. Yielding here fixes the
+    /// count, the vector and the checkpoint together.
+    /// </remarks>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
     {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
+        foreach (var l in base.GetExtraTrainableLayers())
+            yield return l;
+        foreach (var layer in GenerationModules())
         {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Generation modules ride at the TAIL of the flat vector — same layout as
-        // GetParameters/SetParameters — so training updates reach them (same
-        // off-Layers contract as PaLME._patchEmbed and GR00TN1/Helix._tokenEmbedding).
-        foreach (var module in GenerationModules())
-        {
-            int count = (int)module.ParameterCount;
-            if (count > 0 && idx + count <= parameters.Length)
-            {
-                module.UpdateParameters(parameters.Slice(idx, count));
-                idx += count;
-            }
+            if (layer is LayerBase<T> lb) yield return lb;
         }
     }
+
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

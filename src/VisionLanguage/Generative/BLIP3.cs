@@ -285,34 +285,7 @@ public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Q-Former and decoder are part of the trainable graph (registered
-        // via RegisterAuxiliaryEncoderStream and surfaced through
-        // GetExtraTrainableLayers), so their parameter slices live
-        // alongside the vision encoder's in the flat parameter vector.
-        foreach (var l in _qFormerLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        foreach (var l in _decoderLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();
