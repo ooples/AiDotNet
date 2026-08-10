@@ -132,7 +132,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private readonly int _outputFeatures;
     private readonly int _messageFeatures;
     private readonly bool _useEdgeFeatures;
-    private readonly Random _random;
 
     /// <summary>
     /// Message computation network (MLP).
@@ -363,7 +362,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         _outputFeatures = outputFeatures;
         _messageFeatures = messageFeatures > 0 ? messageFeatures : outputFeatures;
         _useEdgeFeatures = useEdgeFeatures;
-        _random = RandomHelper.CreateSecureRandom();
 
         // Message network: takes concatenated node features (and optionally edge features)
         int messageInputDim = 2 * inputFeatures; // source + target features

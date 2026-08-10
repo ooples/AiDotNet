@@ -80,6 +80,11 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _numMembers;
     private readonly bool _useBias;
 
+    /// <summary>
+    /// Distinguishes the r-vector and s-vector initializations when a fixed <c>RandomSeed</c> is set.
+    /// </summary>
+    private long _rankInitCallCounter;
+
     // Shared base weights
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -177,28 +182,46 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Initializes a tensor with Xavier/Glorot initialization.
     /// </summary>
+    /// <remarks>
+    /// Delegates rather than hand-rolling. The Box-Muller loop this replaced computed the RIGHT
+    /// distribution - normal scaled by <c>sqrt(2/(fanIn+fanOut))</c>, genuine Xavier, unlike
+    /// <c>CrossAttentionLayer</c>'s - but got there two wrong ways. It drew from
+    /// <c>RandomHelper.CreateSecureRandom()</c>, which is entropy-seeded per call and so ignored
+    /// <c>RandomSeed</c>, making an identically-seeded model initialize differently on every
+    /// construction. And that RNG is a <c>LockedRandom</c>, taking a lock on each of its TWO draws per
+    /// element; the base path fills the raw array with an unlocked local RNG instead.
+    /// </remarks>
     private void InitializeXavier(Tensor<T> tensor)
     {
-        var random = RandomHelper.CreateSecureRandom();
         int fanIn = tensor.Shape[0];
         int fanOut = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
-        double stdDev = Math.Sqrt(2.0 / (fanIn + fanOut));
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            tensor[i] = NumOps.FromDouble(normal * stdDev);
-        }
+        InitializeLayerWeights(tensor, fanIn, fanOut);
     }
 
     /// <summary>
     /// Initializes rank vectors centered around 1 with some variation.
     /// </summary>
+    /// <remarks>
+    /// KEEPS ITS OWN LOOP, DELIBERATELY. This is not Xavier and must not be routed to the base
+    /// initializer: BatchEnsemble's rank-1 fast weights are centred on 1.0 so that an untrained ensemble
+    /// member starts as a no-op multiplicative perturbation of the shared weights (Wen et al. 2020).
+    /// Replacing it with a zero-centred initializer would zero the shared weights' contribution instead
+    /// of leaving it untouched. Only the RNG changes here - to the seeded convention used across the
+    /// layer library - so an identically-seeded model reproduces its rank vectors. These tensors are
+    /// small (members x dim), so the per-call lock is not worth restructuring the loop over.
+    /// </remarks>
     private void InitializeRankVectors(Tensor<T> tensor, double scale)
     {
-        var random = RandomHelper.CreateSecureRandom();
+        // MIXED WITH A CALL COUNTER, not RandomSeed alone. This method initializes BOTH _rVectors and
+        // _sVectors, and BatchEnsemble's perturbation is their outer product r (x) s - so seeding both
+        // calls identically would make s == r elementwise, collapsing a rank-1 perturbation into a
+        // symmetric one and giving every ensemble member the same fast weights. LayerBase derives its
+        // per-tensor seeds the same way and for the same reason.
+        long call = System.Threading.Interlocked.Increment(ref _rankInitCallCounter);
+        var random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(
+                unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)call)))
+            : RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < tensor.Length; i++)
         {

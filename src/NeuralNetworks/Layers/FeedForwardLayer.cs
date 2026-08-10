@@ -711,13 +711,29 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
 
         if (actualInputSize > sharedInputSize)
         {
-            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
-            var random = RandomHelper.CreateSecureRandom();
-            for (int i = sharedInputSize; i < actualInputSize; i++)
+            // THE NEW ROWS ARE DRAWN FROM THE SAME DISTRIBUTION AS THE OLD ONES, via the base
+            // initializer, into a scratch tensor that is then copied in. The whole matrix cannot be
+            // re-initialized here - the rows copied above are trained weights - so a scratch tensor is
+            // what lets the sanctioned path be reused on a partial update.
+            //
+            // The loop this replaced drew scale * U(-1,1) with scale = sqrt(2/(fanIn+fanOut)), variance
+            // scale^2/3. Xavier-uniform needs a limit of sqrt(6/(fanIn+fanOut)), so those rows came out
+            // sqrt(3)x too narrow AND uniform where the rest of this matrix is Xavier-NORMAL from
+            // InitializeLayerWeights - a grown layer had two different initialization laws inside one
+            // weight matrix. It also used CreateSecureRandom, ignoring RandomSeed, so growing a layer
+            // made an otherwise reproducible model diverge.
+            //
+            // fanIn/fanOut describe the FULL resized matrix, not just the new block, so the scale
+            // matches the rows being preserved.
+            int newRowCount = actualInputSize - sharedInputSize;
+            var newRows = new Tensor<T>([newRowCount, outputSize]);
+            InitializeLayerWeights(newRows, actualInputSize, outputSize);
+
+            for (int i = 0; i < newRowCount; i++)
             {
                 for (int o = 0; o < outputSize; o++)
                 {
-                    resizedWeights[i, o] = NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1));
+                    resizedWeights[sharedInputSize + i, o] = newRows[i, o];
                 }
             }
         }

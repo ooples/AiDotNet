@@ -82,7 +82,6 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     private readonly int _outputFeatures;
     private readonly int _mlpHiddenDim;
     private readonly bool _learnEpsilon;
-    private readonly Random _random;
 
     /// <summary>
     /// Epsilon parameter for weighting self vs neighbor features.
@@ -208,7 +207,6 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         _mlpHiddenDim = mlpHiddenDim > 0 ? mlpHiddenDim : outputFeatures;
         _learnEpsilon = learnEpsilon;
         _epsilon = NumOps.FromDouble(epsilon);
-        _random = RandomHelper.CreateSecureRandom();
         _epsilonGradient = NumOps.Zero;
 
         // Initialize weights as Tensors for GPU acceleration

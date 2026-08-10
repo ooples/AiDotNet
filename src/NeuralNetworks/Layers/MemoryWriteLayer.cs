@@ -489,19 +489,24 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
         if (actualInputDim != expectedInputDim)
         {
             int memoryDim = _queryWeights.Shape[1];
-            T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputDim + memoryDim)));
-            var random = RandomHelper.CreateSecureRandom();
 
             _queryWeights = new Tensor<T>([actualInputDim, memoryDim]);
             _keyWeights = new Tensor<T>([actualInputDim, memoryDim]);
             _valueWeights = new Tensor<T>([actualInputDim, memoryDim]);
 
-            for (int i = 0; i < _queryWeights.Length; i++)
-                _queryWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-            for (int i = 0; i < _keyWeights.Length; i++)
-                _keyWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-            for (int i = 0; i < _valueWeights.Length; i++)
-                _valueWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+            // All three are replaced wholesale, so unlike FeedForwardLayer's grow path there is nothing
+            // to preserve and the base initializer can be used directly. Three things improve at once:
+            //
+            //  * The draws were scale * U(-1,1) with scale = sqrt(2/(fanIn+fanOut)) - variance scale^2/3
+            //    where Xavier-uniform wants a limit of sqrt(6/(fanIn+fanOut)), so sqrt(3)x too narrow.
+            //  * CreateSecureRandom ignored RandomSeed, so a model that adapted its input dimension
+            //    stopped being reproducible from that point on.
+            //  * THIS RUNS ON THE FORWARD PATH, not at construction. CreateSecureRandom returns a
+            //    LockedRandom, so every one of these three fills took a lock per element during
+            //    inference. The base path writes the raw array with an unlocked local RNG.
+            InitializeLayerWeights(_queryWeights, actualInputDim, memoryDim);
+            InitializeLayerWeights(_keyWeights, actualInputDim, memoryDim);
+            InitializeLayerWeights(_valueWeights, actualInputDim, memoryDim);
 
             UpdateInputShape([actualInputDim]);
         }

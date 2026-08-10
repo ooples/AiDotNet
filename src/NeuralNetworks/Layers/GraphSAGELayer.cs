@@ -83,7 +83,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private readonly int _outputFeatures;
     private readonly SAGEAggregatorType _aggregatorType;
     private readonly bool _normalize;
-    private readonly Random _random;
 
     /// <summary>
     /// Weight tensor for self features. Shape: [inputFeatures, outputFeatures].
@@ -205,7 +204,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _outputFeatures = outputFeatures;
         _aggregatorType = aggregatorType;
         _normalize = normalize;
-        _random = RandomHelper.CreateSecureRandom();
 
         // Initialize weights as Tensors for GPU acceleration
         _selfWeights = new Tensor<T>([_inputFeatures, _outputFeatures]);
