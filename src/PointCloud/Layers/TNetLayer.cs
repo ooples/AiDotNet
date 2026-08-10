@@ -262,8 +262,33 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    // UpdateParameters walked Layers by hand, distributing the flat vector slice by
-    // slice. That is the base implementation, restated.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in _mlpLayers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                var layerParameters = parameters.SubVector(offset, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                offset += layerParameterCount;
+            }
+        }
+
+        foreach (var layer in _fcLayers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                var layerParameters = parameters.SubVector(offset, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                offset += layerParameterCount;
+            }
+        }
+
+        Parameters = parameters;
+    }
     public override void ResetState()
     {
         _lastInput = null;

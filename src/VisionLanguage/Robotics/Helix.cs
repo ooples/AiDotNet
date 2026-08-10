@@ -416,11 +416,27 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        // _tokenEmbedding lives OUTSIDE Layers: it embeds token IDs on the dedicated
+        // instruction path (EmbedInstructionTokens), so it cannot join the sequential
+        // Layers walk that Predict runs image tensors through. Its parameters ride at
+        // the TAIL of the flat vector — same layout as GetParameters/SetParameters —
+        // so training updates reach the embedding table (same off-Layers contract as
+        // PaLME._patchEmbed and GR00TN1).
+        int embedCount = (int)_tokenEmbedding.ParameterCount;
+        if (embedCount > 0 && idx + embedCount <= parameters.Length)
+            _tokenEmbedding.UpdateParameters(parameters.Slice(idx, embedCount));
+    }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

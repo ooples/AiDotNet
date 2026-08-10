@@ -350,7 +350,10 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    // UpdateParameters delegated straight to SetParameters. The base does that now.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        SetParameters(parameters);
+    }
     /// <inheritdoc/>
     public override void ClearGradients()
     {

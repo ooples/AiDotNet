@@ -90,13 +90,13 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     private List<ILayer<T>>? _audioEncoderLayers;
     private ILayer<T>? _audioInputProjection;
     private ILayer<T>? _audioOutputProjection;
-    private Matrix<T>? _audioPositionalEmbedding;
+    private Tensor<T>? _audioPositionalEmbedding;
 
     // Visual encoder components
     private List<ILayer<T>>? _visualEncoderLayers;
     private ILayer<T>? _visualInputProjection;
     private ILayer<T>? _visualOutputProjection;
-    private Matrix<T>? _visualPositionalEmbedding;
+    private Tensor<T>? _visualPositionalEmbedding;
 
     // Cross-modal attention for localization
     private List<ILayer<T>>? _crossModalAttentionLayers;
@@ -228,14 +228,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         const int maxAudioLength = 500;
         const int maxVisualLength = 256;
 
-        _audioPositionalEmbedding = new Matrix<T>(maxAudioLength, _embeddingDimension);
-        _visualPositionalEmbedding = new Matrix<T>(maxVisualLength, _embeddingDimension);
+        _audioPositionalEmbedding = new Tensor<T>([maxAudioLength, _embeddingDimension]);
+        _visualPositionalEmbedding = new Tensor<T>([maxVisualLength, _embeddingDimension]);
 
         InitializeSinusoidalEmbedding(_audioPositionalEmbedding, maxAudioLength);
         InitializeSinusoidalEmbedding(_visualPositionalEmbedding, maxVisualLength);
     }
 
-    private void InitializeSinusoidalEmbedding(Matrix<T> embedding, int maxLength)
+    private void InitializeSinusoidalEmbedding(Tensor<T> embedding, int maxLength)
     {
         for (int pos = 0; pos < maxLength; pos++)
         {
@@ -640,7 +640,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         // Add positional embeddings
         if (_audioPositionalEmbedding is not null)
         {
-            var seqLen = Math.Min(projected.Shape[0], _audioPositionalEmbedding.Rows);
+            var seqLen = Math.Min(projected.Shape[0], _audioPositionalEmbedding.Shape[0]);
             for (int i = 0; i < seqLen; i++)
             {
                 for (int j = 0; j < _embeddingDimension; j++)
@@ -686,7 +686,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         // Add positional embeddings
         if (_visualPositionalEmbedding is not null)
         {
-            var seqLen = Math.Min(projected.Shape[0], _visualPositionalEmbedding.Rows);
+            var seqLen = Math.Min(projected.Shape[0], _visualPositionalEmbedding.Shape[0]);
             for (int i = 0; i < seqLen; i++)
             {
                 for (int j = 0; j < _embeddingDimension; j++)
@@ -1049,8 +1049,20 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         }
     }
 
-    // UpdateParameters was an empty override, silently dropping every restore. The base
-    // distributes the vector over the declared enumeration.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
+        // parameter values (post-optimizer-step), NOT raw gradients. The
+        // previous body misread the contract — it computed
+        // `currentParams - 0.001 * input` and called SetParameters with that,
+        // which on top of Adam's own update produced a double-step that
+        // collapsed weights to near-zero. Training_ShouldChangeParameters
+        // saw no movement because the second-step output happened to equal
+        // the first-step output's hash. Forward straight to SetParameters
+        // per the base contract — Adam already produced the correct new
+        // values.
+        SetParameters(parameters);
+    }
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

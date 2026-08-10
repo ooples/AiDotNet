@@ -577,11 +577,26 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         }
     }
 
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(offset, count));
+            offset += count;
+        }
+    }
     #endregion
 
     #region Disposal

@@ -51,7 +51,7 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<int> _elasticKernelSizes;
 
         // Attention module parameters
-        private readonly Matrix<T> _attentionWeights;
+        private readonly Tensor<T> _attentionWeights;
         private readonly Matrix<T> _attentionGradients;
         private readonly int _attentionHiddenSize;
 
@@ -83,12 +83,12 @@ namespace AiDotNet.AutoML.NAS
 
             // Initialize attention module
             int numArchitectureChoices = _elasticDepths.Count + _elasticWidthMultipliers.Count + _elasticKernelSizes.Count;
-            _attentionWeights = new Matrix<T>(_attentionHiddenSize, numArchitectureChoices);
+            _attentionWeights = new Tensor<T>([_attentionHiddenSize, numArchitectureChoices]);
             _attentionGradients = new Matrix<T>(_attentionHiddenSize, numArchitectureChoices);
 
-            for (int i = 0; i < _attentionWeights.Rows; i++)
+            for (int i = 0; i < _attentionWeights.Shape[0]; i++)
             {
-                for (int j = 0; j < _attentionWeights.Columns; j++)
+                for (int j = 0; j < _attentionWeights.Shape[1]; j++)
                 {
                     _attentionWeights[i, j] = _ops.FromDouble((_random.NextDouble() - 0.5) * 0.1);
                 }
@@ -141,12 +141,12 @@ namespace AiDotNet.AutoML.NAS
         private Vector<T> ComputeAttentionScores(Vector<T> contextVector)
         {
             // Linear attention projection: scores = W * context (no softmax needed for NAS scoring)
-            var scores = new Vector<T>(_attentionWeights.Columns);
+            var scores = new Vector<T>(_attentionWeights.Shape[1]);
 
-            for (int j = 0; j < _attentionWeights.Columns; j++)
+            for (int j = 0; j < _attentionWeights.Shape[1]; j++)
             {
                 T score = _ops.Zero;
-                for (int i = 0; i < Math.Min(_attentionWeights.Rows, contextVector.Length); i++)
+                for (int i = 0; i < Math.Min(_attentionWeights.Shape[0], contextVector.Length); i++)
                 {
                     score = _ops.Add(score, _ops.Multiply(_attentionWeights[i, j], contextVector[i]));
                 }
@@ -289,7 +289,7 @@ namespace AiDotNet.AutoML.NAS
             var embedding = config.Embedding
                 ?? throw new InvalidOperationException("Config embedding must not be null when updating attention weights.");
 
-            for (int i = 0; i < Math.Min(_attentionWeights.Rows, embedding.Length); i++)
+            for (int i = 0; i < Math.Min(_attentionWeights.Shape[0], embedding.Length); i++)
             {
                 // Gradient approximation: performance * embedding
                 T gradient = _ops.Multiply(performance, embedding[i]);
@@ -395,7 +395,7 @@ namespace AiDotNet.AutoML.NAS
         /// <summary>
         /// Gets the attention weights
         /// </summary>
-        public Matrix<T> GetAttentionWeights() => _attentionWeights;
+        public Tensor<T> GetAttentionWeights() => _attentionWeights;
 
         /// <summary>
         /// Gets the performance memory

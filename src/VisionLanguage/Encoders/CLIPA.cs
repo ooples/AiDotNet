@@ -271,11 +271,30 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         }
     }
 
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+        // Sync the text-encoder stream too. After the dual-stream split
+        // (vision in Layers, text in TextEncoderLayers via
+        // VisionLanguageModelBase + GetExtraTrainableLayers below), the
+        // flat parameter vector includes both streams, but writing back
+        // only into Layers leaves the text encoder on stale weights —
+        // the model state then de-syncs across encoders.
+        foreach (var l in TextEncoderLayers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateTextEncoderTrainableLayers();

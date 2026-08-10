@@ -776,8 +776,18 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         base.Train(trainingInput, target);
     }
 
-    // UpdateParameters was an empty override, silently dropping every restore. The base
-    // distributes the vector over the declared enumeration.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        // NeuralNetworkBase.UpdateParameters contract: the caller passes the
+        // NEW parameter values (post-optimizer-step), NOT raw gradients. The
+        // previous body was an empty no-op with a comment claiming the optimizer
+        // updates parameters in Train() — but for optimizers that route through
+        // model.UpdateParameters(newParams) as part of their step, this
+        // discarded every update and Adam saw zero parameter motion. Forward
+        // to SetParameters so the layer-side weight tensors actually receive
+        // the new values.
+        SetParameters(parameters);
+    }
     /// <inheritdoc/>
     /// <remarks>
     /// <para>

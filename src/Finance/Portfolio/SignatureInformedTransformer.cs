@@ -247,8 +247,18 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         return Objective.ConditionalValueAtRisk(losses);
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        Guard.NotNull(parameters);
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
+            offset += layerParams.Length;
+        }
+    }
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {

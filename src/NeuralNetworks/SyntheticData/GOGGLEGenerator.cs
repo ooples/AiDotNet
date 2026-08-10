@@ -827,8 +827,30 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         }
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                startIndex += layerParameterCount;
+            }
+        }
+
+        // Consume the adjacency block appended by GetParameters() so any
+        // parameter-vector-based flow (clone-by-parameters, external optimizers)
+        // actually updates the learned graph instead of silently dropping it.
+        if (_adjacency is not null && _adjacency.Length > 0
+            && startIndex + _adjacency.Length <= parameters.Length)
+        {
+            for (int i = 0; i < _adjacency.Length; i++)
+                _adjacency[i] = parameters[startIndex + i];
+        }
+    }
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

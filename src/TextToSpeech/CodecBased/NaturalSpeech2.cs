@@ -235,8 +235,19 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
     }
 
-    // UpdateParameters walked Layers by hand, distributing the flat vector slice by
-    // slice. That is the base implementation, restated.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = checked((int)l.ParameterCount);
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {

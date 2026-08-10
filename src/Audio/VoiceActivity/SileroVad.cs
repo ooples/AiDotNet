@@ -745,8 +745,23 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         }
     }
 
-    // UpdateParameters was an empty override, silently dropping every restore. The base
-    // distributes the vector over the declared enumeration.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        // Apply gradient descent updates to all layers
+        var learningRate = NumOps.FromDouble(0.001);
+
+        foreach (var layer in _convLayers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
+
+        foreach (var layer in _lstmLayers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
+
+        _outputLayer?.UpdateParameters(learningRate);
+    }
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
