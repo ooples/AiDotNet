@@ -151,6 +151,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
 
             info.TraceableNumeric = TraceableNumericOf(Unwrap(p.Type))?.ToDisplayString(FullyQualified);
+            info.Settings = SettingsOf(Unwrap(p.Type)) ?? new List<SettingModel>();
 
             var isMarked = HasStateAttribute(p);
 
@@ -323,8 +324,17 @@ public class LayerStateGenerator : IIncrementalGenerator
         // it was built with.
         // Before the interface check: a delegate is a reference type with its own save path.
         if (type.TypeKind == TypeKind.Delegate) return ValueKind.Delegate;
+        if (type is IArrayTypeSymbol { Rank: 1 } strings
+            && strings.ElementType.SpecialType == SpecialType.System_String)
+            return ValueKind.StringArray;
+
 
         if (IsLayer(type, out _)) return ValueKind.Layer;
+
+        // A plain configuration object: no behaviour, just settable values. Its properties are
+        // construction state as much as a scalar parameter is, and rebuilding it by parameterless
+        // construction alone would silently restore every one of them to its default.
+        if (SettingsOf(type) is not null) return ValueKind.Settings;
         if (IsLayerSequence(type, out _)) return ValueKind.LayerList;
 
         // A pluggable strategy: record which implementation was used and rebuild that one.
@@ -625,6 +635,22 @@ public class LayerStateGenerator : IIncrementalGenerator
             // A delegate is described rather than written down: a named static method by reference,
             // never as marshalled code. Keras marshals the Lambda layer's bytecode and made loading
             // a model arbitrary code execution (CVE-2025-9906); this refuses to.
+            // A settings object is written property by property under its own key namespace, so it
+            // rebuilds through an object initializer the compiler checks rather than by reflection.
+            if (p.Kind == ValueKind.Settings)
+            {
+                sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __metadata[\"{p.Key}.$set\"] = \"true\";");
+                foreach (var s in p.Settings)
+                {
+                    sb.AppendLine($"            __metadata[\"{p.Key}.{s.Name}\"] = "
+                        + $"global::AiDotNet.Serialization.LayerStateBag.Format(this.{p.BackingMember}.{s.Name});");
+                }
+                sb.AppendLine("        }");
+                continue;
+            }
+
             if (p.Kind == ValueKind.Delegate)
             {
                 // A traceable expression is recorded by running it, so a closure survives; anything
@@ -858,10 +884,10 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
             ValueKind.BooleanArray => $"state.BooleanArray(\"{p.Key}\")",
+            ValueKind.StringArray => $"state.StringArray(\"{p.Key}\")",
+            ValueKind.Settings => SettingsArgument(p),
             ValueKind.Delegate => $"global::AiDotNet.Serialization.DelegateState.Load<{p.TypeFqn.TrimEnd('?')}>("
                 + $"state.String(\"{p.Key}\"), \"{layerName}\", \"{p.Key}\")",
-
-
             ValueKind.DoubleArray => $"state.DoubleArray(\"{p.Key}\")",
             ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
             ValueKind.Layer => $"({p.TypeFqn.TrimEnd('?')})RebuildNested(state, \"{p.Key}\")!",
@@ -878,6 +904,55 @@ public class LayerStateGenerator : IIncrementalGenerator
         };
 
         return $"{p.Name}: {read}";
+    }
+
+    /// <summary>
+    /// Rebuilds a settings object through an object initializer, or leaves it null when none was
+    /// saved. Compile-checked property assignments rather than reflection, so a renamed property
+    /// breaks the build instead of silently restoring a default.
+    /// </summary>
+    private static string SettingsArgument(ParamModel p)
+    {
+        var assignments = string.Join(", ", p.Settings.Select(s => $"{s.Name} = {s.Read(p.Key)}"));
+        var created = $"new {p.TypeFqn.TrimEnd('?')} {{ {assignments} }}";
+        return p.AcceptsNull ? $"state.Has(\"{p.Key}.$set\") ? {created} : null" : created;
+    }
+
+    /// <summary>
+    /// The settable public properties of a plain settings object, when every one of them is a value
+    /// the metadata can carry and the type can be constructed without arguments. Anything else is
+    /// not a settings object and keeps reporting ADN0053, rather than round-tripping partially.
+    /// </summary>
+    private static List<SettingModel>? SettingsOf(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class } named || named.IsAbstract) return null;
+
+        if (!named.InstanceConstructors.Any(c => c.Parameters.Length == 0
+            && c.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal))
+            return null;
+
+        var settings = new List<SettingModel>();
+        foreach (var property in named.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (property.IsStatic || property.IsIndexer) continue;
+            if (property.DeclaredAccessibility != Accessibility.Public) continue;
+            if (property.GetMethod is null || property.SetMethod is null) continue;
+            if (property.SetMethod.DeclaredAccessibility != Accessibility.Public) continue;
+
+            var kind = Classify(property.Type);
+            if (kind is ValueKind.Unsupported or ValueKind.Settings or ValueKind.Layer
+                or ValueKind.LayerList or ValueKind.Delegate or ValueKind.Component)
+                return null;
+
+            settings.Add(new SettingModel
+            {
+                Name = property.Name,
+                Kind = kind,
+                TypeFqn = property.Type.ToDisplayString(FullyQualified),
+            });
+        }
+
+        return settings.Count > 0 ? settings : null;
     }
 
     private static readonly SymbolDisplayFormat FullyQualified =
@@ -901,14 +976,42 @@ public class LayerStateGenerator : IIncrementalGenerator
         DoubleArray,
         BooleanArray,
         Delegate,
-
-
+        StringArray,
+        Settings,
         Int32Jagged,
         Layer,
         LayerList,
-
         Component,
     }
+
+    /// <summary>One property of a settings object, and how a rebuild reads it back.</summary>
+    private sealed class SettingModel
+    {
+        public string Name = string.Empty;
+        public ValueKind Kind;
+        public string TypeFqn = string.Empty;
+
+        /// <summary>The accessor call that reads this property out of the saved state.</summary>
+        public string Read(string parameterKey)
+        {
+            var key = parameterKey + "." + Name;
+            return Kind switch
+            {
+                ValueKind.Int32 => $"state.Int32(\"{key}\")",
+                ValueKind.Int64 => $"state.Int64(\"{key}\")",
+                ValueKind.Double => $"state.Double(\"{key}\")",
+                ValueKind.Single => $"state.Single(\"{key}\")",
+                ValueKind.Boolean => $"state.Boolean(\"{key}\")",
+                ValueKind.String => $"state.String(\"{key}\")",
+                ValueKind.Int32Array => $"state.Int32Array(\"{key}\")",
+                ValueKind.DoubleArray => $"state.DoubleArray(\"{key}\")",
+                ValueKind.BooleanArray => $"state.BooleanArray(\"{key}\")",
+                ValueKind.StringArray => $"state.StringArray(\"{key}\")",
+                _ => $"state.Enum<{TypeFqn.TrimEnd('?')}>(\"{key}\")",
+            };
+        }
+    }
+
 
     private sealed class ParamModel
     {
@@ -931,6 +1034,9 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// description that survives a closure.
         /// </summary>
         public string? TraceableNumeric;
+
+        /// <summary>For a settings object, the properties that carry its state.</summary>
+        public List<SettingModel> Settings = new();
 
 
 

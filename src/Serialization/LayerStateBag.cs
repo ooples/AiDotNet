@@ -322,6 +322,19 @@ public readonly struct LayerStateBag
         return result;
     }
 
+    /// <summary>Reads a required array of strings.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored values.</returns>
+    public string[] StringArray(string key)
+    {
+        if (!TryRaw(key, out var v)) throw Missing(key, "a list of text values");
+        if (v is string[] arr) return arr;
+
+        var text = AsText(v);
+        return text.Length == 0 ? [] : text.Split('');
+    }
+
+
     /// <summary>Reads a required array of booleans, such as a per-block flag.</summary>
     /// <param name="key">The metadata key.</param>
     /// <returns>The stored values.</returns>
@@ -528,6 +541,14 @@ public readonly struct LayerStateBag
 
     /// <inheritdoc cref="Format(int)"/>
     public static string Format(bool[]? value) => value is null ? string.Empty : string.Join(",", value);
+
+    /// <inheritdoc cref="Format(int)"/>
+    /// <remarks>
+    /// Joined on the unit separator rather than a comma, because these are user-supplied names
+    /// (a graph's node and edge types) and a comma inside one would silently split it in two.
+    /// </remarks>
+    public static string Format(string[]? value) => value is null ? string.Empty : string.Join("", value);
+
 
 
     /// <inheritdoc cref="Format(int)"/>
