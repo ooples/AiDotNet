@@ -882,28 +882,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             _lossFunction);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int generatorCount = (int)Generator.GetParameterCount();
-        int discriminatorCount = (int)Discriminator.GetParameterCount();
-        int totalCount = generatorCount + discriminatorCount;
-
-        if (parameters.Length != totalCount)
-        {
-            throw new ArgumentException(
-                $"Parameters vector length ({parameters.Length}) must equal {totalCount} " +
-                $"(generator: {generatorCount} + discriminator: {discriminatorCount}).",
-                nameof(parameters));
-        }
-
-        var generatorParams = new Vector<T>(generatorCount);
-        for (int i = 0; i < generatorCount; i++)
-            generatorParams[i] = parameters[i];
-        Generator.UpdateParameters(generatorParams);
-
-        var discriminatorParams = new Vector<T>(discriminatorCount);
-        for (int i = 0; i < discriminatorCount; i++)
-            discriminatorParams[i] = parameters[generatorCount + i];
-        Discriminator.UpdateParameters(discriminatorParams);
-    }
+    // UpdateParameters split the vector between Generator and Discriminator; GetExtraTrainableLayers
+    // yields the same two in the same order, so the base reproduces the split. Removed under AIDN082.
 }

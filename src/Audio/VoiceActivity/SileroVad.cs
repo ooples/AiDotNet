@@ -73,7 +73,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Silero VAD: Pre-Trained Enterprise-Grade Voice Activity Detector", "https://github.com/snakers4/silero-vad")]
-public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
+public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     private readonly SileroVadOptions _options;
 
@@ -746,28 +746,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         }
     }
 
-    /// <summary>
-    /// Surfaces the convolutional and LSTM stacks to the parameter walk.
-    /// </summary>
-    /// <remarks>
-    /// SileroVad builds both stacks outside <c>Layers</c>. The base call is kept so the audio base's TextEncoderLayers still flow through. Walking it inside UpdateParameters, as this model used to, fixed only the write path:
-    /// ParameterCount and GetParameters still described <c>Layers</c> alone, so the count and the
-    /// vector agreed with each other while both understated the model. Yielding here fixes the
-    /// count, the vector and the checkpoint together.
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        foreach (var l in base.GetExtraTrainableLayers())
-            yield return l;
-        foreach (var layer in _convLayers)
-        {
-            if (layer is LayerBase<T> lb) yield return lb;
-        }
-        foreach (var layer in _lstmLayers)
-        {
-            if (layer is LayerBase<T> lb) yield return lb;
-        }
-    }
+    // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
     public override void UpdateParameters(Vector<T> parameters)
     {

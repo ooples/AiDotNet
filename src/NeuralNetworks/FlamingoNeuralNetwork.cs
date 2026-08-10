@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Flamingo: a Visual Language Model for Few-Shot Learning", "https://arxiv.org/abs/2204.14198", Year = 2022, Authors = "Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katie Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob Menick, Sebastian Borgeaud, Andrew Brock, Aida Nematzadeh, Sahand Sharifzadeh, Mikolaj Binkowski, Ricardo Barreira, Oriol Vinyals, Andrew Zisserman, Karen Simonyan")]
-public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
+public partial class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 {
     private readonly FlamingoOptions _options;
 
@@ -1233,24 +1233,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         return result;
     }
 
-    /// <summary>
-    /// Surfaces the vision encoder tower to the parameter walk.
-    /// </summary>
-    /// <remarks>
-    /// Flamingo keeps its vision tower outside <c>Layers</c>; on NeuralNetworkBase this hook is the only route into the parameter walk. Walking it inside UpdateParameters, as this model used to, fixed only the write path:
-    /// ParameterCount and GetParameters still described <c>Layers</c> alone, so the count and the
-    /// vector agreed with each other while both understated the model. Yielding here fixes the
-    /// count, the vector and the checkpoint together.
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        foreach (var l in base.GetExtraTrainableLayers())
-            yield return l;
-        foreach (var layer in _visionEncoderLayers)
-        {
-            if (layer is LayerBase<T> lb) yield return lb;
-        }
-    }
+    // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
     public override void UpdateParameters(Vector<T> parameters)
     {

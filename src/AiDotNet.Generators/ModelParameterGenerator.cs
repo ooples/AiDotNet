@@ -57,6 +57,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private const string RegisterHook = "RegisterComponents";
     private const string RegisterCall = "RegisterParameterComponent";
     private const string ExtraTensorsHook = "GetExtraTrainableTensors";
+    private const string ExtraLayersHook = "GetExtraTrainableLayers";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -105,28 +106,52 @@ public class ModelParameterGenerator : IIncrementalGenerator
             // nothing and cannot miss a site. Its element type is Tensor<T>, so only tensor fields
             // are automated there; matrices and vectors on that trunk stay reported.
             bool hasRegistry = InheritsRegistry(classSymbol) && !DeclaresOwn(classSymbol, RegisterHook);
-            bool hasExtraTensors = !hasRegistry
-                                   && InheritsExtraTensorsHook(classSymbol)
-                                   && !DeclaresOwn(classSymbol, ExtraTensorsHook);
-            if (!hasRegistry && !hasExtraTensors) continue;
+            bool onNetworkTrunk = !hasRegistry && InheritsExtraTensorsHook(classSymbol);
+
+            // The two hooks are suppressed INDEPENDENTLY. Coupling them was a bug: Flamingo declares
+            // its own GetExtraTrainableTensors, which silently also suppressed the layers hook, so
+            // its vision tower stayed invisible -- the very defect being automated away. Declaring
+            // one hook is a claim about that hook only.
+            bool emitTensors = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraTensorsHook);
+            bool emitLayers = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraLayersHook);
+            if (!hasRegistry && !emitTensors && !emitLayers) continue;
 
             if (!processed.Add(classSymbol.ToDisplayString())) continue;
 
-            if (hasExtraTensors)
+            if (emitTensors || emitLayers)
             {
                 var tensors = new List<string>();
+                var layerGroups = new List<string>();
                 foreach (var member in classSymbol.GetMembers())
                 {
-                    if (member is not IFieldSymbol tf) continue;
-                    if (!IsRegisterableField(tf, scratchSymbol, bufferSymbol)) continue;
-                    if (SourceFor(tf.Type, elem) != "TensorFieldParameterSource") continue;
-                    tensors.Add(tf.Name);
+                    if (member is IFieldSymbol tf)
+                    {
+                        if (!IsRegisterableField(tf, scratchSymbol, bufferSymbol)) continue;
+                        if (SourceFor(tf.Type, elem) == "TensorFieldParameterSource")
+                        {
+                            if (emitTensors) tensors.Add(tf.Name);
+                            continue;
+                        }
+                        if (!emitLayers) continue;
+                        var acc = LayerAccessorFor(tf.Type, tf.Name, elem);
+                        if (acc is not null) layerGroups.Add(acc);
+                    }
+                    else if (member is IPropertySymbol tp)
+                    {
+                        // Sub-networks are conventionally exposed as properties (GAN's Generator and
+                        // Discriminator, StyleGAN's MappingNetwork). Fields alone would miss them.
+                        if (!emitLayers) continue;
+                        if (tp.IsStatic || tp.IsImplicitlyDeclared || tp.GetMethod is null) continue;
+                        if (HasAttr2(tp, scratchSymbol) || HasAttr2(tp, bufferSymbol)) continue;
+                        var acc = LayerAccessorFor(tp.Type, tp.Name, elem);
+                        if (acc is not null) layerGroups.Add(acc);
+                    }
                 }
 
-                if (tensors.Count == 0) continue;
+                if (tensors.Count == 0 && layerGroups.Count == 0) continue;
                 context.AddSource(
                     HintName(classSymbol) + ".ModelExtraTensors.g.cs",
-                    GenerateExtraTensorsSource(classSymbol, elem, tensors));
+                    GenerateExtraTensorsSource(classSymbol, elem, tensors, layerGroups));
                 continue;
             }
 
@@ -182,30 +207,170 @@ public class ModelParameterGenerator : IIncrementalGenerator
     }
 
     private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
-                                                     List<string> tensors)
+                                                     List<string> tensors, List<string> layerGroups)
     {
         var sb = OpenPartial(classSymbol, out var closers);
-        sb.AppendLine("    /// <summary>");
-        sb.AppendLine("    /// Auto-generated: surfaces this model's tensor weights that live outside Layers,");
-        sb.AppendLine("    /// in declaration order, after whatever the base already yields.");
-        sb.AppendLine("    /// </summary>");
-        sb.AppendLine("    /// <remarks>");
-        sb.AppendLine("    /// Fields marked [Scratch] or [Buffer] are excluded, and a null field is skipped");
-        sb.AppendLine("    /// rather than yielded -- an unfitted model has no weights there yet. Declare");
-        sb.AppendLine($"    /// {ExtraTensorsHook}() by hand to take ownership and this disappears.");
-        sb.AppendLine("    /// </remarks>");
-        sb.AppendLine($"    protected override global::System.Collections.Generic.IEnumerable<Tensor<{elem}>> {ExtraTensorsHook}()");
-        sb.AppendLine("    {");
-        sb.AppendLine($"        foreach (var __t in base.{ExtraTensorsHook}()) yield return __t;");
-        foreach (var name in tensors)
+
+        if (tensors.Count > 0)
         {
-            sb.AppendLine($"        if ({name} is not null) yield return {name};");
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: surfaces this model's tensor weights that live outside Layers,");
+            sb.AppendLine("    /// in declaration order, after whatever the base already yields.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    /// <remarks>");
+            sb.AppendLine("    /// Fields marked [Scratch] or [Buffer] are excluded, and a null field is skipped");
+            sb.AppendLine("    /// rather than yielded -- an unfitted model has no weights there yet. Declare");
+            sb.AppendLine($"    /// {ExtraTensorsHook}() by hand to take ownership and this disappears.");
+            sb.AppendLine("    /// </remarks>");
+            sb.AppendLine($"    protected override global::System.Collections.Generic.IEnumerable<Tensor<{elem}>> {ExtraTensorsHook}()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        foreach (var __t in base.{ExtraTensorsHook}()) yield return __t;");
+            foreach (var name in tensors)
+            {
+                sb.AppendLine($"        if ({name} is not null) yield return {name};");
+            }
+            sb.AppendLine("    }");
         }
-        sb.AppendLine("    }");
+
+        if (layerGroups.Count > 0)
+        {
+            if (tensors.Count > 0) sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: surfaces this model's trainable layers that live outside");
+            sb.AppendLine("    /// <c>Layers</c> -- its own layer collections and its sub-networks' layers.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    /// <remarks>");
+            sb.AppendLine("    /// <para>");
+            sb.AppendLine("    /// Discovery order is declaration order, which is the serialization order.");
+            sb.AppendLine("    /// Members marked [Scratch] or [Buffer] are excluded -- use [Buffer] for a frozen");
+            sb.AppendLine("    /// teacher or target copy, which is not an independent parameter and would");
+            sb.AppendLine("    /// otherwise inflate the count and be handed to an optimizer.");
+            sb.AppendLine("    /// </para>");
+            sb.AppendLine("    /// <para>");
+            sb.AppendLine("    /// Each layer is yielded at most once, and never if it is already in <c>Layers</c>.");
+            sb.AppendLine("    /// The base folds Layers and this hook back to back WITHOUT deduplicating, so a");
+            sb.AppendLine("    /// model that both adds a sub-network's layers to Layers and owns the sub-network");
+            sb.AppendLine("    /// -- WGANGP does exactly that -- would otherwise count every one of those weights");
+            sb.AppendLine("    /// twice in ParameterCount and emit them twice from GetParameters.");
+            sb.AppendLine("    /// </para>");
+            sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    protected override global::System.Collections.Generic.IEnumerable<"
+                          + "global::AiDotNet.NeuralNetworks.Layers.LayerBase<" + elem + ">?> GetExtraTrainableLayers()");
+            sb.AppendLine("    {");
+            // A reference-identity list rather than HashSet + ReferenceEqualityComparer: that
+            // comparer does not exist on net471, which this library still targets. Layer counts are
+            // in the tens, so the linear scan costs nothing and the code compiles on every target.
+            sb.AppendLine("        var __seen = new global::System.Collections.Generic.List<object>();");
+            sb.AppendLine("        bool __IsNew(object __c)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            for (int __k = 0; __k < __seen.Count; __k++)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                if (ReferenceEquals(__seen[__k], __c)) return false;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            __seen.Add(__c);");
+            sb.AppendLine("            return true;");
+            sb.AppendLine("        }");
+            sb.AppendLine("        foreach (var __l in base.GetExtraTrainableLayers())");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (__l is not null) __IsNew(__l);");
+            sb.AppendLine("            yield return __l;");
+            sb.AppendLine("        }");
+            sb.AppendLine("        for (int __i = 0; __i < Layers.Count; __i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (Layers[__i] is object __own) __IsNew(__own);");
+            sb.AppendLine("        }");
+            foreach (var group in layerGroups)
+            {
+                sb.AppendLine($"        foreach (var __layer in {group})");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            if (__layer is global::AiDotNet.NeuralNetworks.Layers.LayerBase<{elem}> __lb && __IsNew(__layer)) yield return __lb;");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
         for (int i = 0; i < closers; i++) sb.AppendLine("}");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// An expression yielding the trainable layers a member contributes, or null when the member is
+    /// not layer-bearing.
+    /// </summary>
+    /// <remarks>
+    /// Two shapes cover what models in this library actually hold outside <c>Layers</c>: a collection
+    /// of layers (SileroVad's conv and LSTM stacks, Flamingo's vision tower, BLIP3's Q-Former), and a
+    /// whole sub-network (every GAN's generator and discriminator). Both were hand-written hooks
+    /// before this, which is the same override in a different name -- an author writing the next one
+    /// still has to know, and still forgets.
+    /// </remarks>
+    private static string? LayerAccessorFor(ITypeSymbol type, string name, string elem)
+    {
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        // A sub-network: yield the layers it owns.
+        for (var c = bare as INamedTypeSymbol; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+            {
+                return $"{name}?.Layers ?? (global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)global::System.Array.Empty<global::AiDotNet.Interfaces.ILayer<{elem}>>()";
+            }
+        }
+
+        // A single layer held in its own member -- a lazily-built patch-embedding conv, a token
+        // embedding, a projection head. NeuralNetworkBase's own documentation names this shape as
+        // the reason GetExtraTrainableLayers exists, and it is the commonest way one weight goes
+        // missing: it is not in Layers, it is not a collection, and nothing walks it.
+        if (IsLayerOf(bare, elem))
+        {
+            // Nullable element type: these fields are frequently built lazily, so a non-nullable
+            // array would be CS8601 at every site. The loop's `is LayerBase<T>` test drops nulls.
+            return $"new global::AiDotNet.Interfaces.ILayer<{elem}>?[] {{ {name} }}";
+        }
+
+        // A collection of layers.
+        ITypeSymbol? element = null;
+        if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
+        else if (bare is INamedTypeSymbol named && named.TypeArguments.Length == 1)
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal))
+            {
+                element = named.TypeArguments[0];
+            }
+        }
+        if (element is null) return null;
+        if (!IsLayerOf(element, elem)) return null;
+        var et = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+        return $"{name} ?? (global::System.Collections.Generic.IEnumerable<{et}>)global::System.Array.Empty<{et}>()";
+    }
+
+    /// <summary>ILayer&lt;T&gt; or a LayerBase&lt;T&gt; subclass over the model's element type.</summary>
+    private static bool IsLayerOf(ITypeSymbol type, string elem)
+    {
+        if (type is not INamedTypeSymbol named) return false;
+        var open = named.OriginalDefinition.ToDisplayString();
+        if (open.StartsWith("AiDotNet.Interfaces.ILayer<", System.StringComparison.Ordinal))
+            return named.TypeArguments.Length == 1 && named.TypeArguments[0].ToDisplayString() == elem;
+        for (var c = named; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.Layers.LayerBase<", System.StringComparison.Ordinal))
+            {
+                return c.TypeArguments.Length == 1 && c.TypeArguments[0].ToDisplayString() == elem;
+            }
+        }
+        return false;
+    }
+
+    private static bool HasAttr2(ISymbol s, INamedTypeSymbol? attr) =>
+        attr is not null && s.GetAttributes()
+            .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attr));
 
     private static StringBuilder OpenPartial(INamedTypeSymbol classSymbol, out int closers)
     {
