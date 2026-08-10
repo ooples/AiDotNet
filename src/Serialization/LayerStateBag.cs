@@ -490,7 +490,7 @@ public readonly struct LayerStateBag
         // one now matches it.
         try
         {
-            var created = Activator.CreateInstance(type)
+            var created = Construct(type)
                 ?? throw new InvalidOperationException(
                     $"Activator returned null for '{type.FullName}'. A component type that cannot be "
                     + "instantiated must fail here rather than hand back a null component that only "
@@ -502,8 +502,38 @@ public readonly struct LayerStateBag
         {
             throw new InvalidOperationException(
                 $"Cannot rebuild {_layerName}: '{typeName}' was saved for '{key}', but it has no "
-                + "public parameterless constructor to rebuild it with.", ex);
+                + "constructor that can be called without arguments.", ex);
         }
+    }
+
+    /// <summary>Creates a component, using a constructor whose arguments are all optional.</summary>
+    /// <param name="type">The concrete component type.</param>
+    /// <returns>The new instance.</returns>
+    /// <remarks>
+    /// <c>Activator.CreateInstance(type)</c> needs a genuinely PARAMETERLESS constructor, and a
+    /// component declaring <c>Foo(bool useNormal = true)</c> has none -- it is callable with no
+    /// arguments but has one parameter. That threw MissingMethodException and cost
+    /// DepthwiseConv1DLayer its clone, over HeInitializationStrategy. Each omitted argument takes
+    /// the default its own signature declares, never default(T), for the same reason the generated
+    /// factories do: restoring a `true` default as `false` is a silent behaviour change.
+    /// </remarks>
+    private static object? Construct(Type type)
+    {
+        var parameterless = type.GetConstructor(Type.EmptyTypes);
+        if (parameterless is not null) return parameterless.Invoke(null);
+
+        var callable = type.GetConstructors()
+            .Where(c => c.GetParameters().All(p => p.IsOptional))
+            .OrderBy(c => c.GetParameters().Length)
+            .FirstOrDefault();
+
+        if (callable is null)
+        {
+            throw new MissingMethodException(
+                $"'{type.FullName}' has no constructor callable without arguments.");
+        }
+
+        return callable.Invoke(callable.GetParameters().Select(p => p.DefaultValue).ToArray());
     }
     /// <summary>Reads a required component, failing legibly rather than returning null.</summary>
     /// <typeparam name="TComponent">The interface the constructor takes.</typeparam>
