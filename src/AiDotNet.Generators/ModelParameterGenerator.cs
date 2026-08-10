@@ -442,7 +442,28 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 if (tp.Name == "T") return tp.Name;
             }
         }
-        return type.TypeParameters.Length > 0 ? type.TypeParameters[0].Name : null;
+        if (type.TypeParameters.Length > 0) return type.TypeParameters[0].Name;
+
+        // A model that CLOSES over a concrete numeric type has no type parameter to find, and
+        // returning null here skipped it from automation entirely and silently -- LinearVectorModel
+        // is `ModelBase<double, Matrix<double>, Vector<double>>` and got nothing at all. The element
+        // type is still perfectly well known: it is the base's first type ARGUMENT. Reading it there
+        // means a model is automated whether it is generic over its scalar or fixed to one, which is
+        // a property future models should not have to know about.
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            var open = b.OriginalDefinition.ToDisplayString();
+            if ((open.StartsWith("AiDotNet.Models.ModelBase<", System.StringComparison.Ordinal)
+                 || open.StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                && b.TypeArguments.Length > 0)
+            {
+                var arg = b.TypeArguments[0];
+                // Only a CLOSED type is usable: an unsubstituted parameter is already handled above,
+                // and emitting its name here would bind to a parameter this class does not declare.
+                if (arg.TypeKind != TypeKind.TypeParameter) return arg.ToDisplayString();
+            }
+        }
+        return null;
     }
 
     /// <summary>
