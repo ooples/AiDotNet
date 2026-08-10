@@ -234,6 +234,9 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
         _beta = new Tensor<T>([0]);
     }
 
+    /// <summary>Construction state: the 'featureSize' the layer was built with.</summary>
+    private readonly int _featureSize;
+
     /// <summary>
     /// AiDotNet#1370 eager-init constructor. Pass <paramref name="featureSize"/> at
     /// construction to allocate gamma/beta immediately and resolve the layer's input
@@ -265,6 +268,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
         double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { featureSize }, new[] { featureSize })
     {
+        _featureSize = featureSize;
         if (featureSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(featureSize),
                 $"featureSize must be positive, got {featureSize}.");

@@ -83,6 +83,12 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// </summary>
     public FlashAttentionConfig Config => _config;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
+    /// <summary>Construction state: the 'embeddingDimension' the layer was built with.</summary>
+    private readonly int _embeddingDimension;
+
     /// <summary>
     /// Creates a new Flash Attention layer with the specified dimensions.
     /// </summary>
@@ -114,6 +120,8 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _embeddingDimension = embeddingDimension;
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(
@@ -150,6 +158,8 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
             [sequenceLength, embeddingDimension],
             vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        _embeddingDimension = embeddingDimension;
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(

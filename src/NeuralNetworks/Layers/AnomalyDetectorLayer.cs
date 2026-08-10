@@ -179,6 +179,9 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="AnomalyDetectorLayer{T}"/> class.
     /// </summary>
@@ -211,6 +214,7 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base([inputSize], [1])
     {
+        _inputSize = inputSize;
         _anomalyThreshold = anomalyThreshold;
         _historyCapacity = historyCapacity;
         _smoothingFactor = smoothingFactor;

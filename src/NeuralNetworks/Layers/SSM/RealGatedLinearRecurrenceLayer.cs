@@ -150,6 +150,9 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _decayParam.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Real-Gated Linear Recurrence Unit (RG-LRU) layer.
     /// </summary>
@@ -183,6 +186,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

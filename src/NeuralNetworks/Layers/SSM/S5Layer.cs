@@ -171,6 +171,9 @@ public partial class S5Layer<T> : LayerBase<T>
         _inputProjectionWeights.Length + _inputProjectionBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new S5 (Simplified State Space) layer.
     /// </summary>
@@ -200,6 +203,7 @@ public partial class S5Layer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

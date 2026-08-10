@@ -190,6 +190,9 @@ internal partial class MambaBlock<T> : LayerBase<T>
         _aLog.Length + _dParam.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Mamba block.
     /// </summary>
@@ -244,6 +247,7 @@ internal partial class MambaBlock<T> : LayerBase<T>
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

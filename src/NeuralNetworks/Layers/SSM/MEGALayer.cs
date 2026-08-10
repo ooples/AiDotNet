@@ -195,6 +195,9 @@ public partial class MEGALayer<T> : LayerBase<T>
         _outputGateWeights.Length + _outputGateBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new MEGA (Moving Average Equipped Gated Attention) layer.
     /// </summary>
@@ -231,6 +234,7 @@ public partial class MEGALayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

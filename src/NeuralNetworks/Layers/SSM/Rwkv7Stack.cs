@@ -36,6 +36,12 @@ public partial class Rwkv7Stack<T> : LayerBase<T>
 {
     private readonly List<RWKV7Block<T>> _blocks;
 
+    /// <summary>Construction state: the 'numLayers' the layer was built with.</summary>
+    private readonly int _numLayers;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>Creates a stack of RWKV-7 blocks sharing one value-residual chain.</summary>
     /// <param name="numLayers">Number of blocks. Must be at least one.</param>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -56,6 +62,8 @@ public partial class Rwkv7Stack<T> : LayerBase<T>
         : base([sequenceLength, modelDimension], [sequenceLength, modelDimension],
                (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
+        _numLayers = numLayers;
         if (numLayers < 1)
             throw new ArgumentOutOfRangeException(nameof(numLayers), "An RWKV-7 stack needs at least one block.");
 

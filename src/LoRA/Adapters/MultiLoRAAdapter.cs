@@ -53,7 +53,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// You can switch between tasks at runtime, and each task only trains its specific LoRA weights!
 /// </para>
 /// </remarks>
-public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLayer<T>
+public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLayer<T>
 {
     /// <summary>
     /// Dictionary mapping task names to their specific LoRA layers.
@@ -131,6 +131,12 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
         }
     }
 
+    /// <summary>Construction state: the 'defaultTaskName' the layer was built with.</summary>
+    private readonly string _defaultTaskName;
+
+    /// <summary>Construction state: the 'defaultRank' the layer was built with.</summary>
+    private readonly int _defaultRank;
+
     /// <summary>
     /// Initializes a new Multi-LoRA adapter with an initial default task.
     /// </summary>
@@ -166,6 +172,8 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInferenceLay
         bool freezeBaseLayer = true)
         : base(baseLayer, defaultRank, alpha, freezeBaseLayer)
     {
+        _defaultRank = defaultRank;
+        _defaultTaskName = defaultTaskName;
         if (string.IsNullOrWhiteSpace(defaultTaskName))
         {
             throw new ArgumentException("Default task name cannot be null or whitespace", nameof(defaultTaskName));

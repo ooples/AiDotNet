@@ -191,6 +191,9 @@ public partial class RetNetLayer<T> : LayerBase<T>
         _outputProjectionWeights.Length + _outputProjectionBias.Length +
         _groupNormScale.Length + _groupNormBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new RetNet (Retentive Network) layer.
     /// </summary>
@@ -223,6 +226,7 @@ public partial class RetNetLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

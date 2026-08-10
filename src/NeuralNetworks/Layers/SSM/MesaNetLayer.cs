@@ -184,6 +184,9 @@ public partial class MesaNetLayer<T> : LayerBase<T>
         _outputProjectionWeights.Length + _outputProjectionBias.Length +
         _lnGamma.Length + _lnBeta.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new MesaNet layer implementing locally optimal test-time training.
     /// </summary>
@@ -218,6 +221,7 @@ public partial class MesaNetLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

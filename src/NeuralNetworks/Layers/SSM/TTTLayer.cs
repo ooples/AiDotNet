@@ -185,6 +185,9 @@ public partial class TTTLayer<T> : LayerBase<T>
         _outputProjectionWeights.Length + _outputProjectionBias.Length +
         _lnGamma.Length + _lnBeta.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new TTT (Test-Time Training) layer implementing the TTT-Linear variant.
     /// </summary>
@@ -221,6 +224,7 @@ public partial class TTTLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

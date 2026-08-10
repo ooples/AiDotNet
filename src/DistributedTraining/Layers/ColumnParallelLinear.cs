@@ -37,6 +37,9 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
     public override long ParameterCount => _localOutputSize * (long)_inputSize + _localOutputSize;
     public int LocalOutputSize => _localOutputSize;
 
+    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
+    private readonly int _outputSize;
+
     public ColumnParallelLinear(
         ICommunicationBackend<T> backend,
         int inputSize,
@@ -47,6 +50,7 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>
                [gatherOutput ? outputSize : ShardCount(outputSize, backend.WorldSize, backend.Rank)],
                activationFunction ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
+        _outputSize = outputSize;
         _backend = backend;
         _f = new CopyToTensorParallelRegion<T>(backend);
         _gather = new GatherFromTensorParallelRegion<T>(backend, outputSize);

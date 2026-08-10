@@ -1108,6 +1108,9 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
     public Tensor<T>? LastCentroidPositions => _lastCentroidPositions;
     public int OutputChannels => _outputChannels;
 
+    /// <summary>Construction state: the 'searchRadius' the layer was built with.</summary>
+    private readonly double _searchRadius;
+
     public SetAbstractionLayer(
         int numPoints,
         double searchRadius,
@@ -1116,6 +1119,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>
         int neighborSamples)
         : base([0, inputChannels], [0, mlpDimensions[^1]])
     {
+        _searchRadius = searchRadius;
         if (numPoints <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(numPoints), "Number of points must be positive.");

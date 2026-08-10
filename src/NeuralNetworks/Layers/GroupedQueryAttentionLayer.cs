@@ -204,6 +204,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
               _outputWeights.Length + _queryBias.Length + _keyBias.Length + _valueBias.Length +
               _outputBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Grouped-Query Attention layer.
     /// </summary>
@@ -229,6 +232,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         // With an explicit head dimension the projection widths are numHeads*headDim (which may differ
         // from embeddingDimension, e.g. Gemma-style decoders), so embeddingDimension need not be divisible
         // by numHeads. Only the default (headDim = embeddingDimension/numHeads) requires that divisibility.

@@ -25,7 +25,7 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-internal class CachedGroupedQueryAttention<T> : LayerBase<T>
+internal partial class CachedGroupedQueryAttention<T> : LayerBase<T>
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
@@ -100,6 +100,9 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         set => _layerIndex = value;
     }
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new cached GQA layer.
     /// </summary>
@@ -117,6 +120,7 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % numHeads != 0)
             throw new ArgumentException($"Embedding dimension ({embeddingDimension}) must be divisible by numHeads ({numHeads}).");
         if (numHeads % numKVHeads != 0)

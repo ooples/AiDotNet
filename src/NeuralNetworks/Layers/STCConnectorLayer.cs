@@ -48,6 +48,9 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'dim' the layer was built with.</summary>
+    private readonly int _dim;
+
     /// <summary>
     /// Creates a connector that preserves the input/output feature width.
     /// </summary>
@@ -65,6 +68,7 @@ public partial class STCConnectorLayer<T> : LayerBase<T>
         int padding = 1)
         : this(dim, dim, patchesHeight, patchesWidth, kernelSize, stride, padding, stageDepth: 4, mlpDepth: 2)
     {
+        _dim = dim;
     }
 
     /// <summary>

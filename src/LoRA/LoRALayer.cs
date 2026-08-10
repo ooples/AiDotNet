@@ -145,6 +145,12 @@ public partial class LoRALayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
+    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
+    private readonly int _outputSize;
+
     /// <summary>
     /// Initializes a new LoRA layer with the specified dimensions and hyperparameters.
     /// </summary>
@@ -172,6 +178,8 @@ public partial class LoRALayer<T> : LayerBase<T>
     public LoRALayer(int inputSize, int outputSize, int rank, double alpha = -1, IActivationFunction<T>? activationFunction = null)
         : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
         if (inputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be positive");

@@ -513,6 +513,9 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
         base.Dispose(disposing);
     }
 
+    /// <summary>Construction state: the 'size' the layer was built with.</summary>
+    private readonly int _size;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SynapticPlasticityLayer{T}"/> class.
     /// </summary>
@@ -544,6 +547,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     public SynapticPlasticityLayer(int size, double stdpLtpRate = 0.005,
         double stdpLtdRate = 0.0025, double homeostasisRate = 0.0001, double minWeight = 0, double maxWeight = 1, double traceDecay = 0.95) : base([size], [size])
     {
+        _size = size;
         // Initialize cached state tensors
         _lastInput = new Tensor<T>([size]);
         _lastInput.Fill(NumOps.Zero);

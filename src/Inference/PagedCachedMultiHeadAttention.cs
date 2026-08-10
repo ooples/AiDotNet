@@ -20,7 +20,7 @@ namespace AiDotNet.Inference;
 /// For concurrent serving, create one sequence per request (distinct <see cref="SequenceId"/> values).
 /// </para>
 /// </remarks>
-internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>
+internal partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>
 {
     private readonly int _headCount;
     private readonly int _kvHeadCount;
@@ -116,6 +116,9 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <param name="kvHeadCount">
     /// Number of key/value heads for grouped-query attention. 0 (the default) means "same as
     /// <paramref name="headCount"/>" — standard multi-head attention. When smaller, K/V project to
@@ -133,6 +136,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(

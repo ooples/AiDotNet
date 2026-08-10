@@ -194,15 +194,19 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 /// detached mean for σ (so the scale learns the residual spread without an "inflate σ to kill the μ gradient"
 /// escape hatch). This is the historical DeepAR head, preserved bit-for-bit as the default.
 /// </summary>
-internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
+internal sealed partial class DeepARGaussianHead<T> : DeepARDistributionHead<T>
 {
     private readonly Tensor<T> _meanW, _meanB, _scaleW, _scaleB;
 
     public override string LikelihoodName => "Gaussian";
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
     public DeepARGaussianHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
     {
+        _hiddenSize = hiddenSize;
         var random = RandomHelper.CreateSeededRandom(seed);
         (_meanW, _meanB) = AddProjection(1, random);
         (_scaleW, _scaleB) = AddProjection(1, random);
@@ -272,7 +276,7 @@ internal sealed class DeepARGaussianHead<T> : DeepARDistributionHead<T>
 /// fat-tailed data. ν is fixed (not learned) so the log-Γ normalisation constants are true constants and the
 /// loss stays fully differentiable in (μ, σ) with standard tape ops — no differentiable log-Γ required.
 /// </summary>
-internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
+internal sealed partial class DeepARStudentTHead<T> : DeepARDistributionHead<T>
 {
     private readonly Tensor<T> _meanW, _meanB, _scaleW, _scaleB;
     private readonly double _nu;
@@ -280,9 +284,17 @@ internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
 
     public override string LikelihoodName => "StudentT";
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
+    /// <summary>Construction state: the 'degreesOfFreedom' the layer was built with.</summary>
+    private readonly double _degreesOfFreedom;
+
     public DeepARStudentTHead(int hiddenSize, double degreesOfFreedom, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
     {
+        _degreesOfFreedom = degreesOfFreedom;
+        _hiddenSize = hiddenSize;
         // ν must exceed 2 for a finite variance (so predictive std is defined). Clamp defensively.
         _nu = degreesOfFreedom > 2.0001 ? degreesOfFreedom : 2.0001;
         var random = RandomHelper.CreateSeededRandom(seed);
@@ -366,7 +378,7 @@ internal sealed class DeepARStudentTHead<T> : DeepARDistributionHead<T>
 /// distribution can be ASYMMETRIC and multi-modal-ish — the head that actually models skew, which the
 /// downstream skew-aware sizing consumes via the closed-form quantile function.
 /// </summary>
-internal sealed class DeepARSplineHead<T> : DeepARDistributionHead<T>
+internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>
 {
     // Fixed probability grid (must be strictly increasing, symmetric around 0.5 for a sane median).
     private static readonly double[] Grid = { 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95 };
@@ -377,9 +389,13 @@ internal sealed class DeepARSplineHead<T> : DeepARDistributionHead<T>
 
     public override string LikelihoodName => "Spline";
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
     public DeepARSplineHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: Grid.Length)
     {
+        _hiddenSize = hiddenSize;
         var random = RandomHelper.CreateSeededRandom(seed);
         (_knotW, _knotB) = AddProjection(Grid.Length, random);
     }

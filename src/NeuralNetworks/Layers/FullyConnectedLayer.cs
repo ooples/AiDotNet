@@ -226,6 +226,11 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
+    private readonly int _outputSize;
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="FullyConnectedLayer{T}"/> class with a scalar activation function.
     /// </summary>
@@ -264,6 +269,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     public FullyConnectedLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
@@ -285,6 +291,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
         : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
     {
+        _inputSize = inputSize;
         if (inputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputSize));
         if (outputSize <= 0)
@@ -367,6 +374,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     public FullyConnectedLayer(int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
         : base(new[] { -1 }, new[] { outputSize }, vectorActivationFunction ?? new ReLUActivation<T>())
     {
+        _outputSize = outputSize;
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 

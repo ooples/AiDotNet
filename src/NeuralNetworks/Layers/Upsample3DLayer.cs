@@ -126,6 +126,9 @@ public partial class Upsample3DLayer<T> : LayerBase<T>
 
     #region Constructors
 
+    /// <summary>Construction state: the 'scaleFactor' the layer was built with.</summary>
+    private readonly int _scaleFactor;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Upsample3DLayer{T}"/> class with uniform scaling.
     /// </summary>
@@ -144,6 +147,7 @@ public partial class Upsample3DLayer<T> : LayerBase<T>
     public Upsample3DLayer(int scaleFactor)
         : this(scaleFactor, scaleFactor, scaleFactor)
     {
+        _scaleFactor = scaleFactor;
     }
 
     /// <summary>

@@ -35,7 +35,7 @@ namespace AiDotNet.Inference;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for computations.</typeparam>
-internal class CachedMultiHeadAttention<T> : LayerBase<T>
+internal partial class CachedMultiHeadAttention<T> : LayerBase<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -130,6 +130,9 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         set => _layerIndex = value;
     }
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new cached multi-head attention layer.
     /// </summary>
@@ -153,6 +156,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(

@@ -143,6 +143,9 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         _gateWeights.Length + _gateBias.Length +
         _outputWeights.Length + _outputBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Gated Linear Attention layer.
     /// </summary>
@@ -168,6 +171,7 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

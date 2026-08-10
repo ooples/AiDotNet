@@ -183,6 +183,9 @@ public partial class BASEDLayer<T> : LayerBase<T>
         _mixingGateWeights.Length + _mixingGateBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new BASED layer that combines linear attention with sliding window attention.
     /// </summary>
@@ -225,6 +228,7 @@ public partial class BASEDLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

@@ -148,6 +148,9 @@ public partial class HGRNLayer<T> : LayerBase<T>
         _inputGateWeights.Length + _inputGateBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new HGRN (Hierarchically Gated Recurrent Neural Network) layer.
     /// </summary>
@@ -184,6 +187,7 @@ public partial class HGRNLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

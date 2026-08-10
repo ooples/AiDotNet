@@ -173,6 +173,9 @@ public partial class HedgehogLayer<T> : LayerBase<T>
         _outputGateWeights.Length + _outputGateBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Hedgehog layer with trainable feature maps for linear attention.
     /// </summary>
@@ -208,6 +211,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

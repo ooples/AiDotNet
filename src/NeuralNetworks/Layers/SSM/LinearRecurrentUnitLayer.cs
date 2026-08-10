@@ -174,6 +174,9 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
         _inputProjectionWeights.Length + _inputProjectionBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Linear Recurrent Unit (LRU) layer.
     /// </summary>
@@ -204,6 +207,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

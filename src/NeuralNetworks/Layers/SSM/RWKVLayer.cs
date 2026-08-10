@@ -181,6 +181,9 @@ public partial class RWKVLayer<T> : LayerBase<T>
         _channelKeyWeights.Length + _channelValueWeights.Length + _channelReceptanceWeights.Length +
         _normGamma1.Length + _normBeta1.Length + _normGamma2.Length + _normBeta2.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new RWKV layer.
     /// </summary>
@@ -216,6 +219,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

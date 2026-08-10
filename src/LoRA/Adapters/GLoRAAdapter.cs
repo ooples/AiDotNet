@@ -47,7 +47,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// - Total: 24,000 parameters (still 97.6% reduction from 1M!)
 /// </para>
 /// </remarks>
-public class GLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// The LoRA layer that adapts activations (layer outputs).
@@ -102,6 +102,9 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         }
     }
 
+    /// <summary>Construction state: the 'weightRank' the layer was built with.</summary>
+    private readonly int _weightRank;
+
     /// <summary>
     /// Initializes a new GLoRA adapter with the specified parameters.
     /// </summary>
@@ -142,6 +145,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         bool freezeBaseLayer = true)
         : base(baseLayer, weightRank, weightAlpha, freezeBaseLayer)
     {
+        _weightRank = weightRank;
         // Default activation rank to weight rank if not specified
         int actualActivationRank = activationRank > 0 ? activationRank : weightRank;
 

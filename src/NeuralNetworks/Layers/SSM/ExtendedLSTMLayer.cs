@@ -185,6 +185,9 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
         _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Extended LSTM (xLSTM) layer using the mLSTM (matrix memory) variant.
     /// </summary>
@@ -210,6 +213,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

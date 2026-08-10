@@ -80,6 +80,9 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
     /// <summary>The shared expert's sigmoid gate (hidden -&gt; 1; null when absent).</summary>
     public DenseLayer<T>? SharedGateLogit => _sharedGateLogit;
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
     /// <summary>Creates a sparse MoE feed-forward layer.</summary>
     /// <param name="hiddenSize">Model (residual stream) dimension.</param>
     /// <param name="ffnDim">Each expert's inner (intermediate) dimension.</param>
@@ -92,6 +95,7 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>
         int sharedFfnDim = 0)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _hiddenSize = hiddenSize;
         if (hiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
         if (ffnDim <= 0) throw new ArgumentOutOfRangeException(nameof(ffnDim));
         if (numExperts <= 0) throw new ArgumentOutOfRangeException(nameof(numExperts));

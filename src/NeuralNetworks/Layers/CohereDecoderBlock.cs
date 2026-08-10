@@ -47,6 +47,9 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>
     /// <summary>The model (input/output) feature dimension.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Construction state: the 'ffnDim' the layer was built with.</summary>
+    private readonly int _ffnDim;
+
     /// <summary>Creates a Cohere parallel-residual decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="ffnDim">FFN inner dimension.</param>
@@ -55,6 +58,7 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>
     public CohereDecoderBlock(int hiddenSize, int ffnDim, LayerBase<T> attention, double layerNormEpsilon = 1e-5)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _ffnDim = ffnDim;
         Guard.NotNull(attention);
         _hiddenSize = hiddenSize;
         _attention = attention;

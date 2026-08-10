@@ -500,6 +500,9 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         _weights2.Shape[0] * _weights2.Shape[1] +   // FC2 weights
         _bias2.Shape[0];                             // FC2 biases
 
+    /// <summary>Construction state: the 'reductionRatio' the layer was built with.</summary>
+    private readonly int _reductionRatio;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SqueezeAndExcitationLayer{T}"/> class with scalar activation functions.
     /// </summary>
@@ -532,6 +535,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([[channels]], [channels])
     {
+        _reductionRatio = reductionRatio;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastChannelAttentionLoss = NumOps.Zero;
@@ -581,6 +585,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([[channels]], [channels])
     {
+        _reductionRatio = reductionRatio;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastChannelAttentionLoss = NumOps.Zero;

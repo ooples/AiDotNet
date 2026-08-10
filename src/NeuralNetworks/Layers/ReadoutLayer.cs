@@ -145,6 +145,12 @@ public partial class ReadoutLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
+    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
+    private readonly int _outputSize;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ReadoutLayer{T}"/> class with a scalar activation function.
     /// </summary>
@@ -175,6 +181,8 @@ public partial class ReadoutLayer<T> : LayerBase<T>
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], scalarActivation)
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         _weights = new Tensor<T>([outputSize, inputSize]);
@@ -220,6 +228,8 @@ public partial class ReadoutLayer<T> : LayerBase<T>
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], vectorActivation)
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         _weights = new Tensor<T>([outputSize, inputSize]);

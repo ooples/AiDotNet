@@ -404,6 +404,9 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _runningVariance = new Tensor<T>([0]);
     }
 
+    /// <summary>Construction state: the 'numFeatures' the layer was built with.</summary>
+    private readonly int _numFeatures;
+
     /// <summary>
     /// AiDotNet#1370 eager-init constructor. Pass <paramref name="numFeatures"/> at
     /// construction (the channel count for image-like inputs OR the feature count
@@ -433,6 +436,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         double momentum = 0.9)
         : base(new[] { numFeatures }, new[] { numFeatures })
     {
+        _numFeatures = numFeatures;
         if (numFeatures <= 0)
             throw new ArgumentOutOfRangeException(nameof(numFeatures),
                 $"numFeatures must be positive, got {numFeatures}.");

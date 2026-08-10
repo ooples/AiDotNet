@@ -1103,7 +1103,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<
 /// tape forward (<c>AutoformerModel.EncoderLayerEngine</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
-internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -1144,10 +1144,14 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'seed' the layer was built with.</summary>
+    private readonly int _seed;
+
     public AutoformerEncoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
         : base(new[] { embeddingDim }, new[] { embeddingDim * 2 })
     {
+        _seed = seed;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _movingAvgKernel = movingAvgKernel;
@@ -1273,7 +1277,7 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 /// tape forward (<c>AutoformerModel.DecoderLayerEngine</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
-internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -1325,10 +1329,14 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'seed' the layer was built with.</summary>
+    private readonly int _seed;
+
     public AutoformerDecoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
         : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim * 2 })
     {
+        _seed = seed;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _movingAvgKernel = movingAvgKernel;

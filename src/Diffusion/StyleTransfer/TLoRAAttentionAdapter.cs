@@ -68,6 +68,12 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'rank' the layer was built with.</summary>
+    private readonly int _rank;
+
+    /// <summary>Construction state: the 'totalTimesteps' the layer was built with.</summary>
+    private readonly int _totalTimesteps;
+
     /// <summary>
     /// Wraps <paramref name="inner"/> with a T-LoRA adapter over <paramref name="channels"/> width.
     /// </summary>
@@ -85,6 +91,8 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         : base(inner?.GetInputShape() ?? throw new ArgumentNullException(nameof(inner)),
                inner.GetOutputShape())
     {
+        _totalTimesteps = totalTimesteps;
+        _rank = rank;
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), channels, "Channel width must be positive.");
 

@@ -220,6 +220,9 @@ public partial class Mamba2Block<T> : LayerBase<T>
         _outputProjectionWeights.Length + _outputProjectionBias.Length +
         _normGamma.Length + _normBeta.Length;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new Mamba-2 block with State Space Duality (SSD) computation.
     /// </summary>
@@ -264,6 +267,7 @@ public partial class Mamba2Block<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

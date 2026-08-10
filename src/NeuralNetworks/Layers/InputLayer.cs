@@ -66,6 +66,9 @@ public partial class InputLayer<T> : LayerBase<T>
         return inputs[0];
     }
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="InputLayer{T}"/> class with the specified input size.
     /// </summary>
@@ -90,6 +93,7 @@ public partial class InputLayer<T> : LayerBase<T>
         int inputSize)
         : base([inputSize], [inputSize], new IdentityActivation<T>() as IActivationFunction<T>)
     {
+        _inputSize = inputSize;
     }
 
     /// <summary>

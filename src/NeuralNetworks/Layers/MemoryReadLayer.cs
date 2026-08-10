@@ -240,6 +240,9 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'outputDimension' the layer was built with.</summary>
+    private readonly int _outputDimension;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MemoryReadLayer{T}"/> class with the specified dimensions
     /// and a scalar activation function.
@@ -270,6 +273,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MemoryReadLayer(int memoryDimension, int outputDimension, IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1 }, new[] { outputDimension }, activationFunction ?? new IdentityActivation<T>())
     {
+        _outputDimension = outputDimension;
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
         if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
 
@@ -341,6 +345,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public MemoryReadLayer(int memoryDimension, int outputDimension, IVectorActivationFunction<T> activationFunction)
         : base(new[] { -1 }, new[] { outputDimension }, activationFunction ?? new IdentityActivation<T>())
     {
+        _outputDimension = outputDimension;
         if (memoryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(memoryDimension));
         if (outputDimension <= 0) throw new ArgumentOutOfRangeException(nameof(outputDimension));
 

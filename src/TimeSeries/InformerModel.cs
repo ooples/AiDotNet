@@ -1087,7 +1087,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 /// <summary>
 /// Tensor-based encoder layer for Informer with ProbSparse attention.
 /// </summary>
-internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
 
     private readonly int _embeddingDim;
@@ -1144,9 +1144,13 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'dropoutRate' the layer was built with.</summary>
+    private readonly double _dropoutRate;
+
     public InformerEncoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
     {
+        _dropoutRate = dropoutRate;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
@@ -1269,7 +1273,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 /// <summary>
 /// Tensor-based distilling convolution layer for sequence compression.
 /// </summary>
-internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
+internal partial class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
 
     private readonly int _embeddingDim;
@@ -1299,9 +1303,13 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'inputSeqLen' the layer was built with.</summary>
+    private readonly int _inputSeqLen;
+
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
     {
+        _inputSeqLen = inputSeqLen;
         _embeddingDim = embeddingDim;
         _distillingFactor = distillingFactor;
 
@@ -1440,9 +1448,13 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Informer runs its forward pass at the model level (InformerModel.ForwardBatch); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'sparsityFactor' the layer was built with.</summary>
+    private readonly int _sparsityFactor;
+
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim })
     {
+        _sparsityFactor = sparsityFactor;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
