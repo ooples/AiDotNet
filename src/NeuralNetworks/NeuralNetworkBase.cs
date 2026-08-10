@@ -619,6 +619,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // for a fully-architecturally-defined model. Idempotent: chain
         // resolution only happens once per network instance, guarded by
         // each layer's IsShapeResolved short-circuit.
+        //
+        // EnsureParametersReady first, for the same reason ParameterCount calls it first: a model
+        // that builds its layers lazily has nothing to walk until it has run its own initializer.
+        EnsureParametersReady();
         ResolveLazyLayerShapes();
 
         // Size the flat buffer from the SAME quantity that fills it — each
@@ -2011,6 +2015,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // per-layer ParameterCount. Lazy DenseLayer / ConvolutionalLayer / FullyConnectedLayer
             // / FeedForwardLayer return 0 from ParameterCount when InputShape[0] is still the -1
             // sentinel (issue #1209's lazy-shape-inference migration).
+            //
+            // EnsureParametersReady comes FIRST: resolving shapes over Layers is meaningless for a
+            // model whose layers are not built yet. Models used to solve that by overriding this
+            // property to call their own initializer and delegate to base -- see the hook's remarks.
+            EnsureParametersReady();
             ResolveLazyLayerShapes();
 
             // Sum per-layer counts FRESH on every access. The previous cached
@@ -3186,6 +3195,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public void MaterializeParameters()
     {
+        EnsureParametersReady();
         ResolveLazyLayerShapes();
 
         if (Layers is not null)
@@ -3202,6 +3212,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (extra is LayerBase<T> extraLayer) extraLayer.MaterializeParameters();
         }
     }
+
+    /// <summary>
+    /// Hook for a model that builds its own weights lazily, called before every parameter surface
+    /// reads them. Override it to finish construction; the default does nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ResolveLazyLayerShapes"/> handles the shapes of layers the base can already see.
+    /// It cannot help a model whose LAYERS do not exist yet -- one that defers building its encoder
+    /// and decoder until a native-mode initializer runs. Those models used to override ParameterCount,
+    /// GetParameters and SetParameters identically, each doing nothing but calling their initializer
+    /// and then delegating straight back to base. Three overrides per model to express one fact:
+    /// "materialize me first".
+    /// </para>
+    /// <para>
+    /// This is that one fact, in one member. The base calls it from every surface that reads
+    /// parameters, so a model states its lazy construction ONCE and the count, the vector, the
+    /// restore and the chunks all observe it. Overriding a parameter surface to add an initializer
+    /// call is now never necessary, and an override that forgets one surface -- which is how a count
+    /// and a vector come to disagree -- is no longer possible to write.
+    /// </para>
+    /// <para>
+    /// Implementations MUST be idempotent: this runs on every parameter read.
+    /// </para>
+    /// </remarks>
+    protected virtual void EnsureParametersReady()
+    {
+    }
+
 
 
 
@@ -12454,6 +12493,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(parameters));
         }
 
+        // Restore must see the same model the count and the vector saw.
+        EnsureParametersReady();
+
         // ParameterCount is long; SetParameters takes a flat Vector<T> whose
         // Length is int. Guard at this boundary: if the model's true
         // parameter count exceeds int.MaxValue the caller can't even
@@ -12529,6 +12571,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // forms keyed by exactly that identity. Single source of truth:
         // see InvalidateWeightCachesAfterSuccessfulWeightUpdate.
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+
+        // Last, so a model that derives state from its weights can rebuild it.
+        OnParametersRestored();
+    }
+
+    /// <summary>
+    /// Hook called after <see cref="SetParameters"/> has written every weight. Override it to
+    /// rebuild anything derived from those weights; the default does nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Some models cache an object built FROM their parameters rather than reading the parameters
+    /// directly on each use -- InverseProblemPINN holds a parameterized PDE it constructs from the
+    /// coefficients it is solving for. Restoring the coefficients without rebuilding that object
+    /// leaves the model computing with the old physics while reporting the new weights.
+    /// </para>
+    /// <para>
+    /// Models used to handle this by overriding UpdateParameters with a full reimplementation of
+    /// restore -- re-slicing the vector per layer, writing their own tensors, then rebuilding.
+    /// That is how the two restore paths came to disagree: SetParameters, the one serialization
+    /// actually calls, silently did less. Declare the weights through GetExtraTrainableTensors and
+    /// put ONLY the rebuild here, and both paths do the same thing because there is only one.
+    /// </para>
+    /// </remarks>
+    protected virtual void OnParametersRestored()
+    {
     }
 
     /// <summary>

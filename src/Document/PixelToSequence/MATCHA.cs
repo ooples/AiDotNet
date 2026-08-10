@@ -747,40 +747,22 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     #region NeuralNetworkBase Implementation
 
-    /// <inheritdoc/>
-    public override long ParameterCount
-    {
-        get
-        {
-            if (_useNativeMode)
-            {
-                EnsureNativeInitialized();
-            }
-
-            return base.ParameterCount;
-        }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <inheritdoc />
+    /// <remarks>
+    /// MATCHA builds its encoder and decoder lists inside EnsureNativeInitialized, so in native mode there is nothing for the base to walk until that has run.
+    /// <para>
+    /// This replaces separate ParameterCount, GetParameters and SetParameters overrides that
+    /// each ran the initializer and then called base. The base calls this hook from all of
+    /// them, so the count, the vector, the restore and the chunks cannot observe different
+    /// stages of construction.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersReady()
     {
         if (_useNativeMode)
         {
             EnsureNativeInitialized();
         }
-
-        return base.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (_useNativeMode)
-        {
-            EnsureNativeInitialized();
-        }
-
-        base.SetParameters(parameters);
     }
 
     /// <inheritdoc/>
