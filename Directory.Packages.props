@@ -276,7 +276,7 @@
          released package containing the serving branch's required Tensors APIs. Managed and native
          packages are coreleased in lockstep. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.121.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.121.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.122.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.121.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.121.0" />
     <!-- Microsoft / .NET -->
