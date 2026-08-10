@@ -354,7 +354,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The weight matrix for reservoir-to-output connections.
     /// </summary>
-    private Matrix<T> _outputWeights;
+    private Tensor<T> _outputWeights;
 
     /// <summary>
     /// The bias vector for the reservoir.
@@ -494,7 +494,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _reservoirState = new Vector<T>(_reservoirSize);
         _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
         _reservoirWeights = new Matrix<T>(_reservoirSize, _reservoirSize);
-        _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
+        _outputWeights = new Tensor<T>([_reservoirSize, _outputSize]);
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
         _currentState = new Vector<T>(_reservoirSize); // Must match reservoir size, not input size
@@ -578,7 +578,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _reservoirState = new Vector<T>(_reservoirSize);
         _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
         _reservoirWeights = new Matrix<T>(_reservoirSize, _reservoirSize);
-        _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
+        _outputWeights = new Tensor<T>([_reservoirSize, _outputSize]);
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
         _currentState = new Vector<T>(_reservoirSize); // Must match reservoir size, not input size
@@ -608,7 +608,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Initialize weights with small random values
         _inputWeights = new Matrix<T>(_inputSize, _reservoirSize);
         _reservoirWeights = new Matrix<T>(_reservoirSize, _reservoirSize);
-        _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
+        _outputWeights = new Tensor<T>([_reservoirSize, _outputSize]);
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
         _currentState = new Vector<T>(_reservoirSize); // Start with zero state
@@ -837,9 +837,18 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <returns>The output vector.</returns>
     private Vector<T> ComputeOutput()
     {
-        // Vectorized output: transpose(output_weights) * reservoir_state + output_bias
-        var outputWeightsTransposed = Engine.MatrixTranspose(_outputWeights);
-        Vector<T> linearOutput = Engine.MatrixVectorMultiply(outputWeightsTransposed, _currentState);
+        // Vectorized output: transpose(output_weights) * reservoir_state + output_bias.
+        // _outputWeights is [reservoirSize, outputSize], so state-as-row @ W gives [1, outputSize]
+        // directly -- the same product the MatrixTranspose + MatrixVectorMultiply pair computed,
+        // without materialising the transpose. It is a tensor because the readout is this model's
+        // only trainable parameter block and the base restores by writing through declared tensors.
+        var stateRow = new Tensor<T>([1, _reservoirSize], _currentState);
+        var linearRow = Engine.TensorMatMul(stateRow, _outputWeights);
+        Vector<T> linearOutput = new Vector<T>(_outputSize);
+        for (int j = 0; j < _outputSize; j++)
+        {
+            linearOutput[j] = linearRow[0, j];
+        }
         Vector<T> preActivation = Engine.Add(linearOutput, _outputBias);
 
         // Apply output activation if specified
@@ -1137,60 +1146,34 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override long ParameterCount => (long)_reservoirSize * _outputSize + _outputSize;
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var p = new Vector<T>(_reservoirSize * _outputSize + _outputSize);
-        int idx = 0;
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _outputSize; j++)
-                p[idx++] = _outputWeights[i, j];
-        for (int j = 0; j < _outputSize; j++)
-            p[idx++] = _outputBias[j];
-        return p;
-    }
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _outputSize; j++)
-                _outputWeights[i, j] = parameters[idx++];
-        for (int j = 0; j < _outputSize; j++)
-            _outputBias[j] = parameters[idx++];
-    }
-
-    /// <inheritdoc/>
+    /// <summary>
+    /// Declares the readout -- the ESN's only trainable parameters.
+    /// </summary>
     /// <remarks>
-    /// ESN's only trainable parameters are the readout: <c>_outputWeights</c>
-    /// (a <see cref="Matrix{T}"/> field set by <c>Train</c>'s gradient-descent
-    /// loop, see <c>EchoStateNetwork.Train</c>) and <c>_outputBias</c>. Neither
-    /// lives in the <c>Layers</c> list — the default base <c>GetParameterChunks</c>
-    /// walks <c>Layers</c> and would yield nothing, so the framework-level
-    /// invariant tests (<c>Training_ShouldChangeParameters</c>,
-    /// <c>GradientFlow_ShouldBeNonZeroAndFinite</c>) saw zero chunks and
-    /// reported "no parameters changed" even though Train was mutating the
-    /// readout. Yielding the readout tensors here matches the
-    /// <see cref="ParameterCount"/> / <see cref="GetParameters"/> /
-    /// <see cref="SetParameters"/> trio so callers that mix the flat and
-    /// chunked APIs see a consistent parameter set. Issue #1332 cluster 6.
+    /// <para>
+    /// An Echo State Network trains ONLY its output layer. The input and reservoir weights are drawn
+    /// once and left fixed; that is the defining property of reservoir computing (Jaeger 2001), not
+    /// an omission, so <c>_inputWeights</c> and <c>_reservoirWeights</c> are deliberately absent
+    /// here and stay <c>Matrix&lt;T&gt;</c>. Declared weights-then-bias, the order the deleted
+    /// GetParameters produced.
+    /// </para>
+    /// <para>
+    /// This replaces four members that each restated that layout: a ParameterCount formula, a
+    /// GetParameters copying the readout out element by element, a SetParameters copying it back,
+    /// and a GetParameterChunks that built a SEPARATE pair of tensors and copied into those. That
+    /// last one is why <c>_outputWeights</c> is now a <c>Tensor&lt;T&gt;</c>: the base restores by
+    /// writing THROUGH the declared tensors, so a chunk that is a copy would be written and then
+    /// discarded, leaving the model on its old readout while reporting the new one.
+    /// </para>
+    /// <para>
+    /// The bias stays a <c>Vector&lt;T&gt;</c> -- a tensor built over a vector shares its storage,
+    /// so writes through this view land in the field itself.
+    /// </para>
     /// </remarks>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        var weightTensor = new Tensor<T>([_reservoirSize, _outputSize]);
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _outputSize; j++)
-                weightTensor[i, j] = _outputWeights[i, j];
-        yield return weightTensor;
-
-        var biasTensor = new Tensor<T>([_outputSize]);
-        for (int j = 0; j < _outputSize; j++)
-            biasTensor[j] = _outputBias[j];
-        yield return biasTensor;
+        yield return _outputWeights;
+        yield return new Tensor<T>([_outputBias.Length], _outputBias);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -1764,7 +1747,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Write weight matrices and bias vectors
         SerializeMatrix(writer, _inputWeights);
         SerializeMatrix(writer, _reservoirWeights);
-        SerializeMatrix(writer, _outputWeights);
+        SerializeTensor2D(writer, _outputWeights);
         SerializeVector(writer, _reservoirBias);
         SerializeVector(writer, _outputBias);
 
@@ -1777,6 +1760,44 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="writer">The binary writer.</param>
     /// <param name="matrix">The matrix to serialize.</param>
+    /// <summary>
+    /// Writes a 2-D tensor in EXACTLY the layout <see cref="SerializeMatrix"/> uses (rows, then
+    /// columns, then row-major doubles), so a checkpoint written before the readout became a
+    /// tensor still reads back correctly.
+    /// </summary>
+    private void SerializeTensor2D(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor.Shape[0]);
+        writer.Write(tensor.Shape[1]);
+
+        for (int i = 0; i < tensor.Shape[0]; i++)
+        {
+            for (int j = 0; j < tensor.Shape[1]; j++)
+            {
+                writer.Write(Convert.ToDouble(tensor[i, j]));
+            }
+        }
+    }
+
+    /// <summary>Reads a 2-D tensor written by <see cref="SerializeTensor2D"/>.</summary>
+    private Tensor<T> DeserializeTensor2D(BinaryReader reader)
+    {
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+
+        var tensor = new Tensor<T>([rows, columns]);
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < columns; j++)
+            {
+                tensor[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        return tensor;
+    }
+
     private void SerializeMatrix(BinaryWriter writer, Matrix<T> matrix)
     {
         writer.Write(matrix.Rows);
@@ -1894,7 +1915,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Read weight matrices and bias vectors
         _inputWeights = DeserializeMatrix(reader);
         _reservoirWeights = DeserializeMatrix(reader);
-        _outputWeights = DeserializeMatrix(reader);
+        _outputWeights = DeserializeTensor2D(reader);
         _reservoirBias = DeserializeVector(reader);
         _outputBias = DeserializeVector(reader);
 
