@@ -557,20 +557,8 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
         return x;
     }
 
-    /// <summary>
-    /// Updates parameters using the provided gradients.
-    /// </summary>
-    /// <param name="gradients">Gradient vector for parameter updates.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Parameters are updated through the optimizer in the
-    /// base Train() → TrainWithTape path. This method exists for interface compliance.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        // Parameters are updated through the optimizer in the base Train() → TrainWithTape path.
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the DiffusionTS model.
     /// </summary>

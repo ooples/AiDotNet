@@ -348,31 +348,8 @@ public class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat vector.
-    /// </summary>
-    /// <param name="parameters">Flat parameter vector.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces model weights, used during optimization and loading.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var lp = layer.GetParameters();
-            if (offset + lp.Length <= parameters.Length)
-            {
-                var np = new Vector<T>(lp.Length);
-                for (int i = 0; i < lp.Length; i++) np[i] = parameters[offset + i];
-                layer.UpdateParameters(np);
-                offset += lp.Length;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects model metadata.
     /// </summary>

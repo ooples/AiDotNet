@@ -832,42 +832,11 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         return base.GetNamedLayerActivations(preprocessed);
     }
 
-    /// <summary>
-    /// Updates all model parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">A flat vector containing all model parameters concatenated in layer
-    /// order. The total length must equal the sum of all layer parameter counts.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the flat parameter vector to individual layers by slicing it
-    /// according to each layer's parameter count. This is useful for:
-    /// - Loading parameters from an external source
-    /// - Implementing custom optimization algorithms
-    /// - Parameter averaging across multiple model checkpoints
-    ///
-    /// Parameters are applied in the same order as layers: BiLSTM weights, dropout (no params),
-    /// Dense weights/biases, CRF transition matrix.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method sets all the model's learnable numbers at once from a
-    /// single list. You typically don't need to call this directly - the optimizer handles
-    /// parameter updates during training. It's mainly useful for advanced scenarios like loading
-    /// saved model parameters.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="NotSupportedException">Thrown when called in ONNX mode.</exception>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Preprocesses token embeddings by padding or truncating to MaxSequenceLength before
     /// feeding them to the BiLSTM.

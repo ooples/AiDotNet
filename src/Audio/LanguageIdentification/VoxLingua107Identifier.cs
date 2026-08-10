@@ -503,24 +503,8 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            // Apply actual parameter updates from optimizer
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                layerParams[i] = newParams[i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

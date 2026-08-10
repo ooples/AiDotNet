@@ -1232,33 +1232,8 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         return result;
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        foreach (var layer in _visionEncoderLayers
-            .Concat(_perceiverLayers)
-            .Concat(_gatedCrossAttentionLayers)
-            .Concat(_languageModelLayers)
-            .Concat(new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection }
-                .Where(layer => layer is not null)
-                .Cast<ILayer<T>>()))
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount && offset + i < parameters.Length; i++)
-                {
-                    layerParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
-            }
-        }
-    }
-
+    // UpdateParameters walked Layers by hand, distributing the flat vector slice by
+    // slice. That is the base implementation, restated.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

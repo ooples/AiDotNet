@@ -581,23 +581,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates network parameters using a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all parameters.</param>
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParams = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParams);
-            layer.UpdateParameters(layerParameters);
-            index += layerParams;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata about this model.
     /// </summary>

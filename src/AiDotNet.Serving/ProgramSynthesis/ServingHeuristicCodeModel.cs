@@ -27,10 +27,8 @@ internal sealed class ServingHeuristicCodeModel : CodeModelBase<double>
 
     protected override Tensor<double> PredictCore(Tensor<double> input) => input;
 
-    public override void UpdateParameters(Vector<double> parameters)
-    {
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override void Train(Tensor<double> input, Tensor<double> expectedOutput)
     {
     }

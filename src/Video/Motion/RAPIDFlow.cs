@@ -414,34 +414,8 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
     // updates feed straight back into the encoder / refinement / decoder
     // weights without a separate Train override.
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int expectedLength = 0;
-        foreach (var layer in Layers)
-        {
-            expectedLength = checked(expectedLength + layer.GetParameters().Length);
-        }
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedLength} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (p.Length == 0) continue;
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -290,13 +290,8 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         return EvaluateImage(tensor);
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (Layers.Count == 0) return;
-        Layers[0].UpdateParameters(parameters);
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// AIE's <see cref="Predict"/> doesn't feed the input image directly into
     /// <c>Layers[0]</c> — it first extracts a 3-element feature vector

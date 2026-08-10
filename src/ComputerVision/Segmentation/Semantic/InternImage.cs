@@ -359,33 +359,8 @@ public class InternImage<T> : Common.SemanticSegmentationBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters from a flat vector.
-    /// </summary>
-    /// <param name="parameters">Flat parameter vector ordered by layer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values, used during optimization
-    /// and when loading saved models.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var newParams = new Vector<T>(count);
-                for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
-                layer.UpdateParameters(newParams);
-                offset += count;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this InternImage model.
     /// </summary>

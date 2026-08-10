@@ -517,62 +517,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates all parameters in the network (required by NeuralNetworkBase).
-    /// Distributes parameters across all CMS blocks and recurrent layers.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        if (Layers == null || Layers.Count == 0)
-            throw new InvalidOperationException("Network layers are not initialized");
-
-        // Calculate total parameter count across all layers
-        int totalParams = 0;
-        foreach (var layer in Layers)
-        {
-            if (layer == null)
-                throw new InvalidOperationException("Layer is null");
-
-            totalParams += (int)layer.ParameterCount;
-        }
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length ({parameters.Length}) does not match total parameters ({totalParams})",
-                nameof(parameters));
-        }
-
-        // Distribute parameters to each layer
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerParamCount);
-
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-
-            layer.SetParameters(layerParams);
-            offset += layerParamCount;
-        }
-
-        // SetParameters mutates each layer's weight tensors IN PLACE, but the
-        // CPU/GPU inference fast paths cache DERIVED weight forms (pre-packed
-        // GEMM B-panels) keyed by the weight array's object identity, not its
-        // contents. Without this flush a network loaded via UpdateParameters —
-        // notably a Clone() built through CreateNewInstance + UpdateParameters —
-        // keeps serving packs computed from its constructor-init weights and
-        // predicts differently from the source despite bit-identical parameters
-        // (Clone_AfterTraining_ShouldPreserveLearnedWeights / Issue1296 class).
-        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-    }
-
+    // UpdateParameters refused unconditionally; the base implements it properly.
     /// <summary>
     /// Trains the network on a single input-output pair (required by NeuralNetworkBase).
     /// </summary>

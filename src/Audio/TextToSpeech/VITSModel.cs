@@ -794,35 +794,10 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
     }
 
-    /// <summary>
-    /// Updates model parameters using the configured optimizer.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // Use the configured optimizer for parameter updates
-        var currentParams = GetParameters();
-
-        // A NULL CHECK, NOT A TYPE TEST. _optimizer is declared
-        // IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?, so `is IGradientBasedOptimizer<...>`
-        // succeeded for every non-null value and the manual-SGD else branch was unreachable. Leaving it
-        // there was worse than dead code: it read as a supported fallback, so the 2e-4 rate written into
-        // it looked like a live tuning knob when nothing could ever execute it.
-        if (_optimizer is null)
-        {
-            throw new InvalidOperationException(
-                "VITSModel has no optimizer, so UpdateParameters cannot apply gradients. Construct the " +
-                "model through the native constructor, which supplies one, or inject your own.");
-        }
-
-        var updatedParams = _optimizer.UpdateParameters(currentParams, gradients);
-        SetParameters(updatedParams);
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on input data.
     /// </summary>

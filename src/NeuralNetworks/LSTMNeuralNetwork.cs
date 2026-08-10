@@ -311,53 +311,8 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the internal parameters (weights and biases) of the network with new values.
-    /// This is typically used after training to apply optimized parameters.
-    /// </summary>
-    /// <param name="parameters">
-    /// A vector containing all parameters for all layers in the network.
-    /// The parameters must be in the correct order matching the network's layer structure.
-    /// </param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes a vector of parameters to the appropriate layers in the network. It determines
-    /// how many parameters each layer needs, extracts the corresponding segment from the input parameter vector,
-    /// and updates each layer with its respective parameters. This is commonly used after optimization algorithms
-    /// have calculated improved weights for the network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learned values in the network.
-    /// 
-    /// During training, an LSTM network learns many values (called parameters) that determine
-    /// how it processes information. These include:
-    /// - Weights that control how inputs affect the network
-    /// - Gate parameters that control what information to remember or forget
-    /// - Output parameters that determine how predictions are made
-    /// 
-    /// This method:
-    /// 1. Takes a long list of all these parameters
-    /// 2. Figures out which parameters belong to which layers
-    /// 3. Updates each layer with its corresponding parameters
-    /// 
-    /// Think of it like updating the settings on different parts of a machine
-    /// based on what it has learned through experience.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Processes input through the LSTM network to generate predictions.
     /// </summary>

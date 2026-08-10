@@ -350,9 +350,8 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _ = Forward(new Tensor<T>(new[] { _contextLength, _numFeatures }));
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients) { }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

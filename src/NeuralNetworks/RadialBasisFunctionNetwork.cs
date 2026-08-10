@@ -266,48 +266,8 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of the radial basis function network layers.
-    /// </summary>
-    /// <param name="parameters">The vector of parameter updates to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the parameters of each layer in the radial basis function network based on the provided parameter
-    /// updates. The parameters vector is divided into segments corresponding to each layer's parameter count,
-    /// and each segment is applied to its respective layer. In an RBFN, these parameters typically include the centers
-    /// and widths of the RBFs in the hidden layer, and the weights in the output layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates how the RBFN makes decisions based on training.
-    /// 
-    /// During training:
-    /// - The network learns by adjusting its internal parameters
-    /// - This method applies those adjustments
-    /// - Each layer gets the portion of updates meant specifically for it
-    /// 
-    /// For an RBFN, these adjustments might include:
-    /// - Updating what patterns each "expert" specializes in (their centers)
-    /// - Changing how strictly each expert defines "similarity" (their widths)
-    /// - Adjusting how much influence each expert has on the final prediction (output weights)
-    /// 
-    /// This process allows the RBFN to improve its performance over time by refining its experts
-    /// and how it combines their opinions.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the current state of the Radial Basis Function Network.
     /// </summary>

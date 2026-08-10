@@ -272,31 +272,11 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Bridge-fusion stream is part of the trainable graph (registered via
-        // RegisterAuxiliaryEncoderStream in InitializeLayers and surfaced
-        // through GetExtraTrainableLayers), so its parameter slices live
-        // alongside the vision encoder's in the flat parameter vector. Walk
-        // it here so the writeback covers every trainable parameter the
-        // model exposes.
-        foreach (var l in _bridgeFusionLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
         EnumerateAuxiliaryStreamTrainableLayers();

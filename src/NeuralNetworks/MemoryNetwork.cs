@@ -255,49 +255,8 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network using the provided parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing updated parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter values to each layer in the network. It extracts
-    /// the appropriate segment of the parameter vector for each layer based on the layer's parameter count.
-    /// This allows for updating the learned weights and biases in the network's layers after training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the network's layers.
-    /// 
-    /// During training, a Memory Network learns many values (called parameters) that determine
-    /// how it processes information. These include:
-    /// - How to encode inputs
-    /// - How to determine which memory slots to access
-    /// - How to update memory with new information
-    /// - How to produce outputs based on memory and input
-    /// 
-    /// This method:
-    /// 1. Takes a long list of all these parameters
-    /// 2. Figures out which parameters belong to which layers
-    /// 3. Updates each layer with its corresponding parameters
-    /// 
-    /// Note that this updates the network's processing mechanisms but not the content of the memory itself.
-    /// The memory content is updated during normal operation through the memory write layers.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Processes input through the memory network to generate predictions.
     /// </summary>

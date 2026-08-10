@@ -404,14 +404,7 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
         // Note: BN layers update running stats during forward, not here
     }
 
-    /// <summary>
-    /// Updates the parameters using the specified parameter values.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        SetParameters(parameters);
-    }
-
+    // UpdateParameters delegated straight to SetParameters. The base does that now.
     /// <summary>
     /// Clears accumulated gradients.
     /// </summary>

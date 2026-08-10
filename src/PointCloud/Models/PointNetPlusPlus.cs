@@ -553,21 +553,8 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 
     public override bool SupportsTraining => true;
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -1318,26 +1305,8 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var branch in _branches)
-        {
-            foreach (var layer in branch.MlpLayers)
-            {
-                int layerParameterCount = checked((int)layer.ParameterCount);
-                if (layerParameterCount > 0)
-                {
-                    var layerParameters = parameters.SubVector(offset, layerParameterCount);
-                    layer.UpdateParameters(layerParameters);
-                    offset += layerParameterCount;
-                }
-            }
-        }
-
-        Parameters = parameters;
-    }
-
+    // UpdateParameters walked Layers by hand, distributing the flat vector slice by
+    // slice. That is the base implementation, restated.
     public override void ResetState()
     {
         _lastInput = null;

@@ -419,48 +419,8 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of the residual neural network layers.
-    /// </summary>
-    /// <param name="parameters">The vector of parameter updates to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates the parameters of each layer in the residual neural network based on the provided parameter
-    /// updates. The parameters vector is divided into segments corresponding to each layer's parameter count,
-    /// and each segment is applied to its respective layer. In a ResNet, these parameters typically include weights
-    /// for convolutional layers, as well as parameters for batch normalization and other operations within residual blocks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates how the ResNet makes decisions based on training.
-    /// 
-    /// During training:
-    /// - The network learns by adjusting its internal parameters
-    /// - This method applies those adjustments
-    /// - Each layer gets the portion of updates meant specifically for it
-    /// 
-    /// For a ResNet, these adjustments might include:
-    /// - How each convolutional filter detects patterns
-    /// - How the batch normalization layers stabilize learning
-    /// - How information should flow through both the main and shortcut paths
-    /// 
-    /// The residual connections (shortcuts) make it easier for these updates to flow backward through the network
-    /// during training, which helps very deep networks learn effectively.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.GetSubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the Residual Neural Network.
     /// </summary>

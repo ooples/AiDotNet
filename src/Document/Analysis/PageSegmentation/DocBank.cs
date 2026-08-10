@@ -724,27 +724,10 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
-        }
-
-        // Standard contract: distribute the flat parameter vector back into the layers (SET, not a
-        // gradient step). Framework clone/DeepCopy relies on this — the old override treated the
-        // argument as gradients and SUBTRACTED them, corrupting any copy.
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

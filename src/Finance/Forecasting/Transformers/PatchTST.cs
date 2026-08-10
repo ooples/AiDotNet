@@ -564,40 +564,8 @@ public class PatchTST<T> : ForecastingModelBase<T>
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Updates the model's parameters from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for all layers.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Neural networks have many parameters (weights and biases)
-    /// that determine how they process data. This method allows you to set all these
-    /// parameters at once from a single flattened vector.
-    /// </para>
-    /// <para>
-    /// This is useful for:
-    /// <list type="bullet">
-    /// <item>Loading saved model parameters</item>
-    /// <item>Applying parameters from external optimization algorithms</item>
-    /// <item>Ensemble methods that combine parameters from multiple models</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            layer.SetParameters(newParams);
-            offset += layerParams.Length;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Gets metadata about the model for serialization and inspection.
     /// </summary>

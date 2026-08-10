@@ -459,32 +459,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
 
     #region Parameter Updates
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount > parameters.Length)
-            {
-                throw new ArgumentException(
-                    $"Parameter vector is too short: need {offset + layerParamCount} elements, but got {parameters.Length}.",
-                    nameof(parameters));
-            }
-
-            var newParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                newParams[i] = parameters[offset + i];
-            }
-            layer.UpdateParameters(newParams);
-            offset += layerParamCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     #endregion
 
     #region Serialization Helpers

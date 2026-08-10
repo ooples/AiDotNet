@@ -185,11 +185,8 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         throw new NotSupportedException("CLIP neural network in inference mode does not support training.");
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // No-op for inference mode
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

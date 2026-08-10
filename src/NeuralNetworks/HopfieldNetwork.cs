@@ -328,71 +328,8 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         return current;
     }
 
-    /// <summary>
-    /// Not implemented for Hopfield networks, as they don't use gradient-based parameter updates.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters to update.</param>
-    /// <exception cref="NotImplementedException">Always thrown, as this method is not applicable to Hopfield networks.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is required by the NeuralNetworkBase class but is not implemented for Hopfield networks.
-    /// Hopfield networks use a different training approach (Hebbian learning) that directly sets the weights
-    /// rather than using gradient-based updates as in most neural networks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is not used in Hopfield networks.
-    /// 
-    /// Most neural networks learn by:
-    /// - Making small adjustments to weights based on error gradients
-    /// - Updating parameters gradually over many training iterations
-    /// 
-    /// Hopfield networks are different:
-    /// - They learn using the Hebbian rule ("neurons that fire together, wire together")
-    /// - Training happens in one pass through the Train method
-    /// - They don't use gradient-based updates at all
-    /// 
-    /// This method exists only because the base neural network class requires it,
-    /// but it will throw an error if called.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Accepts the FULL _size x _size matrix, matching GetParameters, SetParameters and
-        // ParameterCount. This used to expect only the (_size * (_size - 1)) / 2 upper-triangle
-        // entries -- 8,128 against the other three APIs' 16,384 -- so a plain
-        // GetParameters() -> UpdateParameters() round-trip threw, and any caller pairing the two by
-        // length (the base contract is that this argument holds new parameter VALUES) was broken.
-        //
-        // The old signature was not arbitrary: a Hopfield weight matrix is symmetric with a zero
-        // diagonal (Hopfield 1982 -- symmetric couplings, no self-connections), so it really does
-        // have only 8,128 free values. That invariant is kept here rather than dropped: the full
-        // matrix is projected onto the symmetric subspace by averaging w[i,j] with w[j,i], and the
-        // diagonal is zeroed. For a matrix that already satisfies the invariant -- which is what
-        // GetParameters returns -- the projection is the identity, so the round-trip is exact.
-        long expectedLength = ParameterCount;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length mismatch. Expected {expectedLength} parameters " +
-                $"(the full {_size}x{_size} weight matrix, as returned by GetParameters) " +
-                $"but got {parameters.Length}.", nameof(parameters));
-        }
-
-        var half = NumOps.FromDouble(0.5);
-        for (int i = 0; i < _size; i++)
-        {
-            _weights[i, i] = NumOps.Zero;
-            for (int j = i + 1; j < _size; j++)
-            {
-                var upper = parameters[(i * _size) + j];
-                var lower = parameters[(j * _size) + i];
-                var symmetric = NumOps.Multiply(NumOps.Add(upper, lower), half);
-                _weights[i, j] = symmetric;
-                _weights[j, i] = symmetric;
-            }
-        }
-    }
-
+    // UpdateParameters was an empty override, silently dropping every restore. The base
+    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Initializes the layers of the neural network.
     /// </summary>

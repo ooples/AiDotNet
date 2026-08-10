@@ -3439,6 +3439,44 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
     }
 
+    /// <summary>
+    /// Whether this network's weights can be written. Override and return <c>false</c> for a model
+    /// running a loaded graph it does not own; the default is <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A model wrapping an ONNX session cannot honour a restore: the weights belong to the loaded
+    /// graph, and writing the native-side tensors would leave it reporting new parameters while
+    /// still computing with the old graph. Hundreds of models expressed that by overriding the
+    /// parameter surfaces with <c>if (!_useNativeMode) throw new NotSupportedException(...)</c> and
+    /// hand-rolling the rest of the method around the guard -- the same refusal written out
+    /// hundreds of times, each free to word it differently, and each free to guard one surface and
+    /// forget another.
+    /// </para>
+    /// <para>
+    /// Stating it once means a model declares the fact and inherits the behaviour:
+    /// <c>protected override bool SupportsParameterMutation =&gt; _useNativeMode;</c>. Read-only
+    /// access -- <see cref="ParameterCount"/> and <see cref="GetParameters"/> -- is deliberately
+    /// NOT gated: an ONNX-mode model can still be counted and inspected, it just cannot be written.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsParameterMutation => true;
+
+    /// <summary>
+    /// Throws the standard refusal when <see cref="SupportsParameterMutation"/> is <c>false</c>.
+    /// </summary>
+    protected void GuardParameterMutation()
+    {
+        if (!SupportsParameterMutation)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} is not in a mode where its parameters can be written: its weights "
+                + "belong to a loaded graph rather than to this model. Construct it in native mode "
+                + "to train, restore or otherwise mutate parameters. Reading them -- ParameterCount "
+                + "and GetParameters -- is still supported.");
+        }
+    }
+
 
 
 
@@ -12714,6 +12752,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             throw new ArgumentNullException(nameof(parameters));
         }
+
+        GuardParameterMutation();
 
         // Restore must see the same model the count and the vector saw.
         EnsureParametersReady();

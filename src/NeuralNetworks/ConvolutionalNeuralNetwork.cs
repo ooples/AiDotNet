@@ -197,35 +197,8 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the network.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the parameters to each layer based on their parameter count.
-    /// It's typically called during training after calculating parameter updates.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> After the backward pass calculates how to improve the network, 
-    /// this method actually applies those improvements. It takes a list of updated settings 
-    /// (parameters) and distributes them to each layer in the network. Think of it like 
-    /// fine-tuning each part of a machine based on performance feedback. This method is 
-    /// called repeatedly during training to gradually improve the network's accuracy.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            var layerParameters = parameters.Slice(index, layerParameterCount);
-            layer.UpdateParameters(layerParameters);
-            index += layerParameterCount;
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Makes a prediction using the convolutional neural network for the given input.
     /// </summary>

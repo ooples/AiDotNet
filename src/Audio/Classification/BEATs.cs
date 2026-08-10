@@ -1088,43 +1088,10 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
     }
 
-    /// <summary>
-    /// Updates all network parameters from a flattened parameter vector.
-    /// </summary>
-    /// <param name="parameters">A flat vector containing all model parameters concatenated.
-    /// The order matches the layer stack: patch projection weights first, then each Transformer
-    /// layer's attention and FFN weights, then the classification head weights.</param>
-    /// <exception cref="NotSupportedException">Thrown in ONNX mode since parameters are stored
-    /// in the ONNX runtime and cannot be modified through this interface.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> A neural network's "knowledge" is stored as millions of numbers
-    /// (parameters/weights). This method replaces all those numbers at once from a single flat
-    /// list. It's used by advanced optimizers that operate on the full parameter vector rather
-    /// than individual layers, and for restoring model state from a checkpoint.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("UpdateParameters is not supported in ONNX mode.");
-
-        // The cumulative offset must fit in int because Vector<T>.Slice
-        // takes int arguments; checked() here turns a silent wrap into
-        // a fail-fast OverflowException if the sum of layer counts
-        // crosses int.MaxValue (which would also mean the input
-        // Vector<T> couldn't possibly hold them all). Per-layer counts
-        // come from `checked((int)layer.ParameterCount)` already.
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            var layerParams = parameters.Slice(index, count);
-            layer.UpdateParameters(layerParams);
-            index = checked(index + count);
-        }
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Preprocesses raw audio into a log-mel spectrogram suitable for BEATs input.
     /// </summary>

@@ -785,25 +785,10 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return activations;
     }
 
-    /// <summary>
-    /// Updates model parameters by applying gradient descent.
-    /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // NeuralNetworkBase.UpdateParameters contract: caller passes NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The
-        // previous body computed `current − lr · input` then SetParameters,
-        // which on top of Adam's own update produced a double-step that
-        // destabilised training. Forward straight to SetParameters per the
-        // contract — Adam already produced the correct new values.
-        SetParameters(parameters);
-    }
-
+    /// <inheritdoc />
+    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
+    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on a single batch.
     /// </summary>

@@ -193,43 +193,8 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
     }
 
-    /// <summary>
-    /// Updates the parameters of all layers in the Capsule Network.
-    /// </summary>
-    /// <param name="parameters">A vector containing the parameters to update all layers with.</param>
-    /// <remarks>
-    /// <para>
-    /// This method distributes the provided parameter vector among all the layers in the network.
-    /// Each layer receives a portion of the parameter vector corresponding to its number of parameters.
-    /// The method keeps track of the starting index for each layer's parameters in the input vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the network's internal values during training.
-    /// 
-    /// When updating parameters:
-    /// - The input is a long list of numbers representing all values in the entire network
-    /// - The method divides this list into smaller chunks
-    /// - Each layer gets its own chunk of values
-    /// - The layers use these values to adjust their internal settings
-    /// 
-    /// Think of it like giving each department in a company their specific budget allocations
-    /// from the overall company budget.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Performs a forward pass through the Capsule Network to make a prediction.
     /// </summary>

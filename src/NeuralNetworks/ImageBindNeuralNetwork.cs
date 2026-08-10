@@ -1542,6 +1542,66 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         }
     }
 
+    // ---- behavioural overrides, restored ----
+    // These four were deleted as collateral when this file's parameter surfaces were removed:
+    // the deletion took a LINE RANGE that happened to contain them, rather than the members it
+    // had identified. Without PredictCore, ImageBind falls through to the base, which chains the
+    // flat Layers list -- and Layers is all seven modality towers concatenated, so image input
+    // reaches the TEXT tower's embedding and EmbeddingLayer throws "in Indices mode". 25 tests
+    // went from passing to failing. The parameter work itself was correct and is unchanged.
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        SetTrainingMode(false);
+        if (_useNativeMode)
+            return Accelerate(input, () => EncodeImageNativeTensor(input));
+
+        return Accelerate(input, () =>
+        {
+            var embedding = EncodeImageOnnx(input);
+            var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
+            for (int i = 0; i < embedding.Length; i++)
+            {
+                result[0, i] = embedding[i];
+            }
+            return result;
+        });
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Training is not supported for ONNX ImageBind models.");
+
+        return EncodeImageNativeTensor(input);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        SetTrainingMode(false);
+
+        if (_useNativeMode)
+        {
+            EncodeImageNativeTensor(input, activations);
+        }
+        else
+        {
+            activations["Image/OnnxEmbedding"] = Predict(input).Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        TrainWithTape(input, expectedOutput, _optimizer);
+    }
+
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

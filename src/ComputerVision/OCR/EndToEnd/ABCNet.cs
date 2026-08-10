@@ -794,25 +794,8 @@ public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
         return decoded;
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        Guard.NotNull(parameters);
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (p.Length > 0 && offset + p.Length <= parameters.Length)
-            {
-                var slice = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += p.Length;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {

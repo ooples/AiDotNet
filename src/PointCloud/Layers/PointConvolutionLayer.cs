@@ -156,8 +156,7 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
         _biases = parameters[1];
     }
 
-    public override void UpdateParameters(Vector<T> parameters) => SetParameters(parameters);
-
+    // UpdateParameters delegated straight to SetParameters. The base does that now.
     public override void ClearGradients()
     {
         // No-op: gradients live on the tape, not in a per-layer buffer.

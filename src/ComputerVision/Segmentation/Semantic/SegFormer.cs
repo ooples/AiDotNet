@@ -541,41 +541,8 @@ public class SegFormer<T> : Common.SemanticSegmentationBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates all trainable parameters across the encoder and decoder layers from a flat parameter vector.
-    /// </summary>
-    /// <param name="parameters">A flat vector containing new values for all model parameters,
-    /// ordered sequentially by layer (encoder layers first, then decoder layers).</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> A neural network's "parameters" are the numerical weights that determine
-    /// its behavior. This method replaces all current weights with new values from a flat vector.
-    /// It walks through each layer in order, slicing out the correct number of parameters for that
-    /// layer and updating them. This is used internally during optimization and when loading
-    /// saved model weights.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-    }
-
+    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
+    // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
     /// Collects metadata describing this SegFormer model's configuration and current state.
     /// </summary>
