@@ -118,6 +118,14 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     /// <inheritdoc/>
     public string SupportedCharacters => _charset;
 
+    // NO CONTRACT YET, and the sweep is why. The class count IS charset+1 - that half was right - but
+    // the STEP count is not MaxSequenceLength: the contract said [1,26,96] and Predict returned
+    // [1,256,96]. The [MaxSequenceLength, charset+1] tensor this class builds is a FALLBACK path; the
+    // real forward decodes 256 steps from the vision backbone, and 26 is just the configured maximum.
+    // Stating the family law here would assert a step count the model does not use, so this declines
+    // until the 256 is traced to whatever produces it. CRNN, whose CTC head really does emit
+    // MaxSequenceLength steps, agrees with the family law and keeps its contract.
+
     /// <inheritdoc/>
     public new int MaxSequenceLength => base.MaxSequenceLength;
 
