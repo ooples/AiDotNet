@@ -110,7 +110,15 @@ public class LayerStateGenerator : IIncrementalGenerator
             TypeParameters = type.TypeParameters.Select(tp => tp.Name).ToList(),
             BaseFqn = type.ConstructedFrom.ToDisplayString(UnqualifiedGenerics),
             Location = syntax.Identifier.GetLocation(),
-            IsPartial = type.DeclaringSyntaxReferences
+            ContainingTypes = ContainingTypeChain(type),
+            FactoryAccessible = IsFactoryAccessible(type),
+            // A nested layer's writer lands inside its container, so EVERY enclosing declaration
+            // has to be partial too, not just the layer's own.
+            IsPartial = EnclosingChain(type).All(t => t.DeclaringSyntaxReferences
+                .Select(r => r.GetSyntax())
+                .OfType<TypeDeclarationSyntax>()
+                .Any(d => d.Modifiers.Any(SyntaxKind.PartialKeyword))) &&
+                type.DeclaringSyntaxReferences
                 .Select(r => r.GetSyntax())
                 .OfType<TypeDeclarationSyntax>()
                 .Any(d => d.Modifiers.Any(SyntaxKind.PartialKeyword)),
@@ -186,6 +194,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             else if (p.IsOptional)
             {
                 info.UseDefault = true;
+                info.DefaultLiteral = DefaultLiteralOf(p);
             }
             else
             {
@@ -312,6 +321,57 @@ public class LayerStateGenerator : IIncrementalGenerator
             ? n.TypeArguments[0]
             : type;
 
+    /// <summary>Enclosing types, outermost first, rendered with their type parameters.</summary>
+    private static List<string> ContainingTypeChain(INamedTypeSymbol type)
+    {
+        var chain = new List<string>();
+        for (var t = type.ContainingType; t is not null; t = t.ContainingType)
+        {
+            var generics = t.TypeParameters.Length == 0
+                ? string.Empty
+                : "<" + string.Join(", ", t.TypeParameters.Select(tp => tp.Name)) + ">";
+            chain.Insert(0, t.Name + generics);
+        }
+
+        return chain;
+    }
+
+    /// <summary>The type and every type it is nested in, innermost first.</summary>
+    private static IEnumerable<INamedTypeSymbol> EnclosingChain(INamedTypeSymbol type)
+    {
+        for (var t = type; t is not null; t = t.ContainingType) yield return t;
+    }
+
+    /// <summary>
+    /// Whether <c>GeneratedLayerFactories</c>, which lives in another namespace, can name this
+    /// type. A private or protected nested layer is reachable only from inside its container, so
+    /// an entry for it would not compile -- it still gets a writer, just no factory.
+    /// </summary>
+    private static bool IsFactoryAccessible(INamedTypeSymbol type)
+        => EnclosingChain(type).All(t => t.DeclaredAccessibility
+            is Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal);
+
+    /// <summary>
+    /// The parameter's declared default as C# source, so an omitted optional argument is rebuilt
+    /// as the value the signature promises rather than as <c>default(T)</c>.
+    /// </summary>
+    private static string? DefaultLiteralOf(IParameterSymbol p)
+    {
+        if (!p.HasExplicitDefaultValue) return null;
+
+        var v = p.ExplicitDefaultValue;
+        if (v is null) return "default!";
+
+        // An enum default arrives as its underlying integral value; cast it back so the emitted
+        // argument keeps the parameter's own type.
+        var t = Unwrap(p.Type);
+        if (t.TypeKind == TypeKind.Enum)
+            return $"({t.ToDisplayString(FullyQualified)})({SymbolDisplay.FormatPrimitive(v, true, false)})";
+
+        return SymbolDisplay.FormatPrimitive(v, quoteStrings: true, useHexadecimalNumbers: false);
+    }
+
+
     private static string Pascal(string name)
         => name.Length == 0 ? name : char.ToUpperInvariant(name[0]) + name.Substring(1);
 
@@ -370,6 +430,15 @@ public class LayerStateGenerator : IIncrementalGenerator
             ? string.Empty
             : "<" + string.Join(", ", model.TypeParameters) + ">";
 
+        // Nested layers are declared inside their container, so the writer has to be too. Emitting
+        // `partial class RegStageBlock` at namespace level declared a NEW top-level type that
+        // derived from nothing, and the override bound to nothing (CS0115).
+        foreach (var outer in model.ContainingTypes)
+        {
+            sb.AppendLine($"partial class {outer}");
+            sb.AppendLine("{");
+        }
+
         sb.AppendLine($"partial class {model.TypeName}{generics}");
         sb.AppendLine("{");
         sb.AppendLine("    /// <inheritdoc/>");
@@ -391,6 +460,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         }
         sb.AppendLine("    }");
         sb.AppendLine("}");
+
+        for (var i = 0; i < model.ContainingTypes.Count; i++)
+        {
+            sb.AppendLine("}");
+        }
+
         return sb.ToString();
     }
 
@@ -427,7 +502,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("internal static class GeneratedLayerFactories<T>");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>Number of layer types with generated factories.</summary>");
-        sb.AppendLine($"    internal const int Count = {models.Count(m => m.TypeParameters.Count == 1)};");
+        sb.AppendLine($"    internal const int Count = {models.Count(m => m.TypeParameters.Count == 1 && m.FactoryAccessible)};");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Attempts to rebuild a layer of the given open generic type.</summary>");
         sb.AppendLine("    /// <param name=\"genericDefinition\">The layer's open generic type, e.g. <c>typeof(DenseLayer&lt;&gt;)</c>.</param>");
@@ -444,7 +519,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("        out object layer)");
         sb.AppendLine("    {");
 
-        foreach (var model in models.Where(m => m.TypeParameters.Count == 1))
+        foreach (var model in models.Where(m => m.TypeParameters.Count == 1 && m.FactoryAccessible))
         {
             var args = string.Join(", ", model.Parameters.Select(p => Argument(p)));
             var closed = model.ClosedFqn;
@@ -488,7 +563,10 @@ public class LayerStateGenerator : IIncrementalGenerator
             return $"{p.Name}: {source} as {iface}";
         }
 
-        if (p.UseDefault) return $"{p.Name}: default!";
+        // The parameter's OWN default, not default(T). `bool useBias = true` rebuilt through
+        // `default!` came back false -- the same silent-value-loss this generator replaced a
+        // 4811-line switch to remove, reintroduced one layer down.
+        if (p.UseDefault) return $"{p.Name}: {p.DefaultLiteral ?? "default!"}";
 
         var read = p.Kind switch
         {
@@ -525,6 +603,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         String,
         Enum,
         Int32Array,
+        DoubleArray,
+        Int32Jagged,
         Component,
     }
 
@@ -540,6 +620,15 @@ public class LayerStateGenerator : IIncrementalGenerator
         public bool UseDefault;
         public bool NeedsConvert;
         public ValueKind Kind;
+
+        /// <summary>
+        /// The parameter's own declared default, rendered as C# source. Rebuilding an omitted
+        /// optional parameter as <c>default!</c> is not the same as rebuilding it as its declared
+        /// default: <c>bool useBias = true</c> came back <c>false</c>. That is the silent-value-loss
+        /// this generator exists to remove, reintroduced inside the replacement.
+        /// </summary>
+        public string? DefaultLiteral;
+
     }
 
     private sealed class LayerModel
@@ -559,6 +648,20 @@ public class LayerStateGenerator : IIncrementalGenerator
         public List<ParamModel> Parameters = new();
         public List<Diagnostic> Diagnostics = new();
         public Location Location = Location.None;
+        /// <summary>
+        /// Enclosing types, outermost first, each already rendered with its type parameters. A
+        /// nested layer's writer has to be emitted inside those same declarations; emitting it at
+        /// namespace level declared an unrelated top-level type deriving from nothing, so the
+        /// override bound to nothing -- CS0115 on STCConnectorLayer's private RegStageBlock.
+        /// </summary>
+        public List<string> ContainingTypes = new();
+
+        /// <summary>
+        /// Whether the central factory can name this type at all. A private nested layer is
+        /// visible only inside its container, so registering it would not compile.
+        /// </summary>
+        public bool FactoryAccessible = true;
+
         public bool IsPartial;
         public bool HasHandWrittenMetadata;
         public bool IsValid;
