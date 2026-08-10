@@ -602,9 +602,9 @@ internal sealed class TensorParallelPagedModel<T> : NeuralNetworkBase<T>
 
     protected override void InitializeLayers() { /* manual tensor-parallel model; no ILayer stack */ }
 
-    public override void UpdateParameters(Vector<T> parameters)
-        => throw new NotSupportedException("TensorParallelPagedModel is an inference-only serving model.");
-
+    // UpdateParameters is inherited. It threw NotSupportedException here because the base member
+    // was ABSTRACT and demanded an answer; it is virtual now and distributes a flat vector over
+    // the same enumeration GetParameters folds.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         Name = "TensorParallelPagedModel",
