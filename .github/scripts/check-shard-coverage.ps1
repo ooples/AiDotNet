@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Fails when a generated ModelFamily test class is not covered by any shard filter.
 
@@ -80,9 +80,18 @@ $workflowText = Get-Content $Workflow -Raw
 
 # Every prefix the workflow actually filters on, with the shared "Generated." head
 # removed so what remains is compared against the class name.
+# -CaseSensitive IS LOAD-BEARING. Sort-Object -Unique is case-INSENSITIVE by default, so it
+# collapsed Generated.MA and Generated.Ma into one entry and kept whichever sorted first. The
+# comparison below is StartsWith(..., Ordinal), which IS case-sensitive -- so a prefix deleted by
+# the dedup could never match, and adding the correctly-cased prefix to the workflow did nothing
+# because the dedup ate it before the comparison ran. Measured: 175 prefixes in the workflow
+# reported as 144, one FEWER than before the correctly-cased ones were added.
+#
+# This is the same distinction the header above depends on: Generated.MEG, Generated.Mel and
+# Generated.Mem are three separate shards, and a case-insensitive dedup conflates them.
 $prefixes = [regex]::Matches($workflowText, 'FullyQualifiedName~Generated\.([A-Za-z0-9_]+)') |
     ForEach-Object { $_.Groups[1].Value } |
-    Sort-Object -Unique
+    Sort-Object -Unique -CaseSensitive
 
 if (-not $prefixes -or @($prefixes).Count -eq 0) {
     throw "No FullyQualifiedName~Generated.* shard filters were found in $Workflow; the gate has nothing to check against."
