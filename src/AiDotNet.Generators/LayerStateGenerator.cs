@@ -319,6 +319,9 @@ public class LayerStateGenerator : IIncrementalGenerator
         // Before the interface check below, which would otherwise claim ILayer<T> as a Component and
         // rebuild a child layer by parameterless Activator.CreateInstance -- losing every argument
         // it was built with.
+        // Before the interface check: a delegate is a reference type with its own save path.
+        if (type.TypeKind == TypeKind.Delegate) return ValueKind.Delegate;
+
         if (IsLayer(type, out _)) return ValueKind.Layer;
         if (IsLayerSequence(type, out _)) return ValueKind.LayerList;
 
@@ -588,6 +591,16 @@ public class LayerStateGenerator : IIncrementalGenerator
                 continue;
             }
 
+            // A delegate is described rather than written down: a named static method by reference,
+            // never as marshalled code. Keras marshals the Lambda layer's bytecode and made loading
+            // a model arbitrary code execution (CVE-2025-9906); this refuses to.
+            if (p.Kind == ValueKind.Delegate)
+            {
+                sb.AppendLine($"        __metadata[\"{p.Key}\"] = "
+                    + $"global::AiDotNet.Serialization.DelegateState.Save(this.{p.BackingMember});");
+                continue;
+            }
+
             if (p.Kind == ValueKind.Component)
             {
                 sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatType(this.{p.BackingMember});");
@@ -806,6 +819,9 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
             ValueKind.BooleanArray => $"state.BooleanArray(\"{p.Key}\")",
+            ValueKind.Delegate => $"global::AiDotNet.Serialization.DelegateState.Load<{p.TypeFqn.TrimEnd('?')}>("
+                + $"state.String(\"{p.Key}\"), \"{layerName}\", \"{p.Key}\")",
+
 
             ValueKind.DoubleArray => $"state.DoubleArray(\"{p.Key}\")",
             ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
@@ -845,6 +861,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         Int32Array,
         DoubleArray,
         BooleanArray,
+        Delegate,
+
 
         Int32Jagged,
         Layer,
