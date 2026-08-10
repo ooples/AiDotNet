@@ -1681,6 +1681,98 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  model-shape-conformance-windows:
+    name: Model shape conformance (offset ${{ matrix.offset }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # WHY THIS IS SHARDED RATHER THAN ONE JOB. The conformance sweep checks every model's declared
+    # shape contract against a real Predict. Run whole against the vision-language family it does not
+    # finish: 170 LLaVA-scale models exceeded thirty minutes locally without reporting a single
+    # result, so the run was pure cost with no evidence. ModelContractConformanceTests already takes
+    # ADNSHAPE_CONF_OFFSET / ADNSHAPE_CONF_BUDGET for exactly this, and the windows are independent -
+    # each constructs its own models and shares nothing - so they belong on separate runners rather
+    # than in sequence. Wall clock goes from ~3.5 hours serial to one window.
+    timeout-minutes: 60
+    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        # 170 models in 25-model windows. The last window runs past the end, which the harness
+        # handles by simply having fewer candidates - a window that lands entirely past the end
+        # reports zero declared and fails the guard below, which is the intended signal that the
+        # family shrank and this matrix needs updating.
+        offset: [0, 25, 50, 75, 100, 125, 150]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc /usr/local/.ghcup || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the conformance window
+        env:
+          ADNSHAPE_CONF_NAMESPACE: VisionLanguage
+          ADNSHAPE_CONF_OFFSET: ${{ matrix.offset }}
+          ADNSHAPE_CONF_BUDGET: '25'
+        run: |
+          # PIPESTATUS, not the pipe: `dotnet test | tee` reports tee's status, so a failing run
+          # would look green. Same trap the parameter sweep above documents.
+          set -o pipefail
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+            --filter "FullyQualifiedName~ModelContractConformanceTests" \
+            --logger 'console;verbosity=detailed' \
+            --results-directory TestResults 2>&1 | tee window-output.txt
+          dotnet_status=${PIPESTATUS[0]}
+          set +o pipefail
+          echo "dotnet test exited ${dotnet_status}"
+
+          if grep -qE 'MSBUILD : error|MSB1008|error MSB[0-9]|No test source files' window-output.txt; then
+            echo '::error::Conformance harness failed to START -- infrastructure fault, not a finding.'
+            exit 1
+          fi
+
+          # A WINDOW THAT MEASURED NOTHING IS NOT A PASS. The sweep reports zero disagreements just
+          # as readily when it declined on everything, which is exactly how the video
+          # super-resolution law looked correct while never executing once. Require the window to
+          # have declared something before its verdict counts.
+          if ! grep -qE 'models declaring a contract' window-output.txt; then
+            echo '::error::Window produced no conformance summary -- it did not run to completion.'
+            exit 1
+          fi
+          declared=$(grep -oE 'models declaring a contract *: *[0-9]+' window-output.txt | grep -oE '[0-9]+$' | head -1)
+          echo "window declared ${declared} contracts"
+          if [ "${declared:-0}" -eq 0 ]; then
+            echo "::error::Window at offset ${ADNSHAPE_CONF_OFFSET} declared 0 contracts -- the family shrank or the filter is wrong; this matrix needs updating."
+            exit 1
+          fi
+
+          if [ "${dotnet_status}" -gt 1 ]; then
+            echo "::error::Window was killed (exit ${dotnet_status}) after printing a partial summary -- results are INCOMPLETE."
+            exit 1
+          fi
+          exit "${dotnet_status}"
+
+      - name: Upload window report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: model-shape-conformance-${{ matrix.offset }}-${{ github.sha }}
+          path: |
+            window-output.txt
+            TestResults/
+          if-no-files-found: error
+          retention-days: 14
+
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
