@@ -707,8 +707,25 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
         // REaLTabFormer uses its own specialized training via Fit/FitAsync.
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            int count = layerParams.Length;
+            if (offset + count <= parameters.Length)
+            {
+                var slice = new Vector<T>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    slice[i] = parameters[offset + i];
+                }
+                layer.UpdateParameters(slice);
+                offset += count;
+            }
+        }
+    }
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

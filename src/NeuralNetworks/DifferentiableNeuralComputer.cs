@@ -388,7 +388,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     // matrix is read/written by the legacy Serialize/Deserialize paths only.
     // _lastCombinedVector was a backward-pass cache for the manual matmul that
     // the new Layers-chain projection no longer needs.
-    private Matrix<T> _outputWeights;
+    private Tensor<T> _outputWeights;
 #pragma warning disable CS0169
     private Vector<T>? _lastCombinedVector;
 #pragma warning restore CS0169
@@ -481,7 +481,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         _precedenceWeighting = new Vector<T>(_memorySize);
         _temporalLinkMatrix = new Matrix<T>(_memorySize, _memorySize);
-        _outputWeights = new Matrix<T>(combinedSize, outputSize);
+        _outputWeights = new Tensor<T>([combinedSize, outputSize]);
 
         InitializeOutputWeights();
         InitializeMemory();
@@ -560,7 +560,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         _precedenceWeighting = new Vector<T>(_memorySize);
         _temporalLinkMatrix = new Matrix<T>(_memorySize, _memorySize);
-        _outputWeights = new Matrix<T>(combinedSize, outputSize);
+        _outputWeights = new Tensor<T>([combinedSize, outputSize]);
 
         InitializeOutputWeights();
         InitializeMemory();
@@ -570,9 +570,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private void InitializeOutputWeights()
     {
         // Initialize with small random values
-        for (int i = 0; i < _outputWeights.Rows; i++)
+        for (int i = 0; i < _outputWeights.Shape[0]; i++)
         {
-            for (int j = 0; j < _outputWeights.Columns; j++)
+            for (int j = 0; j < _outputWeights.Shape[1]; j++)
             {
                 _outputWeights[i, j] = NumOps.FromDouble((Random.NextDouble() * 0.2) - 0.1);
             }
@@ -1573,10 +1573,10 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
 
         // Write output weights
-        writer.Write(_outputWeights.Rows);
-        writer.Write(_outputWeights.Columns);
-        for (int i = 0; i < _outputWeights.Rows; i++)
-            for (int j = 0; j < _outputWeights.Columns; j++)
+        writer.Write(_outputWeights.Shape[0]);
+        writer.Write(_outputWeights.Shape[1]);
+        for (int i = 0; i < _outputWeights.Shape[0]; i++)
+            for (int j = 0; j < _outputWeights.Shape[1]; j++)
                 writer.Write(Convert.ToDouble(_outputWeights[i, j]));
 
         // Write read weightings
@@ -1679,7 +1679,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Read output weights
         int owRows = reader.ReadInt32();
         int owCols = reader.ReadInt32();
-        _outputWeights = new Matrix<T>(owRows, owCols);
+        _outputWeights = new Tensor<T>([owRows, owCols]);
         for (int i = 0; i < owRows; i++)
             for (int j = 0; j < owCols; j++)
                 _outputWeights[i, j] = NumOps.FromDouble(reader.ReadDouble());

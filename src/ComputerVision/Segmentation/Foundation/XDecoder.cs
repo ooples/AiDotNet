@@ -362,8 +362,23 @@ public class XDecoder<T> : Common.PanopticSegmentationBase<T>
         }
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int expected = 0;
+        foreach (var layer in Layers) expected += layer.GetParameters().Length;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = layer.GetParameters().Length;
+            var newParams = new Vector<T>(count);
+            for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
+            layer.UpdateParameters(newParams);
+            offset += count;
+        }
+    }
     /// <summary>
     /// Collects metadata describing this X-Decoder model's configuration.
     /// </summary>

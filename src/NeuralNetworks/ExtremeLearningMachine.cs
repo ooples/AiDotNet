@@ -160,7 +160,10 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         }
     }
 
-    // UpdateParameters refused unconditionally; the base implements it properly.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        throw new InvalidOperationException("Extreme Learning Machines do not support direct parameter updates via this method. Input-to-hidden weights are randomly initialized and remain fixed. Only output layer weights are computed analytically via the Train method.");
+    }
     /// <summary>
     /// Makes a prediction using the Extreme Learning Machine.
     /// </summary>

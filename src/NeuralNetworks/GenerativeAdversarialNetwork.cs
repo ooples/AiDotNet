@@ -2056,8 +2056,36 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         return activations;
     }
 
-    // UpdateParameters was an empty override, silently dropping every restore. The base
-    // distributes the vector over the declared enumeration.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        // Determine the split point between Generator and Discriminator parameters
+        int generatorParameterCount = (int)Generator.GetParameterCount();
+        int discriminatorParameterCount = (int)Discriminator.GetParameterCount();
+
+        if (parameters.Length != generatorParameterCount + discriminatorParameterCount)
+        {
+            throw new ArgumentException($"Invalid parameter vector length. Expected {generatorParameterCount + discriminatorParameterCount}, but got {parameters.Length}.");
+        }
+
+        // Split the parameters vector
+        var generatorParameters = new Vector<T>([.. parameters.Take(generatorParameterCount)]);
+        var discriminatorParameters = new Vector<T>([.. parameters.Skip(generatorParameterCount).Take(discriminatorParameterCount)]);
+
+        // Update Generator parameters
+        Generator.UpdateParameters(generatorParameters);
+
+        // Update Discriminator parameters
+        Discriminator.UpdateParameters(discriminatorParameters);
+
+        // Calculate the magnitude of parameter changes
+        T parameterChangeNorm = parameters.L2Norm();
+
+        // Reset optimizer state if a very large change is detected (indicates training instability)
+        if (NumOps.GreaterThan(parameterChangeNorm, NumOps.FromDouble(10.0)))
+        {
+            ResetOptimizerState();
+        }
+    }
     /// <summary>
     /// Resets the optimizer state to its initial values.
     /// </summary>

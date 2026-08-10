@@ -87,7 +87,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the weights for a component.
     /// </value>
-    private Matrix<T> _weights;
+    private Tensor<T> _weights;
 
     /// <summary>
     /// Y-loadings (c) from the NIPALS algorithm: c_k = t_k'*y / (t_k'*t_k).
@@ -148,7 +148,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _options = options ?? new PartialLeastSquaresRegressionOptions<T>();
         _loadings = new Matrix<T>(0, 0);
         _scores = new Matrix<T>(0, 0);
-        _weights = new Matrix<T>(0, 0);
+        _weights = new Tensor<T>([0, 0]);
         _yMean = NumOps.Zero;
         _xMean = new Vector<T>(0);
         _yStd = NumOps.Zero;
@@ -340,7 +340,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     protected override Vector<T> CalculateFeatureImportances()
     {
         // When using OLS (no PLS decomposition), use absolute coefficient values
-        if (_scores.Rows == 0 || _weights.Rows == 0)
+        if (_scores.Rows == 0 || _weights.Shape[0] == 0)
         {
             var importance = new Vector<T>(Coefficients.Length);
             for (int j = 0; j < Coefficients.Length; j++)
@@ -404,7 +404,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         writer.Write(_options.NumComponents);
         SerializationHelper<T>.SerializeMatrix(writer, _loadings);
         SerializationHelper<T>.SerializeMatrix(writer, _scores);
-        SerializationHelper<T>.SerializeMatrix(writer, _weights);
+        SerializationHelper<T>.SerializeTensor(writer, _weights);
         SerializationHelper<T>.WriteValue(writer, _yMean);
         SerializationHelper<T>.SerializeVector(writer, _xMean);
         SerializationHelper<T>.WriteValue(writer, _yStd);
@@ -441,7 +441,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _options.NumComponents = reader.ReadInt32();
         _loadings = SerializationHelper<T>.DeserializeMatrix(reader);
         _scores = SerializationHelper<T>.DeserializeMatrix(reader);
-        _weights = SerializationHelper<T>.DeserializeMatrix(reader);
+        _weights = SerializationHelper<T>.DeserializeTensor(reader);
         _yMean = SerializationHelper<T>.ReadValue(reader);
         _xMean = SerializationHelper<T>.DeserializeVector(reader);
         _yStd = SerializationHelper<T>.ReadValue(reader);

@@ -148,22 +148,22 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <summary>
     /// Learnable CLS token for vision encoder.
     /// </summary>
-    private Matrix<T>? _visionClsToken;
+    private Tensor<T>? _visionClsToken;
 
     /// <summary>
     /// Learnable CLS token for text encoder.
     /// </summary>
-    private Matrix<T>? _textClsToken;
+    private Tensor<T>? _textClsToken;
 
     /// <summary>
     /// Vision positional embeddings.
     /// </summary>
-    private Matrix<T>? _visionPositionalEmbeddings;
+    private Tensor<T>? _visionPositionalEmbeddings;
 
     /// <summary>
     /// Text positional embeddings.
     /// </summary>
-    private Matrix<T>? _textPositionalEmbeddings;
+    private Tensor<T>? _textPositionalEmbeddings;
 
     /// <summary>
     /// Text token embeddings (vocabulary lookup).
@@ -505,12 +505,12 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         _lmHead = Layers[idx++];
 
         // Initialize learnable tokens
-        _visionClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
-        _textClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
+        _visionClsToken = new Tensor<T>([1, _hiddenDim]);
+        _textClsToken = new Tensor<T>([1, _hiddenDim]);
 
         // Initialize positional embeddings
-        _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-        _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _hiddenDim, NumOps.Zero);
+        _visionPositionalEmbeddings = new Tensor<T>([numPatches + 1, _hiddenDim]);
+        _textPositionalEmbeddings = new Tensor<T>([_maxSequenceLength, _hiddenDim]);
 
         // Initialize with small random values
         InitializeParameters();
@@ -544,9 +544,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Initialize positional embeddings
         if (_visionPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _visionPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _visionPositionalEmbeddings.Shape[1]; j++)
                 {
                     _visionPositionalEmbeddings[i, j] = NumOps.FromDouble((random.NextDouble() - 0.5) * scale);
                 }
@@ -555,9 +555,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _textPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _textPositionalEmbeddings.Shape[1]; j++)
                 {
                     _textPositionalEmbeddings[i, j] = NumOps.FromDouble((random.NextDouble() - 0.5) * scale);
                 }
@@ -860,7 +860,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Add positional embeddings using Engine
         if (_textPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_textPositionalEmbeddings);
+            var posEmbTensor = _textPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             // Slice to actual sequence length using proper int[] parameters
@@ -908,7 +908,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Prepend CLS token using Engine operations
         if (_visionClsToken is not null)
         {
-            var clsTensor = Tensor<T>.FromMatrix(_visionClsToken);
+            var clsTensor = _visionClsToken;
             var clsExpanded = Engine.TensorExpandDims<T>(clsTensor, 0);
 
             // Concatenate CLS token with patch embeddings
@@ -918,7 +918,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Add positional embeddings
         if (_visionPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_visionPositionalEmbeddings);
+            var posEmbTensor = _visionPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1123,14 +1123,14 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_visionClsToken is not null)
         {
-            var clsTensor = Tensor<T>.FromMatrix(_visionClsToken);
+            var clsTensor = _visionClsToken;
             var clsExpanded = Engine.TensorExpandDims<T>(clsTensor, 0);
             hidden = Engine.TensorConcatenate(new[] { clsExpanded, hidden }, axis: 1);
         }
 
         if (_visionPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_visionPositionalEmbeddings);
+            var posEmbTensor = _visionPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1182,7 +1182,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_textPositionalEmbeddings);
+            var posEmbTensor = _textPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1219,7 +1219,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Add positional embeddings
         if (_textPositionalEmbeddings is not null)
         {
-            var posEmbTensor = Tensor<T>.FromMatrix(_textPositionalEmbeddings);
+            var posEmbTensor = _textPositionalEmbeddings;
             int seqLen = Math.Min(hidden.Shape[1], posEmbTensor.Shape[0]);
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
@@ -1605,9 +1605,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // CLS tokens and positional embeddings first
         if (_visionClsToken is not null)
         {
-            for (int i = 0; i < _visionClsToken.Rows; i++)
+            for (int i = 0; i < _visionClsToken.Shape[0]; i++)
             {
-                for (int j = 0; j < _visionClsToken.Columns; j++)
+                for (int j = 0; j < _visionClsToken.Shape[1]; j++)
                 {
                     _visionClsToken[i, j] = parameters[index++];
                 }
@@ -1616,9 +1616,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_textClsToken is not null)
         {
-            for (int i = 0; i < _textClsToken.Rows; i++)
+            for (int i = 0; i < _textClsToken.Shape[0]; i++)
             {
-                for (int j = 0; j < _textClsToken.Columns; j++)
+                for (int j = 0; j < _textClsToken.Shape[1]; j++)
                 {
                     _textClsToken[i, j] = parameters[index++];
                 }
@@ -1627,9 +1627,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_visionPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _visionPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _visionPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _visionPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _visionPositionalEmbeddings.Shape[1]; j++)
                 {
                     _visionPositionalEmbeddings[i, j] = parameters[index++];
                 }
@@ -1638,9 +1638,9 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         if (_textPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _textPositionalEmbeddings.Rows; i++)
+            for (int i = 0; i < _textPositionalEmbeddings.Shape[0]; i++)
             {
-                for (int j = 0; j < _textPositionalEmbeddings.Columns; j++)
+                for (int j = 0; j < _textPositionalEmbeddings.Shape[1]; j++)
                 {
                     _textPositionalEmbeddings[i, j] = parameters[index++];
                 }

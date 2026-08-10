@@ -517,8 +517,35 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         return current;
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int startIndex = 0;
+        foreach (var layer in Layers)
+        {
+            int layerParameterCount = checked((int)layer.ParameterCount);
+            if (layerParameterCount > 0)
+            {
+                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
+                layer.UpdateParameters(layerParameters);
+                startIndex += layerParameterCount;
+            }
+        }
+
+        // Update mean and log variance layers
+        if (_meanLayer != null && _logVarianceLayer != null)
+        {
+            int meanParameterCount = checked((int)_meanLayer.ParameterCount);
+            _meanLayer.UpdateParameters(parameters.SubVector(startIndex, meanParameterCount));
+            startIndex += meanParameterCount;
+
+            int logVarianceParameterCount = checked((int)_logVarianceLayer.ParameterCount);
+            _logVarianceLayer.UpdateParameters(parameters.SubVector(startIndex, logVarianceParameterCount));
+        }
+        else
+        {
+            throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
+        }
+    }
     /// <summary>
     /// Makes a prediction using the Variational Autoencoder by encoding the input, sampling from the latent space, and decoding.
     /// </summary>
