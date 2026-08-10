@@ -1,4 +1,9 @@
-﻿using AiDotNet.Interfaces;
+﻿using System.Collections.Generic;
+// AiDotNet.Attributes is REQUIRED for [TensorLayout] to bind to the right type: two other Tensors
+// namespaces declare a TensorLayout, and without this using the attribute silently resolves to one
+// of those and the contract is never seen.
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -44,8 +49,47 @@ namespace AiDotNet.NER;
 /// (100-300 dimensions), Word2Vec (300 dimensions), and BERT (768 dimensions).
 /// </para>
 /// </remarks>
-public abstract class NERNeuralNetworkBase<T> : NeuralNetworkBase<T>
+[TensorLayout(TensorAxis.Time, TensorAxis.Features,
+    Direction = TensorLayoutDirection.Input,
+    Note = "Token embeddings: one row per token. No batch axis - PredictLabels is defined for a "
+         + "single sequence.")]
+[TensorLayout(TensorAxis.Time,
+    Direction = TensorLayoutDirection.Output,
+    Note = "One DECODED label id per token. Not the emission matrix - see OutputAxesFor.")]
+public abstract class NERNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// The NER family's law: one row of <see cref="NumLabels"/> emission scores per input token.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declared on the ROOT of the NER hierarchy, which is one declaration rather than four.
+    /// TransformerNERBase and SpanBasedNERBase both derive from SequenceLabelingNERBase, which
+    /// derives from this - so the counts that looked like four families (31, 31, 21, 6) are the same
+    /// models counted at four depths, and <see cref="NumLabels"/> lives here at the top.
+    /// </para>
+    /// <para>
+    /// THERE IS NO BATCH AXIS: <c>PredictLabels</c> is defined for a single sequence, so the token
+    /// axis is axis 0 and is carried through unchanged - a tagger emits exactly one answer per token
+    /// it was given.
+    /// </para>
+    /// <para>
+    /// THE OUTPUT IS THE DECODED PATH, NOT THE EMISSION MATRIX, and that correction came from the
+    /// sweep rather than from the documentation. <c>PredictLabels</c> is documented as returning
+    /// "[sequenceLength, numLabels]" emission scores, so the first version of this declared
+    /// <c>[Time, Fixed(NumLabels)]</c> - and all four exercisable models disagreed identically:
+    /// "in [1,64] contract says [1,9] but Predict returned [1]". The concrete models run the CRF
+    /// decode, so <c>Predict</c> hands back one label ID per token. The doc describes the abstract
+    /// method's emission contract; the shape system has to describe what Predict actually returns,
+    /// and where those two disagree the forward pass wins.
+    /// </para>
+    /// </remarks>
+    public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
+    {
+        if (inputRank != 2) return null;
+        return [new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time))];
+    }
+
     /// <summary>
     /// Gets or sets the number of entity label classes this model predicts.
     /// </summary>
