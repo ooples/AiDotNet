@@ -4397,6 +4397,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// that count is virtual and cached, and any disagreement with the walk wrote past the buffer.
     /// Two passes over one walk cannot disagree with each other.
     /// </remarks>
+    /// <summary>
+    /// The gradient slice written by <see cref="ScatterParameterGradients"/>, or <c>null</c> when
+    /// no tape gradient has ever been published to this layer.
+    /// </summary>
+    /// <remarks>
+    /// NON-VIRTUAL ON PURPOSE. 170 files override <see cref="GetParameterGradients"/>, and most of
+    /// those overrides pre-date the autodiff tape and allocate their own zero vector, so going
+    /// through the virtual accessor returns manufactured zeros no matter what the tape produced.
+    /// Reading the scattered field directly bypasses every one of them, which is what lets the
+    /// model-level surface be correct before those overrides have been deleted.
+    /// </remarks>
+    public Vector<T>? ScatteredParameterGradients => ParameterGradients;
+
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         if (grads is null || grads.Count == 0) return 0;
