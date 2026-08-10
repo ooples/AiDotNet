@@ -3423,6 +3423,38 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// difference between sub-second tests and 120-second timeouts.
     /// </summary>
     private bool _layerShapesResolved;
+
+    /// <summary>
+    /// Shadow evidence gathered AT THE PROPAGATION SITE, for the shape-contract cutover.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A SECOND SHADOW IS NEEDED BECAUSE THE FIRST ONE ANSWERS A DIFFERENT QUESTION.
+    /// <c>LayerContractValidator.CompareContractsToResolvedShapes</c> compares each layer's contract
+    /// against that layer's own <c>GetInputShape()</c> -&gt; <c>GetOutputShape()</c>, which are per-sample
+    /// throughout <c>LayerBase</c> - so it passes <c>isBatched: false</c>. It reported 611 agreements
+    /// and 0 disagreements, and a cutover was attempted on that basis and reverted, with the note
+    /// "shadow evidence does not cover the propagating shape".
+    /// </para>
+    /// <para>
+    /// It does not cover it because <see cref="TryAdvanceLayerShape"/> does not propagate per-sample
+    /// shapes. The walk starts from <see cref="TryGetArchitectureInputShape"/>, which prepends a unit
+    /// batch, so the shape flowing through the chain is BATCHED. The reverted attempt fed that batched
+    /// shape to the contract while hard-coding <c>isBatched: false</c> - two conventions mixed in one
+    /// call, which is a different defect from anything the first shadow could have caught.
+    /// </para>
+    /// <para>
+    /// So this records, per layer TRANSITION rather than per layer, what the contract answers for the
+    /// shape actually being propagated - under BOTH interpretations, because which convention holds is
+    /// the very thing in question and assuming it is what went wrong last time. Reporting only; the
+    /// propagated value is still whichever one <see cref="TryAdvanceLayerShape"/> already chose.
+    /// </para>
+    /// </remarks>
+    private int _propagationShadowAgreedBatched;
+    private int _propagationShadowAgreedPerSample;
+    private int _propagationShadowDeclined;
+    private int _propagationShadowDisagreedBoth;
+    private List<string>? _propagationShadowDisagreements;
     /// <summary>
     /// Whether lazy shape resolution has already run on this instance.
     /// </summary>
@@ -3671,6 +3703,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 TryAdvanceLayerShape(extra, ref currentShape, ref lastGoodShape);
             }
 
+        // After the whole walk, so the tally covers every transition including the extra layers.
+        ReportPropagationShadow();
+
         _layerShapesResolved = true;
     }
 
@@ -3701,6 +3736,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     lb.ResolveShapesOnly(tryShape);
                 }
                 int[] outShape = layer.GetOutputShape();
+
+                // Shadow the contract against the field HERE, where the answer actually propagates.
+                // Reporting only - outShape below is untouched. See the field declarations for why the
+                // existing per-layer shadow does not license a cutover at this site.
+                RecordPropagationShadow(layer, tryShape, outShape);
+
                 if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
                 {
                     // Deliberately NOT a copy: callers rely on currentShape aliasing the layer's own
@@ -3728,6 +3769,130 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Records, for ONE layer transition, what the shape contract answers for the shape actually being
+    /// propagated versus what the imperative field answered. Reporting only.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BOTH BATCH INTERPRETATIONS ARE TRIED, ON PURPOSE. Which convention the propagating shape follows
+    /// is the open question: <see cref="TryGetArchitectureInputShape"/> prepends a unit batch, so the
+    /// walk looks batched, but individual layers may hand back per-sample shapes mid-chain and the
+    /// existing per-layer shadow explicitly assumes per-sample. Picking one and asserting it is exactly
+    /// what invalidated the previous cutover attempt, so this counts agreement under each and lets the
+    /// numbers decide. A transition counted in BOTH columns is one where the two interpretations
+    /// coincide (common when the contract carries the leading axis through untouched).
+    /// </para>
+    /// <para>
+    /// Never throws and never influences propagation. A contract is a diagnostic here, and a diagnostic
+    /// must not be the reason a model fails to resolve its shapes.
+    /// </para>
+    /// </remarks>
+    private void RecordPropagationShadow(ILayer<T> layer, int[] tryShape, int[]? fieldShape)
+    {
+        try
+        {
+            if (layer is not IShapeContract) return;
+            if (tryShape is null || tryShape.Length == 0) return;
+            if (fieldShape is null || fieldShape.Length == 0) return;
+            if (!System.Array.TrueForAll(fieldShape, d => d > 0)) return;
+            if (!System.Array.TrueForAll(tryShape, d => d > 0)) return;
+
+            int[]? batched = SafeInfer(layer, tryShape, isBatched: true);
+            int[]? perSample = SafeInfer(layer, tryShape, isBatched: false);
+
+            if (batched is null && perSample is null)
+            {
+                _propagationShadowDeclined++;
+                return;
+            }
+
+            bool agreesBatched = batched is not null && ShapesEqual(batched, fieldShape);
+            bool agreesPerSample = perSample is not null && ShapesEqual(perSample, fieldShape);
+
+            if (agreesBatched) _propagationShadowAgreedBatched++;
+            if (agreesPerSample) _propagationShadowAgreedPerSample++;
+
+            if (!agreesBatched && !agreesPerSample)
+            {
+                _propagationShadowDisagreedBoth++;
+
+                // Capped: a long chain that disagrees everywhere would otherwise bury the summary, and
+                // the first few transitions are what identify the pattern.
+                _propagationShadowDisagreements ??= new List<string>();
+                if (_propagationShadowDisagreements.Count < 12)
+                {
+                    _propagationShadowDisagreements.Add(
+                        $"{layer.GetType().Name}: propagating [{string.Join(",", tryShape)}] -> field "
+                        + $"[{string.Join(",", fieldShape)}], contract says batched="
+                        + (batched is null ? "declined" : $"[{string.Join(",", batched)}]")
+                        + ", perSample="
+                        + (perSample is null ? "declined" : $"[{string.Join(",", perSample)}]"));
+                }
+            }
+        }
+        catch
+        {
+            // A diagnostic must never break shape resolution.
+        }
+    }
+
+    private static int[]? SafeInfer(ILayer<T> layer, int[] inputShape, bool isBatched)
+    {
+        try { return ShapeInference.InferOutputShape(layer, inputShape, isBatched); }
+        catch { return null; }
+    }
+
+    private static bool ShapesEqual(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Emits the propagation-site shadow tally. Call after the chain walk completes.
+    /// </summary>
+    /// <remarks>
+    /// Gated on <c>AIDOTNET_QUIET</c> like the sibling per-layer shadow, and it prints even when nothing
+    /// disagreed: the EXERCISED counts are the point. "0 disagreed" is equally true of a contract that
+    /// declined on every transition, and that vacuity is what hid 13 dead <c>[ElementWiseShape]</c>
+    /// contracts elsewhere in this work.
+    /// </remarks>
+    private void ReportPropagationShadow()
+    {
+        try
+        {
+            int total = _propagationShadowAgreedBatched + _propagationShadowAgreedPerSample
+                        + _propagationShadowDeclined + _propagationShadowDisagreedBoth;
+            if (total == 0) return;
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET"))) return;
+
+            var report = new System.Text.StringBuilder();
+            report.Append(GetType().Name)
+                .Append(": propagation-site shape shadow (agreedBatched=")
+                .Append(_propagationShadowAgreedBatched)
+                .Append(", agreedPerSample=").Append(_propagationShadowAgreedPerSample)
+                .Append(", declined=").Append(_propagationShadowDeclined)
+                .Append(", disagreedBoth=").Append(_propagationShadowDisagreedBoth)
+                .Append(')');
+
+            if (_propagationShadowDisagreements is not null)
+            {
+                foreach (var d in _propagationShadowDisagreements)
+                {
+                    report.AppendLine().Append("  ").Append(d);
+                }
+            }
+
+            System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
+        }
+        catch
+        {
+            // Reporting must never be the reason a model fails to construct.
+        }
     }
 
     /// <summary>
@@ -11641,6 +11806,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
