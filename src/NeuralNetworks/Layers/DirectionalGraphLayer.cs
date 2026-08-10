@@ -84,7 +84,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
     private readonly bool _useGating;
-    private readonly Random _random;
 
     /// <summary>
     /// Weights for incoming edge aggregation.
@@ -254,7 +253,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
         _useGating = useGating;
-        _random = RandomHelper.CreateSecureRandom();
 
         // Initialize transformation weights for each direction - all Tensor<T>
         _incomingWeights = new Tensor<T>([_inputFeatures, _outputFeatures]);
