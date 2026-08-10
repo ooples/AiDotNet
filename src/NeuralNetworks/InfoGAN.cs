@@ -1072,52 +1072,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             NumOps.ToDouble(_mutualInfoCoefficient));
     }
 
-    /// <summary>
-    /// Updates the parameters of all networks in the InfoGAN.
-    /// </summary>
-    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
-        }
-
-        int generatorCount = (int)Generator.GetParameterCount();
-        int discriminatorCount = (int)Discriminator.GetParameterCount();
-        int qNetworkCount = (int)QNetwork.GetParameterCount();
-
-        int totalCount = generatorCount + discriminatorCount + qNetworkCount;
-
-        if (parameters.Length != totalCount)
-        {
-            throw new ArgumentException(
-                $"Parameters vector length mismatch: expected {totalCount} " +
-                $"(Generator: {generatorCount}, Discriminator: {discriminatorCount}, " +
-                $"QNetwork: {qNetworkCount}), but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        // Update Generator parameters
-        var generatorParams = new Vector<T>(generatorCount);
-        for (int i = 0; i < generatorCount; i++)
-            generatorParams[i] = parameters[offset + i];
-        Generator.UpdateParameters(generatorParams);
-        offset += generatorCount;
-
-        // Update Discriminator parameters
-        var discriminatorParams = new Vector<T>(discriminatorCount);
-        for (int i = 0; i < discriminatorCount; i++)
-            discriminatorParams[i] = parameters[offset + i];
-        Discriminator.UpdateParameters(discriminatorParams);
-        offset += discriminatorCount;
-
-        // Update QNetwork parameters
-        var qNetworkParams = new Vector<T>(qNetworkCount);
-        for (int i = 0; i < qNetworkCount; i++)
-            qNetworkParams[i] = parameters[offset + i];
-        QNetwork.UpdateParameters(qNetworkParams);
-    }
+    // UpdateParameters split the vector between Generator, Discriminator and QNetwork;
+    // GetExtraTrainableLayers yields those three in the same order, so the base reproduces the
+    // split. Removed under AIDN082.
 }

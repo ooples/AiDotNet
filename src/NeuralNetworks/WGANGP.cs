@@ -1092,37 +1092,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             new WGANGPOptions(_options));
     }
 
-    /// <summary>
-    /// Updates the parameters of both the generator and critic networks.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for both networks.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int generatorParameterCount = (int)Generator.GetParameterCount();
-        int criticParameterCount = (int)Critic.GetParameterCount();
-
-        if (parameters.Length != generatorParameterCount + criticParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {generatorParameterCount + criticParameterCount} parameters, " +
-                $"but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // Split and update Generator parameters
-        var generatorParameters = new Vector<T>((int)(generatorParameterCount));
-        for (int i = 0; i < generatorParameterCount; i++)
-        {
-            generatorParameters[i] = parameters[i];
-        }
-        Generator.UpdateParameters(generatorParameters);
-
-        // Split and update Critic parameters
-        var criticParameters = new Vector<T>((int)(criticParameterCount));
-        for (int i = 0; i < criticParameterCount; i++)
-        {
-            criticParameters[i] = parameters[generatorParameterCount + i];
-        }
-        Critic.UpdateParameters(criticParameters);
-    }
+    // UpdateParameters split the vector between Generator and Critic. Both sub-networks' layers are
+    // added to Layers in that same order (Layers.AddRange(Generator.Layers) then
+    // Layers.AddRange(Critic.Layers)), so the base fold reproduces the split. Removed under AIDN082.
 }

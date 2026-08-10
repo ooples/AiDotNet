@@ -887,26 +887,9 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-    }
+    // UpdateParameters redistributed the vector across Layers, which the base already folds -- and
+    // did it less safely: the `offset + count <= parameters.Length` guard silently left the
+    // remaining layers untouched on a short vector instead of failing. Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -81,7 +81,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2025,
     Authors = "Chen et al."
 )]
-public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusProOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -556,24 +556,7 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             _pixelDecoderOut,
         };
 
-    /// <summary>
-    /// Surfaces the generation modules to the parameter walk.
-    /// </summary>
-    /// <remarks>
-    /// JanusPro's generation head lives outside <c>Layers</c> and is reachable only through a helper, so no base walk reached it. Walking it inside UpdateParameters, as this model used to, fixed only the write path:
-    /// ParameterCount and GetParameters still described <c>Layers</c> alone, so the count and the
-    /// vector agreed with each other while both understated the model. Yielding here fixes the
-    /// count, the vector and the checkpoint together.
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        foreach (var l in base.GetExtraTrainableLayers())
-            yield return l;
-        foreach (var layer in GenerationModules())
-        {
-            if (layer is LayerBase<T> lb) yield return lb;
-        }
-    }
+    // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>

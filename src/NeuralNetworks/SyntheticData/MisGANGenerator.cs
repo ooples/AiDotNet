@@ -819,25 +819,9 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         foreach (var drop in _maskDiscDropoutLayers) drop.SetTrainingMode(isTraining);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var slice = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(slice);
-                offset += count;
-            }
-        }
-    }
+    // UpdateParameters redistributed the vector across Layers, which the base already folds -- and
+    // did it less safely: the length guard silently left the remaining layers untouched on a short
+    // vector instead of failing. Removed under AIDN082.
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

@@ -771,37 +771,6 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
             NumOps.ToDouble(_l1Lambda));
     }
 
-    /// <summary>
-    /// Updates the parameters of all networks in the Pix2Pix GAN.
-    /// </summary>
-    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int generatorCount = (int)Generator.GetParameterCount();
-        int discriminatorCount = (int)Discriminator.GetParameterCount();
-
-        if (parameters.Length != generatorCount + discriminatorCount)
-        {
-            throw new ArgumentException(
-                $"Expected {generatorCount + discriminatorCount} parameters, " +
-                $"but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // Update Generator parameters
-        var generatorParams = new Vector<T>(generatorCount);
-        for (int i = 0; i < generatorCount; i++)
-        {
-            generatorParams[i] = parameters[i];
-        }
-        Generator.UpdateParameters(generatorParams);
-
-        // Update Discriminator parameters
-        var discriminatorParams = new Vector<T>(discriminatorCount);
-        for (int i = 0; i < discriminatorCount; i++)
-        {
-            discriminatorParams[i] = parameters[generatorCount + i];
-        }
-        Discriminator.UpdateParameters(discriminatorParams);
-    }
+    // UpdateParameters split the vector between Generator and Discriminator; GetExtraTrainableLayers
+    // yields the same two in the same order, so the base reproduces the split. Removed under AIDN082.
 }

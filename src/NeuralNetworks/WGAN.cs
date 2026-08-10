@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wasserstein GAN", "https://arxiv.org/abs/1701.07875", Year = 2017, Authors = "Martin Arjovsky, Soumith Chintala, Leon Bottou")]
-public class WGAN<T> : NeuralNetworkBase<T>
+public partial class WGAN<T> : NeuralNetworkBase<T>
 {
     private readonly WGANOptions _options;
 
@@ -709,43 +709,5 @@ public class WGAN<T> : NeuralNetworkBase<T>
             _criticIterations);
     }
 
-    /// <summary>
-    /// Updates the parameters of both the generator and critic networks.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for both networks.</param>
-    /// <remarks>
-    /// <para>
-    /// The parameters vector is split between the generator and critic based on their
-    /// respective parameter counts. Generator parameters come first, followed by critic parameters.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int generatorParameterCount = (int)Generator.GetParameterCount();
-        int criticParameterCount = (int)Critic.GetParameterCount();
-
-        if (parameters.Length != generatorParameterCount + criticParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {generatorParameterCount + criticParameterCount} parameters, " +
-                $"but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // Split and update Generator parameters
-        var generatorParameters = new Vector<T>((int)(generatorParameterCount));
-        for (int i = 0; i < generatorParameterCount; i++)
-        {
-            generatorParameters[i] = parameters[i];
-        }
-        Generator.UpdateParameters(generatorParameters);
-
-        // Split and update Critic parameters
-        var criticParameters = new Vector<T>((int)(criticParameterCount));
-        for (int i = 0; i < criticParameterCount; i++)
-        {
-            criticParameters[i] = parameters[generatorParameterCount + i];
-        }
-        Critic.UpdateParameters(criticParameters);
-    }
+    // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 }
