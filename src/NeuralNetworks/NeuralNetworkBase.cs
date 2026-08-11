@@ -609,6 +609,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This method collects all those adjustable values into a single list so they can be updated during training.
     /// </para>
     /// </remarks>
+    // --- Parameter component registry -------------------------------------------------------
+    //
+    // A fourth source, after Layers, GetExtraTrainableLayers and GetExtraTrainableTensors, for
+    // parameters that are none of those: a set COMPUTED from a structure rather than stored in a
+    // field. NEAT's surface is its best genome's connections, an expression tree's is the constants
+    // in its nodes, a NAS supernet's is architecture weights keyed by operation. None can be
+    // expressed as a tensor field or a layer, and before this the only way to surface them was to
+    // hand-write ParameterCount, GetParameters and SetParameters -- three separate chances for the
+    // count and the vector to disagree, which is the defect this whole surface exists to remove.
+    //
+    // Registered LAST so that every model that registers nothing keeps byte-identical
+    // serialization order.
+
+    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this model's surface. Registration order is
+    /// serialization order, so keep it stable. Null is tolerated and registration is idempotent by
+    /// reference.
+    /// </summary>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    {
+        if (component is null) return;
+        for (int i = 0; i < _parameterComponents.Count; i++)
+        {
+            if (ReferenceEquals(_parameterComponents[i], component)) return;
+        }
+        _parameterComponents.Add(component);
+    }
+
+    /// <summary>
+    /// Declare components here with <see cref="RegisterParameterComponent"/>. Called once, lazily,
+    /// so it runs after the constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>The registered components, registering them on first use.</summary>
+    protected IReadOnlyList<IParameterSource<T>> ParameterComponents
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                RegisterComponents();
+                // Latch only once something registered: a model can be asked for its parameters
+                // before it has built them, and registration tolerates null, so an early call would
+                // otherwise mark the job done and leave the model reporting zero for ever.
+                _componentsRegistered = _parameterComponents.Count > 0;
+            }
+            return _parameterComponents;
+        }
+    }
+
+    /// <summary>Total across the registered components, or zero when none are registered.</summary>
+    protected long RegisteredComponentCount
+    {
+        get
+        {
+            long total = 0;
+            var components = ParameterComponents;
+            for (int i = 0; i < components.Count; i++) total += components[i].ParameterCount;
+            return total;
+        }
+    }
+
     public virtual Vector<T> GetParameters()
     {
         // Pre-resolve any lazy layer shapes from the architecture before
@@ -676,6 +744,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             tensor.AsSpan().CopyTo(flat.AsWritableSpan());
             perLayerParameters.Add(flat);
             totalParameterCountLong += flat.Length;
+        }
+        // Registered components, fourth and last -- the same position ParameterCount and
+        // SetParameters use, so the three describe one parameter set in one order.
+        var registeredComponents = ParameterComponents;
+        for (int ci = 0; ci < registeredComponents.Count; ci++)
+        {
+            var componentParameters = registeredComponents[ci].GetParameters();
+            perLayerParameters.Add(componentParameters);
+            totalParameterCountLong += componentParameters.Length;
         }
         int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
@@ -2059,6 +2136,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 if (tensor is not null) total += tensor.Length;
             }
+
+            // Registered components last, so a model that registers nothing is byte-identical.
+            total += RegisteredComponentCount;
 
             return total;
         }
@@ -12815,6 +12895,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (tensor is null || tensor.Length == 0) continue;
             srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
             currentIndex += tensor.Length;
+        }
+        var restoreComponents = ParameterComponents;
+        for (int ci = 0; ci < restoreComponents.Count; ci++)
+        {
+            int componentCount = (int)restoreComponents[ci].ParameterCount;
+            if (componentCount == 0) continue;
+            var slice = new Vector<T>(componentCount);
+            srcSpan.Slice(currentIndex, componentCount).CopyTo(slice.AsWritableSpan());
+            restoreComponents[ci].SetParameters(slice);
+            currentIndex += componentCount;
         }
 
         // Some ITrainableLayer implementations swap their parameter tensors
