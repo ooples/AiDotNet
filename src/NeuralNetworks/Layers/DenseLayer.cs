@@ -591,6 +591,27 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// <summary>
     /// Ensures that weights are allocated and initialized for lazy initialization.
     /// </summary>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Weights are <c>[inputSize, outputSize]</c> and biases <c>[outputSize]</c>, read off the same
+    /// resolved shapes the allocation below uses. Empty while the input width is still the -1
+    /// sentinel, which is the base's signal that this layer cannot answer yet.
+    /// </remarks>
+    protected override IReadOnlyList<(Tensor<T>? Tensor, TensorShape Expected, PersistentTensorRole Role)>
+        DeclaredParameterShapes()
+    {
+        int inputSize = InputShape[0];
+        int outputSize = OutputShape[0];
+        if (inputSize < 0 || outputSize < 0)
+            return System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
+
+        return new (Tensor<T>?, TensorShape, PersistentTensorRole)[]
+        {
+            (_weights, ShapeOf(inputSize, outputSize), PersistentTensorRole.Weights),
+            (_biases,  ShapeOf(outputSize),            PersistentTensorRole.Biases),
+        };
+    }
+
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
@@ -621,37 +642,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             if (inputSize < 0)
                 return;
 
-            // A fresh layer can receive materialized parameters before its first
-            // Forward (deserialization and graph-safe cloning both do this). The
-            // parameter tensors are the source of truth in that state: do not
-            // replace trained/restored values merely because the lazy-init latch
-            // has not run yet.
-            bool hasExpectedWeights =
-                _weights.Shape.Length == 2 &&
-                _weights.Shape[0] == inputSize &&
-                _weights.Shape[1] == outputSize;
-            bool hasExpectedBiases =
-                _biases.Shape.Length == 1 &&
-                _biases.Shape[0] == outputSize;
-
-            if (hasExpectedWeights && hasExpectedBiases)
+            // A fresh layer can receive materialized parameters before its first Forward
+            // (deserialization and graph-safe cloning both do this), and in that state the tensors
+            // are the source of truth. The RULE for that lives in LayerBase so every lazy layer
+            // answers it the same way; this layer supplies only the shapes it expects, in
+            // DeclaredParameterShapes below. A half-delivered or non-conforming set throws there.
+            if (TryAdoptRestoredParameters())
             {
-                RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
                 _isInitialized = true;
                 return;
-            }
-
-            // Never silently discard a partially restored or incompatible
-            // parameter set. Surface the broken lifecycle/shape contract at the
-            // layer boundary with both expected and actual shapes.
-            if (_weights.Length > 0 || _biases.Length > 0)
-            {
-                throw new InvalidOperationException(
-                    $"DenseLayer parameters do not conform to the resolved shape. " +
-                    $"Expected weights [{inputSize}, {outputSize}] and biases [{outputSize}], " +
-                    $"but received weights [{string.Join(", ", _weights.Shape.ToArray())}] and " +
-                    $"biases [{string.Join(", ", _biases.Shape.ToArray())}].");
             }
 
             // Streaming-aware allocation: when the parent network has

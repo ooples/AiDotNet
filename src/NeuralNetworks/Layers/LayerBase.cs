@@ -678,6 +678,131 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected static TensorShape ShapeOf(params int[] dims) => TensorShape.WrapUnsafe(dims);
 
     /// <summary>
+    /// The trainable tensors this layer allocates for itself, each paired with the shape it must
+    /// have once the layer's own shapes are resolved, and the role that names it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DATA, not policy -- the same division as <see cref="DeclaredSubLayerShapes"/>. Only the layer
+    /// knows that its weights are <c>[inputSize, outputSize]</c> and its biases <c>[outputSize]</c>;
+    /// what to DO when a restore has already filled those tensors is the base's business, and lives
+    /// in <see cref="TryAdoptRestoredParameters"/> so that every lazy layer answers it identically.
+    /// </para>
+    /// <para>
+    /// Return an empty list while the shapes are still unresolved (a lazy layer carries the -1
+    /// sentinel until its first forward). An empty declaration means "I cannot say yet", and the
+    /// base then leaves initialization alone.
+    /// </para>
+    /// </remarks>
+    protected virtual IReadOnlyList<(Tensor<T>? Tensor, TensorShape Expected, PersistentTensorRole Role)>
+        DeclaredParameterShapes()
+        => System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
+
+    /// <summary>
+    /// Keeps parameters that were supplied from outside before this layer initialized, instead of
+    /// letting the lazy initializer allocate over them. Returns true when the caller should stop.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A restore -- deserialization, or graph-safe cloning -- binds real weight tensors into a layer
+    /// that has never run a forward. The layer's own "have I initialized" latch is private and
+    /// nothing outside can set it, so the next call to the initializer saw the latch still false and
+    /// allocated fresh random weights straight over the loaded ones: a saved model reloading as a
+    /// different model. Measured on a trained Transformer: 4,192 of 8,448 values in the encoder
+    /// block moved across the restored model's FIRST Predict, while the trained source moved 0, and
+    /// Predict came back 0.974 different.
+    /// </para>
+    /// <para>
+    /// Three outcomes, and the middle one is the reason this cannot be a blanket "tensors exist, so
+    /// skip": NOTHING supplied means initialize normally; EVERY tensor supplied AND conforming means
+    /// keep what arrived; anything else -- a half-delivered set, or one whose shapes disagree with
+    /// the resolved geometry -- is a broken lifecycle that must be reported rather than silently
+    /// papered over in either direction. An earlier attempt that skipped whenever the tensors were
+    /// merely non-empty swallowed exactly that case.
+    /// </para>
+    /// </remarks>
+    protected bool TryAdoptRestoredParameters()
+    {
+        var declared = DeclaredParameterShapes();
+        if (declared is null || declared.Count == 0) return false;
+
+        int supplied = 0, conforming = 0;
+        for (int i = 0; i < declared.Count; i++)
+        {
+            var (tensor, expected, _) = declared[i];
+            if (tensor is null || tensor.Length == 0) continue;
+            supplied++;
+            if (ShapeMatchesDeclared(tensor, expected)) conforming++;
+        }
+
+        if (supplied == 0) return false;
+
+        if (conforming == declared.Count)
+        {
+            // Register them: the tensors are this layer's real parameters now, and the optimizer,
+            // checkpointer and streaming pool all discover parameters through the registry.
+            for (int i = 0; i < declared.Count; i++)
+            {
+                var (tensor, _, role) = declared[i];
+                if (tensor is not null) RegisterTrainableParameter(tensor, role);
+            }
+            return true;
+        }
+
+        throw new InvalidOperationException(
+            $"{GetType().Name} parameters do not conform to the resolved shape. " +
+            $"Expected {DescribeDeclaredShapes(declared, expected: true)}, " +
+            $"but received {DescribeDeclaredShapes(declared, expected: false)}.");
+    }
+
+    private static bool ShapeMatchesDeclared(Tensor<T> tensor, TensorShape expected)
+    {
+        var actual = tensor.Shape;
+        if (actual.Length != expected.Length) return false;
+        for (int i = 0; i < actual.Length; i++)
+        {
+            if (actual[i] != expected[i]) return false;
+        }
+        return true;
+    }
+
+    private static string DescribeDeclaredShapes(
+        IReadOnlyList<(Tensor<T>? Tensor, TensorShape Expected, PersistentTensorRole Role)> declared,
+        bool expected)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < declared.Count; i++)
+        {
+            if (i > 0) sb.Append(i == declared.Count - 1 ? " and " : ", ");
+            var (tensor, shape, role) = declared[i];
+            sb.Append(role.ToString().ToLowerInvariant()).Append(" [");
+            if (expected)
+            {
+                for (int d = 0; d < shape.Length; d++)
+                {
+                    if (d > 0) sb.Append(", ");
+                    sb.Append(shape[d]);
+                }
+            }
+            else if (tensor is null)
+            {
+                sb.Append("none");
+            }
+            else
+            {
+                var actual = tensor.Shape;
+                for (int d = 0; d < actual.Length; d++)
+                {
+                    if (d > 0) sb.Append(", ");
+                    sb.Append(actual[d]);
+                }
+            }
+            sb.Append(']');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// True while a constructor is bringing this layer up WITHOUT allocating weights.
     /// </summary>
     /// <remarks>
