@@ -192,14 +192,33 @@ public partial class TimeMoEBlockLayer<T> : LayerBase<T>, IShapeContract
     /// sequence; its weight count depends only on <c>_hiddenDim</c> either way.
     /// </para>
     /// </remarks>
+    protected override IReadOnlyList<(LayerBase<T>? Child, TensorShape InputShape)> DeclaredSubLayerShapes()
+    {
+        if (_declaredSubLayerShapes is not null) return _declaredSubLayerShapes;
+
+        var hidden = ShapeOf(_hiddenDim);
+        _declaredSubLayerShapes = new (LayerBase<T>?, TensorShape)[]
+        {
+            (_norm1,         hidden),
+            (_selfAttention, ShapeOf(1, _hiddenDim)),
+            (_norm2,         hidden),
+            (_moe,           hidden),
+        };
+        return _declaredSubLayerShapes;
+    }
+
+    /// <summary>Cached <see cref="DeclaredSubLayerShapes"/>; the children and _hiddenDim never change.</summary>
+    private (LayerBase<T>? Child, TensorShape InputShape)[]? _declaredSubLayerShapes;
+
     protected override void EnsureInitialized()
     {
         EnsureSubLayersRegistered();
 
-        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape([_hiddenDim]);
-        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape([_hiddenDim]);
-        if (!_selfAttention.IsShapeResolved) _selfAttention.ResolveFromShape([1, _hiddenDim]);
-        if (!_moe.IsShapeResolved) _moe.ResolveFromShape([_hiddenDim]);
+        // The per-child IsShapeResolved guards were redundant -- ResolveFromShape opens with
+        // `if (IsShapeResolved) return;` -- and going through the base instead means a shape walker
+        // or a deferring constructor gets dimensions without paying for weights, which the direct
+        // ResolveFromShape calls did not allow.
+        BringUpDeclaredSubLayers();
 
         base.EnsureInitialized();
     }
