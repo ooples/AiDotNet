@@ -11590,7 +11590,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// the count check after SetParameters still reports the shortfall — by layer name and now by shape.
     /// </para>
     /// </remarks>
-    private static void MaterializeDestinationLayer(LayerBase<T> destination, int[]? declared)
+    protected static void MaterializeDestinationLayer(LayerBase<T> destination, int[]? declared)
     {
         if (declared is null || declared.Length == 0) return;
 

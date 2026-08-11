@@ -661,12 +661,16 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             var source = Layers[i];
             var destination = copy.Layers[i];
             int[] inputShape = source.GetInputShape();
+
+            // The base helper, not a local copy of the test it used to run here. The old guard was
+            // "destination is unresolved AND every declared axis is positive", and both halves are
+            // permanently false for a layer carrying the -1 free-axis sentinel, so it skipped
+            // precisely the layers that needed resolving. MaterializeDestinationLayer falls back to
+            // a forward probe with the free axes filled in.
             if (destination is LayerBase<T> destinationBase &&
-                !destinationBase.IsShapeResolved &&
-                inputShape.Length > 0 &&
-                Array.TrueForAll(inputShape, dimension => dimension > 0))
+                destinationBase.ParameterCount != source.ParameterCount)
             {
-                destinationBase.ResolveFromShape(inputShape);
+                MaterializeDestinationLayer(destinationBase, inputShape);
             }
 
             destination.SetParameters(source.GetParameters());

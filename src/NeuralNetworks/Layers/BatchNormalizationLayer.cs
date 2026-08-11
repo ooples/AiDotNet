@@ -1040,6 +1040,25 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
     {
         int featureSize = InputShape[0];
+
+        // A layer whose feature count has not resolved yet cannot check anything: InputShape[0] is
+        // the -1 free-axis sentinel, and the arithmetic below turned that into the message
+        // "extra parameters must have length -2 (mean + variance for -1 features), but got 0" --
+        // a demand for a negative number of values, which no caller can satisfy. An empty vector
+        // from an equally unresolved source is not a mismatch, it is two sides agreeing that there
+        // are no running statistics yet, so accept it and leave the buffers alone. This is what
+        // CRNN's clone hit: neither side had run a forward, so neither had statistics.
+        if (featureSize <= 0)
+        {
+            if (extraParameters.Length == 0) return;
+
+            throw new ArgumentException(
+                $"BatchNormalization cannot accept {extraParameters.Length} extra parameters until " +
+                "its feature count is known; the layer's input shape is still unresolved. Run a " +
+                "forward pass, or restore into a layer resolved from the same input shape.",
+                nameof(extraParameters));
+        }
+
         if (extraParameters.Length != featureSize * 2)
             throw new ArgumentException(
                 $"BatchNormalization extra parameters must have length {featureSize * 2} " +
