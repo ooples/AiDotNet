@@ -362,23 +362,7 @@ public class XDecoder<T> : Common.PanopticSegmentationBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int expected = 0;
-        foreach (var layer in Layers) expected += layer.GetParameters().Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = layer.GetParameters().Length;
-            var newParams = new Vector<T>(count);
-            for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
-            layer.UpdateParameters(newParams);
-            offset += count;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <summary>
     /// Collects metadata describing this X-Decoder model's configuration.
     /// </summary>

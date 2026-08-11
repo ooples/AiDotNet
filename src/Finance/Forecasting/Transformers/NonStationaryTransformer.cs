@@ -70,7 +70,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Non-stationary Transformers: Exploring the Stationarity in Time Series Forecasting", "https://arxiv.org/abs/2205.14415", Year = 2022, Authors = "Yong Liu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
-public class NonStationaryTransformer<T> : ForecastingModelBase<T>
+public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -143,6 +143,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// before processing and de-normalize after.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
@@ -154,6 +155,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// the data to unit variance before processing.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     /// <summary>

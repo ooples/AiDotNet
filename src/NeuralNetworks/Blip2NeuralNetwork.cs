@@ -66,7 +66,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models", "https://arxiv.org/abs/2301.12597", Year = 2023, Authors = "Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi")]
-public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
+public partial class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 {
     private readonly Blip2Options _options;
 
@@ -161,11 +161,13 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <summary>
     /// Gradient storage for query tokens.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _queryTokensGradients;
 
     /// <summary>
     /// Gradient storage for positional embeddings.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _queryPositionalEmbeddingsGradients;
 
     /// <summary>
@@ -1927,30 +1929,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (gradients.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        if (!_useNativeMode) return;
-
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent update: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        // Set the updated parameters
-        SetParameters(currentParams);
-    }
-
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

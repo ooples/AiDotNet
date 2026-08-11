@@ -61,7 +61,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
     "https://arxiv.org/abs/2108.13643",
     Year = 2021,
     Authors = "Dweep Trivedi, Jesse Zhang, Shao-Hua Sun, Joseph J. Lim")]
-public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthesizer<T>
+public partial class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthesizer<T>
 {
     private readonly NeuralProgramSynthesizerOptions _options;
 

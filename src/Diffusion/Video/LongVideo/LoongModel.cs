@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Loong: Generating Minute-level Long Videos with Autoregressive Language Models", "https://arxiv.org/abs/2410.02757", Year = 2024, Authors = "Wang et al.")]
-public class LoongModel<T> : VideoDiffusionModelBase<T>
+public partial class LoongModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

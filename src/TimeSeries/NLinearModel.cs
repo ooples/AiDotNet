@@ -1,7 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
-using AiDotNet.Optimizers;
+using AiDotNet.Optimizers;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -18,12 +19,14 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Are Transformers Effective for Time Series Forecasting?", "https://arxiv.org/abs/2205.13504", Year = 2023, Authors = "Ailing Zeng, Muxi Chen, Lei Zhang, Qiang Xu")]
-public class NLinearModel<T> : TimeSeriesModelBase<T>
+public partial class NLinearModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NLinearOptions<T> _options;
     private readonly Random _random;
     private readonly int _l;
+    [TrainableParameter]
     private readonly double[] _w;
+    [TrainableParameter]
     private double _b;
     private readonly IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
 
@@ -33,9 +36,13 @@ public class NLinearModel<T> : TimeSeriesModelBase<T>
     // coincide and this reduces to plain NLinear, but normalizing in the model's own space is what makes
     // training converge independent of the series magnitude (Adam can't otherwise move the bias/weights far
     // enough on large-scale targets within the epoch budget).
+    [Buffer]
     private double _xMean;
+    [Buffer]
     private double _xStd = 1.0;
+    [Buffer]
     private double _yMean;
+    [Buffer]
     private double _yStd = 1.0;
 
     /// <param name="options">Model configuration (window, horizon, epochs, batch size, learning rate).</param>
@@ -172,7 +179,6 @@ public class NLinearModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        ModelParameters = FlattenParameters();
     }
 
     // Fit z-score scalers over the training inputs (all window values) and targets. A (near-)constant series
@@ -221,16 +227,6 @@ public class NLinearModel<T> : TimeSeriesModelBase<T>
         double pred = Forecast(j => Convert.ToDouble(input[j]), input.Length);
         return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
     }
-
-    private Vector<T> FlattenParameters()
-    {
-        var flat = new T[_l + 1];
-        for (int j = 0; j < _l; j++) { flat[j] = NumOps.FromDouble(_w[j]); }
-        flat[_l] = NumOps.FromDouble(_b);
-        return new Vector<T>(flat);
-    }
-
-    public override long ParameterCount => _l + 1;
 
     protected override void SerializeCore(BinaryWriter writer)
     {

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("MiniMax Hailuo I2V-01", "https://hailuoai.video")]
-public class MinimaxVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class MinimaxVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

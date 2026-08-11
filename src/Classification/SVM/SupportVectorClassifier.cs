@@ -52,16 +52,18 @@ namespace AiDotNet.Classification.SVM;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Training Algorithm for Optimal Margin Classifiers", "https://doi.org/10.1145/130385.130401", Year = 1992, Authors = "Bernhard E. Boser, Isabelle M. Guyon, Vladimir N. Vapnik")]
-public class SupportVectorClassifier<T> : SVMBase<T>
+public partial class SupportVectorClassifier<T> : SVMBase<T>
 {
     /// <summary>
     /// Stored training features.
     /// </summary>
+    [Buffer]
     private Matrix<T>? _xTrain;
 
     /// <summary>
     /// Stored training labels (converted to +1/-1 for binary).
     /// </summary>
+    [Buffer]
     private Vector<T>? _yTrain;
 
     /// <summary>

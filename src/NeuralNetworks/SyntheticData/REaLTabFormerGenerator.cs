@@ -77,7 +77,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2302.02041",
     Year = 2023,
     Authors = "Aivin V. Solatorio, Olivier Dupriez")]
-public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly REaLTabFormerOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -707,25 +707,9 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
         // REaLTabFormer uses its own specialized training via Fit/FitAsync.
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var slice = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(slice);
-                offset += count;
-            }
-        }
-    }
+    // UpdateParameters redistributed the vector across Layers, which the base already folds -- and
+    // did it less safely: the length guard silently left the remaining layers untouched on a short
+    // vector instead of failing. Removed under AIDN082.
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

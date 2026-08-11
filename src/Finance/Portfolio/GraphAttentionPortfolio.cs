@@ -253,38 +253,7 @@ public class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
         return Objective.Loss(Objective.PortfolioReturns(weights, assetReturns));
     }
 
-    /// <inheritdoc />
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        Guard.NotNull(parameters);
-
-        // The whole length is checked BEFORE any layer is mutated. Slicing sequentially meant a
-        // short vector threw partway through, leaving the earlier layers updated and the rest on
-        // their old values -- a model in a state that was neither the old one nor the new one -- and
-        // a long vector left its tail silently unused.
-        // long, because ParameterCount is long: accumulating into an int would overflow silently on a
-        // large model and then report a mismatch against a negative expectation.
-        long expected = 0;
-        foreach (var layer in Layers) expected += layer.ParameterCount;
-
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters for {Layers.Count} layers; got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            // checked: a single layer with more than int.MaxValue parameters cannot be sliced by this
-            // API anyway, so overflow should throw here rather than wrap into a wrong slice length.
-            int count = checked((int)layer.ParameterCount);
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {

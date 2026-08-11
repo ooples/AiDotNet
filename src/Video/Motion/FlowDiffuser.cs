@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2404.09117",
     Year = 2024,
     Authors = "Ao Luo, Xin Li, Fan Fang, Jiangyu Liu, Haoqiang Fan, Shuaicheng Liu")]
-public class FlowDiffuser<T> : OpticalFlowBase<T>
+public partial class FlowDiffuser<T> : OpticalFlowBase<T>
 {
     private readonly FlowDiffuserOptions _options;
 
@@ -197,44 +197,7 @@ public class FlowDiffuser<T> : OpticalFlowBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        if (_featureExtract is not null)
-        {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

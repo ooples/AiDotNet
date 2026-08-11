@@ -70,7 +70,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2021,
     Authors = "Jia et al."
 )]
-public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -275,9 +275,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         }
     }
 
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

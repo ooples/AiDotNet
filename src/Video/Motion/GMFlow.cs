@@ -64,7 +64,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2111.13680",
     Year = 2022,
     Authors = "Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, Dacheng Tao")]
-public class GMFlow<T> : OpticalFlowBase<T>
+public partial class GMFlow<T> : OpticalFlowBase<T>
 {
     private readonly GMFlowOptions _options;
 
@@ -659,25 +659,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         foreach (var layer in _refinement) Layers.Add(layer);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

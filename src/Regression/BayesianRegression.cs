@@ -82,6 +82,7 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// <summary>
     /// The covariance matrix of the posterior distribution over model parameters.
     /// </summary>
+    [Buffer]
     private Matrix<T> _posteriorCovariance;
 
     /// <summary>

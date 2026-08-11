@@ -49,7 +49,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Multiple Time Series", "https://doi.org/10.1002/0471667196", Year = 2005, Authors = "Helmut Lütkepohl")]
-public class VARMAModel<T> : VectorAutoRegressionModel<T>
+public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -72,6 +72,7 @@ public class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
+    [Buffer]
     private Matrix<T> _residuals;
 
     /// <summary>

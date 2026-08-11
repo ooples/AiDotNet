@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Trajectory Consistency Distillation", "https://arxiv.org/abs/2402.19159", Year = 2024, Authors = "Zheng et al.")]
-public class TCDModel<T> : LatentDiffusionModelBase<T>
+public partial class TCDModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

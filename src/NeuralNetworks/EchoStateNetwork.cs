@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("The 'echo state' approach to analysing and training recurrent neural networks", "https://www.ai.rug.nl/minds/uploads/EchoStatesTechRep.pdf", Year = 2001, Authors = "Herbert Jaeger")]
-public class EchoStateNetwork<T> : NeuralNetworkBase<T>
+public partial class EchoStateNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly EchoStateNetworkOptions _options;
 
@@ -1067,60 +1067,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Updates the output layer parameters (weights and biases) of the Echo State Network.
-    /// </summary>
-    /// <param name="parameters">A vector containing the output weights and biases to update.</param>
-    /// <exception cref="ArgumentException">Thrown when parameter vector length doesn't match expected size.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method updates the ESN's output layer parameters from a flat parameter vector. The parameter vector
-    /// must have a length equal to (reservoirSize × outputSize) + outputSize. Note that this only updates the
-    /// output layer - the reservoir weights remain fixed. While ESNs typically train using ridge regression
-    /// (see the Train method), this method allows for direct parameter updates for external optimization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the output layer weights directly.
-    ///
-    /// Echo State Networks are different from standard neural networks:
-    /// - Their reservoir weights stay fixed (unchangeable) after initialization
-    /// - Only the output layer weights are trainable
-    /// - They typically use ridge regression for training (not gradient descent)
-    ///
-    /// This method allows you to:
-    /// - Directly set the output layer weights and biases
-    /// - Integrate with external optimization algorithms
-    /// - Transfer parameters from other sources
-    ///
-    /// <b>Note:</b> The reservoir weights are NOT affected by this method and remain fixed.
-    /// For typical ESN training, use the Train method with ridge regression instead.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int outputWeightCount = _reservoirSize * _outputSize;
-        int expectedLength = outputWeightCount + _outputSize;
-
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException($"Parameter vector length mismatch. Expected {expectedLength} parameters but got {parameters.Length}.", nameof(parameters));
-        }
-
-        int paramIndex = 0;
-
-        for (int i = 0; i < _reservoirSize; i++)
-        {
-            for (int j = 0; j < _outputSize; j++)
-            {
-                _outputWeights[i, j] = parameters[paramIndex++];
-            }
-        }
-
-        for (int i = 0; i < _outputSize; i++)
-        {
-            _outputBias[i] = parameters[paramIndex++];
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Makes a prediction using the Echo State Network.
     /// </summary>

@@ -55,14 +55,19 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://doi.org/10.1109/ICASSP49357.2023.10095969",
     Year = 2023,
     Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
-public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+// The inherited [Batch, Features] input is CORRECT - CLAP takes raw audio, per EncodeAudio's own
+// contract of "[samples] or [batch, samples]". What the declared-input check saw is the log-mel front
+// end: EncodeAudio calls PreprocessAudio BEFORE folding the stack, so Layers[0] - a
+// PatchEmbeddingLayer over Swin blocks, rank 3 or 4 - receives a spectrogram image and never the
+// waveform. Both declarations describe different tensors, so the exemption is the honest fix here; an
+// override claiming a spectrogram input would advertise a shape Predict does not accept.
+[PreprocessesInput("PreprocessAudio converts the waveform to a log-mel spectrogram image before the "
+    + "audio stack runs, so Layers[0] never sees the raw samples - see EncodeAudio.")]
+public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The text tower. CLAP is dual-encoder: the audio layers are this model's own
-    /// Layers and the text layers are a second stack, and both are trained.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => TextEncoderLayers.Cast<LayerBase<T>?>();
+    // TextEncoderLayers is yielded by AudioNeuralNetworkBase.GetExtraTrainableLayers for every audio
+    // model that owns a text tower, so this override restated the base. Removed under AIDN082.
 
     /// <inheritdoc />
     /// <remarks>The learned logit scale (CLIP's temperature), a single value the contrastive
@@ -725,34 +730,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
  // _logTemperature (learnable τ scalar)
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-
-        int idx = 0;
-        // Audio encoder layers (the inherited Layers list — the primary stream).
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Text encoder layers (the secondary stream on the audio base class).
-        foreach (var layer in TextEncoderLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Learnable temperature τ (last scalar parameter).
-        if (idx < parameters.Length)
-        {
-            _logTemperature[0] = parameters[idx];
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

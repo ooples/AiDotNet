@@ -61,7 +61,7 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1603.01360",
     Year = 2016,
     Authors = "Guillaume Lample, Miguel Ballesteros, Sandeep Subramanian, Kazuya Kawakami, Chris Dyer")]
-public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
+public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
 {
     private readonly BiLSTMCRFOptions _options;
     // Not readonly: deserialization rebuilds the encoder from the persisted vocabularies so a
@@ -352,28 +352,7 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
 
     #region NeuralNetworkBase plumbing
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Validate the FULL vector length up front: slicing per layer would otherwise silently ignore
-        // trailing data, making a partial/mismatched checkpoint or optimizer-state load appear to succeed.
-        int expected = 0;
-        foreach (var layer in Layers)
-            expected = checked(expected + (int)layer.ParameterCount);
-
-        if (parameters.Length != expected)
-            throw new ArgumentException(
-                $"Expected {expected} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -329,6 +329,7 @@ public class SegGPT<T> : Common.PromptableSegmentationBase<T>
     // _imageEmbedding, _imageSet, SetImage and the Supports*Prompts flags (point/box/mask true,
     // text false) all come from PromptableSegmentationBase with these exact values; only SegGPT's
     // cached class probabilities are model-specific.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
 
     /// <summary>

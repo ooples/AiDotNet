@@ -57,7 +57,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LayoutXLM: Multimodal Pre-training for Multilingual Visually-rich Document Understanding", "https://doi.org/10.48550/arXiv.2104.08836", Year = 2022, Authors = "Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Furu Wei")]
-public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
+public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutXLMOptions _options;
 
@@ -926,29 +926,18 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         SetTrainingMode(false);
     }
 
-    /// <inheritdoc/>
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
     /// <remarks>
-    /// Explicit-gradient parameter update kept for the
-    /// <see cref="IFullModel{T, TInput, TOutput}.UpdateParameters"/> contract (some
-    /// AiDotNet builders apply gradients out-of-band). Paper-default lr is 2e-5 with
-    /// linear warmup + decay (Xu et al. ACL 2022 §3.3); when this method is invoked
-    /// outside the AdamW tape path the simplest paper-defensible behavior is a single
-    /// vanilla SGD step at the same base lr — callers who want the full schedule should
-    /// drive <see cref="Train"/> instead and let the AdamW state machine handle it.
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
     /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        var currentParams = GetParameters();
-        // Paper §3.3 base lr 2e-5.
-        T lr = NumOps.FromDouble(2e-5);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

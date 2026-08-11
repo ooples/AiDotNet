@@ -663,7 +663,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new untrained model with same hyperparameters.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new EasyEnsembleClassifier<T>(_nSubsets, _nEstimatorsPerSubset, _maxDepth,
             _learningRate, _samplingStrategy, _softVoting);

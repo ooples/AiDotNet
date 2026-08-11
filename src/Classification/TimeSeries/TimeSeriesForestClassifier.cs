@@ -314,7 +314,7 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     }
 
     /// <inheritdoc />
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = new TimeSeriesForestClassifier<T>(_options);
         clone._trees = _trees;

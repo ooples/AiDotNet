@@ -85,7 +85,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1907.00503",
     Year = 2019,
     Authors = "Lei Xu, Maria Skoularidou, Alfredo Cuesta-Infante, Kalyan Veeramachaneni")]
-public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TVAEOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

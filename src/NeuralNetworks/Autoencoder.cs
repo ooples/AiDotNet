@@ -171,6 +171,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Stores the last encoder activations for auxiliary loss computation.
     /// </summary>
     #pragma warning disable CS0649
+    [Scratch]
     private Tensor<T>? _lastEncoderActivations;
     #pragma warning restore CS0649
 

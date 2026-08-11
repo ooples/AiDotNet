@@ -102,7 +102,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PixArt-alpha: Fast Training of Diffusion Transformer for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2310.00426", Year = 2024, Authors = "Chen et al.")]
-public class PixArtModel<T> : LatentDiffusionModelBase<T>
+public partial class PixArtModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

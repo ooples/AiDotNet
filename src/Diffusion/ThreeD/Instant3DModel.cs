@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Instant3D: Fast Text-to-3D with Sparse-View Generation and Large Reconstruction Model", "https://arxiv.org/abs/2311.06214", Year = 2024, Authors = "Li et al.")]
-public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
+public partial class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

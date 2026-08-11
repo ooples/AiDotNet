@@ -9,13 +9,6 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
-public enum EmbeddingInputMode
-{
-    Auto,
-    Indices,
-    Continuous
-}
-
 /// <summary>
 /// Represents an embedding layer that converts discrete token indices into dense vector representations.
 /// </summary>
@@ -56,11 +49,10 @@ public enum EmbeddingInputMode
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
-// INDICES layouts: [Time] or [Batch, Time] in, one embedding vector appended on the way out. The
-// continuous-projection mode reads the SAME ranks with different axis meanings ([Batch, Features]
-// rather than [Batch, Time]), and two layouts accepting one rank with different names is ADNSHAPE001
-// - so the layouts describe the layer's primary mode and OutputAxesFor declines for the other rather
-// than naming a continuous input's axes wrongly.
+// An embedding is an index lookup: [Time] or [Batch, Time] in, with one embedding vector appended.
+// Continuous feature projection is deliberately represented by DenseLayer, whose feature-last shape
+// and continuous input-domain contracts are different. Keeping the operations as separate types makes
+// a layer's parameter set, input domain, and output rank statically unambiguous.
 [TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
@@ -116,50 +108,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private readonly int _embeddingDimension;
     private bool _embeddingInitialized = true;
 
-    /// <summary>
-    /// Projection weights for continuous input. Lazily *sized* on the first
-    /// continuous Forward (the input feature width is not known at construction),
-    /// but kept non-nullable: it starts as a zero-sized <c>[0,0]</c> placeholder and
-    /// is materialized on demand — the same pattern <see cref="_embeddingTensor"/>
-    /// uses, and the direct analog of PyTorch's <c>nn.LazyLinear</c>
-    /// UninitializedParameter (which materializes on first forward and then appears
-    /// in <c>parameters()</c>). It is marked <c>Optional</c> so the generated
-    /// GetTrainableParameters/SetTrainableParameters omit it while it is still the
-    /// empty placeholder (token-index mode never materializes it) and re-include it
-    /// once continuous-input Forward sizes it. Exposing the empty placeholder as a
-    /// trainable parameter previously made it a permanently "stuck" param that could
-    /// never receive a gradient update on the fused training path (#1331).
-    /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Optional = true)]
-    private Tensor<T> _projectionWeights;
-
-    private Tensor<T>? _projectionWeightsGradient;
     /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// In <see cref="EmbeddingInputMode.Indices"/> mode a token index is replaced by its embedding
-    /// vector, so an axis is APPENDED: <c>[Time]</c> becomes <c>[Time, Features]</c> and
-    /// <c>[Batch, Time]</c> becomes <c>[Batch, Time, Features]</c>. The index axes carry through and
-    /// the new one is the configured embedding width.
-    /// </para>
-    /// <para>
-    /// DECLINES IN <see cref="EmbeddingInputMode.Auto"/>, and that is not a limitation being papered
-    /// over - it is the honest answer. Auto resolves from the last axis SIZE (equal to the vocabulary
-    /// size means continuous), and a contract is asked only for a RANK. At rank 2 the layer may emit
-    /// rank 3 (indices) or rank 2 (a continuous projection), and which one is not knowable from the
-    /// rank. Declaring either would be right half the time. Setting <c>InputMode</c> explicitly - the
-    /// enum exists for exactly this - makes the shape inferable, and the contract then answers.
-    /// </para>
-    /// <para>
-    /// Continuous mode is left undeclared for a separate reason given on the class: its ranks collide
-    /// with the index ranks under different axis names, which a single type-level layout set cannot
-    /// express.
-    /// </para>
+    /// Large embedding tables deliberately start as a zero-sized placeholder. Reporting the base
+    /// class's unconditional <c>true</c> made the model manifest call that placeholder materialized;
+    /// chunk enumeration then allocated the real table and appeared to change the parameter count.
+    /// Readiness now describes the actual storage lifecycle without allocating it.
     /// </remarks>
+    public override bool IsInitialized => _embeddingInitialized;
+
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
-        if (InputMode != EmbeddingInputMode.Indices) return null;
-
         var table = _embeddingTensor;
         if (table is null || table.Rank < 2) return null;
         int embeddingDim = table.Shape[1];
@@ -181,18 +141,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             _ => null,
         };
     }
-
-    private bool _lastInputWasContinuous;
-    private bool? _autoDetectedContinuous;
-
-    /// <summary>
-    /// Whether the index-range validation has already run for this configuration.
-    /// </summary>
-    /// <remarks>
-    /// The check is O(input length), so it runs once rather than on every forward - the same caching
-    /// the value-based mode detection used to rely on. It is a VALIDATION now, not a shape decision.
-    /// </remarks>
-    private bool _indicesValidated;
 
     // GPU-resident cached tensors for GPU training pipeline
     private Tensor<T>? _lastInputGpu;
@@ -263,68 +211,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </summary>
     public T AuxiliaryLossWeight { get; set; }
 
-    private EmbeddingInputMode _inputMode = EmbeddingInputMode.Auto;
-    public EmbeddingInputMode InputMode
-    {
-        get => _inputMode;
-        set
-        {
-            if (_inputMode == value)
-            {
-                return;
-            }
-
-            _inputMode = value;
-            _indicesValidated = false;
-            if (_inputMode == EmbeddingInputMode.Auto)
-            {
-                _autoDetectedContinuous = null;
-            }
-        }
-    }
-
     /// <summary>
-    /// Declares that this layer wants token indices in <c>[0, vocabularySize)</c> whenever it is
-    /// in (or will resolve to) lookup mode.
+    /// Declares that this layer accepts token indices in <c>[0, vocabularySize)</c>.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Resolution here mirrors the forward path EXACTLY, and deliberately reuses the same
-    /// shape-only rule rather than restating it: an explicit mode wins, and
-    /// <see cref="EmbeddingInputMode.Auto"/> consults the already-known input SHAPE. No tensor is
-    /// examined, so this cannot reintroduce the data-dependent output rank that value-sniffing
-    /// caused -- see the remarks on <see cref="IsContinuousInput"/>.
-    /// </para>
-    /// <para>
-    /// When the mode is Auto and no input shape has been seen yet, the answer is Indices. That is
-    /// not a guess: Auto only becomes continuous when the last axis equals the vocabulary size, so
-    /// lookup is what an unresolved Auto layer will actually enforce, and it is what
-    /// <see cref="ValidateIndicesOrThrow"/> would reject a continuous tensor against.
-    /// </para>
-    /// </remarks>
-    public override LayerInputDomain GetInputDomain(int[]? inputShape)
-    {
-        switch (_inputMode)
-        {
-            case EmbeddingInputMode.Continuous:
-                return LayerInputDomain.Continuous;
-            case EmbeddingInputMode.Indices:
-                return LayerInputDomain.Indices(_vocabularySize);
-            default:
-                // THE SAME PREDICATE AS IsContinuousInput, applied to the shape the caller will
-                // actually feed. This layer constructs as base([1], [embeddingDimension]), so the
-                // InputShape field is a placeholder until the shape system resolves it; resolving
-                // against that field would answer Indices for every Auto layer, including a genuine
-                // continuous projection whose real input is [B, V]. Given the true shape, this
-                // declaration and the forward pass cannot disagree.
-                bool continuousByShape = inputShape is not null
-                    && inputShape.Length >= 2
-                    && inputShape[inputShape.Length - 1] == _vocabularySize;
-                return continuousByShape
-                    ? LayerInputDomain.Continuous
-                    : LayerInputDomain.Indices(_vocabularySize);
-        }
-    }
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) =>
+        LayerInputDomain.Indices(_vocabularySize);
 
 
     /// <summary>
@@ -359,7 +250,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// preserving token identity through the encoder. Opt-in (default <c>false</c>) so
     /// existing models that use the embedding as a plain lookup are unaffected; the
     /// transformer builder sets it for embeddings paired with positional encoding.
-    /// Only applies in Indices (token-ID) mode; ignored for continuous projection input.
+    /// Applies to the token-lookup output before it is combined with positional encoding.
     /// </summary>
     public bool ScaleBySqrtDimension { get; set; } = false;
 
@@ -387,7 +278,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // tensor may be a [0,0] lazy placeholder before first Forward.
         metadata["VocabularySize"] = _vocabularySize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["InputMode"] = _inputMode.ToString();
         metadata["ScaleBySqrtDimension"] = ScaleBySqrtDimension ? "true" : "false";
         return metadata;
     }
@@ -445,10 +335,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         _embeddingTensor = new Tensor<T>([0, 0]);
         _embeddingInitialized = false;
 
-        // Continuous-projection weights start as a zero-sized placeholder and are
-        // materialized (sized from the input feature width) on the first continuous
-        // Forward — mirrors the lazy _embeddingTensor and PyTorch's LazyLinear.
-        _projectionWeights = new Tensor<T>([0, 0]);
     }
 
     /// <summary>
@@ -462,8 +348,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// <c>[_vocabularySize, _embeddingDimension]</c> — both fixed at construction.
     /// </summary>
     /// <remarks>
-    /// Only the optional input PROJECTION depends on the incoming feature width; the table itself
-    /// never did. Because allocation happened lazily on first use, a freshly constructed layer
+    /// Because allocation happens lazily on first use, a freshly constructed layer
     /// offered one placeholder tensor of zero length, and a restore arrived with 3,072 values for a
     /// layer reporting none. The underlying routine treats an already-materialized table as
     /// authoritative trained state, so running it from here cannot overwrite a restore.
@@ -492,8 +377,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             if (WeightsAlreadyAllocated(_embeddingTensor, _vocabularySize, _embeddingDimension))
             {
                 RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
-                if (_projectionWeights.Length > 0)
-                    RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
                 _embeddingInitialized = true;
                 return;
             }
@@ -507,17 +390,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             _embeddingTensor = AllocateLazyWeight([_vocabularySize, _embeddingDimension]);
             InitializeParameters();
             RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
-            // The projection weights are a continuous-input-mode feature: they stay a
-            // [0,0] placeholder for token-id (discrete) embedding and are only
-            // materialized + registered when Forward sees continuous input (see the
-            // RegisterTrainableParameter calls after the TensorAllocator.Rent below).
-            // The field is [TrainableParameter(Optional = true)], so the generated
-            // GetTrainableParameters/SetTrainableParameters already skip it while empty
-            // (#1331). Keep _registeredTensors in sync with that view by only registering
-            // it here once it actually holds weights; otherwise it would surface as a
-            // permanently "stuck" trainable param on the fused training path.
-            if (_projectionWeights.Length > 0)
-                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
             _embeddingInitialized = true;
         }
     }
@@ -551,40 +423,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Lazy-initializes the continuous-input projection weights with Xavier
-    /// scaling. Honours the layer-level deterministic seed
-    /// (<see cref="LayerBase{T}.RandomSeed"/>) when set so projection
-    /// weights follow the same reproducibility contract as the embedding
-    /// tensor. Shared by both CPU and GPU forward paths to keep the two
-    /// init policies in lock-step (closes review-comment #1270.yLf-).
-    /// </summary>
-    private void InitializeProjectionWeights(Tensor<T> projectionWeights, int inputFeatures, int embeddingDim)
-    {
-        // Projection weights are LAZILY allocated on first Forward — by then
-        // GetParameters() may already have run and returned a parameter vector
-        // that does NOT contain the projection (because it wasn't allocated
-        // yet). A subsequent SetParameters(thatVector) on a sibling layer will
-        // also see no projection slice and leave _projectionWeights = null on
-        // the receiving side, so the receiver's first Forward then allocates
-        // its OWN projection with independent randomness — breaking the
-        // determinism contract `model2.SetParameters(model1.GetParameters());
-        // model2.Predict(x) == model1.Predict(x)` that callers rely on (e.g.
-        // RWKV7/Mamba LM tests). Deriving the default seed from the projection
-        // SHAPE makes the lazy init shape-deterministic across sibling layers
-        // when no explicit RandomSeed is provided, restoring the contract
-        // without forcing eager allocation. Explicit RandomSeed still wins.
-        int defaultSeed = HashCode.Combine(inputFeatures, embeddingDim, _vocabularySize);
-        Random random = RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
-            : RandomHelper.CreateSeededRandom(defaultSeed);
-        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
-        for (int i = 0; i < projectionWeights.Length; i++)
-        {
-            projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-        }
     }
 
     /// <summary>
@@ -728,135 +566,53 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         int embeddingDim = _embeddingTensor.Shape[1];
         int vocabularySize = _embeddingTensor.Shape[0];
 
-        // Industry standard: Support any-rank input tensors
-        // 1D: [seqLen] -> [seqLen, embeddingDim]
-        // 2D: [batch, seqLen] -> [batch, seqLen, embeddingDim]
-        // 3D: [batch, seqLen, 1] -> [batch, seqLen, embeddingDim]
-
-        // Detect if input is continuous (float values, not integer indices)
-        // Continuous input: use linear projection instead of embedding lookup
-        bool isContinuousInput = InputMode switch
-        {
-            EmbeddingInputMode.Continuous => true,
-            EmbeddingInputMode.Indices => false,
-            _ => _autoDetectedContinuous ??= IsContinuousInput(input, vocabularySize)
-        };
-
-        // Index mode must actually receive indices. This used to silently flip the layer to
-        // continuous mode - and with it the output RANK - whenever the data disagreed.
-        if (!isContinuousInput && !_indicesValidated)
-        {
-            ValidateIndicesOrThrow(input, vocabularySize);
-            _indicesValidated = true;
-        }
-
-        _lastInputWasContinuous = isContinuousInput;
+        // The layer is an index lookup by construction. Continuous feature projection belongs in
+        // DenseLayer, so invalid values cannot silently change this layer's output rank or parameters.
+        ValidateIndicesOrThrow(input, vocabularySize);
 
         Tensor<T> flatOutput;
-
-        if (isContinuousInput)
+        // Standard embedding lookup for integer token indices.
+        // AiDotNet#1331: route lookups through the float-indices overload
+        // when a graph-mode lazy trace is active. The legacy
+        // <c>TensorEmbeddingLookup&lt;T, int&gt;</c> snapshots the int
+        // indices array INSIDE the lazy node — but the int array is built
+        // here in C# from a flat <c>Tensor&lt;int&gt;</c> instance that is
+        // NOT a leaf of the lazy graph. On subsequent <c>plan.Step()</c>
+        // calls the snapshot never refreshes, so every replay gathers
+        // rows for the FIRST batch's tokens regardless of the current
+        // float input data — the model converges to a uniform output
+        // (loss ≈ ln(V)) instead of learning the input→target mapping.
+        //
+        // The float-indices variant captures the float input tensor by
+        // reference and converts to int at execute time. The caller can
+        // update the float input's data in place between Step() calls and
+        // the next replay sees the new indices.
+        //
+        // Tape-awareness: same backward as the int path (dL/dE scatter
+        // back to the embedding table), but the scatter uses fresh
+        // indices read at backward time too — keeping forward gather and
+        // backward scatter aligned on every Step.
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
         {
-            // Use linear projection for continuous input
-            // Project from input features to embedding dimension
-            int inputFeatures = input.Shape[input.Rank - 1];
-
-            // Materialize/size projection weights on demand (lazy sizing). The
-            // placeholder is zero-sized ([0,0]); if the input feature dimension
-            // changes between calls. #1643: these are TRAINABLE, long-lived weights —
-            // allocate from the arena's PINNED tier so an active TensorArena's Reset()
-            // (this projection materializes lazily inside the first training forward)
-            // can't recycle them as transient activations and corrupt the weights.
-            // RentPinned degrades to a plain heap Tensor<T> when no arena is active.
-            // No TensorAllocator.Return on the old buffer: pinned/heap tensors aren't
-            // pool-managed, so a rare input-shape change simply drops it to GC.
-            if (_projectionWeights.Length == 0 || _projectionWeights.Shape[0] != inputFeatures)
-            {
-                _projectionWeights = TensorAllocator.RentPinned<T>([inputFeatures, embeddingDim]);
-                InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
-                // Keep the registered trainable tensor in sync with the materialized
-                // projection so tape-based training sees the real weights.
-                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
-            }
-
-            // Flatten input to 2D [total_samples, inputFeatures] for projection.
-            // Engine.TensorMatMul (not instance MatrixMultiply) so the projection
-            // weights stay on the autodiff tape and receive gradients under
-            // tape-based training.
-            int totalSamples = input.Length / inputFeatures;
-            var input2D = Engine.Reshape(input, [totalSamples, inputFeatures]);
-            flatOutput = Engine.TensorMatMul(input2D, _projectionWeights);
+            flatOutput = Engine.TensorEmbeddingLookupFromFloatIndices(_embeddingTensor, input);
         }
         else
         {
-            // Standard embedding lookup for integer token indices.
-            // AiDotNet#1331: route lookups through the float-indices overload
-            // when a graph-mode lazy trace is active. The legacy
-            // <c>TensorEmbeddingLookup&lt;T, int&gt;</c> snapshots the int
-            // indices array INSIDE the lazy node — but the int array is built
-            // here in C# from a flat <c>Tensor&lt;int&gt;</c> instance that is
-            // NOT a leaf of the lazy graph. On subsequent <c>plan.Step()</c>
-            // calls the snapshot never refreshes, so every replay gathers
-            // rows for the FIRST batch's tokens regardless of the current
-            // float input data — the model converges to a uniform output
-            // (loss ≈ ln(V)) instead of learning the input→target mapping.
-            //
-            // The float-indices variant captures the float input tensor by
-            // reference and converts to int at execute time. The caller can
-            // update the float input's data in place between Step() calls and
-            // the next replay sees the new indices.
-            //
-            // Tape-awareness: same backward as the int path (dL/dE scatter
-            // back to the embedding table), but the scatter uses fresh
-            // indices read at backward time too — keeping forward gather and
-            // backward scatter aligned on every Step.
-            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            // Eager / inference fast path: direct row gather avoids the
+            // O(N*V) one-hot matmul. Pre-issue #1208 / pre-#1331 default.
+            int totalIndices = input.Length;
+            var flatIndices = new Tensor<int>([totalIndices]);
+            for (int i = 0; i < totalIndices; i++)
             {
-                flatOutput = Engine.TensorEmbeddingLookupFromFloatIndices(_embeddingTensor, input);
+                int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
+                flatIndices[i] = index;
             }
-            else
-            {
-                // Eager / inference fast path: direct row gather avoids the
-                // O(N*V) one-hot matmul. Pre-issue #1208 / pre-#1331 default.
-                int totalIndices = input.Length;
-                var flatIndices = new Tensor<int>([totalIndices]);
-                for (int i = 0; i < totalIndices; i++)
-                {
-                    int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
-                    flatIndices[i] = index;
-                }
-                flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
-            }
+            flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
         }
 
         // Calculate output shape
         int[] outputShape;
-        if (isContinuousInput)
-        {
-            // For continuous input (linear projection): replace last dimension with embeddingDim
-            // input[..., inputFeatures] -> output[..., embeddingDim]
-            //
-            // Rank-1 input is special: treating the whole [N] vector as the
-            // "feature dim" and producing rank-1 [embeddingDim] would collapse
-            // the sequence dimension and break downstream sequence-aware
-            // layers (e.g. RealGatedLinearRecurrenceLayer's Forward expects
-            // a rank-2+ tensor with a real sequence axis). Promote to
-            // rank-2 [1, embeddingDim] so the layer pipeline downstream sees
-            // a single-sample sequence rather than a featureless scalar.
-            if (input.Rank == 1)
-            {
-                outputShape = [1, embeddingDim];
-            }
-            else
-            {
-                outputShape = new int[input.Rank];
-                for (int i = 0; i < input.Rank - 1; i++)
-                {
-                    outputShape[i] = input.Shape[i];
-                }
-                outputShape[^1] = embeddingDim;
-            }
-        }
-        else if (input.Rank == 1)
+        if (input.Rank == 1)
         {
             // [seqLen] -> [seqLen, embeddingDim]
             outputShape = [input.Shape[0], embeddingDim];
@@ -891,7 +647,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // automatically during backprop (this layer is fully tape-based — no custom
         // Backward override to maintain). In eager inference (NoGradScope) it is a plain
         // value multiply.
-        if (ScaleBySqrtDimension && !isContinuousInput)
+        if (ScaleBySqrtDimension)
         {
             T sqrtDim = NumOps.Sqrt(NumOps.FromDouble(embeddingDim));
             reshaped = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, reshaped, sqrtDim);
@@ -944,88 +700,8 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             _originalInputShape = inputTensor._shape;
         }
 
-        // Detect if input is continuous
-        bool isContinuousInput = InputMode switch
-        {
-            EmbeddingInputMode.Continuous => true,
-            EmbeddingInputMode.Indices => false,
-            _ => _autoDetectedContinuous ??= IsContinuousInput(inputTensor, vocabularySize)
-        };
-
-        // Same validation as the CPU path: index mode must actually receive indices, rather than
-        // silently changing the output rank when the data disagrees.
-        if (!isContinuousInput && !_indicesValidated)
-        {
-            ValidateIndicesOrThrow(inputTensor, vocabularySize);
-            _indicesValidated = true;
-        }
-
-        if (IsTrainingMode)
-        {
-            _lastInputWasContinuous = isContinuousInput;
-        }
-
-        if (isContinuousInput)
-        {
-            // Linear projection for continuous input: input @ _projectionWeights
-            int inputFeatures = inputTensor.Shape[^1];
-
-            // Create projection weights if needed (lazy initialization). #1643: these are
-            // TRAINABLE, long-lived weights — allocate from the arena's PINNED tier so an
-            // active TensorArena's Reset() can't recycle them as transients and corrupt
-            // the weights (see the matching block in the non-GPU forward path). No
-            // TensorAllocator.Return on the old buffer: pinned/heap tensors aren't
-            // pool-managed, so a rare input-shape change simply drops it to GC.
-            if (_projectionWeights.Length == 0 || _projectionWeights.Shape[0] != inputFeatures)
-            {
-                _projectionWeights = TensorAllocator.RentPinned<T>([inputFeatures, embeddingDim]);
-                InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
-                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
-            }
-
-            // Flatten input to 2D [totalSamples, inputFeatures] for projection
-            int totalSamples = inputTensor.Length / inputFeatures;
-            var input2D = inputTensor.Reshape([totalSamples, inputFeatures]);
-
-            // Cache GPU input tensor for backward pass
-            if (IsTrainingMode)
-            {
-                _lastInputGpu = gpuEngine.UploadToGpu(input2D, GpuTensorRole.Intermediate);
-                _lastInputGpuShape = inputTensor._shape;
-            }
-
-            // Perform GPU matrix multiplication: [totalSamples, inputFeatures] @ [inputFeatures, embeddingDim]
-            var gpuProjectionOutput = gpuEngine.FusedLinearGpu(input2D, _projectionWeights, null, FusedActivationType.None);
-
-            // Calculate output shape: replace last dimension with embeddingDim.
-            // Mirror Forward's rank-1 promotion so a rank-1 [N] continuous input
-            // produces rank-2 [1, embeddingDim] on both CPU and GPU. Without
-            // this, a downstream sequence-aware layer (e.g. RG-LRU) sees a
-            // rank-1 tensor on GPU and a rank-2 tensor on CPU for the same
-            // input — silent backend skew that breaks shape contracts.
-            int[] outputShape;
-            if (inputTensor.Rank == 1)
-            {
-                outputShape = [1, embeddingDim];
-            }
-            else
-            {
-                outputShape = new int[inputTensor.Rank];
-                for (int i = 0; i < inputTensor.Rank - 1; i++)
-                {
-                    outputShape[i] = inputTensor.Shape[i];
-                }
-                outputShape[^1] = embeddingDim;
-            }
-
-            // Reshape if needed (FusedLinearGpu returns [totalSamples, embeddingDim])
-            if (outputShape.Length != 2 || outputShape[0] != totalSamples)
-            {
-                return gpuEngine.ReshapeGpu(gpuProjectionOutput, outputShape);
-            }
-
-            return gpuProjectionOutput;
-        }
+        // Same invariant as the CPU path: this layer only accepts token indices.
+        ValidateIndicesOrThrow(inputTensor, vocabularySize);
 
         // Standard embedding lookup for integer token indices
         int totalIndices = inputTensor.Length;
@@ -1051,7 +727,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // records the op on the autodiff tape, so the embedding-table gradient is scaled the
         // same way regardless of device. Without this the token-index GPU path returned
         // UNSCALED embeddings, making a model trained/served on GPU diverge from CPU.
-        if (ScaleBySqrtDimension && !isContinuousInput)
+        if (ScaleBySqrtDimension)
         {
             T sqrtDim = NumOps.Sqrt(NumOps.FromDouble(embeddingDim));
             gpuOutput = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, gpuOutput, sqrtDim);
@@ -1061,40 +737,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     }
 
     /// <summary>
-    /// Resolves <see cref="EmbeddingInputMode.Auto"/> from the input SHAPE alone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// When the last axis equals the vocabulary size, the input is one-hot / a probability
-    /// distribution / continuous features along that axis - the standard LM input shape
-    /// <c>[B, T, V]</c>. Treating those V values as token indices would mis-rank the output
-    /// (<c>[B, T, V, D]</c> instead of <c>[B, T, D]</c>) and gather V embedding rows per position.
-    /// PyTorch's nn.Linear vs nn.Embedding split is shape-driven for the same reason.
-    /// </para>
-    /// <para>
-    /// THIS USED TO INSPECT THE VALUES. A second pass walked every element and switched to continuous
-    /// mode if any was fractional, negative, out of range, NaN or infinite. That made the layer's
-    /// OUTPUT RANK a function of the DATA: the same <c>[B, S]</c> input produced <c>[B, S, E]</c> or
-    /// <c>[B, E]</c> depending on what happened to be in it. Nothing downstream could reason about the
-    /// shape - not the shape contract, not chain validation, not graph resolution - and a caller whose
-    /// indices happened to be out of range silently got a different rank instead of an error.
-    /// </para>
-    /// <para>
-    /// The values are still checked, but as VALIDATION rather than shape selection - see
-    /// <see cref="ValidateIndicesOrThrow"/>. A caller with genuine continuous features narrower or
-    /// wider than the vocabulary declares <c>InputMode = EmbeddingInputMode.Continuous</c>, which is
-    /// what the enum is for, and the exception says so.
-    /// </para>
-    /// </remarks>
-    private static bool IsContinuousInput(Tensor<T> input, int vocabularySize)
-        => input.Rank >= 2 && input.Shape[input.Rank - 1] == vocabularySize;
-
-    /// <summary>
     /// Confirms the input really holds token indices, and explains the fix when it does not.
     /// </summary>
     /// <remarks>
-    /// Runs once per resolved shape (the caller caches the result), so this is a first-forward cost
-    /// rather than a per-call scan. It replaces a silent mode switch with a named, actionable failure.
+    /// Validation runs on every call because token values can change while the shape remains constant.
+    /// This replaces a silent mode switch or backend-specific gather failure with one actionable error.
     /// </remarks>
     private void ValidateIndicesOrThrow(Tensor<T> input, int vocabularySize)
     {
@@ -1106,13 +753,10 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             if (bad || Math.Abs(val - intVal) > 1e-6 || intVal < 0 || intVal >= vocabularySize)
             {
                 throw new ArgumentException(
-                    $"EmbeddingLayer is in {nameof(EmbeddingInputMode.Indices)} mode but element {i} is "
-                    + $"{val}, which is not a token index in [0, {vocabularySize}). If this tensor holds "
-                    + "CONTINUOUS features rather than indices, set "
-                    + $"InputMode = {nameof(EmbeddingInputMode)}.{nameof(EmbeddingInputMode.Continuous)} "
-                    + "so the layer projects them instead of looking them up. The mode is no longer "
-                    + "inferred from the data, because doing so made the OUTPUT RANK depend on the "
-                    + "values and left the shape unanalysable.",
+                    $"EmbeddingLayer requires token indices, but element {i} is {val}, which is not in "
+                    + $"[0, {vocabularySize}). Use DenseLayer for continuous feature projection, or a "
+                    + "composite embedding layer when word, position, and token-type embeddings must be "
+                    + "looked up in parallel and combined.",
                     nameof(input));
             }
         }
@@ -1147,27 +791,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_embeddingGradient == null && _projectionWeightsGradient == null)
+        if (_embeddingGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        if (_embeddingGradient != null)
-        {
-            var scaledGradient = Engine.TensorMultiplyScalar(_embeddingGradient, learningRate);
-            _embeddingTensor = Engine.TensorSubtract(_embeddingTensor, scaledGradient);
-        }
-
-        if (_projectionWeightsGradient != null && _projectionWeights.Length > 0)
-        {
-            var scaledProjectionGradient = Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate);
-            _projectionWeights = Engine.TensorSubtract(_projectionWeights, scaledProjectionGradient);
-        }
+        var scaledGradient = Engine.TensorMultiplyScalar(_embeddingGradient, learningRate);
+        _embeddingTensor = Engine.TensorSubtract(_embeddingTensor, scaledGradient);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_embeddingTensor);
-        if (_projectionWeights.Length > 0)
-        {
-            Engine.InvalidatePersistentTensor(_projectionWeights);
-        }
     }
 
     /// <summary>
@@ -1338,34 +969,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        int embeddingParamCount = _embeddingTensor.Shape[0] * _embeddingTensor.Shape[1];
-
-        // In continuous (projection) mode: _embeddingGradient is null, _projectionWeightsGradient holds gradients
-        if (_embeddingGradient == null && _projectionWeightsGradient != null && _projectionWeights.Length > 0)
-        {
-            // Return zeros for embedding params + actual projection gradients
-            var embZeros = new Vector<T>(embeddingParamCount);
-            var projGrad = Vector<T>.FromMemory(_projectionWeightsGradient.Data);
-            return Vector<T>.Concatenate(embZeros, projGrad);
-        }
-
-        // Both null: no backward has been run yet, return all-zero vector
+        // No backward has run yet: preserve the framework-wide zero-gradient query contract.
         if (_embeddingGradient == null)
             return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
-        // Discrete embedding mode: return embedding gradients (+ projection if present)
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        var embGrad = Vector<T>.FromMemory(_embeddingGradient.Data);
-        if (_projectionWeightsGradient == null || _projectionWeights.Length == 0)
-            return embGrad;
-        return Vector<T>.Concatenate(embGrad, Vector<T>.FromMemory(_projectionWeightsGradient.Data));
+        return Vector<T>.FromMemory(_embeddingGradient.Data);
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _embeddingGradient = null;
-        _projectionWeightsGradient = null;
     }
 
     public override void ResetState()
@@ -1373,9 +988,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _embeddingGradient = null;
-        _projectionWeightsGradient = null;
-        _lastInputWasContinuous = false;
-        _autoDetectedContinuous = null;
 
         // Clear GPU-related cached data
         _lastInputGpu?.Dispose();

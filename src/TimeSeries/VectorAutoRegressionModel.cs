@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Multiple Time Series", "https://doi.org/10.1002/0471667196", Year = 2005, Authors = "Helmut Lütkepohl")]
-public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMultivariateForecastModel<T>
+public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMultivariateForecastModel<T>
 {
     /// <summary>The number of interrelated series this model forecasts (the VAR output dimension).</summary>
     public int VariableCount => _varOptions.OutputDimension;
@@ -86,9 +86,11 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMultivariat
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
+    [Buffer]
     private Matrix<T> _residuals;
 
     /// <summary>Stored training series for in-sample predictions.</summary>
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>

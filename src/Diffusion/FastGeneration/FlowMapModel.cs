@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FlowMap: Learning to Generate High-Quality Samples with a Single Step", "https://arxiv.org/abs/2406.07507", Year = 2024, Authors = "Chen et al.")]
-public class FlowMapModel<T> : LatentDiffusionModelBase<T>
+public partial class FlowMapModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

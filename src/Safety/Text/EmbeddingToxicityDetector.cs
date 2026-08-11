@@ -47,6 +47,7 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
     private readonly int _embeddingDim;
 
     // Pre-built toxic concept vectors (character n-gram hash space)
+    [Buffer]
     private readonly Vector<T>[] _toxicConceptVectors;
     private readonly SafetyCategory[] _toxicCategories;
 

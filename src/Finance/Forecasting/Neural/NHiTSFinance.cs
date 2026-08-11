@@ -65,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza Ramirez, Max Mergenthaler Canseco, Artur Dubrawski")]
-public class NHiTSFinance<T> : ForecastingModelBase<T>
+public partial class NHiTSFinance<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

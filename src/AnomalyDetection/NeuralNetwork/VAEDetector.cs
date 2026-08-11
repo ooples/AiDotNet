@@ -49,7 +49,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Auto-Encoding Variational Bayes", "https://doi.org/10.48550/arXiv.1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
-public class VAEDetector<T> : AnomalyDetectorBase<T>
+public partial class VAEDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;
     private readonly int _hiddenDim;
@@ -71,7 +71,9 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _decoderB2;
 
     // Normalization parameters
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     private int _inputDim;

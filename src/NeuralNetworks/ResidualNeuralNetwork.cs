@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
-public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly ResidualNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -114,6 +114,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     private readonly List<int> _auxiliaryClassifierPositions = new();
     private List<List<ILayer<T>>> _auxiliaryClassifierLayers = new();
     #pragma warning disable CS0649
+    [Scratch]
     private Vector<T>? _lastExpectedOutput;
     #pragma warning restore CS0649
 

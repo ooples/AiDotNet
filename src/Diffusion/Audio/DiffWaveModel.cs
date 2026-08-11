@@ -79,7 +79,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiffWave: A Versatile Diffusion Model for Audio Synthesis", "https://arxiv.org/abs/2009.09761", Year = 2020, Authors = "Kong et al.")]
-public class DiffWaveModel<T> : DiffusionModelBase<T>
+public partial class DiffWaveModel<T> : DiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

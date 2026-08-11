@@ -112,7 +112,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Structure and Content-Guided Video Synthesis with Diffusion Models", "https://arxiv.org/abs/2302.03011", Year = 2023, Authors = "Esser et al.")]
-public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
+public partial class RunwayGenModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

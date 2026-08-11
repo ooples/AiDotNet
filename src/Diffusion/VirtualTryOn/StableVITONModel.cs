@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("StableVITON: Learning Semantic Correspondence with Latent Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2312.01725", Year = 2024, Authors = "Kim et al.")]
-public class StableVITONModel<T> : LatentDiffusionModelBase<T>
+public partial class StableVITONModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

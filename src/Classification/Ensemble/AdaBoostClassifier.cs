@@ -63,7 +63,7 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Decision-Theoretic Generalization of On-Line Learning and an Application to Boosting", "https://doi.org/10.1006/jcss.1997.1504", Year = 1997, Authors = "Yoav Freund, Robert E. Schapire")]
-public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
+public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>
     /// Gets the AdaBoost specific options.

@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Awadalla et al."
 )]
-public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
+public partial class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly OpenFlamingoOptions _options;
 
@@ -267,34 +267,8 @@ public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Sync the auxiliary streams (perceiver, decoder) too. They're
-        // surfaced through GetExtraTrainableLayers below, so the flat
-        // parameter vector includes their slices — writing back only
-        // into Layers leaves perceiver / decoder on stale weights and
-        // GenerateFromImage rolls back to the random init values.
-        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
-        {
-            if (l is null)
-                continue;
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

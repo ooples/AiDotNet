@@ -84,7 +84,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2025,
     Authors = "NVIDIA"
 )]
-public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -408,27 +408,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // _tokenEmbedding lives OUTSIDE Layers: it embeds token IDs on the dedicated
-        // instruction path (EmbedInstructionTokens), so it cannot join the sequential
-        // Layers walk that Predict runs image tensors through. Its parameters ride at
-        // the TAIL of the flat vector — same layout as GetParameters/SetParameters —
-        // so training updates reach the embedding table (same off-Layers contract as
-        // PaLME._patchEmbed).
-        int embedCount = (int)_tokenEmbedding.ParameterCount;
-        if (embedCount > 0 && idx + embedCount <= parameters.Length)
-            _tokenEmbedding.UpdateParameters(parameters.Slice(idx, embedCount));
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

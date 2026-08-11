@@ -47,7 +47,9 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 public class INFLODetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
+    [Buffer]
     private Matrix<T>? _trainingData;
+    [Buffer]
     private Vector<T>? _localDensities;
     private List<int>[]? _knnLists;
     private List<int>[]? _rknnLists;

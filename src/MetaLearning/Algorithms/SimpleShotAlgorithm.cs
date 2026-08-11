@@ -88,7 +88,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Yan Wang, Wei-Lun Chao, Kilian Q. Weinberger, Laurens van der Maaten")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -98,6 +98,7 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// <summary>
     /// Cached feature mean for CL2N normalization, computed from training features.
     /// </summary>
+    [Buffer]
     private Vector<T>? _featureMean;
 
     /// <inheritdoc/>

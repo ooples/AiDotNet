@@ -57,14 +57,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conditional Image Synthesis with Auxiliary Classifier GANs", "https://arxiv.org/abs/1610.09585", Year = 2017, Authors = "Augustus Odena, Christopher Olah, Jonathon Shlens")]
-public class ACGAN<T> : NeuralNetworkBase<T>
+public partial class ACGAN<T> : NeuralNetworkBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Generator then discriminator. ParameterCount summed both while GetParameters was never overridden and walked this model's own Layers, which is EMPTY -- measured 49,605 against a vector of length 0, so none of an ACGAN's weights could be saved or restored. Both now come from this one declaration.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => Generator.Layers.Cast<LayerBase<T>?>()
-            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
+    // Generator and Discriminator are discovered as sub-network members and their layers surfaced
+    // in declaration order, which is the order this hook used. Removed under AIDN082.
     private readonly ACGANOptions _options;
 
     /// <inheritdoc/>
@@ -882,28 +879,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             _lossFunction);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int generatorCount = (int)Generator.GetParameterCount();
-        int discriminatorCount = (int)Discriminator.GetParameterCount();
-        int totalCount = generatorCount + discriminatorCount;
-
-        if (parameters.Length != totalCount)
-        {
-            throw new ArgumentException(
-                $"Parameters vector length ({parameters.Length}) must equal {totalCount} " +
-                $"(generator: {generatorCount} + discriminator: {discriminatorCount}).",
-                nameof(parameters));
-        }
-
-        var generatorParams = new Vector<T>(generatorCount);
-        for (int i = 0; i < generatorCount; i++)
-            generatorParams[i] = parameters[i];
-        Generator.UpdateParameters(generatorParams);
-
-        var discriminatorParams = new Vector<T>(discriminatorCount);
-        for (int i = 0; i < discriminatorCount; i++)
-            discriminatorParams[i] = parameters[generatorCount + i];
-        Discriminator.UpdateParameters(discriminatorParams);
-    }
+    // UpdateParameters split the vector between Generator and Discriminator; GetExtraTrainableLayers
+    // yields the same two in the same order, so the base reproduces the split. Removed under AIDN082.
 }

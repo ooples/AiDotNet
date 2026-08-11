@@ -133,7 +133,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators", "https://doi.org/10.1038/s42256-021-00302-5", Year = 2021, Authors = "Lu Lu, Pengzhan Jin, Guofei Pang, Zhongqiang Zhang, George Em Karniadakis")]
-    public class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
+    public partial class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
 
         // InitializeLayers already does Layers.AddRange(_branchNet.Layers) followed by Layers.AddRange(_trunkNet.Layers), so the base walk over Layers ALREADY produces the branch-then-trunk parameters the hand-written surfaces rebuilt by hand, in the same order.
@@ -755,27 +755,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return summed;
         }
 
-        /// <summary>
-        /// Updates the branch and trunk network parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int branchParameterCount = (int)_branchNet.GetParameterCount();
-            int trunkParameterCount = (int)_trunkNet.GetParameterCount();
-
-            if (parameters.Length != branchParameterCount + trunkParameterCount)
-            {
-                throw new ArgumentException($"Expected {branchParameterCount + trunkParameterCount} parameters, got {parameters.Length}.");
-            }
-
-            Vector<T> branchParameters = parameters.GetSubVector(0, branchParameterCount);
-            Vector<T> trunkParameters = parameters.GetSubVector(branchParameterCount, trunkParameterCount);
-
-            _branchNet.UpdateParameters(branchParameters);
-            _trunkNet.UpdateParameters(trunkParameters);
-        }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
         public override Vector<T> GetGradients()
         {
             return Vector<T>.Concatenate(_branchNet.GetGradients(), _trunkNet.GetGradients());

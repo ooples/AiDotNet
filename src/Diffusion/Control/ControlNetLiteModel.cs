@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Adding Conditional Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.05543")]
-public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

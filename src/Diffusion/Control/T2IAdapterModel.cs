@@ -91,7 +91,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("T2I-Adapter: Learning Adapters to Dig out More Controllable Ability for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.08453", Year = 2024, Authors = "Mou et al.")]
-public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
+public partial class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

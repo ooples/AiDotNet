@@ -72,7 +72,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza, Max Mergenthaler-Canseco, Armin Dubrawski")]
-public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
+public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -82,6 +82,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
     public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
 
     private readonly NHiTSOptions<T> _options;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private readonly List<NHiTSStackTensor<T>> _stacks;
     private readonly Random _random;
@@ -855,17 +856,8 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
         return new NHiTSModel<T>(new NHiTSOptions<T>(_options));
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int total = 0;
-            foreach (var stack in _stacks)
-                total += (int)stack.ParameterCount;
-            return total;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new NHiTSModel<T>(_options);

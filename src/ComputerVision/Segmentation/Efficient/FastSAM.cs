@@ -246,15 +246,7 @@ public class FastSAM<T> : Common.PromptableSegmentationBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int expected = 0;
-        foreach (var l in Layers) expected += l.GetParameters().Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
-        int o = 0;
-        foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <summary>
     /// Collects metadata describing this model's configuration.
     /// </summary>
@@ -322,6 +314,7 @@ public class FastSAM<T> : Common.PromptableSegmentationBase<T>
     #region IPromptableSegmentation Implementation
     // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment and the four Supports*Prompts
     // flags all arrive from PromptableSegmentationBase with identical values.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
 
     /// <inheritdoc />

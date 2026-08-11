@@ -56,7 +56,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution", "https://arxiv.org/abs/2311.16518", Year = 2024, Authors = "Wu et al.")]
-public class SeeSRModel<T> : LatentDiffusionModelBase<T>
+public partial class SeeSRModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

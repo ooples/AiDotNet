@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TimeMachine: A Time Series is Worth 4 Mambas for Long-term Forecasting", "https://arxiv.org/abs/2403.09898")]
-public class TimeMachine<T> : ForecastingModelBase<T>
+public partial class TimeMachine<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private bool _useNativeMode;
@@ -119,7 +119,9 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     // stores the instance mean/std here so the forecast can be restored to the
     // input's original scale; FlattenInput collapses the input to a single
     // instance, so one (mean, std) pair suffices.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
     #endregion
 

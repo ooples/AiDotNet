@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Predict, Refine, Synthesize: Self-Guiding Diffusion Models for Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2307.11494", Year = 2023, Authors = "Marcel Kollovieh, Abdul Fatir Ansari, Michael Bohlke-Schneider, Jasper Zschiegner, Hao Wang, Yuyang Wang")]
-public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
+public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -88,10 +88,15 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
     private double _guidanceScale;
 
     // DDPM noise schedule (precomputed as generic vectors)
+    [Buffer]
     private Vector<T> _betas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
 
     #endregion

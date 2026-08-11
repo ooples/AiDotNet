@@ -31,7 +31,7 @@ namespace AiDotNet.Classification;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>, IModelShape
+public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>, IModelShape, IParameterManifestProvider
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -650,6 +650,10 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     protected void RegisterParameterComponent(IParameterSource<T>? component)
         => _parameterRegistry.Register(component);
 
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
     /// <summary>
     /// Declare the trainable components of this classifier here. Called once, lazily, so it runs
     /// after fitting has built them.
@@ -671,12 +675,16 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
         {
             if (!_componentsRegistered)
             {
+                if (this is IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                _componentsRegistered = _parameterRegistry.HasComponents;
+                _componentsRegistered = true;
             }
             return _parameterRegistry;
         }
     }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <summary>
     /// Gets this classifier's parameters as a flat vector.
@@ -718,6 +726,18 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// expectation; it is simply no longer mistaken for the count of what is serialized.
     /// </para>
     /// </remarks>
+    /// <summary>Returns a copy of this classifier carrying the given parameters.</summary>
+    /// <remarks>
+    /// Clone-then-set rather than a separate construction path, so the copy is produced by the same
+    /// code that produces every other clone and cannot drift from it.
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = (ClassifierBase<T>)Clone();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
     public virtual long ParameterCount => Registry.ParameterCount;
 
     /// <summary>

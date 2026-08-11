@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VideoPoet: A Large Language Model for Zero-Shot Video Generation", "https://arxiv.org/abs/2312.14125", Year = 2024, Authors = "Kondratyuk et al.")]
-public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
+public partial class VideoPoetModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

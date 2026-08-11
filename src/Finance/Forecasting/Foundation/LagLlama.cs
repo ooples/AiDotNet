@@ -90,7 +90,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lag-Llama: Towards Foundation Models for Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2310.08278", Year = 2024, Authors = "Kashif Rasul, Arjun Ashok, Andrew Robert Williams, Arian Khorasani, George Adamopoulos, Rishika Bhatt, Sun Peng, Christof Henkel, Marine Chaput, Yuriy Ganin, Xuan Shi, Leo Siemens")]
-public class LagLlama<T> : ForecastingModelBase<T>
+public partial class LagLlama<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -174,7 +174,9 @@ public class LagLlama<T> : ForecastingModelBase<T>
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
     // Lag-Llama's RMSNorm blocks are scale-invariant, so without restoring the
     // input level the predicted location (mu) ignores the input's magnitude.
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
     private int[] _lagIndices;
     private double _dropout;

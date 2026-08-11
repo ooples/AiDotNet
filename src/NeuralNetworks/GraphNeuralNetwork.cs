@@ -112,7 +112,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     public T AuxiliaryLossWeight { get; set; }
 
     private T _lastGraphSmoothnessLoss;
+    [Scratch]
     private Tensor<T>? _lastNodeRepresentations = null;
+    [Scratch]
     private Tensor<T>? _lastAdjacencyMatrix = null;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
     /// <summary>
@@ -922,6 +924,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// <summary>
     /// Cached adjacency matrix for forward/backward passes.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _autoAdjacencyMatrix;
 
     private Tensor<T> EnsureAdjacencyMatrix(int numNodes)

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FreeNoise: Tuning-Free Longer Video Diffusion via Noise Rescheduling", "https://arxiv.org/abs/2310.15169", Year = 2023, Authors = "Qiu et al.")]
-public class FreeNoiseVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class FreeNoiseVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

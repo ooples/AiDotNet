@@ -105,7 +105,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Scaling Up to Excellence: Practicing Model Scaling for Photo-Realistic Image Restoration In the Wild", "https://arxiv.org/abs/2401.13627", Year = 2024, Authors = "Yu et al.")]
-public class SUPIRModel<T> : LatentDiffusionModelBase<T>
+public partial class SUPIRModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

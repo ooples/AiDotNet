@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InstructVid2Vid: Controllable Video Editing with Natural Language Instructions", "https://arxiv.org/abs/2305.12328", Year = 2023, Authors = "Qin et al.")]
-public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
+public partial class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

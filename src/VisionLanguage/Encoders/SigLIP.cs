@@ -89,7 +89,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhai et al."
 )]
-public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
 
@@ -356,9 +356,8 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         }
     }
 
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

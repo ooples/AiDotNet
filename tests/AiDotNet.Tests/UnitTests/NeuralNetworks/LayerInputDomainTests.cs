@@ -19,11 +19,9 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// continuous noise.
 /// </para>
 /// <para>
-/// The layer was RIGHT to reject it, and the fix must not make it lenient. EmbeddingLayer resolves
-/// Indices-vs-Continuous from the input SHAPE alone, on purpose: inferring the mode from VALUES
-/// made the layer's output RANK depend on the data and left shape contracts unanalysable. So the
-/// tests below pin the complementary direction -- the layer DECLARES what it accepts, and callers
-/// generate data to match -- and explicitly pin that no value inspection was reintroduced.
+/// The layer was right to reject it, and the fix must not make it lenient. EmbeddingLayer is now an
+/// index-only lookup; DenseLayer is the explicit continuous projection. The tests below pin that
+/// type-level split so parameter sets, domains, and output ranks cannot depend on input data.
 /// </para>
 /// </remarks>
 public class LayerInputDomainTests
@@ -44,10 +42,11 @@ public class LayerInputDomainTests
     }
 
     [Fact]
-    public void Embedding_InIndicesMode_DeclaresTheVocabularyRange()
+    public async Task Embedding_DeclaresTheVocabularyRange()
     {
+        await Task.Yield();
+
         var layer = NewEmbedding();
-        layer.InputMode = EmbeddingInputMode.Indices;
 
         var domain = layer.GetInputDomain(null);
 
@@ -57,27 +56,25 @@ public class LayerInputDomainTests
     }
 
     [Fact]
-    public void Embedding_InContinuousMode_DeclaresContinuous()
+    public async Task DenseLayer_IsTheExplicitContinuousProjection()
     {
-        var layer = NewEmbedding();
-        layer.InputMode = EmbeddingInputMode.Continuous;
+        await Task.Yield();
 
-        Assert.False(layer.GetInputDomain(null).IsIndices);
+        var projection = new DenseLayer<double>(EmbeddingDimension);
+
+        Assert.Equal(LayerInputDomainKind.Continuous, projection.GetInputDomain(null).Kind);
     }
 
-    /// <summary>
-    /// An unresolved Auto layer must declare Indices, because that is what it will ENFORCE.
-    /// Declaring continuous here would hand a token model float noise and reproduce the original
-    /// 1,041 failures exactly.
-    /// </summary>
     [Fact]
-    public void Embedding_InAutoMode_WithNoInputSeenYet_DeclaresIndices()
+    public async Task Embedding_AlwaysDeclaresIndices_EvenWhenLastAxisEqualsVocabularySize()
     {
-        var layer = NewEmbedding();
+        await Task.Yield();
 
-        Assert.Equal(EmbeddingInputMode.Auto, layer.InputMode);
-        Assert.True(layer.GetInputDomain(null).IsIndices);
-        Assert.Equal(VocabularySize, layer.GetInputDomain(null).MaxExclusive);
+        var layer = NewEmbedding();
+        int[] formerlyAmbiguousShape = [2, VocabularySize];
+
+        Assert.True(layer.GetInputDomain(formerlyAmbiguousShape).IsIndices);
+        Assert.Equal(VocabularySize, layer.GetInputDomain(formerlyAmbiguousShape).MaxExclusive);
     }
 
     /// <summary>
@@ -104,33 +101,22 @@ public class LayerInputDomainTests
     }
 
     /// <summary>
-    /// THE DECLARATION MUST AGREE WITH THE FORWARD PASS, resolved against the shape the caller will
-    /// actually feed -- not the layer's own InputShape field.
+    /// A shape that previously activated Auto projection must now be rejected if it contains
+    /// continuous values. Shape alone cannot change the operation represented by the layer type.
     /// </summary>
-    /// <remarks>
-    /// EmbeddingLayer constructs as <c>base([1], [embeddingDimension])</c>, so its InputShape is a
-    /// placeholder until the shape system resolves it. An earlier version of this feature read that
-    /// field and therefore answered Indices for EVERY Auto layer, including a genuine continuous
-    /// projection whose real input is <c>[B, V]</c> with V == vocabulary. That disagreed with what
-    /// Forward would do with the same tensor, which is precisely the drift this pins shut.
-    /// </remarks>
     [Fact]
-    public void Embedding_InAutoMode_AgreesWithForward_ForContinuousByShapeInput()
+    public async Task Embedding_DoesNotProjectContinuousValues_WhenLastAxisEqualsVocabularySize()
     {
+        await Task.Yield();
+
         var layer = NewEmbedding();
-
-        // Last axis == vocabulary size is the shape rule Forward uses to pick continuous mode.
         int[] continuousShape = [2, VocabularySize];
-
-        Assert.False(layer.GetInputDomain(continuousShape).IsIndices);
-
-        // And Forward agrees: continuous values at this shape are projected, not rejected.
         var rng = new Random(20260810);
         var input = new Tensor<double>(continuousShape);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 
-        var output = layer.Forward(input);
-        Assert.Equal(EmbeddingDimension, output.Shape[output.Rank - 1]);
+        var ex = Assert.Throws<ArgumentException>(() => layer.Forward(input));
+        Assert.Contains("requires token indices", ex.Message);
     }
 
     [Fact]
@@ -150,7 +136,6 @@ public class LayerInputDomainTests
     public void ValuesGeneratedFromTheDeclaredDomain_AreAcceptedByTheLayer()
     {
         var layer = NewEmbedding();
-        layer.InputMode = EmbeddingInputMode.Indices;
         var domain = layer.GetInputDomain(null);
 
         var rng = new Random(20260810);
@@ -169,16 +154,17 @@ public class LayerInputDomainTests
     /// makes the layer lenient, the shape contract silently degrades and this fails.
     /// </summary>
     [Fact]
-    public void ContinuousNoise_IsStillRejected_InIndicesMode()
+    public async Task ContinuousNoise_IsRejected()
     {
+        await Task.Yield();
+
         var layer = NewEmbedding();
-        layer.InputMode = EmbeddingInputMode.Indices;
 
         var rng = new Random(20260810);
         var input = new Tensor<double>(new[] { 1, 6 });
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 
         var ex = Assert.Throws<ArgumentException>(() => layer.Forward(input));
-        Assert.Contains("not a token index", ex.Message);
+        Assert.Contains("requires token indices", ex.Message);
     }
 }

@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FlowVid: Taming Imperfect Optical Flows for Consistent Video-to-Video Synthesis", "https://arxiv.org/abs/2312.17681", Year = 2023, Authors = "Liang et al.")]
-public class FlowVidModel<T> : VideoDiffusionModelBase<T>
+public partial class FlowVidModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

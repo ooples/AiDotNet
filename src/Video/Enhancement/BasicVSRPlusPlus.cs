@@ -81,7 +81,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2104.13371",
     Year = 2022,
     Authors = "Kelvin C.K. Chan, Shangchen Zhou, Xiangyu Xu, Chen Change Loy")]
-public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
+public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 {
     private readonly BasicVSRPlusPlusOptions _options;
 
@@ -1048,35 +1048,5 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
     #endregion
 
-public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-
-        // Validate the flat vector length UP FRONT against the total trainable parameter count (the exact
-        // set this loop consumes). A mismatched vector must RAISE rather than silently applying a partial
-        // (corrupt) update via an early break — mirrors the sibling VideoCLIP / SelfOrganizingMap
-        // UpdateParameters overrides (#1789 review).
-        long expected = 0;
-        foreach (var layer in Layers)
-            if (layer.SupportsTraining) expected += layer.ParameterCount;
-        if (parameters.Length != expected)
-            throw new ArgumentException(
-                $"Expected {expected} parameters (sum over trainable layers), got {parameters.Length}.",
-                nameof(parameters));
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            if (!layer.SupportsTraining || layer.ParameterCount == 0)
-                continue;
-            int count = checked((int)layer.ParameterCount);
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-                slice[i] = parameters[offset + i];
-            layer.UpdateParameters(slice);
-            offset += count;
-        }
-    }
-
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
 }

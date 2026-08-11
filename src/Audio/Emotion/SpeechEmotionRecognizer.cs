@@ -99,7 +99,7 @@ namespace AiDotNet.Audio.Emotion;
     "https://doi.org/10.1109/PlatCon.2017.7883728",
     Year = 2017,
     Authors = "Abdul Malik Badshah, Jamil Ahmad, Nasir Rahim, Sung Wook Baik")]
-public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
+public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Execution Mode
 
@@ -842,70 +842,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (_isOnnxMode)
-        {
-            throw new InvalidOperationException("Cannot update parameters in ONNX mode.");
-        }
-
-        int offset = 0;
-
-        // Update conv layers
-        foreach (var layer in _convLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update dense layers
-        foreach (var layer in _denseLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update output layer
-        if (_outputLayer is not null)
-        {
-            var layerParams = _outputLayer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputLayer.SetParameters(newParams);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     #endregion
 
     #region Model Serialization

@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation", "https://arxiv.org/abs/2302.08113", Year = 2023, Authors = "Bar-Tal et al.")]
-public class MultiDiffusionModel<T> : LatentDiffusionModelBase<T>
+public partial class MultiDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

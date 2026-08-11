@@ -68,7 +68,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Crossformer: Transformer Utilizing Cross-Dimension Dependency for Multivariate Time Series Forecasting", "https://arxiv.org/abs/2209.15174", Year = 2023, Authors = "Yunhao Zhang, Junchi Yan")]
-public class Crossformer<T> : ForecastingModelBase<T>
+public partial class Crossformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -115,11 +115,13 @@ public class Crossformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion

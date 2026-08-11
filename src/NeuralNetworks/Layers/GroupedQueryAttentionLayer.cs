@@ -359,7 +359,17 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     /// <remarks>Forces the deferred projection weights to materialize — the hook
     /// <see cref="LayerBase{T}.MaterializeParameters"/> invokes, so the foundation-scale chunk-streaming
     /// path (#1624) reads real weights rather than zero-length placeholders.</remarks>
-    protected override void EnsureParametersMaterialized() => EnsureWeightsMaterialized();
+    protected override void EnsureParametersMaterialized()
+    {
+        EnsureWeightsMaterialized();
+
+        // Then the base, for the registered sub-layers (_ropeLayer / _alibiLayer). Overriding
+        // without chaining used to be harmless because the base only touched THIS layer; it now
+        // also recurses into GetSubLayers(), and skipping that would leave this layer's children
+        // unmaterialized on a save while a restored copy brings them up -- the same asymmetry that
+        // made a VideoCLIP clone reject its own checkpoint.
+        base.EnsureParametersMaterialized();
+    }
 
     /// <summary>
     /// Configures positional encoding for this GQA layer.

@@ -92,7 +92,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OmniGen: Unified Image Generation", "https://arxiv.org/abs/2409.11340", Year = 2024, Authors = "Xiao et al.")]
-public class OmniGenModel<T> : LatentDiffusionModelBase<T>
+public partial class OmniGenModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

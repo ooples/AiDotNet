@@ -67,7 +67,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Paint by Example: Exemplar-based Image Editing with Diffusion Models", "https://arxiv.org/abs/2211.13227", Year = 2023, Authors = "Yang et al.")]
-public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
+public partial class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

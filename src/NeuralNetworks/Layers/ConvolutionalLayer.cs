@@ -469,7 +469,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// Without randomness, all pattern detectors might end up looking for the same thing.
     /// </para>
     /// </remarks>
-    private readonly Random _random;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConvolutionalLayer{T}"/> class with the specified parameters
@@ -563,7 +562,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
-        _random = RandomHelper.CreateSecureRandom();
         _isInitialized = false;
     }
 
@@ -684,7 +682,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
-        _random = RandomHelper.CreateSecureRandom();
         _isInitialized = false;
     }
 

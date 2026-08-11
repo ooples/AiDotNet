@@ -40,7 +40,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
-    ISupportsLossFunction<T>
+    ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -609,6 +610,207 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This method collects all those adjustable values into a single list so they can be updated during training.
     /// </para>
     /// </remarks>
+    // --- Parameter component registry -------------------------------------------------------
+    //
+    // A fourth source, after Layers, GetExtraTrainableLayers and GetExtraTrainableTensors, for
+    // parameters that are none of those: a set COMPUTED from a structure rather than stored in a
+    // field. NEAT's surface is its best genome's connections, an expression tree's is the constants
+    // in its nodes, a NAS supernet's is architecture weights keyed by operation. None can be
+    // expressed as a tensor field or a layer, and before this the only way to surface them was to
+    // hand-write ParameterCount, GetParameters and SetParameters -- three separate chances for the
+    // count and the vector to disagree, which is the defect this whole surface exists to remove.
+    //
+    // Registered LAST so that every model that registers nothing keeps byte-identical
+    // serialization order.
+
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
+    private bool _componentsRegistered;
+
+    /// <summary>
+    /// Declares a component whose parameters belong to this model's surface. Registration order is
+    /// serialization order, so keep it stable. Null is tolerated and registration is idempotent by
+    /// reference.
+    /// </summary>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+        => _parameterRegistry.Register(component);
+
+    /// <summary>Registers an exceptional component by stable identity and semantic role.</summary>
+    protected void RegisterParameterComponent(
+        string stableId,
+        IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role =
+            AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
+    /// <summary>
+    /// Declare components here with <see cref="RegisterParameterComponent"/>. Called once, lazily,
+    /// so it runs after the constructor has built them.
+    /// </summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>The registered components, registering them on first use.</summary>
+    protected IReadOnlyList<IParameterSource<T>> ParameterComponents
+    {
+        get
+        {
+            if (!_componentsRegistered)
+            {
+                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterComponents();
+                _componentsRegistered = true;
+            }
+            return _parameterRegistry.Components;
+        }
+    }
+
+    /// <inheritdoc />
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get => BuildParameterLayout();
+    }
+
+    private AiDotNet.Models.Parameters.ParameterLayoutSnapshot BuildParameterLayout()
+    {
+        EnsureParametersReady();
+        ResolveLazyLayerShapes();
+
+        var slots = new List<AiDotNet.Models.Parameters.ParameterSlotDescriptor>();
+        long offset = 0;
+        bool offsetKnown = true;
+
+        void AddSlot(
+            string stableId,
+            AiDotNet.Models.Parameters.ParameterSlotRole role,
+            AiDotNet.Models.Parameters.ParameterReadiness readiness,
+            long? count)
+        {
+            slots.Add(new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                stableId, role, readiness, count, offsetKnown ? offset : (long?)null));
+            if (count.HasValue && offsetKnown)
+                offset = checked(offset + count.Value);
+            else
+                offsetKnown = false;
+        }
+
+        void AddLayerSlots(ILayer<T> layer, string stableId)
+        {
+            var readiness = GetLayerParameterReadiness(layer);
+            if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.Materialized &&
+                layer is Layers.LayerBase<T> layerBase)
+            {
+                bool found = false;
+                foreach (var chunk in layerBase.GetParameterStateChunks(stableId))
+                {
+                    found = true;
+                    AddSlot(
+                        chunk.StableId,
+                        chunk.Role,
+                        AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                        chunk.Tensor.Length);
+                }
+                if (!found)
+                {
+                    AddSlot(
+                        stableId,
+                        AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                        AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree,
+                        0);
+                }
+                return;
+            }
+
+            long? count = readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
+                ? null
+                : layer.ParameterCount;
+            AddSlot(
+                stableId,
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                readiness,
+                count);
+        }
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            AddLayerSlots(Layers[i], $"layers/{i:D8}");
+        }
+
+        int extraLayerIndex = 0;
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is null) continue;
+            AddLayerSlots(layer, $"extra-layers/{extraLayerIndex++:D8}");
+        }
+
+        int tensorIndex = 0;
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null) continue;
+            AddSlot(
+                $"extra-tensors/{tensorIndex++:D8}",
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                tensor.Length == 0
+                    ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                    : AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                tensor.Length);
+        }
+
+        _ = ParameterComponents;
+        var componentLayout = _parameterRegistry.ParameterLayout;
+        for (int i = 0; i < componentLayout.Slots.Count; i++)
+        {
+            var slot = componentLayout.Slots[i];
+            AddSlot(
+                "components/" + slot.StableId,
+                slot.Role,
+                slot.Readiness,
+                slot.ParameterCount);
+        }
+
+        return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(slots);
+    }
+
+    private static AiDotNet.Models.Parameters.ParameterReadiness GetLayerParameterReadiness(ILayer<T> layer)
+    {
+        var readiness = AiDotNet.Models.Parameters.ParameterReadiness.Materialized;
+
+        if (layer is Layers.LayerBase<T> layerBase)
+        {
+            if (layerBase.HasUninitializedParameters)
+                return AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred;
+            if (layerBase.IsShapeResolved && !layerBase.IsInitialized)
+                readiness = AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized;
+        }
+
+        var subLayers = layer.GetSubLayers();
+        for (int i = 0; i < subLayers.Count; i++)
+        {
+            var childReadiness = GetLayerParameterReadiness(subLayers[i]);
+            if (childReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred)
+                return childReadiness;
+            if (childReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized)
+                readiness = childReadiness;
+        }
+
+        if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.Materialized &&
+            layer.ParameterCount == 0)
+            readiness = AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree;
+
+        return readiness;
+    }
+
+    /// <summary>Total across the registered components, or zero when none are registered.</summary>
+    protected long RegisteredComponentCount
+    {
+        get
+        {
+            _ = ParameterComponents;
+            return _parameterRegistry.ParameterCount;
+        }
+    }
+
     public virtual Vector<T> GetParameters()
     {
         // Pre-resolve any lazy layer shapes from the architecture before
@@ -677,6 +879,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             perLayerParameters.Add(flat);
             totalParameterCountLong += flat.Length;
         }
+        // Registered components, fourth and last -- the same position ParameterCount and
+        // SetParameters use, so the three describe one parameter set in one order.
+        var registeredComponents = ParameterComponents;
+        for (int ci = 0; ci < registeredComponents.Count; ci++)
+        {
+            var componentParameters = registeredComponents[ci].GetParameters();
+            perLayerParameters.Add(componentParameters);
+            totalParameterCountLong += componentParameters.Length;
+        }
         int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
         var parameters = new Vector<T>(totalParameterCount);
@@ -707,7 +918,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// either <see cref="Vector{T}"/>.Length or
     /// <see cref="ParameterCount"/>.
     /// </remarks>
-    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
         ResolveLazyLayerShapes();
 
@@ -726,31 +937,60 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // those are still part of `Layers` from the flat APIs' point of
         // view because GetParameters walks each top-level layer's
         // ParameterCount which already aggregates sublayer params.
-        var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
-        foreach (var trainable in trainableLayers)
+        for (int i = 0; i < Layers.Count; i++)
         {
-            foreach (var t in trainable.GetTrainableParameters())
+            var layer = Layers[i];
+            if (layer is LayerBase<T> layerBase)
             {
-                if (t is null || t.Length == 0) continue;
-                yield return t;
+                foreach (var chunk in layerBase.GetParameterStateChunks($"layers/{i:D8}"))
+                    yield return chunk;
+            }
+            else
+            {
+                var flat = layer.GetParameters();
+                if (flat.Length == 0) continue;
+                yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
+                    $"layers/{i:D8}",
+                    layer.SupportsTraining
+                        ? AiDotNet.Models.Parameters.ParameterSlotRole.Trainable
+                        : AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState,
+                    new Tensor<T>(new[] { flat.Length }, flat));
             }
         }
 
-        // Same order the flat APIs use: layers, then extra layers, then extra tensors.
+        // Same order the flat APIs use: layers, extra layers, extra tensors, components.
+        int extraLayerIndex = 0;
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
-            foreach (var t in extra.GetTrainableParameters())
-            {
-                if (t is null || t.Length == 0) continue;
-                yield return t;
-            }
+            foreach (var chunk in extra.GetParameterStateChunks($"extra-layers/{extraLayerIndex++:D8}"))
+                yield return chunk;
         }
+        int extraTensorIndex = 0;
         foreach (var tensor in GetExtraTrainableTensors())
         {
             if (tensor is null || tensor.Length == 0) continue;
-            yield return tensor;
+            yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
+                $"extra-tensors/{extraTensorIndex++:D8}",
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                tensor);
         }
+
+        _ = ParameterComponents;
+        foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+        {
+            yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
+                "components/" + chunk.StableId,
+                chunk.Role,
+                chunk.Tensor);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in GetParameterStateChunks())
+            yield return chunk.Tensor;
     }
 
     #region GPU Training Methods
@@ -2060,6 +2300,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (tensor is not null) total += tensor.Length;
             }
 
+            // Registered components last, so a model that registers nothing is byte-identical.
+            total += RegisteredComponentCount;
+
             return total;
         }
     }
@@ -3343,6 +3586,38 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// difference between sub-second tests and 120-second timeouts.
     /// </summary>
     private bool _layerShapesResolved;
+
+    /// <summary>
+    /// Shadow evidence gathered AT THE PROPAGATION SITE, for the shape-contract cutover.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A SECOND SHADOW IS NEEDED BECAUSE THE FIRST ONE ANSWERS A DIFFERENT QUESTION.
+    /// <c>LayerContractValidator.CompareContractsToResolvedShapes</c> compares each layer's contract
+    /// against that layer's own <c>GetInputShape()</c> -&gt; <c>GetOutputShape()</c>, which are per-sample
+    /// throughout <c>LayerBase</c> - so it passes <c>isBatched: false</c>. It reported 611 agreements
+    /// and 0 disagreements, and a cutover was attempted on that basis and reverted, with the note
+    /// "shadow evidence does not cover the propagating shape".
+    /// </para>
+    /// <para>
+    /// It does not cover it because <see cref="TryAdvanceLayerShape"/> does not propagate per-sample
+    /// shapes. The walk starts from <see cref="TryGetArchitectureInputShape"/>, which prepends a unit
+    /// batch, so the shape flowing through the chain is BATCHED. The reverted attempt fed that batched
+    /// shape to the contract while hard-coding <c>isBatched: false</c> - two conventions mixed in one
+    /// call, which is a different defect from anything the first shadow could have caught.
+    /// </para>
+    /// <para>
+    /// So this records, per layer TRANSITION rather than per layer, what the contract answers for the
+    /// shape actually being propagated - under BOTH interpretations, because which convention holds is
+    /// the very thing in question and assuming it is what went wrong last time. Reporting only; the
+    /// propagated value is still whichever one <see cref="TryAdvanceLayerShape"/> already chose.
+    /// </para>
+    /// </remarks>
+    private int _propagationShadowAgreedBatched;
+    private int _propagationShadowAgreedPerSample;
+    private int _propagationShadowDeclined;
+    private int _propagationShadowDisagreedBoth;
+    private List<string>? _propagationShadowDisagreements;
     /// <summary>
     /// Whether lazy shape resolution has already run on this instance.
     /// </summary>
@@ -3591,6 +3866,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 TryAdvanceLayerShape(extra, ref currentShape, ref lastGoodShape);
             }
 
+        // After the whole walk, so the tally covers every transition including the extra layers.
+        ReportPropagationShadow();
+
         _layerShapesResolved = true;
     }
 
@@ -3621,6 +3899,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     lb.ResolveShapesOnly(tryShape);
                 }
                 int[] outShape = layer.GetOutputShape();
+
+                // Shadow the contract against the field HERE, where the answer actually propagates.
+                // Reporting only - outShape below is untouched. See the field declarations for why the
+                // existing per-layer shadow does not license a cutover at this site.
+                RecordPropagationShadow(layer, tryShape, outShape);
+
                 if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
                 {
                     // Deliberately NOT a copy: callers rely on currentShape aliasing the layer's own
@@ -3648,6 +3932,130 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Records, for ONE layer transition, what the shape contract answers for the shape actually being
+    /// propagated versus what the imperative field answered. Reporting only.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BOTH BATCH INTERPRETATIONS ARE TRIED, ON PURPOSE. Which convention the propagating shape follows
+    /// is the open question: <see cref="TryGetArchitectureInputShape"/> prepends a unit batch, so the
+    /// walk looks batched, but individual layers may hand back per-sample shapes mid-chain and the
+    /// existing per-layer shadow explicitly assumes per-sample. Picking one and asserting it is exactly
+    /// what invalidated the previous cutover attempt, so this counts agreement under each and lets the
+    /// numbers decide. A transition counted in BOTH columns is one where the two interpretations
+    /// coincide (common when the contract carries the leading axis through untouched).
+    /// </para>
+    /// <para>
+    /// Never throws and never influences propagation. A contract is a diagnostic here, and a diagnostic
+    /// must not be the reason a model fails to resolve its shapes.
+    /// </para>
+    /// </remarks>
+    private void RecordPropagationShadow(ILayer<T> layer, int[] tryShape, int[]? fieldShape)
+    {
+        try
+        {
+            if (layer is not IShapeContract) return;
+            if (tryShape is null || tryShape.Length == 0) return;
+            if (fieldShape is null || fieldShape.Length == 0) return;
+            if (!System.Array.TrueForAll(fieldShape, d => d > 0)) return;
+            if (!System.Array.TrueForAll(tryShape, d => d > 0)) return;
+
+            int[]? batched = SafeInfer(layer, tryShape, isBatched: true);
+            int[]? perSample = SafeInfer(layer, tryShape, isBatched: false);
+
+            if (batched is null && perSample is null)
+            {
+                _propagationShadowDeclined++;
+                return;
+            }
+
+            bool agreesBatched = batched is not null && ShapesEqual(batched, fieldShape);
+            bool agreesPerSample = perSample is not null && ShapesEqual(perSample, fieldShape);
+
+            if (agreesBatched) _propagationShadowAgreedBatched++;
+            if (agreesPerSample) _propagationShadowAgreedPerSample++;
+
+            if (!agreesBatched && !agreesPerSample)
+            {
+                _propagationShadowDisagreedBoth++;
+
+                // Capped: a long chain that disagrees everywhere would otherwise bury the summary, and
+                // the first few transitions are what identify the pattern.
+                _propagationShadowDisagreements ??= new List<string>();
+                if (_propagationShadowDisagreements.Count < 12)
+                {
+                    _propagationShadowDisagreements.Add(
+                        $"{layer.GetType().Name}: propagating [{string.Join(",", tryShape)}] -> field "
+                        + $"[{string.Join(",", fieldShape)}], contract says batched="
+                        + (batched is null ? "declined" : $"[{string.Join(",", batched)}]")
+                        + ", perSample="
+                        + (perSample is null ? "declined" : $"[{string.Join(",", perSample)}]"));
+                }
+            }
+        }
+        catch
+        {
+            // A diagnostic must never break shape resolution.
+        }
+    }
+
+    private static int[]? SafeInfer(ILayer<T> layer, int[] inputShape, bool isBatched)
+    {
+        try { return ShapeInference.InferOutputShape(layer, inputShape, isBatched); }
+        catch { return null; }
+    }
+
+    private static bool ShapesEqual(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Emits the propagation-site shadow tally. Call after the chain walk completes.
+    /// </summary>
+    /// <remarks>
+    /// Gated on <c>AIDOTNET_QUIET</c> like the sibling per-layer shadow, and it prints even when nothing
+    /// disagreed: the EXERCISED counts are the point. "0 disagreed" is equally true of a contract that
+    /// declined on every transition, and that vacuity is what hid 13 dead <c>[ElementWiseShape]</c>
+    /// contracts elsewhere in this work.
+    /// </remarks>
+    private void ReportPropagationShadow()
+    {
+        try
+        {
+            int total = _propagationShadowAgreedBatched + _propagationShadowAgreedPerSample
+                        + _propagationShadowDeclined + _propagationShadowDisagreedBoth;
+            if (total == 0) return;
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET"))) return;
+
+            var report = new System.Text.StringBuilder();
+            report.Append(GetType().Name)
+                .Append(": propagation-site shape shadow (agreedBatched=")
+                .Append(_propagationShadowAgreedBatched)
+                .Append(", agreedPerSample=").Append(_propagationShadowAgreedPerSample)
+                .Append(", declined=").Append(_propagationShadowDeclined)
+                .Append(", disagreedBoth=").Append(_propagationShadowDisagreedBoth)
+                .Append(')');
+
+            if (_propagationShadowDisagreements is not null)
+            {
+                foreach (var d in _propagationShadowDisagreements)
+                {
+                    report.AppendLine().Append("  ").Append(d);
+                }
+            }
+
+            System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + report);
+        }
+        catch
+        {
+            // Reporting must never be the reason a model fails to construct.
+        }
     }
 
     /// <summary>
@@ -10948,6 +11356,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     private byte[] SerializeInternalUnchecked()
     {
+        // MATERIALIZE BEFORE WRITING, so the saved form is not a function of the source's
+        // materialization state.
+        //
+        // GetParameters deliberately reads the UNMATERIALIZED view, so that counting and reading always
+        // agree (LayerBase: "reading materialized a layer that counting had honestly reported as empty --
+        // TimeMoE answered 16,900 and then produced 17,972 values"). The consequence is that a model
+        // serialized before its weights exist writes a PARTIAL payload AND a partial shape manifest, and
+        // a restore then sizes the target from that partial manifest while ApplyParameterLayout has
+        // already materialized it in full - so the pour is rejected ("Expected 49792 parameters, but got
+        // 16452"). Clone reaches this through DeepCopy's serialize/deserialize roundtrip, which is how
+        // that surfaced as three clone failures rather than as a save/load bug.
+        //
+        // Materializing HERE and not on the read path keeps ParameterCount and GetParameters lazy, so
+        // nothing reintroduces the allocate-to-answer-a-question behaviour that threw
+        // OutOfMemoryException on a 774M-parameter model being torn down. A save legitimately needs the
+        // values it is about to write; a count does not.
+        MaterializeParameters();
+
         // Pre-size the MemoryStream to avoid ensureCapacity doubling near the
         // 2GB array cap on large models. ViLBERT (~174M params × 8 B = 1.4 GB)
         // hits OutOfMemoryException during serialize because at ~1 GB filled
@@ -11271,6 +11697,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // Read network-specific data
         DeserializeNetworkSpecificData(reader);
+
+        // SetParameters/ApplyParameterLayout may mutate tensors whose identities were already
+        // observed while the destination graph was materialized. Derived CPU weight packs and
+        // resident GPU buffers must never survive a bulk restore.
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     /// <summary>
@@ -11561,6 +11992,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
@@ -11740,6 +12172,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // (DropoutLayer carries no parameters), so their RandomSeed must be transferred
                 // explicitly — see CopyLayerRandomSeedsTo.
                 CopyLayerRandomSeedsTo(largeBase);
+                largeBase.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
                 return largeCopy;
             }
         }
@@ -12079,6 +12512,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // stream, flaking clone-then-train trajectory invariants (the SpiralNet flake). No-op when
         // the source layers are unseeded (production default).
         CopyLayerRandomSeedsTo(copyBase);
+        copyBase.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         return true;
     }
 
@@ -12815,6 +13249,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (tensor is null || tensor.Length == 0) continue;
             srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
             currentIndex += tensor.Length;
+        }
+        var restoreComponents = ParameterComponents;
+        for (int ci = 0; ci < restoreComponents.Count; ci++)
+        {
+            int componentCount = (int)restoreComponents[ci].ParameterCount;
+            if (componentCount == 0) continue;
+            var slice = new Vector<T>(componentCount);
+            srcSpan.Slice(currentIndex, componentCount).CopyTo(slice.AsWritableSpan());
+            restoreComponents[ci].SetParameters(slice);
+            currentIndex += componentCount;
         }
 
         // Some ITrainableLayer implementations swap their parameter tensors

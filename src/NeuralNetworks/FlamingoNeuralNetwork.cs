@@ -15,7 +15,8 @@ using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Validation;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using System.Collections.Generic;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -53,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Flamingo: a Visual Language Model for Few-Shot Learning", "https://arxiv.org/abs/2204.14198", Year = 2022, Authors = "Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katie Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob Menick, Sebastian Borgeaud, Andrew Brock, Aida Nematzadeh, Sahand Sharifzadeh, Mikolaj Binkowski, Ricardo Barreira, Oriol Vinyals, Andrew Zisserman, Karen Simonyan")]
-public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
+public partial class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 {
     private readonly FlamingoOptions _options;
 
@@ -1232,31 +1233,10 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         return result;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
+    // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
-        foreach (var layer in _visionEncoderLayers
-            .Concat(_perceiverLayers)
-            .Concat(_gatedCrossAttentionLayers)
-            .Concat(_languageModelLayers)
-            .Concat(new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection }
-                .Where(layer => layer is not null)
-                .Cast<ILayer<T>>()))
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount && offset + i < parameters.Length; i++)
-                {
-                    layerParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
-            }
-        }
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

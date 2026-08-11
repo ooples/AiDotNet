@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Nested Learning: The Illusion of Deep Learning Architectures", "https://arxiv.org/abs/2512.24695")]
-public class HopeNetwork<T> : NeuralNetworkBase<T>
+public partial class HopeNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HopeNetworkOptions _options;
 
@@ -60,6 +60,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     private readonly IAssociativeMemory<T> _associativeMemory;
 
     // Self-referential optimization state
+    [Buffer]
     private Vector<T>? _metaState;
     private int _adaptationStep;
     private T _selfModificationRate;
@@ -517,57 +518,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        if (Layers == null || Layers.Count == 0)
-            throw new InvalidOperationException("Network layers are not initialized");
-
-        // Calculate total parameter count across all layers
-        int totalParams = 0;
-        foreach (var layer in Layers)
-        {
-            if (layer == null)
-                throw new InvalidOperationException("Layer is null");
-
-            totalParams += (int)layer.ParameterCount;
-        }
-
-        if (parameters.Length != totalParams)
-        {
-            throw new ArgumentException(
-                $"Parameter vector length ({parameters.Length}) does not match total parameters ({totalParams})",
-                nameof(parameters));
-        }
-
-        // Distribute parameters to each layer
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerParamCount);
-
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-
-            layer.SetParameters(layerParams);
-            offset += layerParamCount;
-        }
-
-        // SetParameters mutates each layer's weight tensors IN PLACE, but the
-        // CPU/GPU inference fast paths cache DERIVED weight forms (pre-packed
-        // GEMM B-panels) keyed by the weight array's object identity, not its
-        // contents. Without this flush a network loaded via UpdateParameters —
-        // notably a Clone() built through CreateNewInstance + UpdateParameters —
-        // keeps serving packs computed from its constructor-init weights and
-        // predicts differently from the source despite bit-identical parameters
-        // (Clone_AfterTraining_ShouldPreserveLearnedWeights / Issue1296 class).
-        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Trains the network on a single input-output pair (required by NeuralNetworkBase).
     /// </summary>

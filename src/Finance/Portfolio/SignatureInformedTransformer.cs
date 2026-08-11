@@ -247,18 +247,7 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         return Objective.ConditionalValueAtRisk(losses);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        Guard.NotNull(parameters);
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
-            offset += layerParams.Length;
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {

@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", "https://arxiv.org/abs/2401.05252", Year = 2024, Authors = "Chen et al.")]
-public class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
+public partial class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

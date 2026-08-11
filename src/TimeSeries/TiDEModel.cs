@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -19,7 +20,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Long-term Forecasting with TiDE: Time-series Dense Encoder", "https://arxiv.org/abs/2304.08424", Year = 2023, Authors = "Abhimanyu Das, Weihao Kong, Andrew Leach, Shaan Mathur, Rajat Sen, Rose Yu")]
-public class TiDEModel<T> : TimeSeriesModelBase<T>
+public partial class TiDEModel<T> : TimeSeriesModelBase<T>
 {
     private readonly TiDEOptions<T> _options;
     private readonly Random _random;
@@ -27,20 +28,30 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
     private readonly int _h;
 
     // Encoder: hidden = ReLU(W1·x + b1). Decoder: out = W2·hidden + b2. Linear skip: + Wr·x + br.
+    [TrainableParameter]
     private readonly double[][] _w1; // [H][L]
+    [TrainableParameter]
     private readonly double[] _b1;   // [H]
+    [TrainableParameter]
     private readonly double[] _w2;   // [H]
+    [TrainableParameter]
     private double _b2;
+    [TrainableParameter]
     private readonly double[] _wr;   // [L]
+    [TrainableParameter]
     private double _br;
 
     // TiDE's reference implementation optionally normalizes each series before
     // the dense encoder and restores its scale after decoding. This supervised
     // Matrix/Vector adaptation keeps equivalent training-set statistics so raw
     // time indices and large target offsets do not destabilize the MLP.
+    [Buffer]
     private readonly double[] _inputMeans;
+    [Buffer]
     private readonly double[] _inputStds;
+    [Buffer]
     private double _targetMean;
+    [Buffer]
     private double _targetStd = 1.0;
 
     public TiDEModel(TiDEOptions<T>? options = null)
@@ -261,27 +272,6 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        ModelParameters = FlattenParameters();
-    }
-
-    /// <summary>
-    /// Flattens every learned weight (<c>_w1</c>, <c>_b1</c>, <c>_w2</c>, <c>_b2</c>, <c>_wr</c>,
-    /// <c>_br</c>) into a single contiguous vector, in the same layout <see cref="ParameterCount"/>
-    /// describes. This is the real parameter set the base-class contract expects for model inspection,
-    /// checkpointing, and parameter transfer — not a one-element placeholder.
-    /// </summary>
-    private Vector<T> FlattenParameters()
-    {
-        var flat = new T[ParameterCount];
-        int k = 0;
-        for (int i = 0; i < _h; i++)
-            for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_w1[i][j]); }
-        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_b1[i]); }
-        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_w2[i]); }
-        flat[k++] = NumOps.FromDouble(_b2);
-        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wr[j]); }
-        flat[k] = NumOps.FromDouble(_br);
-        return new Vector<T>(flat);
     }
 
     public override T PredictSingle(Vector<T> input)
@@ -296,8 +286,6 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
         // a second line of defence for the recursive-forecast path.
         return GuardPrediction(ToFiniteT(pred));
     }
-
-    public override long ParameterCount => (long)_h * _l + _h + _h + 1 + _l + 1;
 
     protected override void SerializeCore(BinaryWriter writer)
     {

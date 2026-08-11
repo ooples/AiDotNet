@@ -19,7 +19,8 @@ namespace AiDotNet.Classification.MultiLabel;
 /// traditional classification which assigns exactly one label.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape
+public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape,
+    IParameterManifestProvider
 {
     /// <summary>
     /// Gets the hardware-accelerated computation engine for vectorized operations.
@@ -175,6 +176,10 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     protected void RegisterParameterComponent(IParameterSource<T>? component)
         => _parameterRegistry.Register(component);
 
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
     /// <summary>
     /// Declare the trainable components of this model here with
     /// <see cref="RegisterParameterComponent"/>. Called once, lazily, so it runs after the
@@ -197,12 +202,16 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         {
             if (!_componentsRegistered)
             {
+                if (this is IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                _componentsRegistered = _parameterRegistry.HasComponents;
+                _componentsRegistered = true;
             }
             return _parameterRegistry;
         }
     }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
     /// <remarks>

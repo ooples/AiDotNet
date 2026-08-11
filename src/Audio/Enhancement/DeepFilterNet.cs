@@ -60,7 +60,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DeepFilterNet: A Low Complexity Speech Enhancement Framework for Full-Band Audio Based on Deep Filtering", "https://arxiv.org/abs/2110.05588", Year = 2022, Authors = "Hendrik Schröter, Alberto N. Escalante-B., Tobias Rosenkranz, Andreas Maier")]
-public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly DeepFilterNetOptions _options;
 
@@ -158,13 +158,17 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <summary>
     /// Cached complex STFT from preprocessing, used for audio reconstruction.
     /// </summary>
+    [Scratch]
     private Tensor<Complex<T>>? _cachedComplexStft;
 
     // Cached constants for the differentiable STFT/ERB pipeline (built lazily once numFreqs is known).
     // These are non-trainable leaf tensors, so building them with scalar fills is fine — only the
     // OPERATIONS wiring trainable params to the loss must be tape-tracked IEngine ops.
+    [Buffer]
     private Tensor<T>? _analysisWindow;   // Hann window [frameLen]
+    [Buffer]
     private Tensor<T>? _erbPoolMatrix;    // [numFreqs, numErbBands]  magnitude -> ERB-band pooling
+    [Buffer]
     private Tensor<T>? _erbExpandMatrix;  // [numErbBands, numFreqs]  ERB-band gain -> per-bin gain
     private int _cachedNumFreqs = -1;
     private bool _lazyShapesWarmed;
@@ -573,30 +577,7 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         TrainWithTape(input, expectedOutput, _optimizer);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // SET each layer's parameters from the flat vector (the contract of this method — it is how
-        // Clone / deserialize restore weights). Walk `Layers` in the SAME order GetParameters emits so
-        // the slices line up. The previous version was doubly broken: it ignored `parameters` entirely
-        // and instead called layer.UpdateParameters(0.001) (a gradient STEP, not a set), and it iterated
-        // the internal sub-lists in a different order (gain last) than GetParameters — so Clone produced
-        // a model with different weights (Clone_ShouldProduceIdenticalOutput).
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = layer.GetParameters().Length;
-            if (count == 0) continue;
-            layer.SetParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-
-        // Weights just changed wholesale (Clone / deserialize restore path). Invalidate any packed
-        // inference weight caches so the next Predict rebuilds them from these params — otherwise a
-        // clone whose cache was populated during ResolveLazyLayerShapes' warm-forward (random init)
-        // keeps serving stale packed weights and predicts differently from the original
-        // (Clone_ShouldProduceIdenticalOutput).
-        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

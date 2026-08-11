@@ -94,7 +94,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SyncDreamer: Generating Multiview-consistent Images from a Single-view Image", "https://arxiv.org/abs/2309.03453", Year = 2024, Authors = "Liu et al.")]
-public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
+public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

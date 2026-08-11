@@ -459,6 +459,38 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// save and load tree models.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Writes a parameter vector into this tree. Only an EMPTY vector is accepted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A tree's learned state is its node structure -- split feature, threshold, child links -- not
+    /// a fixed set of slots, so there is nothing for a flat vector to be written into. The vector
+    /// surface reports zero and hands back nothing, and this accepts the empty vector that implies.
+    /// </para>
+    /// <para>
+    /// Empty rather than a throw, deliberately. That is what nn.Module.parameters() does for a
+    /// module holding no parameters, and it keeps a caller that walks every model uniformly from
+    /// having to special-case tree models. A NON-empty vector still fails, on the length, which is
+    /// the same way PyTorch rejects a mismatched state_dict.
+    /// </para>
+    /// <para>
+    /// To rebuild a tree from a vector, use <see cref="WithParameters"/>, which is what that vector
+    /// came from.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length == 0) return;
+
+        throw new ArgumentException(
+            $"Expected 0 parameters for {GetType().Name}: a tree's learned state is its node "
+            + $"structure, not a flat vector, so nothing can be written in place. Got "
+            + $"{parameters.Length}. Use WithParameters(vector) to rebuild the tree from one.",
+            nameof(parameters));
+    }
+
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Create a new instance with the same options
@@ -935,6 +967,13 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         get { return CountNodes(Root) * 4 + 1; }
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Decision trees learn their split structure during training; an arbitrary flat vector
+    /// cannot initialize that structure safely.
+    /// </remarks>
+    public virtual bool SupportsParameterInitialization => false;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;

@@ -80,7 +80,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VideoCrafter1: Open Diffusion Models for High-Quality Video Generation", "https://arxiv.org/abs/2310.19512", Year = 2023, Authors = "Chen et al.")]
-public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
+public partial class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

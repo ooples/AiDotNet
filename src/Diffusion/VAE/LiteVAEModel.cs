@@ -45,7 +45,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LiteVAE: Lightweight and Efficient Variational Autoencoders for Latent Diffusion Models", "https://arxiv.org/abs/2405.14477", Year = 2024, Authors = "Sauer et al.")]
-public class LiteVAEModel<T> : VAEModelBase<T>
+public partial class LiteVAEModel<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written

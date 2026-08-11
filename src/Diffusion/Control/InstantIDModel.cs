@@ -77,7 +77,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InstantID: Zero-shot Identity-Preserving Generation in Seconds", "https://arxiv.org/abs/2401.07519", Year = 2024, Authors = "Wang et al.")]
-public class InstantIDModel<T> : LatentDiffusionModelBase<T>
+public partial class InstantIDModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

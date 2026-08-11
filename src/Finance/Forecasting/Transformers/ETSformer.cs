@@ -71,7 +71,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ETSformer: Exponential Smoothing Transformers for Time-series Forecasting", "https://arxiv.org/abs/2202.01381", Year = 2022, Authors = "Gerald Woo, Chenghao Liu, Doyen Sahoo, Akshat Kumar, Steven Hoi")]
-public class ETSformer<T> : ForecastingModelBase<T>
+public partial class ETSformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -108,11 +108,13 @@ public class ETSformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion

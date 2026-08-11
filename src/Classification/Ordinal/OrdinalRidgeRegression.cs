@@ -567,7 +567,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     /// <para><b>For Beginners:</b> Creates a copy of this model with different parameter values.
     /// Useful for optimization or ensemble methods.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new OrdinalRidgeRegression<T>(_alpha, _fitIntercept);
         model.NumFeatures = NumFeatures;

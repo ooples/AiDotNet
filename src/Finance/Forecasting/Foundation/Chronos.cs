@@ -100,7 +100,13 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Chronos: Learning the Language of Time Series", "https://arxiv.org/abs/2403.07815", Year = 2024, Authors = "Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen, Oleksandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor, Jasper Zschiegner, Danielle C. Maddix, Michael W. Mahoney, Kari Torkkola, Andrew Gordon Wilson, Michael Bohlke-Schneider, Yuyang Wang")]
-public class Chronos<T> : TimeSeriesFoundationModelBase<T>
+// The paper's whole idea is that a time series becomes a LANGUAGE, and this is where that happens:
+// PredictCore calls Forward(Tokenize(input)), so the EmbeddingLayer receives token indices and never the
+// series. The model's rank-3 [Batch, Time, Features] input and that layer's rank-1/2 input are therefore
+// both correct about DIFFERENT tensors, and comparing them would report a defect that is not there.
+[PreprocessesInput("Tokenize quantizes the real-valued series into token bins before the stack runs, "
+    + "so Layers[0] receives token indices - see PredictCore's Forward(Tokenize(input)).")]
+public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 

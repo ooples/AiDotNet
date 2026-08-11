@@ -73,7 +73,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2211.03456",
     Year = 2023,
     Authors = "Xin Jin, Longhai Wu, Jie Chen, Youxin Chen, Jayoon Koo, Cheul-hee Hahm")]
-public class UPRNet<T> : FrameInterpolationBase<T>
+public partial class UPRNet<T> : FrameInterpolationBase<T>
 {
     private readonly UPRNetOptions _options;
 

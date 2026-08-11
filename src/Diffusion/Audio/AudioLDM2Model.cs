@@ -78,7 +78,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioLDM 2: Learning Holistic Audio Generation with Self-supervised Pretraining", "https://arxiv.org/abs/2308.05734", Year = 2023, Authors = "Liu et al.")]
-public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
+public partial class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

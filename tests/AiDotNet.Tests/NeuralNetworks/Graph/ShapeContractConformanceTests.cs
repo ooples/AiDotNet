@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -236,6 +238,16 @@ public class ShapeContractConformanceTests
     }
 
     [Fact]
+    public async Task ContractAvailabilityTracksTheEffectiveOverrideWithoutConstructingTheType()
+    {
+        await Task.Yield();
+
+        Assert.False(ShapeInference.HasDeclaredOutputShapeContract(typeof(ExplicitlyUnavailableContract)));
+        Assert.False(ShapeInference.HasDeclaredOutputShapeContract(typeof(InheritsUnavailableContract)));
+        Assert.True(ShapeInference.HasDeclaredOutputShapeContract(typeof(OverridesUnavailableContract)));
+    }
+
+    [Fact]
     public void WindowThatDoesNotFit_IsRefused_NotSilentlyClamped()
     {
         // A 7x7 kernel over a 4x4 input with no padding has no valid position. Reporting a size of 1
@@ -275,5 +287,21 @@ public class ShapeContractConformanceTests
             AxisRelation.Window(TensorAxis.Height, kernel: 3, stride: 2, padding: 1).ToString());
         Assert.Equal("2 * in.Width", AxisRelation.Scaled(TensorAxis.Width, 2).ToString());
         Assert.Equal("in.Batch", AxisRelation.Same(TensorAxis.Batch).ToString());
+    }
+
+    private class ExplicitlyUnavailableContract : IShapeContract
+    {
+        [ShapeContractUnavailable("This fixture represents a base that has no safe family-wide law.")]
+        public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
+    }
+
+    private sealed class InheritsUnavailableContract : ExplicitlyUnavailableContract
+    {
+    }
+
+    private sealed class OverridesUnavailableContract : ExplicitlyUnavailableContract
+    {
+        public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) =>
+            Array.Empty<OutputAxisContract>();
     }
 }

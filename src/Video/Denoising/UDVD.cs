@@ -165,22 +165,7 @@ public class UDVD<T> : VideoDenoisingBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int required = 0;
-        foreach (var layer in Layers) required += layer.GetParameters().Length;
-        if (parameters.Length < required)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            layer.SetParameters(sub);
-            offset += p.Length;
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

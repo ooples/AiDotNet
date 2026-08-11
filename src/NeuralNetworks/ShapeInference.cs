@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -28,6 +29,43 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public static class ShapeInference
 {
+    /// <summary>
+    /// Reports whether a type's effective <see cref="IShapeContract.OutputAxesFor"/> implementation
+    /// declares a probeable symbolic law rather than an explicit unavailable marker.
+    /// </summary>
+    /// <param name="type">A closed concrete type to inspect.</param>
+    /// <returns>
+    /// <c>true</c> for a shape-contract implementation that should be instantiated and verified;
+    /// otherwise <c>false</c>.
+    /// </returns>
+    /// <remarks>
+    /// The interface map resolves overrides and explicit interface implementations correctly. Attribute
+    /// inheritance is deliberately disabled: when a derived type overrides an unavailable base method,
+    /// that override is a new contract and must be verified unless it explicitly opts out itself.
+    /// </remarks>
+    public static bool HasDeclaredOutputShapeContract(Type type)
+    {
+        if (type is null) throw new ArgumentNullException(nameof(type));
+        if (type.ContainsGenericParameters || !typeof(IShapeContract).IsAssignableFrom(type)) return false;
+
+        MethodInfo? contractMethod = typeof(IShapeContract).GetMethod(
+            nameof(IShapeContract.OutputAxesFor),
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: new[] { typeof(int) },
+            modifiers: null);
+        if (contractMethod is null) return false;
+
+        InterfaceMapping map = type.GetInterfaceMap(typeof(IShapeContract));
+        for (int i = 0; i < map.InterfaceMethods.Length; i++)
+        {
+            if (map.InterfaceMethods[i] != contractMethod) continue;
+            return !map.TargetMethods[i].IsDefined(typeof(ShapeContractUnavailableAttribute), inherit: false);
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Names the axes of a concrete shape using a type's declared INPUT layout.
     /// </summary>

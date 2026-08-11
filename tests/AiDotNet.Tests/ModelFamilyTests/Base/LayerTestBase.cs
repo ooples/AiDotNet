@@ -1,6 +1,7 @@
 using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -303,6 +304,33 @@ public abstract class LayerTestBase
         return tensor;
     }
 
+    /// <summary>
+    /// Creates deterministic test data from the layer's declared value-domain contract.
+    /// Index consumers receive legal, varied integer IDs; all other layers retain the
+    /// continuous random input used by the original conformance suite.
+    /// </summary>
+    protected static Tensor<double> CreateConformingInput(
+        ILayer<double> layer, int[] shape, int seed = 42)
+    {
+        if (layer is not LayerBase<double> layerBase)
+            return CreateRandomTensor(shape, seed);
+
+        var domain = layerBase.GetInputDomain(shape);
+        if (!domain.IsIndices)
+            return CreateRandomTensor(shape, seed);
+
+        var tensor = new Tensor<double>(shape);
+        int cardinality = domain.MaxExclusive - domain.MinInclusive;
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            int offset = (int)(((long)i + seed) % cardinality);
+            if (offset < 0) offset += cardinality;
+            tensor[i] = domain.MinInclusive + offset;
+        }
+
+        return tensor;
+    }
+
 
     // =========================================================================
     // INVARIANT 1: Forward produces finite, non-empty output
@@ -315,7 +343,7 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         var output = layer.Forward(input);
 
@@ -382,7 +410,8 @@ public abstract class LayerTestBase
         {
             try
             {
-                var output = CreateLayer().Forward(CreateRandomTensor(shape));
+                var candidateLayer = CreateLayer();
+                var output = candidateLayer.Forward(CreateConformingInput(candidateLayer, shape));
                 var outShape = output.Shape.ToArray();
 
                 Assert.True(
@@ -556,7 +585,7 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(false); // Disable dropout/stochastic behavior
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         var out1 = layer.Forward(input);
         layer.ResetState(); // Reset any recurrent state
@@ -585,8 +614,19 @@ public abstract class LayerTestBase
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
 
-        var input1 = CreateConstantTensor(InputShape, 0.1);
-        var input2 = CreateConstantTensor(InputShape, 0.9);
+        // A singleton index domain has only one legal value, so no conforming
+        // second input exists with which to test value sensitivity.
+        if (layer is LayerBase<double> layerBase)
+        {
+            var domain = layerBase.GetInputDomain(InputShape);
+            if (domain.IsIndices && domain.MaxExclusive - domain.MinInclusive <= 1)
+                return;
+        }
+
+        var input1 = CreateConformingInput(layer, InputShape, seed: 17);
+        // Adjacent offsets guarantee a different legal ID for every index
+        // cardinality greater than one (unlike arbitrary seeds that can alias modulo N).
+        var input2 = CreateConformingInput(layer, InputShape, seed: 18);
 
         layer.ResetState();
         var output1 = layer.Forward(input1);
@@ -604,7 +644,7 @@ public abstract class LayerTestBase
             }
         }
         Assert.True(anyDifferent,
-            "Layer produces identical output for inputs [0.1,...] and [0.9,...]. " +
+            "Layer produces identical output for two distinct inputs that conform to its declared value domain. " +
             "Forward pass may ignore input values.");
     }
 
@@ -619,7 +659,7 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         var output = layer.Forward(input);
         var declaredShape = layer.GetOutputShape();
@@ -661,16 +701,8 @@ public abstract class LayerTestBase
         // the invariant we're testing (count == GetParameters().Length
         // and >0 for trainable) requires the layer to be in its
         // "post first forward" state to be meaningful.
-        using (var probeInput = new Tensor<double>(InputShape))
+        using (var probeInput = CreateConformingInput(layer, InputShape, seed: 17))
         {
-            // Fill with non-zero values — some layer Forward paths take
-            // shortcuts on all-zero input (e.g. attention with zero
-            // weights producing NaN softmax) that prevent OnFirstForward
-            // from running. A small deterministic ramp avoids those
-            // shortcuts without coupling to RNG state.
-            for (int i = 0; i < probeInput.Length; i++)
-                probeInput[i] = 0.01 * (i + 1);
-
             try { layer.Forward(probeInput); }
             catch
             {
@@ -729,10 +761,8 @@ public abstract class LayerTestBase
         // Without this, lazy layers (#1209) report ParameterCount = 0 and the
         // roundtrip below would skip — which is correct lazy semantics, but
         // the invariant we're testing only has meaning post-resolution.
-        using (var probeInput = new Tensor<double>(InputShape))
+        using (var probeInput = CreateConformingInput(layer, InputShape, seed: 17))
         {
-            for (int i = 0; i < probeInput.Length; i++)
-                probeInput[i] = 0.01 * (i + 1);
             try { layer.Forward(probeInput); } catch { }
         }
 
@@ -769,7 +799,7 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         var originalOutput = layer.Forward(input);
 
@@ -822,7 +852,7 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         // Forward once to populate state
         layer.Forward(input);
@@ -861,7 +891,7 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(true);
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         // ITrainableLayer<double> exposes the per-tensor trainable references
         // the source generator emits from [TrainableParameter] fields. If
@@ -945,7 +975,7 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
         layer.SetTrainingMode(true);
-        var input = CreateRandomTensor(InputShape);
+        var input = CreateConformingInput(layer, InputShape);
 
         if (layer is not AiDotNet.Interfaces.ITrainableLayer<double> trainable) return;
 

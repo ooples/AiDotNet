@@ -53,7 +53,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class ARModel<T> : TimeSeriesModelBase<T>
+public partial class ARModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -83,6 +83,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The time series values from training, used for in-sample predictions via Predict(Matrix).
     /// </summary>
+    [Buffer]
     private Vector<T> _trainedSeries;
 
     /// <summary>

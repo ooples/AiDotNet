@@ -65,7 +65,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Wentao Hu, Xiurong Jiang, Jiarun Liu, Yuqi Yang, Hui Tian")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);

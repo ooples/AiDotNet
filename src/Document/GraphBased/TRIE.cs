@@ -56,7 +56,7 @@ namespace AiDotNet.Document.GraphBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TRIE: End-to-End Text Reading and Information Extraction for Document Understanding", "https://doi.org/10.48550/arXiv.2005.13118", Year = 2020, Authors = "Peng Zhang, Yunlu Xu, Zhanzhan Cheng, Shiliang Pu, Jing Lu, Liang Qiao, Yi Niu, Fei Wu")]
-public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITextDetector<T>
+public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITextDetector<T>
 {
     private readonly TRIEOptions _options;
 
@@ -850,19 +850,18 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

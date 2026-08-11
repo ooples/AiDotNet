@@ -89,7 +89,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wuerstchen: An Efficient Architecture for Large-Scale Text-to-Image Diffusion Models", "https://arxiv.org/abs/2306.00637", Year = 2023, Authors = "Pernias et al.")]
-public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
+public partial class StableCascadeModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

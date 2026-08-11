@@ -81,7 +81,7 @@ namespace AiDotNet.Finance.Probabilistic;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Diffusion-TS: Interpretable Diffusion for General Time Series Generation", "https://arxiv.org/abs/2403.01742", Year = 2024, Authors = "Xinyu Yuan, Yan Qiao")]
-public class DiffusionTS<T> : ForecastingModelBase<T>
+public partial class DiffusionTS<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;

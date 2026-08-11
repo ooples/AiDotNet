@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
-public class DeepAR<T> : ForecastingModelBase<T>
+public partial class DeepAR<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
 
@@ -128,11 +128,13 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// rather than a hardcoded estimate.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastSigma;
 
     /// <summary>
     /// Instance normalization scale for denormalization.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _scaleStd;
 
     #endregion

@@ -66,7 +66,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech", "https://arxiv.org/abs/2106.06103", Year = 2021, Authors = "Jaehyeon Kim, Jungil Kong, Juhee Son")]
-public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly VITSModelOptions _options;
 
@@ -1147,30 +1147,5 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     }
 
     #endregion
-public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // Use the configured optimizer for parameter updates
-        var currentParams = GetParameters();
-
-        // A NULL CHECK, NOT A TYPE TEST. _optimizer is declared
-        // IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?, so `is IGradientBasedOptimizer<...>`
-        // succeeded for every non-null value and the manual-SGD else branch was unreachable. Leaving it
-        // there was worse than dead code: it read as a supported fallback, so the 2e-4 rate written into
-        // it looked like a live tuning knob when nothing could ever execute it.
-        if (_optimizer is null)
-        {
-            throw new InvalidOperationException(
-                "VITSModel has no optimizer, so UpdateParameters cannot apply gradients. Construct the " +
-                "model through the native constructor, which supplies one, or inject your own.");
-        }
-
-        var updatedParams = _optimizer.UpdateParameters(currentParams, gradients);
-        SetParameters(updatedParams);
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
 }

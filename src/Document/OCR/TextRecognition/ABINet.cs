@@ -55,7 +55,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Read Like Humans: Autonomous, Bidirectional and Iterative Language Modeling for Scene Text Recognition", "https://doi.org/10.48550/arXiv.2103.06495", Year = 2021, Authors = "Shancheng Fang, Hongtao Xie, Yuxin Wang, Zhendong Mao, Yongdong Zhang")]
-public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly ABINetOptions _options;
 
@@ -860,19 +860,18 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.0001);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();

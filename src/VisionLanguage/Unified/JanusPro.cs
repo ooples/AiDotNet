@@ -11,7 +11,8 @@ using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
+using System.Collections.Generic;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -80,7 +81,7 @@ namespace AiDotNet.VisionLanguage.Unified;
     Year = 2025,
     Authors = "Chen et al."
 )]
-public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusProOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -555,30 +556,9 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             _pixelDecoderOut,
         };
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Generation modules ride at the TAIL of the flat vector — same layout as
-        // GetParameters/SetParameters — so training updates reach them (same
-        // off-Layers contract as PaLME._patchEmbed and GR00TN1/Helix._tokenEmbedding).
-        foreach (var module in GenerationModules())
-        {
-            int count = (int)module.ParameterCount;
-            if (count > 0 && idx + count <= parameters.Length)
-            {
-                module.UpdateParameters(parameters.Slice(idx, count));
-                idx += count;
-            }
-        }
-    }
+    // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
+
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

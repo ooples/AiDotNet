@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("FILM: Frame Interpolation for Large Motion", "https://arxiv.org/abs/2202.04901")]
-public class TemporalInterpolationVAE<T> : VAEModelBase<T>
+public partial class TemporalInterpolationVAE<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>The order the previous getter concatenated and the previous setter redistributed

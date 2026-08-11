@@ -84,7 +84,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Point-E: A System for Generating 3D Point Clouds from Complex Prompts", "https://arxiv.org/abs/2212.08751", Year = 2022, Authors = "Nichol et al.")]
-public class PointEModel<T> : ThreeDDiffusionModelBase<T>
+public partial class PointEModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -94,7 +94,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1709.02023",
     Year = 2018,
     Authors = "Murat Kocaoglu, Christopher Snyder, Alexandros G. Dimakis, Sriram Vishwanath")]
-public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly CausalGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
@@ -110,6 +110,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     // Causal structure: adjacency matrix W (numFeatures x numFeatures)
     // W[i,j] > 0 means feature i causally influences feature j
+    [Buffer(Name = "causal-adjacency")]
     private Matrix<T>? _adjacency;
 
     // Augmented Lagrangian parameters for NOTEARS DAG constraint
@@ -126,7 +127,9 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
 
     // Cached pre-activations for proper backward passes
+    [Scratch]
     private readonly List<Tensor<T>> _genPreActivations = new();
+    [Scratch]
     private readonly List<Tensor<T>> _discPreActivations = new();
 
     // Whether custom layers are being used

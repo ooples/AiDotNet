@@ -435,6 +435,7 @@ public class SAMHQ<T> : Common.PromptableSegmentationBase<T>
     #region IPromptableSegmentation Implementation
 
     // SAM-HQ's own promptable state. _imageEmbedding and _imageSet live on PromptableSegmentationBase.
+    [Scratch]
     private Tensor<T>? _imageProbabilities;
 
     // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;

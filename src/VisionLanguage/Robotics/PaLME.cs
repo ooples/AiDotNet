@@ -61,7 +61,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2023,
     Authors = "Driess et al."
 )]
-public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
+public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PaLMEOptions _options;
 
@@ -461,15 +461,8 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return result;
     }
 
-    /// <summary>
-    /// Surfaces _patchEmbed (which lives outside Layers) to the base
-    /// weight-registry walker so its trainable tensors land in the
-    /// streaming pool when ConfigureWeightLifetime is called.
-    /// </summary>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        yield return _patchEmbed;
-    }
+    // _patchEmbed is discovered as a single-layer member and surfaced automatically.
+    // Removed under AIDN082.
 
     /// <summary>
     /// Lazily creates _patchEmbed when the incoming parameter vector is
@@ -491,28 +484,8 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         TokenizeImageInput(probe);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        EnsurePatchEmbedForParameterVector(parameters.Length);
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Apply the patch-embed update from the tail of the parameter vector.
-        if (_patchEmbed is not null)
-        {
-            int pc = checked((int)_patchEmbed.ParameterCount);
-            if (pc > 0 && idx + pc <= parameters.Length)
-            {
-                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
-            }
-        }
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 

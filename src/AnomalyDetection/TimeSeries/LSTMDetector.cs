@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Long Short-Term Memory", "https://doi.org/10.1162/neco.1997.9.8.1735", Year = 1997, Authors = "Sepp Hochreiter, Jürgen Schmidhuber")]
-public class LSTMDetector<T> : AnomalyDetectorBase<T>
+public partial class LSTMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _hiddenDim;
     private readonly int _seqLength;
@@ -62,8 +62,11 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
 
     // The normalized training series and the normalization parameters, kept so Predict can
     // produce in-sample one-step-ahead forecasts and score new data against the learned model.
+    [Buffer]
     private Matrix<T>? _normalizedSeries;
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     /// <summary>Gets the hidden dimension of the LSTM.</summary>

@@ -58,7 +58,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Zhai et al."
 )]
-public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly LiTOptions _options;
 
@@ -275,32 +275,8 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Sync the text-encoder stream too — see CLIPA.UpdateParameters
-        // for full rationale (dual-stream split, GetExtraTrainableLayers
-        // widens ParameterCount to include TextEncoderLayers, so a
-        // flat-vector writeback that only walks Layers leaves the text
-        // encoder on stale weights and the streams de-sync).
-        foreach (var layer in TextEncoderLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

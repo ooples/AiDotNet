@@ -118,28 +118,8 @@ public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters, but got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        // UpdateParameters receives post-optimizer parameter VALUES. The previous
-        // hard-coded SGD subtraction double-applied updates and materialized full-model
-        // Get/Set vectors, defeating the base COW and streaming-friendly update paths.
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = checked((int)layer.ParameterCount);
-            if (count == 0) continue;
-            layer.UpdateParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
+    // UpdateParameters validated the length and distributed the vector across Layers, both of which
+    // the base does. Removed under AIDN082.
 
     public override ModelMetadata<T> GetModelMetadata()
     {

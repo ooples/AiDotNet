@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Video-P2P: Video Editing with Cross-attention Control", "https://arxiv.org/abs/2303.04761", Year = 2023, Authors = "Liu et al.")]
-public class VideoP2PModel<T> : VideoDiffusionModelBase<T>
+public partial class VideoP2PModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

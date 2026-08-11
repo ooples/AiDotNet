@@ -97,6 +97,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;
+    [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
     // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
     // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
@@ -108,7 +109,9 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     // regenerated whenever the input node count changes so a later Predict /
     // Train on a different-sized graph doesn't run against a stale identity.
     private bool _usesFallbackAdjacency;
+    [Scratch]
     private Tensor<T>? _nodeEmbeddings;
+    [Scratch]
     private Tensor<T>? _graphEmbedding;
     private int[]? _maxPoolingIndices; // Cached indices for max pooling backward pass
 

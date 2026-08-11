@@ -63,7 +63,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2003.12039",
     Year = 2020,
     Authors = "Zachary Teed, Jia Deng")]
-public class RAFT<T> : OpticalFlowBase<T>
+public partial class RAFT<T> : OpticalFlowBase<T>
 {
     private readonly RAFTOptions _options;
 
@@ -694,25 +694,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         finally { NumIterations = savedIters; }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -102,7 +102,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ModelScope Text-to-Video Technical Report", "https://arxiv.org/abs/2308.06571", Year = 2023, Authors = "Wang et al.")]
-public class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
+public partial class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

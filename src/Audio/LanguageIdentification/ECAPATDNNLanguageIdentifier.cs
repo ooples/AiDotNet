@@ -63,7 +63,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification", "https://arxiv.org/abs/2005.07143", Year = 2020, Authors = "Brecht Desplanques, Jenthe Thienpondt, Kris Demuynck")]
-public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
+public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -98,6 +98,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
     // Cached values for proper gradient flow in MFA
     private readonly List<int> _blockOutputLengths = [];
+    [Scratch]
     private Tensor<T>? _lastTdnnOutput;
 
     // Language mapping
@@ -447,22 +448,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in GetAllLayers())
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            // Apply actual parameter updates from optimizer
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                layerParams[i] = newParams[i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParams.Length;
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -56,7 +56,7 @@ namespace AiDotNet.Document.VisionLanguage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InfographicVQA", "https://arxiv.org/abs/2104.12756", Year = 2022, Authors = "Minesh Mathew, Viraj Bagal, Rubèn Tito, Dimosthenis Karatzas, Ernest Valveny, C.V. Jawahar")]
-public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
+public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly InfographicVQAOptions _options;
 
@@ -577,26 +577,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        if (parameters.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(offset, count));
-            offset += count;
-        }
-    }
+    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     #endregion
 
     #region Disposal

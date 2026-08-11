@@ -44,13 +44,9 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2111.09395", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
-public class FinRLAgent<T> : TradingAgentBase<T>
+public partial class FinRLAgent<T> : TradingAgentBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The wrapped agent this one delegates to. All three hand-written surfaces forwarded straight to it.</remarks>
-    protected override void RegisterComponents()
-        => RegisterParameterComponent(_innerAgent);
     #region Fields
 
     private readonly FinRLAgentOptions<T> _options;

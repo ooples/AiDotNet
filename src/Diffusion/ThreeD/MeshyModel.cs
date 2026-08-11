@@ -92,7 +92,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Meshy: AI 3D Model Generator", "https://www.meshy.ai")]
-public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
+public partial class MeshyModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

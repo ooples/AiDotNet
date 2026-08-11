@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Snap Video: Scaled Spatiotemporal Transformers for Text-to-Video Synthesis", "https://arxiv.org/abs/2402.14797", Year = 2024, Authors = "Menapace et al.")]
-public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class SnapVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

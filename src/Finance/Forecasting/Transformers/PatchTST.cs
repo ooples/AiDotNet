@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Time Series is Worth 64 Words: Long-term Forecasting with Transformers", "https://arxiv.org/abs/2211.14730", Year = 2023, Authors = "Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
-public class PatchTST<T> : ForecastingModelBase<T>
+public partial class PatchTST<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
 
@@ -86,16 +86,19 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// <summary>
     /// Positional encoding for patches.
     /// </summary>
+    [Buffer]
     private Tensor<T>? _positionalEncoding;
 
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion

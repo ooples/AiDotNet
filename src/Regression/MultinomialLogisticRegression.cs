@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Applied Logistic Regression", "https://doi.org/10.1002/0471722146")]
-public class MultinomialLogisticRegression<T> : RegressionBase<T>
+public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the multinomial logistic regression model.

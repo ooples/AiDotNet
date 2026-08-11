@@ -49,7 +49,9 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private readonly double _lambda;
+    [Buffer]
     private Matrix<T>? _trainingData;
+    [Buffer]
     private Vector<T>? _probabilisticDistances;
 
     /// <summary>

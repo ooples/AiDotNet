@@ -82,7 +82,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HiPPO: Recurrent Memory with Optimal Polynomial Projections", "https://arxiv.org/abs/2008.07669", Year = 2020, Authors = "Albert Gu, Tri Dao, Stefano Ermon, Atri Rudra, Christopher Re")]
-public class Hippo<T> : ForecastingModelBase<T>
+public partial class Hippo<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private bool _useNativeMode;

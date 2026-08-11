@@ -67,7 +67,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
     "https://link.springer.com/article/10.1007/BF00992696",
     Year = 1992,
     Authors = "Williams, R. J.")]
-public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />

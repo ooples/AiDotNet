@@ -36,7 +36,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Outlier Ensembles: An Introduction", "https://doi.org/10.1007/978-3-319-54765-7")]
-public class MaximumDetector<T> : AnomalyDetectorBase<T>
+public partial class MaximumDetector<T> : AnomalyDetectorBase<T>
 {
     private List<IAnomalyDetector<T>>? _baseDetectors;
 

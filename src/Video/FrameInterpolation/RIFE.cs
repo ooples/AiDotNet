@@ -66,7 +66,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2011.06294",
     Year = 2022,
     Authors = "Zhewei Huang, Tianyuan Zhang, Wen Heng, Boxin Shi, Shuchang Zhou")]
-public class RIFE<T> : FrameInterpolationBase<T>
+public partial class RIFE<T> : FrameInterpolationBase<T>
 {
     private readonly RIFEOptions _options;
 
@@ -99,25 +99,44 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private const int DefaultNumFlowBlocks = 3;
 
     // Activation cache for backward pass
+    [Scratch]
     private Tensor<T>? _cachedConcatenatedFrames;
+    [Scratch]
     private Tensor<T>? _cachedFrame1;
+    [Scratch]
     private Tensor<T>? _cachedFrame2;
+    [Scratch]
     private Tensor<T>? _cachedFlow;
+    [Scratch]
     private Tensor<T>? _cachedFlow_0_1;
+    [Scratch]
     private Tensor<T>? _cachedFlow_1_0;
+    [Scratch]
     private Tensor<T>? _cachedFusionMask;
+    [Scratch]
     private Tensor<T>? _cachedFlow_t_0;
+    [Scratch]
     private Tensor<T>? _cachedFlow_t_1;
+    [Scratch]
     private Tensor<T>? _cachedFrame1Warped;
+    [Scratch]
     private Tensor<T>? _cachedFrame2Warped;
+    [Scratch]
     private Tensor<T>? _cachedContext;
+    [Scratch]
     private Tensor<T>? _cachedFusionInput;
+    [Scratch]
     private Tensor<T>? _cachedFused;
     private double _cachedTimestep;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedEncoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowDecoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedContextEncoderOutputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowBlockInputs;
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlowBlockOutputs;
 
     #endregion
@@ -906,106 +925,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         foreach (var layer in _flowBlocks) Layers.Add(layer);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        // Update encoder layers
-        foreach (var layer in _encoder)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update flow decoder layers
-        foreach (var layer in _flowDecoder)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update context encoder layers
-        foreach (var layer in _contextEncoder)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update flow blocks
-        foreach (var layer in _flowBlocks)
-        {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        // Update fusion and output layers
-        if (_fusion != null)
-        {
-            var layerParams = _fusion.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _fusion.SetParameters(newParams);
-                offset += layerParams.Length;
-            }
-        }
-
-        if (_outputConv != null)
-        {
-            var layerParams = _outputConv.GetParameters();
-            if (offset + layerParams.Length <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParams.Length);
-                for (int i = 0; i < layerParams.Length; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputConv.SetParameters(newParams);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

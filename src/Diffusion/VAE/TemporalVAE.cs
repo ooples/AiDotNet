@@ -64,7 +64,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
-public class TemporalVAE<T> : VAEModelBase<T>
+public partial class TemporalVAE<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Same layers, same order, as the previous GetParameters walked.</remarks>

@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FashionVDM: Video Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2411.00225", Year = 2024, Authors = "Gu et al.")]
-public class FashionVDMModel<T> : LatentDiffusionModelBase<T>
+public partial class FashionVDMModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

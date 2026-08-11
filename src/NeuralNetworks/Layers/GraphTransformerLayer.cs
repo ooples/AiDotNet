@@ -101,7 +101,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     private readonly int _headDim;
     private readonly bool _useStructuralEncoding;
     private readonly double _dropoutRate;
-    private readonly Random _random;
 
     /// <summary>
     /// Query transformation weights for each head: [numHeads, inputFeatures, headDim]
@@ -309,7 +308,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _headDim = headDim;
         _useStructuralEncoding = useStructuralEncoding;
         _dropoutRate = dropoutRate;
-        _random = RandomHelper.CreateSecureRandom();
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
         _ffnHiddenDim = 4 * outputFeatures;
 
@@ -361,7 +359,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _headDim = headDim;
         _useStructuralEncoding = useStructuralEncoding;
         _dropoutRate = dropoutRate;
-        _random = RandomHelper.CreateSecureRandom();
         _ffnActivation = ffnActivation ?? new GELUActivation<T>();
         _ffnHiddenDim = 4 * outputFeatures;
 

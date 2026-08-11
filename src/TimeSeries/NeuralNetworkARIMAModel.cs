@@ -42,7 +42,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time series forecasting using a hybrid ARIMA and neural network model", "https://doi.org/10.1016/S0925-2312(01)00702-0", Year = 2003, Authors = "G. Peter Zhang")]
-public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
+public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options for the Neural Network ARIMA model.
@@ -137,6 +137,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// so you can adjust your aim next time.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Vector<T> _residuals;
 
     /// <summary>
@@ -158,6 +159,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// It's like looking back at your practice test results to see which questions you got right and wrong.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Vector<T> _fitted;
 
     /// <summary>
@@ -199,6 +201,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// Think of it as the answer key for a test that your model is taking.
     /// </para>
     /// </remarks>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
@@ -872,11 +875,8 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         base.ApplyParameters(parameters);
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        ApplyParameters(parameters);
-    }
-
+    // SetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Predicts a single value for the given input vector.
     /// </summary>

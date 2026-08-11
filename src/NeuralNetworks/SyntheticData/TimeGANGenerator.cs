@@ -83,7 +83,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://papers.nips.cc/paper/2019/hash/c9efe5f26cd17ba6216bbe2a7d26d490-Abstract.html",
     Year = 2019,
     Authors = "Jinsung Yoon, Daniel Jarrett, Mihaela van der Schaar")]
-public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TimeGANOptions<T> _options;
     // One dedicated optimizer per training phase (Yoon et al. 2019 uses separate
@@ -104,25 +104,30 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     // Embedder (auxiliary): data → latent
     private readonly List<FullyConnectedLayer<T>> _embedderLayers = new();
     private FullyConnectedLayer<T>? _embedderOutput;
+    [Scratch]
     private readonly List<Tensor<T>> _embedderPreActs = new();
 
     // Recovery (auxiliary): latent → data
     private readonly List<FullyConnectedLayer<T>> _recoveryLayers = new();
     private FullyConnectedLayer<T>? _recoveryOutput;
+    [Scratch]
     private readonly List<Tensor<T>> _recoveryPreActs = new();
 
     // Generator pre-activation cache (Layers = generator)
+    [Scratch]
     private readonly List<Tensor<T>> _generatorPreActs = new();
 
     // Supervisor (auxiliary): latent_t → latent_{t+1}
     private readonly List<FullyConnectedLayer<T>> _supervisorLayers = new();
     private FullyConnectedLayer<T>? _supervisorOutput;
+    [Scratch]
     private readonly List<Tensor<T>> _supervisorPreActs = new();
 
     // Discriminator (auxiliary): latent → real/fake
     private readonly List<FullyConnectedLayer<T>> _discriminatorLayers = new();
     private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
     private FullyConnectedLayer<T>? _discriminatorOutput;
+    [Scratch]
     private readonly List<Tensor<T>> _discPreActs = new();
 
     // Whether custom layers are being used

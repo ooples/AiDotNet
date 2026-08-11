@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Visual Instruction Tuning", "https://arxiv.org/abs/2304.08485", Year = 2023, Authors = "Haotian Liu, Chunyuan Li, Qingyang Wu, Yong Jae Lee")]
-public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
+public partial class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 {
     private readonly LLaVAOptions _options;
 
@@ -1109,20 +1109,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
     #region NeuralNetworkBase Implementation
 
-    // ParameterCount is NOT overridden. It summed the layer role-lists plus the embeddings and
-    // omitted the grounding head, while GetParameters was never overridden at all and folded the
-    // base enumeration -- two different answers, 24,772 against 24,260. Both now fold Layers plus
-    // what the two hooks below declare.
-    /// <inheritdoc />
-    /// <remarks>
-    /// The grounding head, a real layer held outside <c>Layers</c>. The hand-written count left it
-    /// out and so did the vector, so it was consistent only by being invisible to both -- 132
-    /// trainable values that could not be saved, restored or optimized.
-    /// </remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        if (_groundingHead is LayerBase<T> head) yield return head;
-    }
+    // _groundingHead is discovered as a single-layer member and surfaced automatically.
+    // Removed under AIDN082.
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -1247,136 +1235,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         TrainWithTape(input, expectedOutput, _optimizer);
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-        {
-            if (parameters.Length != 0)
-            {
-                throw new ArgumentException(
-                    $"Expected 0 parameters, but got {parameters.Length}.",
-                    nameof(parameters));
-            }
-
-            return;
-        }
-
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters, but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        void UpdateLayerParameters(ILayer<T> layer)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount <= 0)
-            {
-                return;
-            }
-
-            var layerParams = new Vector<T>(layerParamCount);
-            for (int i = 0; i < layerParamCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-
-            layer.UpdateParameters(layerParams);
-            offset += layerParamCount;
-        }
-
-        foreach (var layer in _visionEncoderLayers)
-        {
-            UpdateLayerParameters(layer);
-        }
-
-        foreach (var layer in _projectionLayers)
-        {
-            UpdateLayerParameters(layer);
-        }
-
-        foreach (var layer in _languageModelLayers)
-        {
-            UpdateLayerParameters(layer);
-        }
-
-        if (_patchEmbedding is not null)
-        {
-            UpdateLayerParameters(_patchEmbedding);
-        }
-
-        if (_textTokenEmbedding is not null)
-        {
-            UpdateLayerParameters(_textTokenEmbedding);
-        }
-
-        if (_outputProjection is not null)
-        {
-            UpdateLayerParameters(_outputProjection);
-        }
-
-        if (_groundingHead is not null)
-        {
-            UpdateLayerParameters(_groundingHead);
-        }
-
-        if (_visionClsToken is not null)
-        {
-            int rows = _visionClsToken.Shape[0];
-            int columns = _visionClsToken.Shape[1];
-            for (int i = 0; i < rows; i++)
-            {
-                int rowOffset = i * columns;
-                for (int j = 0; j < columns; j++)
-                {
-                    _visionClsToken[i, j] = parameters[offset + rowOffset + j];
-                }
-            }
-            offset += rows * columns;
-        }
-
-        if (_visionPositionalEmbeddings is not null)
-        {
-            int rows = _visionPositionalEmbeddings.Shape[0];
-            int columns = _visionPositionalEmbeddings.Shape[1];
-            for (int i = 0; i < rows; i++)
-            {
-                int rowOffset = i * columns;
-                for (int j = 0; j < columns; j++)
-                {
-                    _visionPositionalEmbeddings[i, j] = parameters[offset + rowOffset + j];
-                }
-            }
-            offset += rows * columns;
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            int rows = _textPositionalEmbeddings.Shape[0];
-            int columns = _textPositionalEmbeddings.Shape[1];
-            for (int i = 0; i < rows; i++)
-            {
-                int rowOffset = i * columns;
-                for (int j = 0; j < columns; j++)
-                {
-                    _textPositionalEmbeddings[i, j] = parameters[offset + rowOffset + j];
-                }
-            }
-            offset += rows * columns;
-        }
-
-        if (offset != expectedCount)
-        {
-            throw new InvalidOperationException(
-                $"Parameter update consumed {offset} parameters, but expected {expectedCount}.");
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

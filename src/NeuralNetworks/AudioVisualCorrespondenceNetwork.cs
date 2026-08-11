@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Look, Listen and Learn", "https://arxiv.org/abs/1705.08168")]
-public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioVisualCorrespondenceModel<T>
+public partial class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioVisualCorrespondenceModel<T>
 {
     private readonly AudioVisualCorrespondenceOptions _options;
 
@@ -1049,19 +1049,38 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
+    // UpdateParameters was overridden here to validate against ParameterCount and walk
+    // Layers by hand. Both are the base's job, and keeping it would have broken as soon as
+    // the tables below joined the count: it walked only Layers, so it would have been short
+    // by exactly their size.
+    /// <summary>
+    /// Declares the audio and visual positional embedding tables, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
+    /// nothing declared them -- so they were never counted, never handed out, never restored,
+    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
+    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
+    /// weights.
+    /// </para>
+    /// <para>
+    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
+    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
+    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The
-        // previous body misread the contract — it computed
-        // `currentParams - 0.001 * input` and called SetParameters with that,
-        // which on top of Adam's own update produced a double-step that
-        // collapsed weights to near-zero. Training_ShouldChangeParameters
-        // saw no movement because the second-step output happened to equal
-        // the first-step output's hash. Forward straight to SetParameters
-        // per the base contract — Adam already produced the correct new
-        // values.
-        SetParameters(parameters);
+        if (_audioPositionalEmbedding is not null)
+        {
+            yield return _audioPositionalEmbedding;
+        }
+
+        if (_visualPositionalEmbedding is not null)
+        {
+            yield return _visualPositionalEmbedding;
+        }
     }
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

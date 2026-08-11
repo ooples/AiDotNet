@@ -78,7 +78,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Simple and Controllable Music Generation", "https://arxiv.org/abs/2306.05284", Year = 2023, Authors = "Copet et al.")]
-public class MusicGenModel<T> : AudioDiffusionModelBase<T>
+public partial class MusicGenModel<T> : AudioDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

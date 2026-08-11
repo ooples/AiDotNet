@@ -51,14 +51,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generative Adversarial Nets", "https://arxiv.org/abs/1406.2661", Year = 2014, Authors = "Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio")]
-public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The generator then the discriminator, the order the hand-written concatenation used and therefore the serialization order. Both are trained -- unlike a target network, a GAN discriminator is a real parameter set, not a copy. Measured before converting: this model owns no Layers of its own, and each sub-network holds all of its weights in its Layers, so the base walk reproduces the previous vector exactly.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => Generator.Layers.Cast<LayerBase<T>?>()
-            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>());
+    // Generator then Discriminator are discovered as sub-network members, in declaration order,
+    // which is the order this hook used and therefore the serialization order. Removed under AIDN082.
     private const double DefaultGanAdamLearningRate = 0.0002;
     private const double DefaultGanAdamBeta1 = 0.5;
     private const double DefaultGanAdamBeta2 = 0.999;
@@ -2056,36 +2053,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         return activations;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Determine the split point between Generator and Discriminator parameters
-        int generatorParameterCount = (int)Generator.GetParameterCount();
-        int discriminatorParameterCount = (int)Discriminator.GetParameterCount();
-
-        if (parameters.Length != generatorParameterCount + discriminatorParameterCount)
-        {
-            throw new ArgumentException($"Invalid parameter vector length. Expected {generatorParameterCount + discriminatorParameterCount}, but got {parameters.Length}.");
-        }
-
-        // Split the parameters vector
-        var generatorParameters = new Vector<T>([.. parameters.Take(generatorParameterCount)]);
-        var discriminatorParameters = new Vector<T>([.. parameters.Skip(generatorParameterCount).Take(discriminatorParameterCount)]);
-
-        // Update Generator parameters
-        Generator.UpdateParameters(generatorParameters);
-
-        // Update Discriminator parameters
-        Discriminator.UpdateParameters(discriminatorParameters);
-
-        // Calculate the magnitude of parameter changes
-        T parameterChangeNorm = parameters.L2Norm();
-
-        // Reset optimizer state if a very large change is detected (indicates training instability)
-        if (NumOps.GreaterThan(parameterChangeNorm, NumOps.FromDouble(10.0)))
-        {
-            ResetOptimizerState();
-        }
-    }
+    // UpdateParameters split the vector between Generator and Discriminator. GetExtraTrainableLayers
+    // above yields those two in the SAME order, so the base reproduces the split exactly -- its own
+    // remark records that this was measured before converting.
+    //
+    // Deleting it also removes a defect. The override finished with:
+    //     if (parameters.L2Norm() > 10) ResetOptimizerState();
+    // described as "the magnitude of parameter changes". It is not a change -- nothing here holds a
+    // previous vector. It is the norm of the incoming parameter VALUES, which for any network above
+    // a handful of weights exceeds 10 permanently, so every single update reset both Adam optimizers
+    // and discarded their moment estimates. Removed under AIDN082.
     /// <summary>
     /// Resets the optimizer state to its initial values.
     /// </summary>

@@ -794,23 +794,7 @@ public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
         return decoded;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        Guard.NotNull(parameters);
-
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var p = layer.GetParameters();
-            if (p.Length > 0 && offset + p.Length <= parameters.Length)
-            {
-                var slice = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += p.Length;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {

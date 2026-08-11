@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2204.02663",
     Year = 2022,
     Authors = "Zhen Li, Cheng-Ze Lu, Jianhua Qin, Chun-Le Guo, Ming-Ming Cheng")]
-public class E2FGVI<T> : VideoInpaintingBase<T>
+public partial class E2FGVI<T> : VideoInpaintingBase<T>
 {
     private readonly E2FGVIOptions _options;
 
@@ -787,25 +787,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         Layers.Add(_outputHead);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

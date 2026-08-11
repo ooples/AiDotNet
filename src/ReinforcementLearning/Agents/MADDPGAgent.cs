@@ -63,7 +63,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
     "https://arxiv.org/abs/1706.02275",
     Year = 2017,
     Authors = "Lowe, R., Wu, Y., Tamar, A., Harb, J., Abbeel, P., & Mordatch, I.")]
-public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
+public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />
@@ -83,8 +83,10 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     // Networks for each agent
     private List<INeuralNetwork<T>> _actorNetworks;
+    [Buffer]
     private List<INeuralNetwork<T>> _targetActorNetworks;
     private List<INeuralNetwork<T>> _criticNetworks;
+    [Buffer]
     private List<INeuralNetwork<T>> _targetCriticNetworks;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;

@@ -50,7 +50,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("GANomaly: Semi-Supervised Anomaly Detection via Adversarial Training", "https://doi.org/10.1007/978-3-030-20893-6_39", Year = 2018, Authors = "Samet Akcay, Amir Atapour-Abarghouei, Toby P. Breckon")]
-public class GANomalyDetector<T> : AnomalyDetectorBase<T>
+public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;
     private readonly int _hiddenDim;
@@ -78,7 +78,9 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
     private int _inputDim;
 
     // Normalization parameters
+    [Buffer]
     private Vector<T>? _dataMeans;
+    [Buffer]
     private Vector<T>? _dataStds;
 
     /// <summary>

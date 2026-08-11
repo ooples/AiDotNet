@@ -97,7 +97,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Shap-E: Generating Conditional 3D Implicit Functions", "https://arxiv.org/abs/2305.02463", Year = 2023, Authors = "Jun & Nichol")]
-public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
+public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

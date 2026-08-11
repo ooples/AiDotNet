@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FLUX.1 Schnell", "https://blackforestlabs.ai/flux-1-schnell/", Year = 2024, Authors = "Black Forest Labs")]
-public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
+public partial class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

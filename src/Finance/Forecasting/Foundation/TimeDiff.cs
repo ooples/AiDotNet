@@ -60,7 +60,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Non-autoregressive Conditional Diffusion Models for Time Series Prediction", "https://arxiv.org/abs/2306.05043", Year = 2023, Authors = "Lifeng Shen, James Kwok")]
-public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
+public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -88,10 +88,15 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
     private bool _useAutoregressiveInit;
 
     // DDPM noise schedule (precomputed as generic vectors)
+    [Buffer]
     private Vector<T> _betas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphas = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _alphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
+    [Buffer]
     private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
 
     #endregion

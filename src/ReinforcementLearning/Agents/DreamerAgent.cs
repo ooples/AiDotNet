@@ -63,7 +63,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
     "https://arxiv.org/abs/1912.01603",
     Year = 2020,
     Authors = "Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M.")]
-public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
+public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

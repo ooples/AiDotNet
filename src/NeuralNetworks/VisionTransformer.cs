@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale", "https://arxiv.org/abs/2010.11929", Year = 2021, Authors = "Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, Neil Houlsby")]
-public class VisionTransformer<T> : NeuralNetworkBase<T>
+public partial class VisionTransformer<T> : NeuralNetworkBase<T>
 {
     private readonly VisionTransformerOptions _options;
 
@@ -545,55 +545,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         return Engine.Reshape(headOut, [batchSize, _numClasses]);
     }
 
-    /// <summary>
-    /// Updates the network's parameters with new values.
-    /// </summary>
-    /// <param name="parameters">The new parameter values.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method sets all the network's internal values at once.
-    /// This is typically used when loading a saved model or when an optimizer
-    /// computes improved parameter values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int totalExpected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != totalExpected)
-        {
-            throw new ArgumentException($"Expected {totalExpected} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        int currentIndex = 0;
-
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            _clsToken[i] = parameters[currentIndex++];
-        }
-
-        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
-        {
-            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
-            {
-                _positionalEmbeddings[i, j] = parameters[currentIndex++];
-            }
-        }
-
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    layerParams[i] = parameters[currentIndex++];
-                }
-                layer.SetParameters(layerParams);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Gets the model metadata.
     /// </summary>

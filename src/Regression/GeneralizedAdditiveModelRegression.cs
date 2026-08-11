@@ -61,7 +61,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Generalized Additive Models", "https://doi.org/10.1214/ss/1177013604", Year = 1986, Authors = "Trevor Hastie, Robert Tibshirani")]
-public class GeneralizedAdditiveModel<T> : RegressionBase<T>
+public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the Generalized Additive Model.
@@ -74,12 +74,14 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// <summary>
     /// Matrix of basis functions applied to the input features.
     /// </summary>
+    [Buffer]
     private Matrix<T> _basisFunctions;
 
     /// <summary>
     /// Vector of model coefficients for the basis functions.
     /// </summary>
     private Vector<T> _coefficients;
+    [Buffer]
     private Vector<T> _basisScales = new Vector<T>(0);
 
     /// <summary>
@@ -90,6 +92,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// distribution landed in a completely different basis (Hastie &amp; Tibshirani 1986
     /// §4: knot placement is part of the fitted model, not a per-call decision).
     /// </summary>
+    [Buffer]
     private List<Vector<T>>? _trainingKnots;
 
     /// <summary>

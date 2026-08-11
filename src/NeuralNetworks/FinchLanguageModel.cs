@@ -131,46 +131,13 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         });
     }
 
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Expected {ParameterCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
-        }
-
-        // THE VECTOR IS POST-UPDATE PARAMETER VALUES, NOT RAW GRADIENTS. Every sibling recurrent
-        // model -- GLA, GatedDeltaNet, Griffin, Hawk -- distributes it straight to the layers and
-        // says why: "The canonical optimizer supplies post-update parameter values. Applying a
-        // second hard-coded SGD step here both bypassed the configured optimizer and materialized
-        // two full-model vectors." Finch was the last model still applying that second step, with a
-        // learning rate and a clip bound of its own that no caller could reach.
-        //
-        // The overflow guard the inline step carried is not lost: it moves to the optimizer, where
-        // FinchOptions.EnableGradientClipping / MaxGradientNorm configure it -- so it now applies to
-        // the real gradients before the step rather than to already-stepped values after it.
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            if (count <= 0)
-            {
-                continue;
-            }
-
-            layer.UpdateParameters(gradients.Slice(offset, count));
-            offset += count;
-        }
-
-        if (offset != gradients.Length)
-        {
-            throw new InvalidOperationException(
-                $"Parameter distribution consumed {offset} of {gradients.Length} values; the layer "
-                + "parameter counts no longer sum to ParameterCount, so part of the vector would be "
-                + "silently discarded.");
-        }
-    }
+    // UpdateParameters validated the length and distributed the vector across Layers. The base does
+    // both. Its trailing "did the loop consume the whole vector" guard is not lost either -- it
+    // protected against sum(layer.ParameterCount) drifting from ParameterCount, and the base derives
+    // the count and the distribution from ONE enumeration, so they cannot drift apart.
+    // (This model previously applied a second hard-coded SGD step here with a private learning rate
+    // and clip bound; that was already corrected, and the clipping now lives in FinchOptions where a
+    // caller can reach it.) Removed under AIDN082.
 
     public override ModelMetadata<T> GetModelMetadata()
     {

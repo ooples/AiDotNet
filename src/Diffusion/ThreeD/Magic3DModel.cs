@@ -81,7 +81,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Magic3D: High-Resolution Text-to-3D Content Creation", "https://arxiv.org/abs/2211.10440", Year = 2023, Authors = "Lin et al.")]
-public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
+public partial class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

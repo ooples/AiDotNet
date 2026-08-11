@@ -55,7 +55,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 // metadata attribute stays, so the class remains fully discoverable.
 [ModelMetadataExempt]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly TextDetectorBase<T> _detector;
     private readonly OCRBase<T> _recognizer;

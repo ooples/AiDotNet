@@ -62,7 +62,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding", "https://doi.org/10.48550/arXiv.2202.13669", Year = 2022, Authors = "Jiapeng Wang, Lianwen Jin, Kai Ding")]
-public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
+public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LiLTOptions _options;
 
@@ -1175,19 +1175,18 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     #endregion
 
     #region Disposal

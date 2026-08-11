@@ -71,7 +71,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DreamFusion: Text-to-3D using 2D Diffusion", "https://arxiv.org/abs/2209.14988", Year = 2022, Authors = "Poole et al.")]
-public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
+public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

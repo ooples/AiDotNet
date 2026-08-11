@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Pika 2.1", "https://pika.art")]
-public class Pika21Model<T> : VideoDiffusionModelBase<T>
+public partial class Pika21Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

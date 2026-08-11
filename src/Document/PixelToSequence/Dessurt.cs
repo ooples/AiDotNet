@@ -56,7 +56,7 @@ namespace AiDotNet.Document.PixelToSequence;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Dessurt: A Dessert for Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2203.16618", Year = 2022, Authors = "Brian Davis, Bryan Morse, Brian Price, Chris Tensmeyer, Curtis Wigington")]
-public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
+public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly DessurtOptions _options;
 
@@ -631,20 +631,18 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
-        EnsureNativeInitialized();
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
-    }
-
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
+    /// belong to that graph, not to this instance.
+    /// </summary>
+    /// <remarks>
+    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
+    /// on every mutating entry point rather than the one member the throw happened to guard, and
+    /// reading -- ParameterCount and GetParameters -- stays available either way.
+    /// </remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();

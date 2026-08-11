@@ -56,7 +56,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HD-Painter: High-Resolution and Prompt-Faithful Text-Guided Image Inpainting with Diffusion Models", "https://arxiv.org/abs/2312.14091", Year = 2024, Authors = "Manukyan et al.")]
-public class HDPainterModel<T> : LatentDiffusionModelBase<T>
+public partial class HDPainterModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Emu Video", "https://arxiv.org/abs/2311.10709")]
-public class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
+public partial class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

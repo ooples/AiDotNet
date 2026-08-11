@@ -86,7 +86,7 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting", "https://arxiv.org/abs/1707.01926", Year = 2018, Authors = "Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu")]
-public class DCRNN<T> : ForecastingModelBase<T>
+public partial class DCRNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;

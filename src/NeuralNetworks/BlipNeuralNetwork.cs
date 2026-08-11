@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation", "https://arxiv.org/abs/2201.12086", Year = 2022, Authors = "Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi")]
-public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
+public partial class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 {
     private readonly BlipOptions _options;
 
@@ -1587,112 +1587,49 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
     #region Parameter Management
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
+    // UpdateParameters was overridden here to validate against ParameterCount and walk
+    // Layers by hand. Both are the base's job, and keeping it would have broken as soon as
+    // the tables below joined the count: it walked only Layers, so it would have been short
+    // by exactly their size.
+    /// <summary>
+    /// Declares the vision and text CLS tokens and both positional embedding tables, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
+    /// nothing declared them -- so they were never counted, never handed out, never restored,
+    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
+    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
+    /// weights.
+    /// </para>
+    /// <para>
+    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
+    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
+    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
+    /// </para>
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (parameters.Length != expectedCount)
-        {
-            throw new ArgumentException(
-                $"Expected {expectedCount} parameters, but got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        if (!_useNativeMode) return;
-
-        int index = 0;
-
-        // CLS tokens and positional embeddings first
         if (_visionClsToken is not null)
         {
-            for (int i = 0; i < _visionClsToken.Shape[0]; i++)
-            {
-                for (int j = 0; j < _visionClsToken.Shape[1]; j++)
-                {
-                    _visionClsToken[i, j] = parameters[index++];
-                }
-            }
+            yield return _visionClsToken;
         }
 
         if (_textClsToken is not null)
         {
-            for (int i = 0; i < _textClsToken.Shape[0]; i++)
-            {
-                for (int j = 0; j < _textClsToken.Shape[1]; j++)
-                {
-                    _textClsToken[i, j] = parameters[index++];
-                }
-            }
+            yield return _textClsToken;
         }
 
         if (_visionPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _visionPositionalEmbeddings.Shape[0]; i++)
-            {
-                for (int j = 0; j < _visionPositionalEmbeddings.Shape[1]; j++)
-                {
-                    _visionPositionalEmbeddings[i, j] = parameters[index++];
-                }
-            }
+            yield return _visionPositionalEmbeddings;
         }
 
         if (_textPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < _textPositionalEmbeddings.Shape[0]; i++)
-            {
-                for (int j = 0; j < _textPositionalEmbeddings.Shape[1]; j++)
-                {
-                    _textPositionalEmbeddings[i, j] = parameters[index++];
-                }
-            }
-        }
-
-        // Update layer parameters from all native layer lists
-        foreach (var layer in _visionEncoderLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-
-        foreach (var layer in _textEncoderLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-
-        foreach (var layer in _textDecoderLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
-        }
-
-        foreach (var layer in _crossAttentionLayers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                var layerParameters = parameters.Slice(index, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                index += layerParameterCount;
-            }
+            yield return _textPositionalEmbeddings;
         }
     }
-
     /// <summary>
     /// Retrieves metadata about the BLIP neural network model.
     /// </summary>

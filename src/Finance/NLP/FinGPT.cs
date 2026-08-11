@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinGPT: Open-Source Financial Large Language Models", "https://arxiv.org/abs/2306.06031", Year = 2023, Authors = "Hongyang Yang, Xiao-Yang Liu, Christina Dan Wang")]
-public class FinGPT<T> : FinancialNLPModelBase<T>
+public partial class FinGPT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
 

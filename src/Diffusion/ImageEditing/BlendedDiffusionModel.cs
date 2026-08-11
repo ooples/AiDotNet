@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Blended Diffusion for Text-driven Editing of Natural Images", "https://arxiv.org/abs/2111.14818", Year = 2022, Authors = "Avrahami et al.")]
-public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
+public partial class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

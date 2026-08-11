@@ -65,7 +65,7 @@ namespace AiDotNet.Video.Generation;
     "https://arxiv.org/abs/2412.20404",
     Year = 2024,
     Authors = "Zangwei Zheng, Xiangyu Peng, Tianji Yang, Chenhui Shen, Shenggui Li, Hongxin Liu, Yukun Zhou, Tianyi Li, Yang You")]
-public class OpenSora<T> : NeuralNetworkBase<T>
+public partial class OpenSora<T> : NeuralNetworkBase<T>
 {
     private readonly OpenSoraOptions _options;
 
@@ -1158,25 +1158,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

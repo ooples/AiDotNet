@@ -45,7 +45,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Scalable Variational Gaussian Process Classification", "https://doi.org/10.48550/arXiv.1411.2005", Year = 2015, Authors = "James Hensman, Alexander G. de G. Matthews, Zoubin Ghahramani")]
-public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
+public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines similarity between data points.
@@ -64,11 +64,13 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The matrix of input features from the training data.
     /// </summary>
+    [Buffer]
     private Matrix<T> _X;
 
     /// <summary>
     /// The vector of target values from the training data.
     /// </summary>
+    [Buffer]
     private Vector<T> _y;
 
     /// <summary>
@@ -88,6 +90,7 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// - Optimized (learned during training to best summarize the data)
     /// </para>
     /// </remarks>
+    [Buffer]
     private Matrix<T> _inducingPoints;
 
     /// <summary>
@@ -168,11 +171,13 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Kernel matrix between inducing points (Kuu).
     /// </summary>
+    [Buffer]
     private Matrix<T> _Kuu;
 
     /// <summary>
     /// Cholesky factor of Kuu for efficient computation.
     /// </summary>
+    [Buffer]
     private Matrix<T> _LKuu;
 
     /// <summary>

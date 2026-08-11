@@ -83,7 +83,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
-public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
+public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>{
 
     /// <inheritdoc />
@@ -483,7 +483,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     }
 
     /// <inheritdoc />
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = new RocketClassifier<T>(_rocketOptions);
         copy._internalWeights = parameters.Clone();

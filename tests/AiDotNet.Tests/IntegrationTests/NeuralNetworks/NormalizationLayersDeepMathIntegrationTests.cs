@@ -660,7 +660,6 @@ public class NormalizationLayersDeepMathIntegrationTests
         // Row 1: [3.0, 4.0]
         // Row 2: [5.0, 6.0]
         var emb = new EmbeddingLayer<double>(3, 2);
-        emb.InputMode = EmbeddingInputMode.Indices;
         var paramVec = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
         emb.SetParameters(paramVec);
 
@@ -678,7 +677,6 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // vocab=4, dim=2
         var emb = new EmbeddingLayer<double>(4, 2);
-        emb.InputMode = EmbeddingInputMode.Indices;
         var paramVec = new Vector<double>(new double[] {
             10.0, 20.0,  // row 0
             30.0, 40.0,  // row 1

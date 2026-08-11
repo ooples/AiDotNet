@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wan: Open and Advanced Large-Scale Video Generative Models", "https://arxiv.org/abs/2503.20314", Year = 2025, Authors = "Alibaba")]
-public class Wan22Model<T> : VideoDiffusionModelBase<T>
+public partial class Wan22Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

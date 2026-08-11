@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MAGI: Multi-Annotated Explanation-Guided Inference for Video Generation", "https://arxiv.org/abs/2501.16925", Year = 2025, Authors = "Sand AI")]
-public class MAGI1Model<T> : VideoDiffusionModelBase<T>
+public partial class MAGI1Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

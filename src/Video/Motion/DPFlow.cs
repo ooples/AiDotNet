@@ -48,7 +48,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2503.14880",
     Year = 2025,
     Authors = "Henrique Morimitsu, Xiaobin Zhu, Roberto M. Cesar Jr., Xiangyang Ji, Xu-Cheng Yin")]
-public class DPFlow<T> : OpticalFlowBase<T>
+public partial class DPFlow<T> : OpticalFlowBase<T>
 {
     private readonly DPFlowOptions _options;
 
@@ -236,41 +236,7 @@ public class DPFlow<T> : OpticalFlowBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int required = 0;
-        if (_featureExtract is not null) required += _featureExtract.GetParameters().Length;
-        foreach (var block in _processingBlocks) required += block.GetParameters().Length;
-        if (_outputConv is not null) required += _outputConv.GetParameters().Length;
-        if (parameters.Length < required)
-            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
-        int offset = 0;
-        if (_featureExtract is not null)
-        {
-            var p = _featureExtract.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            _featureExtract.SetParameters(sub);
-            offset += p.Length;
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            block.SetParameters(sub);
-            offset += p.Length;
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            var sub = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-            _outputConv.SetParameters(sub);
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

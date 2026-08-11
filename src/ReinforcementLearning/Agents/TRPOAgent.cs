@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
     "https://arxiv.org/abs/1502.05477",
     Year = 2015,
     Authors = "Schulman, J., Levine, S., Moritz, P., Jordan, M. I., & Abbeel, P.")]
-public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -78,6 +78,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComp
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _policyNetwork;
+    [Buffer]
     private INeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence
     private INeuralNetwork<T> _valueNetwork;
 

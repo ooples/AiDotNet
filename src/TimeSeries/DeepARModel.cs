@@ -62,10 +62,11 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
-public class DeepARModel<T> : TimeSeriesModelBase<T>
+public partial class DeepARModel<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepAROptions<T> _options;
     private readonly Random _random;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tape-trainable LSTM cells (one per layer) and the pluggable predictive-distribution head
@@ -879,18 +880,8 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var lstm in _lstmLayers)
-                count += (int)lstm.ParameterCount;
-            count += (int)_head.ParameterCount;
-            return count;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Mean training loss recorded at the end of each epoch of the most recent
     /// <see cref="TrainCore"/> call (the objective being minimized by Adam). Exposed so callers

@@ -72,15 +72,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InfoGAN: Interpretable Representation Learning by Information Maximizing Generative Adversarial Nets", "https://arxiv.org/abs/1606.03657", Year = 2016, Authors = "Xi Chen, Yan Duan, Rein Houthooft, John Schulman, Ilya Sutskever, Pieter Abbeel")]
-public class InfoGAN<T> : NeuralNetworkBase<T>
+public partial class InfoGAN<T> : NeuralNetworkBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Generator, discriminator, then the Q network that recovers the latent code -- the order the hand-written concatenation used. The Q network is trained jointly to maximise mutual information between the code and the output, so it belongs in the surface.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => Generator.Layers.Cast<LayerBase<T>?>()
-            .Concat(Discriminator.Layers.Cast<LayerBase<T>?>())
-            .Concat(QNetwork.Layers.Cast<LayerBase<T>?>());
+    // Generator, Discriminator and QNetwork are discovered as sub-network members, in declaration
+    // order, which is the order this hook used and therefore the serialization order.
+    // Removed under AIDN082.
     private readonly InfoGANOptions _options;
 
     /// <inheritdoc/>
@@ -1072,52 +1069,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             NumOps.ToDouble(_mutualInfoCoefficient));
     }
 
-    /// <summary>
-    /// Updates the parameters of all networks in the InfoGAN.
-    /// </summary>
-    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
-        }
-
-        int generatorCount = (int)Generator.GetParameterCount();
-        int discriminatorCount = (int)Discriminator.GetParameterCount();
-        int qNetworkCount = (int)QNetwork.GetParameterCount();
-
-        int totalCount = generatorCount + discriminatorCount + qNetworkCount;
-
-        if (parameters.Length != totalCount)
-        {
-            throw new ArgumentException(
-                $"Parameters vector length mismatch: expected {totalCount} " +
-                $"(Generator: {generatorCount}, Discriminator: {discriminatorCount}, " +
-                $"QNetwork: {qNetworkCount}), but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        // Update Generator parameters
-        var generatorParams = new Vector<T>(generatorCount);
-        for (int i = 0; i < generatorCount; i++)
-            generatorParams[i] = parameters[offset + i];
-        Generator.UpdateParameters(generatorParams);
-        offset += generatorCount;
-
-        // Update Discriminator parameters
-        var discriminatorParams = new Vector<T>(discriminatorCount);
-        for (int i = 0; i < discriminatorCount; i++)
-            discriminatorParams[i] = parameters[offset + i];
-        Discriminator.UpdateParameters(discriminatorParams);
-        offset += discriminatorCount;
-
-        // Update QNetwork parameters
-        var qNetworkParams = new Vector<T>(qNetworkCount);
-        for (int i = 0; i < qNetworkCount; i++)
-            qNetworkParams[i] = parameters[offset + i];
-        QNetwork.UpdateParameters(qNetworkParams);
-    }
+    // UpdateParameters split the vector between Generator, Discriminator and QNetwork;
+    // GetExtraTrainableLayers yields those three in the same order, so the base reproduces the
+    // split. Removed under AIDN082.
 }

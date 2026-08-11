@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SEED-Edit", "https://arxiv.org/abs/2411.06686", Year = 2024, Authors = "ByteDance")]
-public class SeedEdit3Model<T> : LatentDiffusionModelBase<T>
+public partial class SeedEdit3Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

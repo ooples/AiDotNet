@@ -12,7 +12,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Validation;
+using AiDotNet.Validation;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -45,7 +46,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Understanding and Simplifying One-Shot Architecture Search", "https://arxiv.org/abs/1810.03522")]
-    public class SuperNet<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+    public partial class SuperNet<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         private readonly SearchSpaceBase<T> _searchSpace;
         private readonly int _numNodes;
@@ -59,7 +60,9 @@ namespace AiDotNet.NeuralNetworks
         private readonly Dictionary<string, Vector<T>> _weights;
 
         // Gradients
+        [Scratch]
         private readonly List<Matrix<T>> _architectureGradients;
+        [Scratch]
         private readonly Dictionary<string, Vector<T>> _weightGradients;
 
         // Model metadata
@@ -68,6 +71,7 @@ namespace AiDotNet.NeuralNetworks
 
         // IInterpretableModel fields
         private readonly HashSet<InterpretationMethod> _enabledMethods = new();
+        [Buffer]
         private Vector<int>? _sensitiveFeatures;
         private readonly List<FairnessMetric> _fairnessMetrics = new();
         private IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>>? _baseModel;
@@ -79,9 +83,6 @@ namespace AiDotNet.NeuralNetworks
 
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
-        public override long ParameterCount => _weights.Values.Sum(w => w.Length) +
-                                      _architectureParams.Sum(a => a.Rows * a.Columns);
-
         /// <summary>
         /// Gets the default loss function used by this model for gradient computation.
         /// </summary>
@@ -751,48 +752,9 @@ namespace AiDotNet.NeuralNetworks
             };
         }
 
-        // IFullModel implementation
-        public override Vector<T> GetParameters()
-        {
-            var allParams = new List<T>();
+        // Replaced by the declared parameter source below. Removed under AIDN082.
 
-            // Add architecture parameters
-            foreach (var alpha in _architectureParams)
-            {
-                for (int i = 0; i < alpha.Rows; i++)
-                    for (int j = 0; j < alpha.Columns; j++)
-                        allParams.Add(alpha[i, j]);
-            }
-
-            // Add weights
-            foreach (var weight in _weights.Values)
-            {
-                for (int i = 0; i < weight.Length; i++)
-                    allParams.Add(weight[i]);
-            }
-
-            return new Vector<T>(allParams.ToArray());
-        }
-
-        public override void SetParameters(Vector<T> parameters)
-        {
-            int idx = 0;
-
-            // Set architecture parameters
-            foreach (var alpha in _architectureParams)
-            {
-                for (int i = 0; i < alpha.Rows; i++)
-                    for (int j = 0; j < alpha.Columns; j++)
-                        alpha[i, j] = parameters[idx++];
-            }
-
-            // Set weights
-            foreach (var weight in _weights.Values)
-            {
-                for (int i = 0; i < weight.Length; i++)
-                    weight[i] = parameters[idx++];
-            }
-        }
+        // Replaced by the declared parameter source below. Removed under AIDN082.
 
         public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
         {

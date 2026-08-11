@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("BrushNet: A Plug-and-Play Image Inpainting Model with Decomposed Dual-Branch Diffusion", "https://arxiv.org/abs/2403.06976")]
-public class BrushNetXModel<T> : LatentDiffusionModelBase<T>
+public partial class BrushNetXModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

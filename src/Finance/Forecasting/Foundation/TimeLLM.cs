@@ -75,7 +75,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Time-LLM: Time Series Forecasting by Reprogramming Large Language Models", "https://arxiv.org/abs/2310.01728", Year = 2024, Authors = "Ming Jin, Shiyu Wang, Lintao Ma, Zhixuan Chu, James Y. Zhang, Xiaoming Shi, Pin-Yu Chen, Yuxuan Liang, Yuan-Fang Li, Shirui Pan, Qingsong Wen")]
-public class TimeLLM<T> : ForecastingModelBase<T>
+public partial class TimeLLM<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -209,7 +209,9 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// the level on the output so distinct input scales produce distinct
     /// forecasts. Keyed per instance (batch row).
     /// </summary>
+    [Scratch]
     private Vector<T> _revinMean = new Vector<T>(0);
+    [Scratch]
     private Vector<T> _revinStd = new Vector<T>(0);
 
     #endregion

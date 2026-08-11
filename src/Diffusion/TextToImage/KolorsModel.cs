@@ -73,7 +73,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Kolors: Effective Training of Diffusion Model for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2407.15233", Year = 2024, Authors = "Kwai")]
-public class KolorsModel<T> : LatentDiffusionModelBase<T>
+public partial class KolorsModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

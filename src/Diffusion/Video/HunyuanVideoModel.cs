@@ -110,7 +110,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HunyuanVideo: A Systematic Framework For Large Video Generative Models", "https://arxiv.org/abs/2412.03603", Year = 2024, Authors = "Kong et al.")]
-public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

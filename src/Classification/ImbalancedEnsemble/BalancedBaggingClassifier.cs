@@ -559,7 +559,7 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new untrained model with same hyperparameters.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new BalancedBaggingClassifier<T>(_nEstimators, _maxDepth, _minSamplesSplit,
             _minSamplesLeaf, _samplingRatio, _bootstrapMinority);

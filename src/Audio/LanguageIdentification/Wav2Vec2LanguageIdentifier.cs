@@ -57,7 +57,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, Michael Auli")]
-public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
+public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -428,22 +428,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         SetTrainingMode(false);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in GetAllLayers())
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = parameters.Slice(offset, layerParams.Length);
-            // Apply actual parameter updates from optimizer
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                layerParams[i] = newParams[i];
-            }
-            layer.SetParameters(layerParams);
-            offset += layerParams.Length;
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

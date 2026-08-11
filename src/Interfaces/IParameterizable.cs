@@ -16,19 +16,21 @@ namespace AiDotNet.Interfaces;
 public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
 {
     /// <summary>
-    /// Yields the model's trainable weight tensors as references — zero-copy,
-    /// streaming. Callers iterate per-tensor without ever materializing a
-    /// flat <c>Vector&lt;T&gt;</c> of all parameters. Mirrors PyTorch's
-    /// <c>nn.Module.parameters()</c> generator: foundation-scale models
+    /// Yields the model's persistent state as bounded tensors, in the exact order used by
+    /// <see cref="IParameterSource{T}.GetParameters"/>. Callers iterate without materializing one
+    /// aggregate <c>Vector&lt;T&gt;</c>. Tensor-backed sources normally return live references; classical
+    /// sources may return payload chunks that are committed through <see cref="SetParameterChunks"/>.
+    /// Foundation-scale models
     /// (Sora 5 B+, HiDream 8 B+, GPT-3-class 175 B+) cannot fit a single
     /// flat vector but each individual weight tensor is well below
     /// <see cref="int"/>.MaxValue elements.
     /// </summary>
-    /// <returns>An enumerable of trainable weight tensors (no copy).</returns>
+    /// <returns>An enumerable of ordered model-state payload tensors.</returns>
     /// <remarks>
-    /// Default implementation yields nothing — concrete implementations
-    /// should override to yield each layer's <c>GetTrainableParameters</c>
-    /// or equivalent per-tensor weight references. Used by:
+    /// Implementations deriving from the framework model bases receive this surface from the
+    /// generated parameter registry. Use <see cref="AiDotNet.Models.Parameters.IParameterChunkSource{T}"/>
+    /// when semantic roles are required: it distinguishes optimizer-owned trainable tensors from
+    /// learned or frozen persistent state. Used by:
     /// <list type="bullet">
     /// <item>Foundation-scale parameter counting (sum lengths as
     /// <see cref="long"/> to count past <see cref="int"/>.MaxValue)</item>
@@ -44,11 +46,21 @@ public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
     // ModelBase) still expose the same `GetParameterChunks()` method as
     // a regular virtual on both targets — net471 callers just access it
     // through the concrete type instead of the interface.
-    IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+    IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Universal bounded-model fallback. Tensor-backed framework bases override this with
+        // zero-copy, role-aware chunks; a classical model whose state lives in scalars, arrays,
+        // matrices, trees, or tables still receives one exact payload chunk automatically.
+        // This keeps chunk parity a property of the interface rather than boilerplate repeated by
+        // every non-neural base hierarchy.
+        var flat = GetParameters();
+        if (flat.Length == 0) yield break;
+        yield return new Tensor<T>(new[] { flat.Length }, flat);
+    }
 
     /// <summary>
-    /// Streaming counterpart to <see cref="SetParameters"/>: assigns the model's trainable
-    /// weight tensors from a sequence of per-tensor chunks supplied in the SAME order
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns the model's persistent
+    /// state from a sequence of chunks supplied in the SAME order
     /// <see cref="GetParameterChunks"/> yields them, WITHOUT ever materializing a flat
     /// <c>Vector&lt;T&gt;</c> of all parameters. Foundation-scale models (&gt;2.1 B params) cannot
     /// round-trip through the flat <see cref="SetParameters"/> path — the aggregate overflows

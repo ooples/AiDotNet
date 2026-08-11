@@ -70,7 +70,7 @@ namespace AiDotNet.Video.Generation;
     "https://arxiv.org/abs/2311.15127",
     Year = 2023,
     Authors = "Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, Varun Jampani, Robin Rombach")]
-public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
+public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 {
     private readonly StableVideoDiffusionOptions _options;
 
@@ -1173,25 +1173,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         if (_noisePredictor is not null) Layers.Add(_noisePredictor);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

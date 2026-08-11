@@ -97,7 +97,7 @@ namespace AiDotNet.PointCloud.Models;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("Dynamic Graph CNN for Learning on Point Clouds", "https://doi.org/10.1145/3326362", Year = 2019, Authors = "Yue Wang, Yongbin Sun, Ziwei Liu, Sanjay E. Sarma, Michael M. Bronstein, Justin M. Solomon")]
-public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
+public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
 {
     private readonly DGCNNOptions _options;
 
@@ -115,6 +115,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
 
     private readonly List<EdgeConvLayer<T>> _edgeConvLayers;
     private readonly List<ILayer<T>> _classificationHeadLayers;
+    [Scratch]
     private Vector<T>? _globalFeatures;
 
     /// <summary>

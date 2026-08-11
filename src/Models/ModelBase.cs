@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -28,7 +29,8 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
-    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>
+    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
+    IParameterManifestProvider, IParameterChunkSource<T>
 {
     /// <summary>
     /// Gets the hardware-accelerated computation engine for vectorized operations.
@@ -58,7 +60,7 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// The components this model's parameters live in, in registration order, which is also the
     /// serialization order.
     /// </summary>
-    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private readonly ParameterComponentRegistry<T> _parameterRegistry = new();
     private bool _componentsRegistered;
 
     /// <summary>
@@ -75,14 +77,14 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// and registration is idempotent by reference.</para>
     /// </remarks>
     protected void RegisterParameterComponent(IParameterSource<T>? component)
-    {
-        if (component is null) return;
-        for (int i = 0; i < _parameterComponents.Count; i++)
-        {
-            if (ReferenceEquals(_parameterComponents[i], component)) return;
-        }
-        _parameterComponents.Add(component);
-    }
+        => _parameterRegistry.Register(component);
+
+    /// <summary>Registers an exceptional component by stable identity.</summary>
+    protected void RegisterParameterComponent(
+        string stableId,
+        IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
 
     /// <summary>
     /// Declare this model's trainable components here with <see cref="RegisterParameterComponent"/>.
@@ -106,26 +108,27 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
         {
             if (!_componentsRegistered)
             {
+                if (this is IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
 
-                // Latch only once something was actually registered. A model can be asked for its
-                // parameters BEFORE it has built them, and RegisterParameterComponent tolerates
-                // null, so such a call would otherwise register nothing and still mark the job
-                // done, leaving the model permanently reporting zero.
-                _componentsRegistered = _parameterComponents.Count > 0;
+                // Generated sources hold accessors rather than snapshots, so registration can be
+                // latched even when a fitted field is currently null. Its manifest entry remains
+                // ShapeDeferred and observes the field when Fit materializes it later.
+                _componentsRegistered = true;
 
-                // Bring lazily-shaped networks into existence, once. ResolveLazyLayerShapes pins a
-                // lazy layer's shapes but allocates nothing, and the layer parameter surface
-                // refuses to materialize on a read so a bare count can never OOM. A network that
-                // has never been forwarded would otherwise report zero parameters despite a fully
-                // determined architecture -- see the QMIXAgent case on the RL base.
-                for (int i = 0; i < _parameterComponents.Count; i++)
-                {
-                    if (_parameterComponents[i] is NeuralNetworkBase<T> network)
-                        network.MaterializeParameters();
-                }
             }
-            return _parameterComponents;
+            return _parameterRegistry.Components;
+        }
+    }
+
+    /// <inheritdoc />
+    public ParameterLayoutSnapshot ParameterLayout
+    {
+        get
+        {
+            _ = Components;
+            return _parameterRegistry.ParameterLayout;
         }
     }
 
@@ -145,26 +148,7 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     {
         var components = Components;
         if (components.Count == 0) return new Vector<T>(0);
-
-        var parts = new Vector<T>[components.Count];
-        int total = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            parts[i] = components[i].GetParameters();
-            total += parts[i].Length;
-        }
-
-        var result = new Vector<T>(total);
-        int offset = 0;
-        for (int i = 0; i < parts.Length; i++)
-        {
-            for (int j = 0; j < parts[i].Length; j++)
-            {
-                result[offset++] = parts[i][j];
-            }
-        }
-
-        return result;
+        return _parameterRegistry.GetParameters();
     }
 
     /// <summary>
@@ -224,29 +208,9 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
         GuardParameterMutation();
 
         var components = Components;
-        long expected = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            expected += components[i].ParameterCount;
-        }
-
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-        }
-
-        int offset = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            int n = checked((int)components[i].ParameterCount);
-            var slice = new Vector<T>(n);
-            for (int j = 0; j < n; j++)
-            {
-                slice[j] = parameters[offset++];
-            }
-            components[i].SetParameters(slice);
-        }
+        if (components.Count == 0 && parameters.Length != 0)
+            throw new ArgumentException("This model has no registered parameter layout.", nameof(parameters));
+        if (components.Count > 0) _parameterRegistry.SetParameters(parameters);
 
         OnParametersRestored();
     }
@@ -263,13 +227,7 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
         {
             var components = Components;
             if (components.Count == 0) return GetParameters().Length;
-
-            long total = 0;
-            for (int i = 0; i < components.Count; i++)
-            {
-                total += components[i].ParameterCount;
-            }
-            return total;
+            return _parameterRegistry.ParameterCount;
         }
     }
 
@@ -278,16 +236,20 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Default implementation yields nothing. Concrete model bases that
-    /// represent a real layer stack (NeuralNetworkBase) override to walk
-    /// trainable parameters per-tensor; classical / sklearn-style models
-    /// (linear regressors, trees, clustering) keep the empty default
-    /// because their flat <see cref="GetParameters"/> path is sufficient
-    /// (parameter counts are well below int.MaxValue). Foundation-scale
-    /// diffusion models override at <c>DiffusionModelBase</c> / per-model
-    /// level — tracked by issue #1237.
+    /// The registry is the single owner of ordering for count, flat values, restore, and chunks.
+    /// Classical sources that do not natively store tensors are represented by one exact payload
+    /// tensor per registered component, so every generated model receives a correct chunk surface
+    /// without another per-model override.
     /// </remarks>
-    public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+    public virtual IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
+        => _parameterRegistry.GetParameterStateChunks();
+
+    /// <inheritdoc/>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in GetParameterStateChunks())
+            yield return chunk.Tensor;
+    }
 
     /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);

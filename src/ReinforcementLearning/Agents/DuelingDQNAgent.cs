@@ -64,7 +64,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
     "https://arxiv.org/abs/1511.06581",
     Year = 2016,
     Authors = "Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas, N.")]
-public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
+public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
 
     /// <inheritdoc />
@@ -80,6 +80,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private DuelingNetwork<T> _qNetwork;
+    [Buffer]
     private DuelingNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;

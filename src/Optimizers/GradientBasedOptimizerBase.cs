@@ -1726,12 +1726,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // subclass (caller takes the legacy path).
         if (nn is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) return null;
         var chunks = new List<Tensor<T>>();
-        foreach (var c in nnBase.GetParameterChunks())
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>>();
+        int offset = 0;
+        foreach (var stateChunk in nnBase.GetParameterStateChunks())
         {
+            var c = stateChunk.Tensor;
             if (c is null || c.Length == 0) continue;
-            chunks.Add(c);
+            int len = c.Length;
+            if (offset + len > flatGradient.Length) return null;
+
+            if (stateChunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+            {
+                chunks.Add(c);
+                var gradTensor = new Tensor<T>(c.Shape.ToArray());
+                var gradSpan = gradTensor.AsWritableSpan();
+                for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
+                gradients[c] = gradTensor;
+            }
+            offset += len;
         }
-        if (chunks.Count == 0) return null;
+        if (chunks.Count == 0 || offset != flatGradient.Length) return null;
 
         // Slice the flat gradient into per-chunk gradient tensors. Fail
         // fast (return null) if the flat gradient is short of what the
@@ -1745,18 +1759,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // any leftover bytes in flatGradient mean the chunk list is
         // out of sync with what produced the gradient, so we'd be
         // operating on a different model than the gradient describes.
-        var gradients = new Dictionary<Tensor<T>, Tensor<T>>();
-        int offset = 0;
-        foreach (var p in chunks)
-        {
-            int len = p.Length;
-            if (offset + len > flatGradient.Length) return null;
-            var gradTensor = new Tensor<T>(p.Shape.ToArray());
-            var gradSpan = gradTensor.AsWritableSpan();
-            for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
-            gradients[p] = gradTensor;
-            offset += len;
-        }
         if (gradients.Count == 0 || offset != flatGradient.Length) return null;
         return new TapeStepContext<T>(chunks, gradients, NumOps.Zero);
     }

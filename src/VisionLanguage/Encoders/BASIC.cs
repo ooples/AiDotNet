@@ -51,7 +51,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Pham et al."
 )]
-public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     // NO SHAPE CONTRACT, and the reason is measured rather than assumed.
     //
@@ -267,34 +267,8 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // After the dual-stream split (vision in Layers, text in
-        // TextEncoderLayers via VisionLanguageModelBase), text encoder
-        // weights live outside Layers but ParameterCount / GetParameters
-        // include them. Apply the trailing parameter slice to the text
-        // stream too — without this, SetParameters-style flows leave the
-        // text encoder on its old weights and the model state silently
-        // de-syncs across the two streams.
-        foreach (var layer in TextEncoderLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-    }
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

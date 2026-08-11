@@ -63,7 +63,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Li et al."
 )]
-public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly FLIPOptions _options;
 
@@ -248,9 +248,8 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
         }
     }
 
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateTextEncoderTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     private void SyncImageSizeWithArchitecture()
     {

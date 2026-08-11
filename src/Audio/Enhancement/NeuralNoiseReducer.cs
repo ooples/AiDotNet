@@ -79,7 +79,7 @@ namespace AiDotNet.Audio.Enhancement;
     "https://doi.org/10.1109/TASLP.2014.2364452",
     Year = 2015,
     Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
-public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -193,11 +193,13 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Input buffer for streaming mode.
     /// </summary>
+    [Scratch]
     private Vector<T> _inputBuffer = new Vector<T>(0);
 
     /// <summary>
     /// Output buffer for overlap-add.
     /// </summary>
+    [Scratch]
     private Vector<T> _outputBuffer = new Vector<T>(0);
 
     /// <summary>
@@ -208,6 +210,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Window function for STFT.
     /// </summary>
+    [Buffer]
     private Vector<T> _window = new Vector<T>(0);
 
     /// <summary>
@@ -982,88 +985,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (IsOnnxMode)
-        {
-            throw new InvalidOperationException("Cannot update parameters in ONNX mode.");
-        }
-
-        int offset = 0;
-
-        // Update encoder layers
-        foreach (var layer in _encoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update bottleneck layer
-        if (_bottleneckLayer is not null)
-        {
-            var layerParams = _bottleneckLayer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _bottleneckLayer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update decoder layers
-        foreach (var layer in _decoderLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += layerParamCount;
-            }
-        }
-
-        // Update output layer
-        if (_outputLayer is not null)
-        {
-            var layerParams = _outputLayer.GetParameters();
-            int layerParamCount = layerParams.Length;
-
-            if (offset + layerParamCount <= parameters.Length)
-            {
-                var newParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                _outputLayer.SetParameters(newParams);
-            }
-        }
-    }
-
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {

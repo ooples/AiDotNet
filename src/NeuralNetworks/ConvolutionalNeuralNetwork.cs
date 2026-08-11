@@ -248,6 +248,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     // calls and inflating p95. The buffers depend only on batch + layer geometry
     // (weights are read fresh each call), so they're rebuilt only when the batch
     // size changes; weight updates need no invalidation.
+    [Scratch]
     private Tensor<T>[]? _convStemBuf;
     private int _convStemBatch = -1;
 

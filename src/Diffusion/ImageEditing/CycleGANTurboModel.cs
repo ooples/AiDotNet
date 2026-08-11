@@ -56,7 +56,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("One-Step Image Translation with Text-to-Image Models", "https://arxiv.org/abs/2403.12036", Year = 2024, Authors = "Parmar et al.")]
-public class CycleGANTurboModel<T> : LatentDiffusionModelBase<T>
+public partial class CycleGANTurboModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

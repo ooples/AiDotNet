@@ -59,7 +59,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting", "https://arxiv.org/abs/2012.07436", Year = 2021, Authors = "Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang")]
-public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
+public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -71,10 +71,12 @@ public class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunction<T>
     private readonly InformerOptions<T> _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Input embedding and positional encoding (Tensor-based)
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
+    [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
     // Host-side copy of the (constant) positional encoding. The forward assembles the per-batch PE from it
     // every step; indexing _positionalEncoding[i] on a GPU-resident tensor syncs per element

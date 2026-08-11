@@ -531,34 +531,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         return NumOps.Divide(kl, n);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int index = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = parameters.SubVector(index, layerParamCount);
-                layer.SetParameters(layerParams);
-                index += layerParamCount;
-            }
-        }
-
-        // Update variational layer parameters
-        int meanCount = _meanWeights.Length;
-        int logVarCount = _logVarWeights.Length;
-
-        if (index + meanCount + logVarCount <= parameters.Length)
-        {
-            _meanWeights = Tensor<T>.FromVector(parameters.SubVector(index, meanCount))
-                .Reshape(_meanWeights._shape);
-            index += meanCount;
-
-            _logVarWeights = Tensor<T>.FromVector(parameters.SubVector(index, logVarCount))
-                .Reshape(_logVarWeights._shape);
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Trains the model on graph data.
     /// </summary>

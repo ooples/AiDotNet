@@ -77,7 +77,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2105.14969",
     Year = 2021,
     Authors = "Jayoung Kim, Jinsung Jeon, Jaehoon Lee, Jihyeon Hyeong, Noseong Park")]
-public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
+public partial class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly OCTGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
@@ -107,8 +107,10 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     // Cached pre-activations for proper backward passes
 
     // SVDD center in embedding space
+    [Buffer]
     private Tensor<T>? _svddCenter;
 
+    [Buffer]
     private Matrix<T>? _minorityData;
     private bool _usingCustomLayers;
 
@@ -789,25 +791,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         finally { SetTrainingMode(false); }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var newParams = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                {
-                    newParams[i] = parameters[offset + i];
-                }
-                layer.SetParameters(newParams);
-                offset += count;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc />
     protected override void SerializeNetworkSpecificData(System.IO.BinaryWriter writer)
     {

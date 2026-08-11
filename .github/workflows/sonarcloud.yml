@@ -288,6 +288,7 @@ jobs:
           path: |
             src/bin/Release/
             tests/AiDotNet.Tests/bin/Release/
+            tests/AiDotNet.ParameterSweepWorker/bin/Release/
             tests/AiDotNet.Serving.Tests/bin/Release/
           retention-days: 1
 
@@ -1587,7 +1588,32 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # THE HARDENING THIS JOB WAS BORN WITHOUT. harden-xunit-runner.ps1 is the single source of
+      # the exit-143 fix, but it was only ever applied inline inside test-net10-sharded, so this
+      # job -- authored later -- inherited none of it and died with "The runner has received a
+      # shutdown signal" / exit code 143 roughly 85 seconds in, against a 60-minute budget. Exit
+      # 143 well inside the budget is the runner being killed for memory, not a timeout.
+      #
+      # The script rewrites xunit.runner.json in the BUILD OUTPUT, which is the only copy the
+      # xunit.runner.visualstudio adapter honors. That file does not exist until the project is
+      # built, and this job used to let `dotnet test` build implicitly -- so there was nothing to
+      # harden until discovery had already enumerated ~72k cases and blown the runner's memory.
+      # Building as its own step is what makes the hardening reachable at all.
+      - name: Build test project
+        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo
+
+      - name: Harden xUnit runner
+        shell: pwsh
+        run: |
+          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+
       - name: Run the sweep
+        env:
+          # See the identical note on the conformance window below: the hardening script's
+          # DOTNET_gcServer=0 goes into GITHUB_ENV, and this workflow's top-level
+          # DOTNET_gcServer: 1 is layered back over every step, so a separate hardening step
+          # cannot turn Server GC off. Step-level env outranks both.
+          DOTNET_gcServer: '0'
         # The reporting harness (ParameterEnumerationParityTests) classifies every override as
         # redundant / load-bearing / self-inconsistent / mandatory, by invoking the genuine
         # inherited implementation rather than approximating it. Its output is the input to the
@@ -1620,7 +1646,10 @@ jobs:
           # pipeline succeeded whenever tee did and `|| true` was measuring nothing. The real
           # exit code is captured before anything else can overwrite it.
           set -o pipefail
+          # --no-build/--no-restore are what make the hardening stick: a rebuild here would
+          # regenerate xunit.runner.json from the checked-in copy and silently undo the step above.
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+            --no-build --no-restore \
             --filter "FullyQualifiedName~${{ matrix.sweep }}" \
             --logger 'console;verbosity=detailed' \
             --logger 'trx;LogFileName=sweep.trx' \
@@ -1684,38 +1713,31 @@ jobs:
   model-shape-conformance-windows:
     name: Model shape conformance (offset ${{ matrix.offset }})
     runs-on: ubuntu-latest
+    needs: build
     permissions:
       contents: read
-    # WHY THIS IS SHARDED RATHER THAN ONE JOB. The conformance sweep checks every model's declared
-    # shape contract against a real Predict. Run whole against the vision-language family it does not
-    # finish: 170 LLaVA-scale models exceeded thirty minutes locally without reporting a single
-    # result, so the run was pure cost with no evidence. ModelContractConformanceTests already takes
-    # ADNSHAPE_CONF_OFFSET / ADNSHAPE_CONF_BUDGET for exactly this, and the windows are independent -
-    # each constructs its own models and shares nothing - so they belong on separate runners rather
-    # than in sequence. Wall clock goes from ~3.5 hours serial to one window.
+    # WHY THIS REMAINS SHARDED. The conformance sweep checks every model's declared shape contract
+    # against a real Predict. Explicitly unavailable laws are now classified without construction,
+    # and each concrete law is probed in its own bounded worker, which fixes the former runner OOM.
+    # Keeping deterministic five-model windows preserves per-family inventory reports and ensures a
+    # future wave of concrete contracts scales horizontally instead of rebuilding one serial bottleneck.
     timeout-minutes: 60
-    # A REPORTER, NOT A GATE - YET, and this is the ladder every other rule in this work climbed.
-    # ADNSHAPE006 and ADNSHAPE007 both entered as suppressed warnings while their backlog was
-    # non-zero and were promoted to Error only once it reached zero. This job is at the same stage:
-    # the vision-language family has NEVER produced a passing conformance run - every local attempt
-    # at the full namespace exceeded thirty minutes without reporting, and the only green result was
-    # for the Encoders sub-namespace. Gating the branch on an unmeasured family is exactly the
-    # mistake of asserting before measuring, and it turned seven windows red on their first run.
-    #
-    # It stays continue-on-error until the windows report a real agreed/declined/disagreed split.
-    # Then the backlog is known, the disagreements can be worked to zero, and THIS LINE COMES OUT -
-    # the same promotion ADNSHAPE006 got. The step's own guards below still fail loudly for
-    # infrastructure faults, so "the harness never ran" is never mistaken for "nothing to report".
-    continue-on-error: true
+    # This is a real gate. Explicitly unavailable contracts are accounted for without construction;
+    # every concrete contract runs in a bounded child process and must agree with Predict. That makes
+    # a window containing only honest declines valid while preserving strict failure for a mismatch,
+    # crash, timeout, or unconstructable claimed contract.
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       matrix:
-        # 170 models in 25-model windows. The last window runs past the end, which the harness
+        # 170 models in five-model windows. The last window runs past the end, which the harness
         # handles by simply having fewer candidates - a window that lands entirely past the end
         # reports zero declared and fails the guard below, which is the intended signal that the
         # family shrank and this matrix needs updating.
-        offset: [0, 25, 50, 75, 100, 125, 150]
+        # Five is also the forward-looking resource envelope: each concrete contract receives up to
+        # three minutes and 1 GiB in an isolated worker, so one window has a known upper bound even as
+        # the current explicit-unavailability backlog is replaced by generated contracts.
+        offset: [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -1732,16 +1754,54 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: build-output-${{ github.sha }}
+
+      - name: Restore test assets
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+
+      - name: Harden xUnit runner
+        shell: pwsh
+        run: |
+          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+
       - name: Run the conformance window
         env:
+          # WORKSTATION GC, SET HERE BECAUSE GITHUB_ENV CANNOT WIN THIS ARGUMENT. The hardening
+          # script exports DOTNET_gcServer=0 two ways: into its own process, and into GITHUB_ENV
+          # for a later step. Neither reaches here. This workflow declares DOTNET_gcServer: 1 at
+          # the top level, and workflow-level env is re-applied to every step ON TOP of whatever
+          # GITHUB_ENV holds -- so a separate hardening step gets Server GC put straight back.
+          # test-net10-sharded never hit this because it hardens INLINE in the same pwsh process
+          # that runs dotnet test, where $env: assignment is inherited by the child and no
+          # workflow env can override it.
+          #
+          # This is why serialization alone was not enough: the script is explicit that removing
+          # Server GC "is not optional -- with serialization alone a shard still died ~70s into
+          # serial execution, so the footprint, not the parallelism, was the remaining cause".
+          # Step-level env has the highest precedence of all, so it holds regardless.
+          DOTNET_gcServer: '0'
           ADNSHAPE_CONF_NAMESPACE: VisionLanguage
           ADNSHAPE_CONF_OFFSET: ${{ matrix.offset }}
-          ADNSHAPE_CONF_BUDGET: '25'
+          ADNSHAPE_CONF_BUDGET: '5'
         run: |
           # PIPESTATUS, not the pipe: `dotnet test | tee` reports tee's status, so a failing run
           # would look green. Same trap the parameter sweep above documents.
           set -o pipefail
+          # --no-build/--no-restore: a rebuild would regenerate xunit.runner.json and undo the
+          # hardening step above.
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+            --no-build --no-restore \
             --filter "FullyQualifiedName~ModelContractConformanceTests" \
             --logger 'console;verbosity=detailed' \
             --results-directory TestResults 2>&1 | tee window-output.txt

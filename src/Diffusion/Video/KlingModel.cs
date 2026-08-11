@@ -94,7 +94,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Kling: A Text-to-Video Generation Model", "https://kling.kuaishou.com")]
-public class KlingModel<T> : VideoDiffusionModelBase<T>
+public partial class KlingModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

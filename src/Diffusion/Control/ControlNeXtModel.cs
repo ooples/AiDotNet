@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ControlNeXt: Powerful and Efficient Control for Image and Video Generation", "https://arxiv.org/abs/2408.06070", Year = 2024, Authors = "Peng et al.")]
-public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

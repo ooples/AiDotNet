@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiffEdit: Diffusion-based Semantic Image Editing with Mask Guidance", "https://arxiv.org/abs/2210.11427", Year = 2023, Authors = "Couairon et al.")]
-public class DiffEditModel<T> : LatentDiffusionModelBase<T>
+public partial class DiffEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

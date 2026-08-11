@@ -90,7 +90,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Ideogram 3", "https://about.ideogram.ai/3.0")]
-public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
+public partial class Ideogram3Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

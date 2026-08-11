@@ -51,7 +51,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ResearchPaper("Memory-based Parameter Adaptation", "https://arxiv.org/abs/1802.10542", Year = 2018)]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Evaluation)]
-public class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
     private readonly MbPAEpisodicMemory<T> _memory;
     private readonly MbPAOptions<T, TInput, TOutput> _options;
@@ -223,16 +223,10 @@ public class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
             "Use Vector<T>, Matrix<T> or Tensor<T> as the meta-learning output type.");
     }
 
-    /// <inheritdoc/>
-    /// <remarks>Returns theta, the trained head — not any theta_x, which never outlives a call.</remarks>
-    public override Vector<T> GetParameters() => _trainedOutputParams;
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _trainedOutputParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
+    // GetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // SetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         => new MbPAAdaptedModel<T, TInput, TOutput>(BaseModel, _memory, parameters, _options);

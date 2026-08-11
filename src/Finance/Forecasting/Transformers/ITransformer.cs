@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("iTransformer: Inverted Transformers Are Effective for Time Series Forecasting", "https://arxiv.org/abs/2310.06625", Year = 2024, Authors = "Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, Mingsheng Long")]
-public class ITransformer<T> : ForecastingModelBase<T>
+public partial class ITransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -112,11 +112,13 @@ public class ITransformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceMean;
 
     /// <summary>
     /// Instance normalization standard deviation (for RevIN).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _instanceStd;
 
     #endregion

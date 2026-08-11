@@ -63,7 +63,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Semi-Supervised Learning Literature Survey", "https://pages.cs.wisc.edu/~jerryzhu/pub/ssl_survey.pdf")]
-public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
+public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
 
@@ -488,7 +488,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>,
     /// <summary>
     /// Creates a new instance of the model with specified parameters.
     /// </summary>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newClassifier = new SelfTrainingClassifier<T>(
             (IClassifier<T>)((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).WithParameters(parameters),

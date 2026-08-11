@@ -90,7 +90,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CogView3: Finer and Faster Text-to-Image Generation via Relay Diffusion", "https://arxiv.org/abs/2403.05121", Year = 2024, Authors = "Zheng et al.")]
-public class CogView4Model<T> : LatentDiffusionModelBase<T>
+public partial class CogView4Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lumiere: A Space-Time Diffusion Model for Video Generation", "https://arxiv.org/abs/2401.12945", Year = 2024, Authors = "Bar-Tal et al.")]
-public class LumiereModel<T> : VideoDiffusionModelBase<T>
+public partial class LumiereModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

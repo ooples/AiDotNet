@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class SARIMAModel<T> : TimeSeriesModelBase<T>
+public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -126,14 +126,17 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Stored differenced training values for initializing Predict(Matrix) state.
     /// </summary>
+    [Buffer]
     private Vector<T> _lastTrainDiffValues;
 
     /// <summary>
     /// Stored AR+SAR residuals from training for initializing Predict(Matrix) state.
     /// </summary>
+    [Buffer]
     private Vector<T> _lastTrainResiduals;
 
     /// <summary>Original training series for in-sample Predict(Matrix) with undifferencing.</summary>
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>

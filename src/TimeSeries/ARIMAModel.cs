@@ -52,7 +52,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class ARIMAModel<T> : TimeSeriesModelBase<T>
+public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Options specific to the ARIMA model, including p, d, and q parameters.
@@ -114,16 +114,19 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Stored differenced training series values (last P values) for initializing Predict(Matrix).
     /// </summary>
+    [Buffer]
     private Vector<T> _lastTrainDiffValues;
 
     /// <summary>
     /// Stored AR residuals from training (last Q values) for initializing Predict(Matrix).
     /// </summary>
+    [Buffer]
     private Vector<T> _lastTrainResiduals;
 
     /// <summary>
     /// Stored original training series for in-sample prediction and Forecast initialization.
     /// </summary>
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>

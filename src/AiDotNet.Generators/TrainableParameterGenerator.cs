@@ -783,14 +783,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine("        base.EnsureInitialized();");
                 sb.AppendLine("    }");
             }
-            else if (paramFields.Count == 0)
+            if (!DeclaresAny(classSymbol, "GetSubLayers"))
             {
-                // Nothing else will call it. The generated GetTrainableParameters (the other call
-                // site) is only emitted when the class owns tensors, and this class hand-writes
-                // EnsureInitialized, so a pure composite with its own EnsureInitialized got
-                // EnsureSubLayersRegistered emitted and never invoked -- its children stayed
-                // invisible to GetSubLayers and to the recursive parameter walk. VAEEncoder
-                // reported 0 against a 56,092-value vector for exactly this reason.
+                // GetSubLayers is itself a public structural query and must be complete before
+                // Forward. Initialization is too late for Deserialize/Clone/export/topology walks:
+                // a fresh composite has not executed Forward yet, so those paths otherwise see no
+                // children and can silently restore the entire flat vector into the parent's
+                // fallback Parameters slot. This applies even when the generator also emits
+                // EnsureInitialized and even when the parent owns trainable tensors of its own.
                 //
                 // Registering from GetSubLayers keeps the timing lazy. It must NOT move into a
                 // constructor: that places children in front of the pre-step buffer-view walk

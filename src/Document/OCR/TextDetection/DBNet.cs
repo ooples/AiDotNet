@@ -53,7 +53,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Real-time Scene Text Detection with Differentiable Binarization", "https://doi.org/10.48550/arXiv.1911.08947", Year = 2020, Authors = "Minghui Liao, Zhaoyi Wan, Cong Yao, Kai Chen, Xiang Bai")]
-public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
+public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly DBNetOptions _options;
 
@@ -78,8 +78,11 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     private readonly List<ILayer<T>> _thresholdHead = [];
 
     // Cached outputs for inspection
+    [Scratch]
     private Tensor<T>? _lastProbabilityMap;
+    [Scratch]
     private Tensor<T>? _lastThresholdMap;
+    [Scratch]
     private Tensor<T>? _lastBinaryMap;
 
     #endregion

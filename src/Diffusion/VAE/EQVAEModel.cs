@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EQ-VAE: Equivariance Regularized Latent Space for Improved Generative Image Modeling", "https://arxiv.org/abs/2502.09509", Year = 2025, Authors = "Xu et al.")]
-public class EQVAEModel<T> : VAEModelBase<T>
+public partial class EQVAEModel<T> : VAEModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Encoder layers then decoder layers -- the order the previous hand-written

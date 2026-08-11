@@ -51,16 +51,9 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Asynchronous Methods for Deep Reinforcement Learning", "https://arxiv.org/abs/1602.01783")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Actor then critic, the order all three hand-written surfaces used. Advantage actor-critic trains both, so both belong in the surface.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(_actor);
-        RegisterParameterComponent(_critic);
-    }
     #region Fields
 
     private readonly FinancialA2CAgentOptions<T> _options;

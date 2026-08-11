@@ -37,7 +37,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Forecasting at Scale", "https://doi.org/10.1080/00031305.2017.1380080", Year = 2018, Authors = "Sean J. Taylor, Benjamin Letham")]
-public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
+public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// The number of potential trend changepoints laid out across the history when the caller has
@@ -108,6 +108,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// fitting (placed uniformly over the first 80% of the training range, or taken from the options) and the
     /// magnitude of each trend change is learned into <see cref="_delta"/>.
     /// </summary>
+    [Buffer]
     private Vector<T> _changepointTimes;
 
     /// <summary>
@@ -1256,10 +1257,21 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         base.ApplyParameters(parameters);
     }
 
-    public override void SetParameters(Vector<T> parameters)
+    /// <summary>
+    /// Re-derives Prophet's internal state after a restore has written the parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// This was a SetParameters override that called ApplyParameters and nothing else, which meant
+    /// it replaced the base's distribution rather than following it. OnParametersRestored is the
+    /// hook the base calls AFTER the vector has been distributed, so the redistribution still
+    /// happens and the fold above it is no longer bypassed.
+    /// </remarks>
+    protected override void OnParametersRestored()
     {
-        ApplyParameters(parameters);
+        base.OnParametersRestored();
+        ApplyParameters(ModelParameters);
     }
+
 
     /// <summary>
     /// Predicts a single value based on the input vector.

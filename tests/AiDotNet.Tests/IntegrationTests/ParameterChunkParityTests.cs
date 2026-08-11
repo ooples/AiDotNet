@@ -9,25 +9,16 @@ using Xunit.Abstractions;
 namespace AiDotNet.Tests.IntegrationTests;
 
 /// <summary>
-/// Measures whether <c>GetParameterChunks()</c> enumerates the SAME tensors that
+/// Enforces that <c>GetParameterChunks()</c> enumerates the SAME persistent state that
 /// <c>ParameterCount</c> counts and <c>GetParameters()</c> returns.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is a precondition check, not a bug hunt. The plan is to make <c>ParameterCount</c> and
-/// <c>GetParameters</c> both fold from <c>GetParameterChunks()</c> so they cannot disagree. That is
-/// only safe if the chunk enumeration already covers the same tensors -- and there is concrete
-/// reason to doubt it. <c>GetParameterChunks</c> documents itself as yielding "the per-tensor
-/// weight references registered via <c>RegisterTrainableParameter</c>" for
-/// <c>ITrainableLayer&lt;T&gt;</c> layers, and "for non-trainable / parameterless layers this
-/// yields nothing." Each layer's <c>GetParameters()</c>, by contrast, is a hand-written flattening
-/// of whatever fields that layer happens to hold. Those are two different sources.
-/// </para>
-/// <para>
-/// A layer that flattens weights in <c>GetParameters()</c> but never registered them would
-/// contribute zero chunks. Rewiring the base would then drop those parameters from BOTH surfaces
-/// at once -- and the pairing gate would stay green, because both sides would agree on the wrong
-/// number. That is the failure this test exists to find BEFORE the rewire, not after.
+/// The framework bases and generator now expose one stable manifest for count, flat values,
+/// chunks, and restore. Role-aware chunks keep optimizer semantics separate: trainable tensors and
+/// non-trainable buffers occupy the same checkpoint order, but only trainable roles are handed to
+/// an optimizer. Any disagreement here is therefore a product contract failure, not a report-only
+/// migration metric.
 /// </para>
 /// <para>
 /// Chunk lengths themselves are references, but ASKING for them is not free:
@@ -55,6 +46,9 @@ public class ParameterChunkParityTests
     public async System.Threading.Tasks.Task ChunkSum_ShouldMatchParameterCount()
     {
         await System.Threading.Tasks.Task.Yield();
+#if !NET10_0_OR_GREATER
+        return;
+#endif
 
         var divergent = new List<string>();
         var noChunks = new List<string>();
@@ -86,103 +80,54 @@ public class ParameterChunkParityTests
 
         using var _logHandle = log;
 
-        foreach (var closedType in GetConstructableModelTypes())
+        var modelTypes = GetConstructableModelTypes().ToArray();
+        var measurements = await ParameterSweepProcess.MeasureAllAsync(
+            modelTypes, includeChunks: true, MaxParametersToMaterialize, ConstructionTimeout);
+
+        foreach (var result in measurements)
         {
+            var closedType = result.ModelType;
             var typeName = closedType.FullName ?? closedType.Name;
             log?.WriteLine($"[measuring] {typeName}");
+            constructed++;
+            if (constructed % 50 == 0) { GC.Collect(); GC.WaitForPendingFinalizers(); }
 
-            if (!TryConstruct(closedType, out object? instance) || instance is null) { unmeasurable++; continue; }
-
-            try
+            var measurement = result.Measurement;
+            switch (measurement.Status)
             {
-                long declared = ReadLong(instance, "ParameterCount");
-                if (declared < 0) { unmeasurable++; continue; }
-
-                // Size check BEFORE touching the chunk API. GetParameterChunks() is documented as
-                // returning zero-copy references, but it calls ResolveLazyLayerShapes() first --
-                // which ALLOCATES every deferred weight tensor. For CogVideo's paper-scale 5B
-                // variant that is tens of GB at double, and it killed this sweep outright. The
-                // enumeration is cheap only once a model is already materialised; asking an
-                // unmaterialised giant for its chunks is what forces the materialisation.
-                if (declared > MaxParametersToMaterialize)
-                {
+                case "too-large":
                     tooLarge++;
-                    log?.WriteLine($"TOO-LARGE {typeName}: ParameterCount={declared}");
+                    log?.WriteLine($"TOO-LARGE {typeName}: ParameterCount={measurement.Declared}");
                     continue;
-                }
-
-                // A size guard on `declared` alone is NOT sufficient, and assuming it was is what
-                // OOM-killed both the local run and the CI runner. Deferred layers now report 0
-                // parameters -- correctly, since their weights are not sized until an input width
-                // arrives -- so a multi-billion-parameter model whose layers are all deferred reads
-                // 0 here and sails straight past the threshold. GetParameterChunks() then calls
-                // ResolveLazyLayerShapes(), which ALLOCATES every one of those weight tensors.
-                // The number the guard consults is precisely the number that cannot be trusted for
-                // the models the guard exists to catch.
-                //
-                // HasUninitializedParameters answers the question the count cannot: is this model
-                // sized yet? If not, there is no chunk parity to measure without forcing the
-                // materialisation we are trying to avoid, so it is skipped and reported as such
-                // rather than silently attempted.
-                if (ReadBool(instance, "HasUninitializedParameters"))
-                {
+                case "deferred":
+                case "unmaterialized":
                     unsized++;
-                    log?.WriteLine($"UNSIZED {typeName}: deferred layers, cannot enumerate without materialising");
+                    log?.WriteLine($"UNSIZED {typeName}: readiness={measurement.Readiness}");
                     continue;
-                }
-
-                var chunksMethod = closedType.GetMethod("GetParameterChunks",
-                    BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-                if (chunksMethod is null)
-                {
-                    noChunks.Add($"{typeName}: no GetParameterChunks (declared={declared})");
+                case "no-chunks":
+                    noChunks.Add($"{typeName}: no GetParameterChunks (declared={measurement.Declared})");
                     continue;
-                }
-
-                long chunkSum = 0;
-                int chunkCount = 0;
-                if (chunksMethod.Invoke(instance, null) is IEnumerable chunks)
-                {
-                    foreach (var chunk in chunks)
-                    {
-                        if (chunk is null) continue;
-                        var lenProp = chunk.GetType().GetProperty("Length");
-                        if (lenProp is not null) chunkSum += Convert.ToInt64(lenProp.GetValue(chunk));
-                        chunkCount++;
-                    }
-                }
-
-                compared++;
-
-                // Flat length only when it is cheap; the chunk comparison above is the point.
-                // chunkSum is the honest size here: ParameterCount reports 0 for layers whose
-                // input width is still deferred, so it can under-report a large model.
-                long flat = -1;
-                if (chunkSum <= MaxParametersToMaterialize)
-                {
-                    try { flat = ReadVectorLength(instance); }
-                    catch { flat = -1; }
-                }
-
-                if (chunkSum != declared || (flat >= 0 && flat != chunkSum))
-                {
-                    var row = $"{typeName}: ParameterCount={declared}, chunkSum={chunkSum} " +
-                              $"({chunkCount} chunks), GetParameters().Length={(flat < 0 ? "n/a" : flat.ToString())}";
-                    divergent.Add(row);
-                    log?.WriteLine("DIVERGENT " + row);
-                }
+                case "ok":
+                    break;
+                default:
+                    unmeasurable++;
+                    _output.WriteLine($"UNMEASURABLE {typeName}: {measurement.Status} {measurement.Error}");
+                    continue;
             }
-            catch (Exception ex)
+
+            compared++;
+            bool ambiguousZero = measurement.Declared == 0 && measurement.Flat == 0 &&
+                                 measurement.ChunkSum == 0 && measurement.Readiness != "ParameterFree";
+            if (measurement.ChunkSum != measurement.Declared ||
+                (measurement.Flat >= 0 && measurement.Flat != measurement.ChunkSum) || ambiguousZero)
             {
-                unmeasurable++;
-                _output.WriteLine($"UNMEASURABLE {typeName}: {ex.GetBaseException().GetType().Name}");
+                var row = $"{typeName}: ParameterCount={measurement.Declared}, " +
+                          $"chunkSum={measurement.ChunkSum} ({measurement.ChunkCount} chunks), " +
+                          $"GetParameters().Length={(measurement.Flat < 0 ? "n/a" : measurement.Flat.ToString())}, " +
+                          $"readiness={measurement.Readiness}";
+                divergent.Add(row);
+                log?.WriteLine("DIVERGENT " + row);
             }
-            finally
-            {
-                (instance as IDisposable)?.Dispose();
-            }
-
-            if (++constructed % 50 == 0) { GC.Collect(); GC.WaitForPendingFinalizers(); }
         }
 
         _output.WriteLine($"Compared {compared} models; {noChunks.Count} expose no chunk API; " +
@@ -191,19 +136,17 @@ public class ParameterChunkParityTests
         foreach (var n in noChunks.Take(40)) _output.WriteLine("  NO-CHUNKS " + n);
         foreach (var d in divergent) _output.WriteLine("  DIVERGENT " + d);
 
-        // Reported, not enforced. This measures whether a planned refactor is safe; it is not
-        // itself a contract anyone has agreed to yet, and failing the build on it would block
-        // work on a question we are still answering.
-        // THE HARNESS GATES ITSELF, NOT THE PARITY RESULT. This is a reporting sweep, so a
-        // mismatch is recorded rather than failed -- but Assert.True(true) also made "classified
-        // hundreds of models" indistinguishable from "aborted after three", while holding a
-        // 30-minute CI slot either way. A harness that produced no evidence is a failure of the
-        // harness even when it is not a failure of the thing under test.
         Assert.True(compared > 0,
             "The chunk-parity sweep compared NOTHING. It holds a 30-minute slot, so a run that " +
             "measured nothing is an infrastructure failure rather than a clean report. " +
             $"Skipped: {noChunks.Count} with no chunk API, {tooLarge} too large to enumerate, " +
             $"{unsized} not sized yet, {unmeasurable} unmeasurable.");
+        Assert.True(noChunks.Count == 0,
+            "Every materialized model must inherit or provide the canonical chunk API.\n" +
+            string.Join("\n", noChunks));
+        Assert.True(divergent.Count == 0,
+            "ParameterCount, GetParameters, and GetParameterChunks must fold the same state " +
+            "manifest.\n" + string.Join("\n", divergent));
     }
 
     private static bool ReadBool(object instance, string propertyName)

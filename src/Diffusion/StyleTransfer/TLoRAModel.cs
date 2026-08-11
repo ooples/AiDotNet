@@ -63,7 +63,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
     "https://arxiv.org/abs/2507.05964",
     Year = 2025,
     Authors = "Vera Soboleva, Aibek Alanov, Andrey Kuznetsov, Konstantin Sobolev")]
-public class TLoRAModel<T> : LatentDiffusionModelBase<T>
+public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

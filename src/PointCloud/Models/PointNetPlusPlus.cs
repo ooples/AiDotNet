@@ -84,7 +84,7 @@ namespace AiDotNet.PointCloud.Models;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("PointNet++: Deep Hierarchical Feature Learning on Point Sets in a Metric Space", "https://doi.org/10.48550/arXiv.1706.02413", Year = 2017, Authors = "Charles R. Qi, Li Yi, Hao Su, Leonidas J. Guibas")]
-public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
+public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
 {
     private readonly PointNetPlusPlusModelOptions _options;
 
@@ -108,6 +108,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 
     private readonly List<SetAbstractionLayer<T>> _setAbstractionLayers;
     private readonly List<ILayer<T>> _classificationHeadLayers;
+    [Scratch]
     private Vector<T>? _globalFeatures;
 
     /// <summary>

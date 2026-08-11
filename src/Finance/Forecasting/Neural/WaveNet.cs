@@ -78,7 +78,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("WaveNet: A Generative Model for Raw Audio", "https://arxiv.org/abs/1609.03499", Year = 2016, Authors = "Aaron van den Oord, Sander Dieleman, Heiga Zen, Karen Simonyan, Oriol Vinyals, Alex Graves, Nal Kalchbrenner, Andrew Senior, Koray Kavukcuoglu")]
-public class WaveNet<T> : ForecastingModelBase<T>
+public partial class WaveNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 

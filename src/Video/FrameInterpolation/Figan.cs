@@ -78,7 +78,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/1711.06045",
     Year = 2017,
     Authors = "Joost van Amersfoort, Wenzhe Shi, Alejandro Acosta, Francisco Massa, Johannes Totz, Zehan Wang, Jose Caballero")]
-public class Figan<T> : FrameInterpolationBase<T>
+public partial class Figan<T> : FrameInterpolationBase<T>
 {
     #region Fields
 

@@ -76,7 +76,7 @@ namespace AiDotNet.Video.Understanding;
     "https://arxiv.org/abs/2109.14084",
     Year = 2021,
     Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Armen Aghajanyan, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]
-public class VideoCLIP<T> : NeuralNetworkBase<T>
+public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 {
     private readonly VideoCLIPVideoOptions _options;
 
@@ -1128,25 +1128,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         Layers.Add(_logitScale);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-    }
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -76,11 +76,12 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Chronos: Learning the Language of Time Series", "https://arxiv.org/abs/2403.07815", Year = 2024, Authors = "Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen, Oleksandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor, Jasper Zschiegner, Danielle C. Maddix, Hao Wang, Michael W. Mahoney, Kari Torkkola, Andrew Gordon Wilson, Michael Bohlke-Schneider, Yuyang Wang")]
-public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
+public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 {
     private readonly ChronosOptions<T> _options;
     private readonly INumericOperations<T> _numOps;
     private readonly Random _random;
+    [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tokenization parameters
@@ -91,6 +92,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     // Transformer components - now using Tensor<T>
     private Tensor<T> _tokenEmbeddings;      // [vocabularySize, embeddingDim]
+    [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
     private List<ChronosTransformerLayerTensor<T>> _transformerLayers;
     private Tensor<T> _outputProjection;     // [vocabularySize, embeddingDim]
@@ -102,11 +104,14 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     // Pre-allocated gradient computation buffers (reused across gradient steps)
     // Reused per-sample gradient buffers (eliminate the ~1 MB LOH allocations that OOM-crashed corpus-scale training).
+    [Scratch]
     private Tensor<T>? _dOutputProjBuf;       // [vocabularySize, embeddingDim] — output-projection gradient
+    [Scratch]
     private Tensor<T>? _dTokenEmbBuf;         // [vocabularySize, embeddingDim] — sparse token-embedding gradient
     private int[]? _prevTokenRows;            // token rows written last sample (so we zero only those, not the whole tensor)
 
     // Gradient accumulators for batch training
+    [Scratch]
     private readonly Dictionary<string, Tensor<T>> _gradientAccumulators;
     private int _gradientCount;
 
@@ -1054,19 +1059,8 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return new ChronosFoundationModel<T>(new ChronosOptions<T>(_options));
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _tokenEmbeddings.Length;
-            count += _outputProjection.Length + _outputBias.Length;
-            count += _finalLayerNormGamma.Length + _finalLayerNormBeta.Length;
-            foreach (var layer in _transformerLayers)
-                count += (int)layer.ParameterCount;
-            return count;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     private class LayerNormCache
     {
         public Tensor<T> Input { get; set; } = new Tensor<T>(new[] { 1 });

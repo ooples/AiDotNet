@@ -84,7 +84,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Kandinsky: an Improved Text-to-Image Synthesis with Image Prior and Latent Diffusion", "https://arxiv.org/abs/2310.03502", Year = 2023, Authors = "Razzhigaev et al.")]
-public class KandinskyModel<T> : LatentDiffusionModelBase<T>
+public partial class KandinskyModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

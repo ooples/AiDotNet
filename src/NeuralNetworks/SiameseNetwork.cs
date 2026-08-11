@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Siamese Neural Networks for One-shot Image Recognition", "https://www.cs.cmu.edu/~rsalakhu/oneshot/papers/Siamese%20Neural%20Networks%20for%20One-Shot%20Image%20Recognition.pdf")]
-public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
+public partial class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly SiameseNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -407,37 +407,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         return diagnostics;
     }
 
-    /// <summary>
-    /// Updates the network parameters with new values.
-    /// </summary>
-    /// <param name="parameters">The vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method updates the internal values (weights and biases) of the neural network
-    /// during training.
-    /// 
-    /// The parameters vector contains all the numbers that define how the network processes inputs.
-    /// These parameters are split into two parts:
-    /// 1. Parameters for the shared subnetwork (which processes each input)
-    /// 2. Parameters for the output layer (which compares the embeddings)
-    /// 
-    /// During training, these parameters are gradually adjusted to make the network better at
-    /// determining whether two inputs are similar or different.
-    /// 
-    /// You typically won't call this method directly - it's used by the training algorithms
-    /// that optimize the network.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int subnetworkParameterCount = checked((int)_subnetwork.ParameterCount);
-        Vector<T> subnetworkParameters = parameters.SubVector(0, subnetworkParameterCount);
-        _subnetwork.UpdateParameters(subnetworkParameters);
-
-        Vector<T> outputLayerParameters = parameters.SubVector(subnetworkParameterCount, (int)_outputLayer.ParameterCount);
-        _outputLayer.UpdateParameters(outputLayerParameters);
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Gets the total number of trainable parameters in the Siamese network.
     /// </summary>

@@ -32,7 +32,8 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable
+public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+    AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     /// <summary>
     /// Numeric operations provider for type T.
@@ -310,7 +311,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// The components this agent's parameters live in, in registration order, which is also the
     /// serialization order.
     /// </summary>
-    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
     private bool _componentsRegistered;
 
     /// <summary>
@@ -329,14 +330,11 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// and registration is idempotent by reference.</para>
     /// </remarks>
     protected void RegisterParameterComponent(IParameterSource<T>? component)
-    {
-        if (component is null) return;
-        for (int i = 0; i < _parameterComponents.Count; i++)
-        {
-            if (ReferenceEquals(_parameterComponents[i], component)) return;
-        }
-        _parameterComponents.Add(component);
-    }
+        => _parameterRegistry.Register(component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
 
     /// <summary>
     /// Declare this agent's trainable components here with <see cref="RegisterParameterComponent"/>.
@@ -365,45 +363,18 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         {
             if (!_componentsRegistered)
             {
+                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-
-                // Latch only once something was actually registered. An agent can be asked for
-                // its parameters BEFORE its networks exist -- a lazily built one, or a query
-                // during construction -- and RegisterParameterComponent tolerates null, so such
-                // a call would otherwise register nothing and still mark the job done, leaving
-                // the agent permanently reporting zero parameters.
-                _componentsRegistered = _parameterComponents.Count > 0;
-
-                // Bring lazily-shaped networks into existence, once, the first time anything asks
-                // this agent for its parameters.
-                //
-                // An agent's networks are built from an architecture that already carries a
-                // concrete inputSize, but their layers use the lazy DenseLayer(outputSize) form, so
-                // the weights are not allocated until something forwards through them.
-                // ResolveLazyLayerShapes pins the shapes; nothing then allocates. The layer-level
-                // parameter surface deliberately refuses to allocate on a read, so count and vector
-                // agree on a truthful zero -- consistent, and useless: a fully specified network
-                // reports that it has no parameters.
-                //
-                // For most agents a forward during Train hides this. QMIXAgent has no such forward:
-                // it is multi-agent, its Train() waits for BatchSize joint transitions that a
-                // single-agent Train(state, target) never produces, and its first SelectAction takes
-                // the epsilon-greedy RANDOM branch. Its networks resolved to [10]->[32]->[1] and
-                // still reported 0 parameters after training, so every checkpoint it wrote was
-                // empty. Measured, not inferred: the identical failure reproduces on the
-                // hand-written surfaces this registry replaced.
-                //
-                // Done here, on the base, so it holds for every agent without an override, and
-                // driven by an explicit caller asking for parameters rather than by a bare count
-                // inside the layer machinery.
-                for (int i = 0; i < _parameterComponents.Count; i++)
-                {
-                    if (_parameterComponents[i] is NeuralNetworkBase<T> network)
-                        network.MaterializeParameters();
-                }
+                _componentsRegistered = true;
             }
-            return _parameterComponents;
+            return _parameterRegistry.Components;
         }
+    }
+
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get { _ = Components; return _parameterRegistry.ParameterLayout; }
     }
 
     /// <inheritdoc />
@@ -411,28 +382,8 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <see cref="ParameterCount"/> by construction rather than by agreement.</remarks>
     public virtual Vector<T> GetParameters()
     {
-        var components = Components;
-        if (components.Count == 0) return new Vector<T>(0);
-
-        var parts = new Vector<T>[components.Count];
-        int total = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            parts[i] = components[i].GetParameters();
-            total += parts[i].Length;
-        }
-
-        var result = new Vector<T>(total);
-        int offset = 0;
-        for (int i = 0; i < parts.Length; i++)
-        {
-            for (int j = 0; j < parts[i].Length; j++)
-            {
-                result[offset++] = parts[i][j];
-            }
-        }
-
-        return result;
+        _ = Components;
+        return _parameterRegistry.GetParameters();
     }
 
     /// <summary>
@@ -446,31 +397,8 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
-        var components = Components;
-        long expected = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            expected += components[i].ParameterCount;
-        }
-
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-        }
-
-        int offset = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            int n = checked((int)components[i].ParameterCount);
-            var slice = new Vector<T>(n);
-            for (int j = 0; j < n; j++)
-            {
-                slice[j] = parameters[offset++];
-            }
-            components[i].SetParameters(slice);
-        }
-
+        _ = Components;
+        _parameterRegistry.SetParameters(parameters);
         OnParametersRestored();
     }
 
@@ -485,16 +413,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <remarks>Sums the same components the vector concatenates, so the two cannot drift.</remarks>
     public virtual long ParameterCount
     {
-        get
-        {
-            var components = Components;
-            long total = 0;
-            for (int i = 0; i < components.Count; i++)
-            {
-                total += components[i].ParameterCount;
-            }
-            return total;
-        }
+        get { _ = Components; return _parameterRegistry.ParameterCount; }
     }
 
     /// <inheritdoc/>

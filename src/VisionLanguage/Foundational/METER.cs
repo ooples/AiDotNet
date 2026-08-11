@@ -50,7 +50,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2022,
     Authors = "Dou et al."
 )]
-public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly METEROptions _options;
 
@@ -318,31 +318,8 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         }
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        int idx = 0;
-        foreach (var l in Layers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Co-attention stream is part of the trainable graph (registered
-        // via RegisterAuxiliaryEncoderStream and surfaced through
-        // GetExtraTrainableLayers), so its parameter slices live alongside
-        // the vision encoder's in the flat parameter vector.
-        foreach (var l in _textCoAttnLayers)
-        {
-            int c = (int)l.ParameterCount;
-            l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-    }
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateAuxiliaryStreamTrainableLayers();
+    // This forwarded to a helper the base now calls from its own
+    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);

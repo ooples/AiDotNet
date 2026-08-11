@@ -62,16 +62,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks", "https://arxiv.org/abs/1703.10593", Year = 2017, Authors = "Jun-Yan Zhu, Taesung Park, Phillip Isola, Alexei A. Efros")]
-public class CycleGAN<T> : NeuralNetworkBase<T>
+public partial class CycleGAN<T> : NeuralNetworkBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Both generators then both discriminators, the order the hand-written concatenation walked them. All four are trained: CycleGAN optimises the A->B and B->A mappings jointly against a discriminator per domain.</remarks>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => GeneratorAtoB.Layers.Cast<LayerBase<T>?>()
-            .Concat(GeneratorBtoA.Layers.Cast<LayerBase<T>?>())
-            .Concat(DiscriminatorA.Layers.Cast<LayerBase<T>?>())
-            .Concat(DiscriminatorB.Layers.Cast<LayerBase<T>?>());
+    // The four sub-networks are discovered as members and their layers surfaced in declaration
+    // order -- GeneratorAtoB, GeneratorBtoA, DiscriminatorA, DiscriminatorB -- which is the order
+    // this hook used and therefore the serialization order. Removed under AIDN082.
     private readonly CycleGANOptions _options;
 
     /// <inheritdoc/>
@@ -995,61 +991,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         foreach (var chunk in DiscriminatorB.GetParameterChunks()) yield return chunk;
     }
 
-    /// <summary>
-    /// Updates the parameters of all networks in the CycleGAN.
-    /// </summary>
-    /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (parameters is null)
-        {
-            throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
-        }
-
-        int genAtoBCount = (int)GeneratorAtoB.GetParameterCount();
-        int genBtoACount = (int)GeneratorBtoA.GetParameterCount();
-        int discACount = (int)DiscriminatorA.GetParameterCount();
-        int discBCount = (int)DiscriminatorB.GetParameterCount();
-
-        int totalCount = genAtoBCount + genBtoACount + discACount + discBCount;
-
-        if (parameters.Length != totalCount)
-        {
-            throw new ArgumentException(
-                $"Parameters vector length mismatch: expected {totalCount} " +
-                $"(GeneratorAtoB: {genAtoBCount}, GeneratorBtoA: {genBtoACount}, " +
-                $"DiscriminatorA: {discACount}, DiscriminatorB: {discBCount}), " +
-                $"but received {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-
-        // Update GeneratorAtoB parameters
-        var genAtoBParams = new Vector<T>(genAtoBCount);
-        for (int i = 0; i < genAtoBCount; i++)
-            genAtoBParams[i] = parameters[offset + i];
-        GeneratorAtoB.UpdateParameters(genAtoBParams);
-        offset += genAtoBCount;
-
-        // Update GeneratorBtoA parameters
-        var genBtoAParams = new Vector<T>(genBtoACount);
-        for (int i = 0; i < genBtoACount; i++)
-            genBtoAParams[i] = parameters[offset + i];
-        GeneratorBtoA.UpdateParameters(genBtoAParams);
-        offset += genBtoACount;
-
-        // Update DiscriminatorA parameters
-        var discAParams = new Vector<T>(discACount);
-        for (int i = 0; i < discACount; i++)
-            discAParams[i] = parameters[offset + i];
-        DiscriminatorA.UpdateParameters(discAParams);
-        offset += discACount;
-
-        // Update DiscriminatorB parameters
-        var discBParams = new Vector<T>(discBCount);
-        for (int i = 0; i < discBCount; i++)
-            discBParams[i] = parameters[offset + i];
-        DiscriminatorB.UpdateParameters(discBParams);
-    }
+    // UpdateParameters split the vector four ways -- GeneratorAtoB, GeneratorBtoA, DiscriminatorA,
+    // DiscriminatorB -- and GetExtraTrainableLayers yields those four in the same order, so the base
+    // reproduces the split. Removed under AIDN082.
 }

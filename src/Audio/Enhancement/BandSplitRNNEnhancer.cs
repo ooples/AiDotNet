@@ -60,7 +60,9 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
+    [Scratch]
     private Tensor<T>? _lastPhase;
+    [Buffer]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;

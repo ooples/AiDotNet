@@ -72,6 +72,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents a principal component.
     /// </value>
+    [Buffer]
     private Matrix<T> _components;
 
     /// <summary>
@@ -80,6 +81,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// <value>
     /// A vector containing the mean value of each predictor variable.
     /// </value>
+    [Buffer]
     private Vector<T> _xMean;
 
     /// <summary>
@@ -96,6 +98,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// <value>
     /// A vector containing the standard deviation of each predictor variable.
     /// </value>
+    [Buffer]
     private Vector<T> _xStd;
 
     /// <summary>

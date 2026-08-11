@@ -101,7 +101,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TripoSR: Fast 3D Object Reconstruction from a Single Image", "https://arxiv.org/abs/2403.02151", Year = 2024, Authors = "Tochilkin et al.")]
-public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
+public partial class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the
