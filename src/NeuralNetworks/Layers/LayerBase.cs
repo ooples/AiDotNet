@@ -4666,7 +4666,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // because pre-resolution that length is a placeholder. That is a real failure, not a
         // hypothetical: it cut a 144-value restore down to the 32-element placeholder and
         // MusicSourceSeparator threw "Expected 144 parameters, but got 32" on its first forward.
-        if (!hasRegistry)
+        // Park-and-replay, for BOTH the no-registry case and the still-deferred one.
+        //
+        // The no-registry case is the original wholesale semantics described above. The deferred
+        // case is new and necessary: the guard now lets a shape-deferred layer through instead of
+        // throwing, and such a layer must NOT reach the slicing code below. Its slot lengths are
+        // placeholders, so slicing by them truncates exactly the way the comment above records
+        // ("cut a 144-value restore down to the 32-element placeholder"). Letting it through to
+        // slice would have turned a clear error into silent weight loss -- a worse failure than the
+        // one being fixed.
+        //
+        // Parking the whole vector is what a lazy module can correctly do: hold the payload until
+        // the shape arrives, then hand it on at materialization, which is the convention
+        // Conv1DLayer's ApplyResolvedParameters already follows.
+        if (!hasRegistry || !shapeKnown)
         {
             Parameters = parameters;
             return;
