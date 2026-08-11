@@ -13352,6 +13352,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"model. See #1832 for the diagnostic and #1826 for the facade context.");
         }
 
+        // Materialize BEFORE walking. The filter below reads ParameterCount, and a lazily sized
+        // layer reports 0 until its shape is known -- so filtering first silently SKIPS exactly the
+        // layers a restore is supposed to populate, and the clone keeps its random initialization
+        // while the restore reports success. DCCRN, DeepFilterNet, SAM and ViMUNet each carried a
+        // hand-written UpdateParameters whose first statement was ResolveLazyLayerShapes() for this
+        // reason; that is the base's job, not theirs, and doing it here is what makes those
+        // overrides deletable.
+        //
+        // Best-effort: a model that cannot resolve without a real input is no worse off than before
+        // -- it still reaches the walk, and the guard above has already reported any length
+        // mismatch with the ResolveShapes(sampleInput) advice.
+        foreach (var layer in Layers)
+        {
+            if (layer is Layers.LayerBase<T> lazyLayer) lazyLayer.MaterializeParameters();
+        }
+
         int currentIndex = 0;
         var srcSpan = parameters.AsSpan();
         foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
