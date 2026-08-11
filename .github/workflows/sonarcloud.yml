@@ -1743,7 +1743,13 @@ jobs:
         # handles by simply having fewer candidates - a window that lands entirely past the end
         # reports zero declared and fails the guard below, which is the intended signal that the
         # family shrank and this matrix needs updating.
-        offset: [0, 25, 50, 75, 100, 125, 150]
+        # FIVE MODELS PER RUNNER, NOT TWENTY-FIVE. Every runner-tuning knob is already off here
+        # -- serial collections, no theory pre-enumeration, no discovery diagnostics, Workstation
+        # GC -- and the windows still died on exit 143 about 50 seconds into execution. That rules
+        # out configuration and leaves footprint: 25 LLaVA-scale models do not fit a 16 GB runner
+        # no matter how they are collected. Budget and offset exist for exactly this, so the same
+        # family is covered by more, smaller windows instead of fewer that cannot finish.
+        offset: [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -1790,7 +1796,7 @@ jobs:
           DOTNET_gcServer: '0'
           ADNSHAPE_CONF_NAMESPACE: VisionLanguage
           ADNSHAPE_CONF_OFFSET: ${{ matrix.offset }}
-          ADNSHAPE_CONF_BUDGET: '25'
+          ADNSHAPE_CONF_BUDGET: '5'
         run: |
           # PIPESTATUS, not the pipe: `dotnet test | tee` reports tee's status, so a failing run
           # would look green. Same trap the parameter sweep above documents.
