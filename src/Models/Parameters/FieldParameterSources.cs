@@ -72,7 +72,18 @@ public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParame
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var t = _get();
-        if (t is null) return;
+        if (t is null)
+        {
+            // NOT A SILENT RETURN. This source reads its tensor through an accessor and has no
+            // setter, so with the field still null there is nowhere to put these values and no way
+            // to create it. Dropping them here is how a restored model came back with its declared
+            // shape and none of its learned weights -- the round-trip reported success and the
+            // model predicted differently. An empty vector is genuinely nothing to do; anything
+            // else is a caller restoring before the owner has materialized its storage.
+            if (parameters.Length == 0) return;
+            throw new ParameterLayoutNotReadyException(
+                "restore", new ParameterLayoutSnapshot(GetParameterLayout()));
+        }
         int n = Math.Min(t.Length, parameters.Length);
         for (int i = 0; i < n; i++) t[i] = parameters[i];
     }
@@ -135,7 +146,18 @@ public sealed class MatrixFieldParameterSource<T> : IParameterSource<T>, IParame
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var m = _get();
-        if (m is null) return;
+        if (m is null)
+        {
+            // NOT A SILENT RETURN. This source reads its matrix through an accessor and has no
+            // setter, so with the field still null there is nowhere to put these values and no way
+            // to create it. Dropping them here is how a restored model came back with its declared
+            // shape and none of its learned weights -- the round-trip reported success and the
+            // model predicted differently. An empty vector is genuinely nothing to do; anything
+            // else is a caller restoring before the owner has materialized its storage.
+            if (parameters.Length == 0) return;
+            throw new ParameterLayoutNotReadyException(
+                "restore", new ParameterLayoutSnapshot(GetParameterLayout()));
+        }
         int idx = 0;
         for (int r = 0; r < m.Rows; r++)
         {
@@ -194,7 +216,18 @@ public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>, IPar
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var v = _get();
-        if (v is null) return;
+        if (v is null)
+        {
+            // NOT A SILENT RETURN. This source reads its vector through an accessor and has no
+            // setter, so with the field still null there is nowhere to put these values and no way
+            // to create it. Dropping them here is how a restored model came back with its declared
+            // shape and none of its learned weights -- the round-trip reported success and the
+            // model predicted differently. An empty vector is genuinely nothing to do; anything
+            // else is a caller restoring before the owner has materialized its storage.
+            if (parameters.Length == 0) return;
+            throw new ParameterLayoutNotReadyException(
+                "restore", new ParameterLayoutSnapshot(GetParameterLayout()));
+        }
         int n = Math.Min(v.Length, parameters.Length);
         for (int i = 0; i < n; i++) v[i] = parameters[i];
     }

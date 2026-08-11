@@ -4636,7 +4636,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // ("Expected 0 parameters, but got 3072" across the Finance suite) -- refusing exactly the
         // case the wholesale path below exists to serve. A count of zero here is not a claim that
         // the layer has no parameters; it is the layer saying it does not know yet.
-        if (hasRegistry && parameters.Length != ParameterCount)
+        // DECLARATIONS PRESENT, NOTHING SIZED: the layer is deferred, not empty. The comment above
+        // says a zero count "is the layer saying it does not know yet", and this is the branch that
+        // has to honour it. EnsureMaterializedForParameterSurface ran and still could not size
+        // these tensors, because their shape comes from the input -- BatchNormalizationLayer sizes
+        // from the channel count it has not seen yet, so it reports `tensors 2, ParameterCount 0`
+        // and every restore into one was rejected with "Expected 0 parameters, but got 16".
+        //
+        // A deferred layer takes the wholesale path below, exactly as an unregistered one does:
+        // the vector is parked in Parameters and handed to ApplyResolvedParameters when the shape
+        // arrives. That is what load_state_dict does for a lazy module in PyTorch, and it is the
+        // path Conv1DLayer already depends on.
+        bool deferred = hasRegistry && ParameterCount == 0;
+
+        if (hasRegistry && !deferred && parameters.Length != ParameterCount)
         {
             // Name the layer. A bare count pair says a restore failed somewhere in a hundred-layer
             // model without saying where, and the whole point of deriving these surfaces is that
@@ -4654,7 +4667,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // because pre-resolution that length is a placeholder. That is a real failure, not a
         // hypothetical: it cut a 144-value restore down to the 32-element placeholder and
         // MusicSourceSeparator threw "Expected 144 parameters, but got 32" on its first forward.
-        if (!hasRegistry)
+        if (!hasRegistry || deferred)
         {
             Parameters = parameters;
             return;
