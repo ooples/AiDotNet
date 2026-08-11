@@ -254,17 +254,79 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 $"Expected {layout.ParameterCount.Value} parameters, got {parameters.Length}.",
                 nameof(parameters));
 
-        var ordered = OrderedEntries();
+        var spans = DeclaredSpans();
         int offset = 0;
-        for (int i = 0; i < ordered.Count; i++)
+        for (int i = 0; i < spans.Count; i++)
         {
-            var source = ordered[i].Source;
+            var source = spans[i].Key.Source;
             if (source is null) continue;
-            int count = checked((int)source.ParameterCount);
+
+            // The declared span, never source.ParameterCount. See DeclaredSpans for why.
+            long? declared = spans[i].Value;
+            if (!declared.HasValue) throw new ParameterLayoutNotReadyException("restore", layout);
+
+            int count = checked((int)declared.Value);
             var slice = new Vector<T>(count);
             for (int j = 0; j < count; j++) slice[j] = parameters[offset++];
             source.SetParameters(slice);
         }
+
+        // The spans are what the vector was validated against, so a shortfall here means a source
+        // described a different span than the snapshot did. Report it rather than leaving a
+        // partially-restored model that predicts plausibly and wrongly.
+        if (offset != parameters.Length)
+            throw new InvalidOperationException(
+                $"Restore consumed {offset} of {parameters.Length} values. A component's declared " +
+                "layout disagrees with the manifest snapshot the vector was validated against.");
+    }
+
+    /// <summary>
+    /// The declared span of each ordered entry, computed from the same local layout the manifest
+    /// snapshot is built from.
+    /// </summary>
+    /// <remarks>
+    /// Restore must slice by this rather than by <c>source.ParameterCount</c>. The two can
+    /// disagree — a source that implements <see cref="IParameterLayoutSource"/> reports its span
+    /// through the layout, and while a shape is deferred that layout is authoritative while the
+    /// scalar count is not. Slicing by the source advances the offset by a different amount than
+    /// the total the vector was just validated against, so every later component silently receives
+    /// another component's values: the model restores without error and predicts differently. That
+    /// is the round-trip defect this walk exists to prevent.
+    /// </remarks>
+    private List<KeyValuePair<Entry, long?>> DeclaredSpans()
+    {
+        var ordered = OrderedEntries();
+        var spans = new List<KeyValuePair<Entry, long?>>(ordered.Count);
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            var entry = ordered[i];
+            if (entry.Source is null)
+            {
+                spans.Add(new KeyValuePair<Entry, long?>(entry, null));
+                continue;
+            }
+
+            if (entry.Source is IParameterLayoutSource layoutSource)
+            {
+                long total = 0;
+                bool known = true;
+                var local = layoutSource.GetParameterLayout();
+                for (int j = 0; j < local.Count; j++)
+                {
+                    // Hoisted: indexing twice loses the HasValue proof, since the indexer is not
+                    // guaranteed to return the same instance on a second call.
+                    var slot = local[j];
+                    long? slotCount = slot.ParameterCount;
+                    if (!slotCount.HasValue) { known = false; break; }
+                    total = checked(total + slotCount.Value);
+                }
+                spans.Add(new KeyValuePair<Entry, long?>(entry, known ? total : (long?)null));
+                continue;
+            }
+
+            spans.Add(new KeyValuePair<Entry, long?>(entry, entry.Source.ParameterCount));
+        }
+        return spans;
     }
 
     private List<Entry> OrderedEntries()

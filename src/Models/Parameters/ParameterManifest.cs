@@ -173,6 +173,70 @@ public sealed class ParameterLayoutSnapshot
 
     /// <summary>The exact total, or <c>null</c> rather than a false zero when a shape is deferred.</summary>
     public long? ParameterCount { get; }
+
+    /// <summary>
+    /// Whether another snapshot describes the same slots: same stable IDs, in the same order,
+    /// with the same resolved counts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the comparison a clone check needs, and comparing scalar totals is not. A freshly
+    /// reconstructed model has not run a forward pass, so its layout is
+    /// <see cref="ParameterReadiness.ShapeDeferred"/> and its <see cref="ParameterCount"/> is
+    /// <c>null</c> — reading it throws rather than returning a different number, so equality of
+    /// totals cannot even be evaluated, let alone trusted.
+    /// </para>
+    /// <para>
+    /// It is also strictly stronger where both sides are resolved: two models can hold the same
+    /// number of parameters in a different slot order, and a total that matches hides exactly the
+    /// reordering that would restore each component's values into its neighbour.
+    /// </para>
+    /// <para>
+    /// A slot whose count is unresolved on BOTH sides compares equal — the two agree on the shape
+    /// of their disagreement, which is all that can be asked before materialization. A slot
+    /// resolved on one side and not the other does not.
+    /// </para>
+    /// </remarks>
+    public bool DescribesSameLayoutAs(ParameterLayoutSnapshot? other)
+    {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+        if (Slots.Count != other.Slots.Count) return false;
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            var mine = Slots[i];
+            var theirs = other.Slots[i];
+            if (!string.Equals(mine.StableId, theirs.StableId, StringComparison.Ordinal)) return false;
+            if (mine.ParameterCount != theirs.ParameterCount) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Explains the first difference against another snapshot, for an error a caller can act on.
+    /// Returns <c>null</c> when the layouts match.
+    /// </summary>
+    public string? DescribeDifferenceFrom(ParameterLayoutSnapshot? other)
+    {
+        if (other is null) return "the other layout is null";
+        if (Slots.Count != other.Slots.Count)
+            return $"slot count differs: {Slots.Count} vs {other.Slots.Count}";
+
+        for (int i = 0; i < Slots.Count; i++)
+        {
+            var mine = Slots[i];
+            var theirs = other.Slots[i];
+            if (!string.Equals(mine.StableId, theirs.StableId, StringComparison.Ordinal))
+                return $"slot {i} is '{mine.StableId}' but the other has '{theirs.StableId}' " +
+                       "(the components are ordered differently, so a restore would cross them over)";
+            if (mine.ParameterCount != theirs.ParameterCount)
+                return $"slot '{mine.StableId}' declares " +
+                       $"{mine.ParameterCount?.ToString() ?? "an unresolved count"} but the other declares " +
+                       $"{theirs.ParameterCount?.ToString() ?? "an unresolved count"}";
+        }
+        return null;
+    }
 }
 
 /// <summary>Implemented by sources that can describe their local slots without allocating storage.</summary>
