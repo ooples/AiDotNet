@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Models.Parameters;
 
@@ -25,6 +26,57 @@ public enum ParameterSlotRole
 
     /// <summary>State owned by an external runtime, such as a loaded ONNX graph.</summary>
     External
+}
+
+/// <summary>
+/// One concrete, ordered model-state chunk together with the manifest identity and semantic role
+/// that govern it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A bare <see cref="Tensor{T}"/> cannot say whether an optimizer may mutate it. That ambiguity
+/// made persistent buffers such as batch-normalization running statistics look like trainable
+/// weights whenever the chunked checkpoint surface was compared with the flat state surface.
+/// Carrying the role beside the tensor lets serialization enumerate the complete state while an
+/// optimizer selects only <see cref="ParameterSlotRole.Trainable"/> chunks.
+/// </para>
+/// <para>
+/// <see cref="StableId"/> is durable manifest identity, not a reflection or registration index.
+/// <see cref="Tensor"/> is normally live backing storage. Sources whose native storage is scalar,
+/// matrix, tree, or another non-tensor representation may return a payload tensor that is committed
+/// through their ordinary <c>SetParameters</c> path.
+/// </para>
+/// </remarks>
+public sealed class ParameterChunk<T>
+{
+    /// <summary>Creates one role-aware state chunk.</summary>
+    public ParameterChunk(string stableId, ParameterSlotRole role, Tensor<T> tensor)
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+            throw new ArgumentException("A parameter chunk requires a stable ID.", nameof(stableId));
+        StableId = stableId;
+        Role = role;
+        Tensor = tensor ?? throw new ArgumentNullException(nameof(tensor));
+    }
+
+    /// <summary>The durable path of this chunk in the owning model manifest.</summary>
+    public string StableId { get; }
+
+    /// <summary>Whether and how this chunk participates in optimization and persistence.</summary>
+    public ParameterSlotRole Role { get; }
+
+    /// <summary>The concrete payload, in the same scalar order as the flat state surface.</summary>
+    public Tensor<T> Tensor { get; }
+}
+
+/// <summary>
+/// Exposes the complete persistent state as role-aware chunks without conflating it with the
+/// trainable-only optimizer view.
+/// </summary>
+public interface IParameterChunkSource<T>
+{
+    /// <summary>Yields state chunks in the exact order used by count, flat read, and restore.</summary>
+    IEnumerable<ParameterChunk<T>> GetParameterStateChunks();
 }
 
 /// <summary>States whether a parameter layout can be inspected or restored without allocation.</summary>

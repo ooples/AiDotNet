@@ -4,6 +4,7 @@ using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Graph;
 using AiDotNet.Memory;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -4272,6 +4273,83 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         FillParameters(result, 0);
         return result;
     }
+
+    /// <summary>
+    /// Enumerates the exact state walk used by <see cref="GetParameters"/>, preserving trainable
+    /// tensors, persistent buffers, sparse payloads, legacy flat storage, and child-layer order.
+    /// </summary>
+    internal IEnumerable<ParameterChunk<T>> GetParameterStateChunks(string stablePrefix)
+    {
+        if (Parameters.Length > 0)
+        {
+            yield return new ParameterChunk<T>(
+                stablePrefix + "/legacy",
+                ParameterSlotRole.Trainable,
+                new Tensor<T>(new[] { Parameters.Length }, Parameters));
+        }
+
+        var trainable = GetTrainableParameters();
+        if (trainable is not null)
+        {
+            for (int i = 0; i < trainable.Count; i++)
+            {
+                var tensor = trainable[i];
+                if (tensor is null || TrainableScalarCount(tensor) == 0) continue;
+                yield return new ParameterChunk<T>(
+                    stablePrefix + $"/trainable/{i:D8}",
+                    ParameterSlotRole.Trainable,
+                    AsStoredScalarChunk(tensor));
+            }
+        }
+
+        var buffers = GetRegisteredBuffers();
+        if (buffers is not null)
+        {
+            for (int i = 0; i < buffers.Count; i++)
+            {
+                var (name, tensor) = buffers[i];
+                if (tensor is null || TrainableScalarCount(tensor) == 0) continue;
+                string bufferId = string.IsNullOrWhiteSpace(name) ? $"buffer-{i:D8}" : name;
+                yield return new ParameterChunk<T>(
+                    stablePrefix + "/buffers/" + bufferId,
+                    ParameterSlotRole.LearnedState,
+                    AsStoredScalarChunk(tensor));
+            }
+        }
+
+        var subs = GetSubLayers();
+        if (subs is null) yield break;
+        for (int i = 0; i < subs.Count; i++)
+        {
+            var sub = subs[i];
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            string subPrefix = stablePrefix + $"/children/{i:D8}";
+            if (sub is LayerBase<T> layerBase)
+            {
+                foreach (var chunk in layerBase.GetParameterStateChunks(subPrefix))
+                    yield return chunk;
+            }
+            else
+            {
+                var flat = sub.GetParameters();
+                if (flat.Length == 0) continue;
+                yield return new ParameterChunk<T>(
+                    subPrefix,
+                    sub.SupportsTraining ? ParameterSlotRole.Trainable : ParameterSlotRole.LearnedState,
+                    new Tensor<T>(new[] { flat.Length }, flat));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sparse tensors expose a dense logical <c>Length</c>, while the flat parameter contract
+    /// contains only their stored values. Return a zero-copy view of that compact payload so chunk
+    /// length, count, read, and restore all describe the same scalars without densification.
+    /// </summary>
+    private static Tensor<T> AsStoredScalarChunk(Tensor<T> tensor)
+        => tensor is SparseTensor<T> sparse
+            ? new Tensor<T>(new[] { sparse.NonZeroCount }, sparse.DataVector)
+            : tensor;
 
     /// <summary>
     /// Writes this layer's parameters into <paramref name="dest"/> starting at

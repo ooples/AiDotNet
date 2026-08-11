@@ -9,25 +9,16 @@ using Xunit.Abstractions;
 namespace AiDotNet.Tests.IntegrationTests;
 
 /// <summary>
-/// Measures whether <c>GetParameterChunks()</c> enumerates the SAME tensors that
+/// Enforces that <c>GetParameterChunks()</c> enumerates the SAME persistent state that
 /// <c>ParameterCount</c> counts and <c>GetParameters()</c> returns.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is a precondition check, not a bug hunt. The plan is to make <c>ParameterCount</c> and
-/// <c>GetParameters</c> both fold from <c>GetParameterChunks()</c> so they cannot disagree. That is
-/// only safe if the chunk enumeration already covers the same tensors -- and there is concrete
-/// reason to doubt it. <c>GetParameterChunks</c> documents itself as yielding "the per-tensor
-/// weight references registered via <c>RegisterTrainableParameter</c>" for
-/// <c>ITrainableLayer&lt;T&gt;</c> layers, and "for non-trainable / parameterless layers this
-/// yields nothing." Each layer's <c>GetParameters()</c>, by contrast, is a hand-written flattening
-/// of whatever fields that layer happens to hold. Those are two different sources.
-/// </para>
-/// <para>
-/// A layer that flattens weights in <c>GetParameters()</c> but never registered them would
-/// contribute zero chunks. Rewiring the base would then drop those parameters from BOTH surfaces
-/// at once -- and the pairing gate would stay green, because both sides would agree on the wrong
-/// number. That is the failure this test exists to find BEFORE the rewire, not after.
+/// The framework bases and generator now expose one stable manifest for count, flat values,
+/// chunks, and restore. Role-aware chunks keep optimizer semantics separate: trainable tensors and
+/// non-trainable buffers occupy the same checkpoint order, but only trainable roles are handed to
+/// an optimizer. Any disagreement here is therefore a product contract failure, not a report-only
+/// migration metric.
 /// </para>
 /// <para>
 /// Chunk lengths themselves are references, but ASKING for them is not free:
@@ -145,19 +136,17 @@ public class ParameterChunkParityTests
         foreach (var n in noChunks.Take(40)) _output.WriteLine("  NO-CHUNKS " + n);
         foreach (var d in divergent) _output.WriteLine("  DIVERGENT " + d);
 
-        // Reported, not enforced. This measures whether a planned refactor is safe; it is not
-        // itself a contract anyone has agreed to yet, and failing the build on it would block
-        // work on a question we are still answering.
-        // THE HARNESS GATES ITSELF, NOT THE PARITY RESULT. This is a reporting sweep, so a
-        // mismatch is recorded rather than failed -- but Assert.True(true) also made "classified
-        // hundreds of models" indistinguishable from "aborted after three", while holding a
-        // 30-minute CI slot either way. A harness that produced no evidence is a failure of the
-        // harness even when it is not a failure of the thing under test.
         Assert.True(compared > 0,
             "The chunk-parity sweep compared NOTHING. It holds a 30-minute slot, so a run that " +
             "measured nothing is an infrastructure failure rather than a clean report. " +
             $"Skipped: {noChunks.Count} with no chunk API, {tooLarge} too large to enumerate, " +
             $"{unsized} not sized yet, {unmeasurable} unmeasurable.");
+        Assert.True(noChunks.Count == 0,
+            "Every materialized model must inherit or provide the canonical chunk API.\n" +
+            string.Join("\n", noChunks));
+        Assert.True(divergent.Count == 0,
+            "ParameterCount, GetParameters, and GetParameterChunks must fold the same state " +
+            "manifest.\n" + string.Join("\n", divergent));
     }
 
     private static bool ReadBool(object instance, string propertyName)

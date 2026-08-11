@@ -167,6 +167,80 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         return result;
     }
 
+    /// <summary>
+    /// Yields the registered state in stable-ID order. Tensor-backed child sources keep their
+    /// zero-copy chunks; classical sources receive one exact flat payload chunk.
+    /// </summary>
+    public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
+    {
+        var ordered = OrderedEntries();
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            var entry = ordered[i];
+            var source = entry.Source;
+            if (source is null) continue;
+
+            if (source is IParameterChunkSource<T> chunkSource)
+            {
+                foreach (var chunk in chunkSource.GetParameterStateChunks())
+                {
+                    if (chunk is null || chunk.Tensor.Length == 0) continue;
+                    var role = entry.Role == ParameterSlotRole.Trainable
+                        ? chunk.Role
+                        : entry.Role;
+                    string localId = chunk.StableId == "$"
+                        ? entry.StableId
+                        : entry.StableId + "/" + chunk.StableId;
+                    yield return new ParameterChunk<T>(localId, role, chunk.Tensor);
+                }
+                continue;
+            }
+
+            var flat = source.GetParameters();
+            if (flat.Length == 0) continue;
+
+            if (source is IParameterLayoutSource layoutSource)
+            {
+                var layout = layoutSource.GetParameterLayout();
+                int offset = 0;
+                for (int j = 0; j < layout.Count; j++)
+                {
+                    var slot = layout[j];
+                    if (!slot.ParameterCount.HasValue)
+                        throw new ParameterLayoutNotReadyException(
+                            "enumerate chunks", new ParameterLayoutSnapshot(layout));
+                    int count = checked((int)slot.ParameterCount.Value);
+                    if (count == 0) continue;
+                    if (offset + count > flat.Length)
+                        throw new InvalidOperationException(
+                            $"Parameter layout for '{entry.StableId}' describes more values than " +
+                            "its flat parameter source contains.");
+
+                    var values = new Vector<T>(count);
+                    flat.AsSpan().Slice(offset, count).CopyTo(values.AsWritableSpan());
+                    string localId = slot.StableId == "$"
+                        ? entry.StableId
+                        : entry.StableId + "/" + slot.StableId;
+                    var role = entry.Role == ParameterSlotRole.Trainable ? slot.Role : entry.Role;
+                    yield return new ParameterChunk<T>(
+                        localId, role, new Tensor<T>(new[] { count }, values));
+                    offset += count;
+                }
+                if (offset != flat.Length)
+                    throw new InvalidOperationException(
+                        $"Parameter layout for '{entry.StableId}' describes {offset} values but " +
+                        $"its flat parameter source contains {flat.Length}.");
+                continue;
+            }
+
+            // Tensor(Vector) shares the Vector's storage. For native tensor sources the branch
+            // above supplies the model's real backing tensor; this fallback is the explicit,
+            // immutable-payload style used by scalar/tree/classical sources.
+            yield return new ParameterChunk<T>(entry.StableId, entry.Role,
+                new Tensor<T>(new[] { flat.Length }, flat));
+        }
+    }
+
     /// <summary>Restores slices using the exact manifest snapshot used to validate the vector.</summary>
     public void SetParameters(Vector<T> parameters)
     {
