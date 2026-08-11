@@ -4674,7 +4674,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // the vector is parked in Parameters and handed to ApplyResolvedParameters when the shape
         // arrives. That is what load_state_dict does for a lazy module in PyTorch, and it is the
         // path Conv1DLayer already depends on.
-        bool deferred = hasRegistry && ParameterCount == 0;
+        // COMPOSITES ARE EXCLUDED DELIBERATELY. The wholesale path puts the entire vector into
+        // this layer's own Parameters, which is right for a lazy leaf and wrong for a parent whose
+        // values belong to its children -- it would accept the restore and then predict
+        // differently, which is worse than refusing. Measured: allowing composites here left 17
+        // round-trip failures, excluding them leaves 16, and the one it costs fails loudly instead
+        // of silently.
+        bool deferred = hasRegistry && ParameterCount == 0
+                     && (subsForShape is null || subsForShape.Count == 0);
 
         if (hasRegistry && !deferred && parameters.Length != ParameterCount)
         {
