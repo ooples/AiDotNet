@@ -437,7 +437,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var clone = new OnlineNaiveBayesClassifier<T>(_options);
         clone._knownClasses.AddRange(_knownClasses);

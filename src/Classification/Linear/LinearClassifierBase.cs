@@ -336,7 +336,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = (LinearClassifierBase<T>)Clone();
         newModel.SetParameters(parameters);

@@ -874,7 +874,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = Clone();
         if (newModel is CalibratedClassifier<T> calibrated)

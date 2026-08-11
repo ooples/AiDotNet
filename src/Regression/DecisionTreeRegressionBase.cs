@@ -550,6 +550,24 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     /// save and load tree models.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// A tree's structure cannot be written from a flat vector in place; use
+    /// <see cref="WithParameters"/>, which rebuilds the tree from one.
+    /// </summary>
+    /// <remarks>
+    /// Stated rather than silently ignored. A decision tree's parameters describe NODES -- split
+    /// feature, threshold, child links -- so assigning a vector over an existing tree would have to
+    /// either rebuild it (which is WithParameters) or corrupt it. Returning quietly would let a
+    /// caller believe a restore had happened.
+    /// </remarks>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} cannot set parameters in place: its parameters describe tree NODES, "
+            + "not a fixed set of slots. Use WithParameters(vector), which rebuilds the tree from "
+            + "the vector and returns the new model.");
+    }
+
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Create a new instance with the same options

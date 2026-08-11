@@ -749,7 +749,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Creates a new model. For tree models, the parameters
     /// don't fully capture the model state.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new HistGradientBoostingClassifier<T>(_maxBins, _maxDepth, _nEstimators,
             _learningRate, _minSamplesLeaf, _l2Regularization);

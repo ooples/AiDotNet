@@ -603,7 +603,7 @@ public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new untrained model with same hyperparameters.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new BalancedRandomForestClassifier<T>(_nEstimators, _maxDepth, _maxFeatures,
             _minSamplesSplit, _minSamplesLeaf, _samplingStrategy, _bootstrap);
