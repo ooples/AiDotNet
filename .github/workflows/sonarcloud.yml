@@ -288,6 +288,7 @@ jobs:
           path: |
             src/bin/Release/
             tests/AiDotNet.Tests/bin/Release/
+            tests/AiDotNet.ParameterSweepWorker/bin/Release/
             tests/AiDotNet.Serving.Tests/bin/Release/
           retention-days: 1
 
@@ -1712,43 +1713,30 @@ jobs:
   model-shape-conformance-windows:
     name: Model shape conformance (offset ${{ matrix.offset }})
     runs-on: ubuntu-latest
+    needs: build
     permissions:
       contents: read
-    # WHY THIS IS SHARDED RATHER THAN ONE JOB. The conformance sweep checks every model's declared
-    # shape contract against a real Predict. Run whole against the vision-language family it does not
-    # finish: 170 LLaVA-scale models exceeded thirty minutes locally without reporting a single
-    # result, so the run was pure cost with no evidence. ModelContractConformanceTests already takes
-    # ADNSHAPE_CONF_OFFSET / ADNSHAPE_CONF_BUDGET for exactly this, and the windows are independent -
-    # each constructs its own models and shares nothing - so they belong on separate runners rather
-    # than in sequence. Wall clock goes from ~3.5 hours serial to one window.
+    # WHY THIS REMAINS SHARDED. The conformance sweep checks every model's declared shape contract
+    # against a real Predict. Explicitly unavailable laws are now classified without construction,
+    # and each concrete law is probed in its own bounded worker, which fixes the former runner OOM.
+    # Keeping deterministic five-model windows preserves per-family inventory reports and ensures a
+    # future wave of concrete contracts scales horizontally instead of rebuilding one serial bottleneck.
     timeout-minutes: 60
-    # A REPORTER, NOT A GATE - YET, and this is the ladder every other rule in this work climbed.
-    # ADNSHAPE006 and ADNSHAPE007 both entered as suppressed warnings while their backlog was
-    # non-zero and were promoted to Error only once it reached zero. This job is at the same stage:
-    # the vision-language family has NEVER produced a passing conformance run - every local attempt
-    # at the full namespace exceeded thirty minutes without reporting, and the only green result was
-    # for the Encoders sub-namespace. Gating the branch on an unmeasured family is exactly the
-    # mistake of asserting before measuring, and it turned seven windows red on their first run.
-    #
-    # It stays continue-on-error until the windows report a real agreed/declined/disagreed split.
-    # Then the backlog is known, the disagreements can be worked to zero, and THIS LINE COMES OUT -
-    # the same promotion ADNSHAPE006 got. The step's own guards below still fail loudly for
-    # infrastructure faults, so "the harness never ran" is never mistaken for "nothing to report".
-    continue-on-error: true
+    # This is a real gate. Explicitly unavailable contracts are accounted for without construction;
+    # every concrete contract runs in a bounded child process and must agree with Predict. That makes
+    # a window containing only honest declines valid while preserving strict failure for a mismatch,
+    # crash, timeout, or unconstructable claimed contract.
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       matrix:
-        # 170 models in 25-model windows. The last window runs past the end, which the harness
+        # 170 models in five-model windows. The last window runs past the end, which the harness
         # handles by simply having fewer candidates - a window that lands entirely past the end
         # reports zero declared and fails the guard below, which is the intended signal that the
         # family shrank and this matrix needs updating.
-        # FIVE MODELS PER RUNNER, NOT TWENTY-FIVE. Every runner-tuning knob is already off here
-        # -- serial collections, no theory pre-enumeration, no discovery diagnostics, Workstation
-        # GC -- and the windows still died on exit 143 about 50 seconds into execution. That rules
-        # out configuration and leaves footprint: 25 LLaVA-scale models do not fit a 16 GB runner
-        # no matter how they are collected. Budget and offset exist for exactly this, so the same
-        # family is covered by more, smaller windows instead of fewer that cannot finish.
+        # Five is also the forward-looking resource envelope: each concrete contract receives up to
+        # three minutes and 1 GiB in an isolated worker, so one window has a known upper bound even as
+        # the current explicit-unavailability backlog is replaced by generated contracts.
         offset: [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170]
     steps:
       - name: Checkout code
@@ -1766,12 +1754,21 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # Same omission as the parameter sweep above, same consequence: these seven windows were
-      # authored after harden-xunit-runner.ps1 and never called it, so every one of them died on
-      # exit 143 with a shutdown signal minutes into a 60-minute budget. Build first so the runner
-      # config exists in the build output for the hardening step to rewrite.
-      - name: Build test project
-        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: build-output-${{ github.sha }}
+
+      - name: Restore test assets
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
 
       - name: Harden xUnit runner
         shell: pwsh
