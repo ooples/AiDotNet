@@ -12,7 +12,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Validation;
+using AiDotNet.Validation;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -82,8 +83,68 @@ namespace AiDotNet.NeuralNetworks
 
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
-        public override long ParameterCount => _weights.Values.Sum(w => w.Length) +
-                                      _architectureParams.Sum(a => a.Rows * a.Columns);
+        /// <summary>
+        /// The supernet's parameters: its per-operation weights, then its architecture alphas.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A COMPUTED surface. The weights are keyed by operation and sized from the input, so they
+        /// cannot be allocated in the constructor -- there is no input yet to size them from. That
+        /// makes SuperNet lazy in the same sense a shape-inferring layer is lazy, and the answer is
+        /// the same one the rest of the library already uses: materialize before measuring. Both
+        /// PyTorch and Keras require exactly this of their lazy modules before a checkpoint means
+        /// anything.
+        /// </para>
+        /// <para>
+        /// Declaring one source is what makes the count and the vector agree at any instant, which
+        /// three hand-written members could not guarantee: ParameterCount summed a dictionary and a
+        /// list while GetParameters and SetParameters each walked them again separately.
+        /// </para>
+        /// <para>
+        /// Order is weights then architecture parameters -- the order the hand-written surfaces
+        /// used, and therefore the serialization order. Dictionary enumeration order is insertion
+        /// order for a dictionary that is only ever added to, which is the case here.
+        /// </para>
+        /// </remarks>
+        protected override void RegisterComponents()
+        {
+            base.RegisterComponents();
+            RegisterParameterComponent(new DelegatingParameterSource<T>(
+                () => _weights.Values.Sum(w => (long)w.Length)
+                      + _architectureParams.Sum(a => (long)a.Rows * a.Columns),
+                () =>
+                {
+                    var values = new List<T>();
+                    foreach (var w in _weights.Values)
+                    {
+                        for (int i = 0; i < w.Length; i++) values.Add(w[i]);
+                    }
+                    foreach (var alpha in _architectureParams)
+                    {
+                        for (int r = 0; r < alpha.Rows; r++)
+                        for (int c = 0; c < alpha.Columns; c++) values.Add(alpha[r, c]);
+                    }
+                    var flat = new Vector<T>(values.Count);
+                    for (int i = 0; i < values.Count; i++) flat[i] = values[i];
+                    return flat;
+                },
+                values =>
+                {
+                    int at = 0;
+                    foreach (var w in _weights.Values)
+                    {
+                        for (int i = 0; i < w.Length && at < values.Length; i++) w[i] = values[at++];
+                    }
+                    foreach (var alpha in _architectureParams)
+                    {
+                        for (int r = 0; r < alpha.Rows; r++)
+                        for (int c = 0; c < alpha.Columns && at < values.Length; c++)
+                            alpha[r, c] = values[at++];
+                    }
+                }));
+        }
+
+        // Replaced by the declared parameter source below. Removed under AIDN082.
 
         /// <summary>
         /// Gets the default loss function used by this model for gradient computation.
@@ -754,48 +815,9 @@ namespace AiDotNet.NeuralNetworks
             };
         }
 
-        // IFullModel implementation
-        public override Vector<T> GetParameters()
-        {
-            var allParams = new List<T>();
+        // Replaced by the declared parameter source below. Removed under AIDN082.
 
-            // Add architecture parameters
-            foreach (var alpha in _architectureParams)
-            {
-                for (int i = 0; i < alpha.Rows; i++)
-                    for (int j = 0; j < alpha.Columns; j++)
-                        allParams.Add(alpha[i, j]);
-            }
-
-            // Add weights
-            foreach (var weight in _weights.Values)
-            {
-                for (int i = 0; i < weight.Length; i++)
-                    allParams.Add(weight[i]);
-            }
-
-            return new Vector<T>(allParams.ToArray());
-        }
-
-        public override void SetParameters(Vector<T> parameters)
-        {
-            int idx = 0;
-
-            // Set architecture parameters
-            foreach (var alpha in _architectureParams)
-            {
-                for (int i = 0; i < alpha.Rows; i++)
-                    for (int j = 0; j < alpha.Columns; j++)
-                        alpha[i, j] = parameters[idx++];
-            }
-
-            // Set weights
-            foreach (var weight in _weights.Values)
-            {
-                for (int i = 0; i < weight.Length; i++)
-                    weight[i] = parameters[idx++];
-            }
-        }
+        // Replaced by the declared parameter source below. Removed under AIDN082.
 
         public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
         {
