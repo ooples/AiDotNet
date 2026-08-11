@@ -129,12 +129,68 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// add that 0.3% correction, resulting in a final prediction of 2.8% growth.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Fits the VAR part, then the MA part on its residuals.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This override did not exist, which is why the model was a VAR. Every piece of the moving
+    /// average was written -- EstimateMACoefficients, PrepareLaggedResiduals, PredictMA,
+    /// CalculateResiduals -- and each had exactly ONE reference in the file: its own definition.
+    /// Nothing called any of them. _residuals never left Matrix&lt;T&gt;.Empty() and
+    /// _maCoefficients stayed zero, and both were serialized anyway.
+    /// </para>
+    /// <para>
+    /// VARMA is a VAR plus a moving average of its own errors. Fitting one and not the other gives
+    /// a model that is not wrong so much as not the model asked for: the AR part predicts, and the
+    /// systematic error the MA part exists to correct is left in.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        base.TrainCore(x, y);
+
+        // The MA part is a regression on the VAR's own residuals, so it can only be fitted after
+        // the AR part has been.
+        _residuals = CalculateResiduals(x, y);
+
+        if (_varmaOptions.MaLag > 0 && _residuals.Rows > _varmaOptions.MaLag)
+        {
+            EstimateMACoefficients();
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The AR prediction plus the MA correction. The comment this replaces claimed "the MA
+    /// component is already incorporated during training" and that out-of-sample correction was
+    /// "negligible"; neither was true, because no MA component was ever fitted.
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // For in-sample predictions, base.Predict returns training values directly.
-        // The MA component is already incorporated during training.
-        // For out-of-sample, the MA correction is negligible (assumed zero errors).
-        return base.Predict(input);
+        var arPrediction = base.Predict(input);
+
+        if (_varmaOptions.MaLag <= 0 || _residuals.Rows == 0)
+        {
+            return arPrediction;
+        }
+
+        var maCorrection = PredictMA();
+        if (maCorrection.Length == 0)
+        {
+            return arPrediction;
+        }
+
+        // PredictMA returns one correction per output dimension, formed from the most recent
+        // residuals. It applies to the forecast, so add it to each predicted step.
+        var result = new Vector<T>(arPrediction.Length);
+        for (int i = 0; i < arPrediction.Length; i++)
+        {
+            T correction = maCorrection[i % maCorrection.Length];
+            result[i] = NumOps.Add(arPrediction[i], correction);
+        }
+
+        return result;
     }
 
     /// <summary>
