@@ -54,7 +54,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Bagging Predictors", "https://doi.org/10.1007/BF00058655", Year = 1996, Authors = "Leo Breiman")]
-public class BaggingClassifier<T> : MetaClassifierBase<T>
+public partial class BaggingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.

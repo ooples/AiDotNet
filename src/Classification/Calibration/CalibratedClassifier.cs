@@ -54,7 +54,7 @@ namespace AiDotNet.Classification.Calibration;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Predicting Good Probabilities with Supervised Learning", "https://doi.org/10.1145/1102351.1102430")]
-public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
+public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
