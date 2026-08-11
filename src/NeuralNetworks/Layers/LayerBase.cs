@@ -637,6 +637,124 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// The sub-layers this composite owns, each paired with the input shape it takes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A composite overrides this with DATA -- which child receives which shape -- and gets the
+    /// whole deferred-construction behaviour from the base: cheap construction, allocation on
+    /// first real use, and a parameter surface that does not depend on execution history. Only
+    /// the composite can know that its second feed-forward takes the feed-forward width rather
+    /// than the embedding width, so that one fact is what it declares; deciding WHEN to allocate
+    /// is not its job and it should not be repeating the flags and branches that decide it.
+    /// </para>
+    /// <para>
+    /// Empty by default, which is correct for a leaf layer and for a composite that has not been
+    /// migrated: <see cref="BringUpDeclaredSubLayers"/> then does nothing and the layer behaves
+    /// exactly as it did before.
+    /// </para>
+    /// </remarks>
+    protected virtual IReadOnlyList<(LayerBase<T>? Child, TensorShape InputShape)> DeclaredSubLayerShapes()
+        => System.Array.Empty<(LayerBase<T>?, TensorShape)>();
+
+    /// <summary>
+    /// Wraps dimensions as a <see cref="TensorShape"/> without copying them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="TensorShape"/> is the library's shape type -- an immutable readonly struct over the
+    /// dimensions -- and it is what a declaration should be expressed in rather than a bare
+    /// <c>int[]</c>. Its PUBLIC constructor defensively clones, and <c>ToArray()</c> clones again, so
+    /// the obvious spelling would pay two copies to describe a shape that never changes. The internal
+    /// wrap constructor exists for exactly this case and AiDotNet can reach it
+    /// (<c>InternalsVisibleTo</c>), which is the same escape hatch ADNPERF001 points callers at when
+    /// it rejects a throwaway <c>Shape.ToArray()</c>.
+    /// </para>
+    /// <para>
+    /// The caller must not mutate the array afterwards. A declaration built once and cached satisfies
+    /// that by construction, which is how it is meant to be used.
+    /// </para>
+    /// </remarks>
+    protected static TensorShape ShapeOf(params int[] dims) => TensorShape.WrapUnsafe(dims);
+
+    /// <summary>
+    /// True while a constructor is bringing this layer up WITHOUT allocating weights.
+    /// </summary>
+    /// <remarks>
+    /// The sibling of <see cref="IsResolvingShapesOnly"/>, which covers an external shape walker.
+    /// Both answer the same question -- is the caller asking for dimensions or for weights -- and
+    /// <see cref="BringUpDeclaredSubLayers"/> is the only place that needs to read either.
+    /// </remarks>
+    protected bool IsConstructingShapesOnly { get; private set; }
+
+    /// <summary>
+    /// True once <see cref="BringUpDeclaredSubLayers"/> has actually ALLOCATED the declared
+    /// children, as opposed to merely resolving their shapes.
+    /// </summary>
+    /// <remarks>
+    /// A composite guards its initializer on this in addition to its own "children exist" flag,
+    /// which is what keeps the initializer RE-ENTERABLE: construction satisfies "children exist"
+    /// and leaves this false, and the first caller that genuinely needs weights performs the
+    /// allocation on a second entry.
+    /// </remarks>
+    protected bool DeclaredSubLayerWeightsMaterialized { get; private set; }
+
+    /// <summary>
+    /// Runs this layer's initializer in shape-only mode, for an eager constructor that knows its
+    /// dimensions and must not pay for its weights yet.
+    /// </summary>
+    /// <remarks>
+    /// Measured on the layer this was extracted from: one LLaVA-NeXT-Video decoder layer
+    /// (heads 32, ff 16384, embed 4096) cost 3,457 MB and 1,974 ms to construct eagerly, against
+    /// 0.5 MB and 16 ms to resolve only its shapes -- and the model stacks about 30 of them, which
+    /// is the difference between constructing and OutOfMemoryException.
+    /// </remarks>
+    protected void InitializeShapesWithoutAllocating()
+    {
+        IsConstructingShapesOnly = true;
+        try { EnsureInitialized(); }
+        finally { IsConstructingShapesOnly = false; }
+    }
+
+    /// <summary>
+    /// Brings every child from <see cref="DeclaredSubLayerShapes"/> up to shapes, or all the way
+    /// to weights, according to who is asking. Returns true when weights were allocated.
+    /// </summary>
+    /// <remarks>
+    /// WHO IS ASKING DECIDES. A shape walker and a constructor want dimensions; anything else --
+    /// a real forward, SetParameters, ApplyParameterLayout -- is about to use the weights. The
+    /// allocating branch goes through <see cref="ResolveAndMaterialize"/> rather than either call
+    /// alone, because a child left shape-only declines to materialize and a child that already
+    /// has its shape ignores a second resolve.
+    /// </remarks>
+    protected bool BringUpDeclaredSubLayers()
+    {
+        var declared = DeclaredSubLayerShapes();
+        if (declared is null || declared.Count == 0) return false;
+
+        bool shapesOnly = IsResolvingShapesOnly || IsConstructingShapesOnly;
+        for (int i = 0; i < declared.Count; i++)
+        {
+            var (child, shape) = declared[i];
+            if (child is null) continue;
+
+            // The backing dimensions, NOT ToArray(). ResolveShapesOnly/ResolveFromShape take int[]
+            // and ToArray() would clone one per child per call purely to hand it straight back --
+            // the throwaway copy ADNPERF001 exists to reject. The field is internal and AiDotNet is
+            // an InternalsVisibleTo friend, and a cached declaration is never mutated.
+            int[] dims = shape._dims ?? System.Array.Empty<int>();
+            if (dims.Length == 0) continue;
+
+            if (shapesOnly) child.ResolveShapesOnly(dims);
+            else ResolveAndMaterialize(child, dims);
+        }
+
+        if (shapesOnly) return false;
+        DeclaredSubLayerWeightsMaterialized = true;
+        return true;
+    }
+
+    /// <summary>
     /// Forces lazy parameter allocation now (the hook <see cref="MaterializeParameters"/> drives).
     /// </summary>
     /// <remarks>

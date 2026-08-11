@@ -434,13 +434,9 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // until the first forward.
         if (_embeddingSize > 0)
         {
-            // SHAPES ONLY HERE. A constructor must not allocate a decoder's worth of weights:
-            // measured, one LLaVA-NeXT-Video decoder layer (heads 32, ff 16384, embed 4096) cost
-            // 3,457 MB and 1,974 ms allocating, against 0.5 MB and 16 ms resolving shapes, and
-            // 32 of them is the difference between constructing the model and OutOfMemoryException.
-            _constructingShapesOnly = true;
-            try { EnsureInitialized(); }
-            finally { _constructingShapesOnly = false; }
+            // SHAPES ONLY HERE. A constructor must not allocate a decoder's worth of weights; the
+            // base owns that policy and the measurement behind it.
+            InitializeShapesWithoutAllocating();
         }
     }
 
@@ -448,18 +444,12 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// True once sublayers (attention, norm1, ffn1, ffn2, norm2) have been constructed.
     /// Eager ctor sets this <c>true</c> at construction.
     /// </summary>
-    private bool _isInitialized;
-
-    /// <summary>True once the sublayers' WEIGHTS are allocated, not merely their shapes resolved.</summary>
     /// <remarks>
-    /// Separate from <c>_isInitialized</c> so <see cref="EnsureInitialized"/> is RE-ENTERABLE:
-    /// construction resolves shapes and leaves this false, and the first caller that genuinely needs
-    /// weights - a real forward, a restore, ApplyParameterLayout - performs the allocation.
+    /// Says the children EXIST, not that their weights do -- that second question is
+    /// <see cref="LayerBase{T}.DeclaredSubLayerWeightsMaterialized"/>, and the two together are
+    /// what keep <see cref="EnsureInitialized"/> re-enterable.
     /// </remarks>
-    private bool _sublayerWeightsMaterialized;
-
-    /// <summary>Set only while the eager constructor runs, so it resolves shapes without allocating.</summary>
-    private bool _constructingShapesOnly;
+    private bool _isInitialized;
 
     /// <summary>
     /// AiDotNet#1370 shape oracle override: when the eager-dimension ctor
@@ -535,17 +525,47 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         ResolveShapes(resolved, declaredOutput);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The children take the embedding width, except the second feed-forward, which consumes the
+    /// feed-forward width the first one projected up to, and self-attention, which wants a
+    /// sequence axis in front. That asymmetry is the only thing about the deferral that this layer
+    /// knows and the base cannot derive, so it is the only thing declared here.
+    /// </remarks>
+    protected override IReadOnlyList<(LayerBase<T>? Child, TensorShape InputShape)> DeclaredSubLayerShapes()
+    {
+        // BUILT ONCE. The declaration is a constant of this layer once _embeddingSize is known, and
+        // EnsureInitialized re-enters (construction resolves shapes, a later caller allocates), so
+        // rebuilding it per call would allocate the shapes and the list again every time for a
+        // description that cannot have changed.
+        if (_declaredSubLayerShapes is not null) return _declaredSubLayerShapes;
+
+        var embed = ShapeOf(_embeddingSize);
+        _declaredSubLayerShapes = new (LayerBase<T>?, TensorShape)[]
+        {
+            (_selfAttention, ShapeOf(1, _embeddingSize)),
+            (_norm1,         embed),
+            (_feedForward1,  embed),
+            (_feedForward2,  ShapeOf(_feedForwardDim)),
+            (_norm2,         embed),
+        };
+        return _declaredSubLayerShapes;
+    }
+
+    /// <summary>Cached <see cref="DeclaredSubLayerShapes"/>; the children and their widths never change once built.</summary>
+    private (LayerBase<T>? Child, TensorShape InputShape)[]? _declaredSubLayerShapes;
+
     protected override void EnsureInitialized()
     {
         // TWO CONDITIONS, NOT ONE. _isInitialized means the sublayers EXIST with resolved shapes;
-        // _sublayerWeightsMaterialized means their weights are ALLOCATED. Construction satisfies only
-        // the first, so this must stay re-enterable - the write path calls it again and that call is
-        // what allocates.
-        if (_isInitialized && _sublayerWeightsMaterialized) return;
+        // DeclaredSubLayerWeightsMaterialized means their weights are ALLOCATED. Construction
+        // satisfies only the first, so this must stay re-enterable - the write path calls it again
+        // and that call is what allocates.
+        if (_isInitialized && DeclaredSubLayerWeightsMaterialized) return;
 
         lock (InitializationLock)
         {
-            if (_isInitialized && _sublayerWeightsMaterialized) return;
+            if (_isInitialized && DeclaredSubLayerWeightsMaterialized) return;
             if (_embeddingSize <= 0)
                 throw new InvalidOperationException(
                     "TransformerEncoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
@@ -601,50 +621,9 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             // Sub-layers are sized from the known embedding size rather than left lazy, so that
             // SetParameters dispatch -- which slices by ParameterCount -- does not see 0 for a lazy
             // FeedForwardLayer (-1 input × outDim + outDim = 0) and silently skip its serialized
-            // weights.
-            int[] subInputShape = new[] { _embeddingSize };
-
-            // WHO IS ASKING DECIDES. A shape-walker (LayerBase.ResolveShapesOnly sets
-            // IsResolvingShapesOnly) and the constructor both want dimensions without allocation.
-            // Anything else - a real forward, SetParameters, ApplyParameterLayout - is about to use
-            // the weights, so it gets them. LayerBase.EnsureParametersMaterialized is what routes
-            // the write path back here a second time, and _sublayerWeightsMaterialized is what makes
-            // that second entry do something.
-            if (IsResolvingShapesOnly || _constructingShapesOnly)
-            {
-                _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
-                _norm1.ResolveShapesOnly(subInputShape);
-                _feedForward1.ResolveShapesOnly(subInputShape);
-                _feedForward2.ResolveShapesOnly(new[] { _feedForwardDim });
-                _norm2.ResolveShapesOnly(subInputShape);
-            }
-            else
-            {
-                // BOTH CALLS, and neither is redundant - they cover the two states a sublayer can be in
-                // and each is a no-op in the other's case.
-                //
-                //   ResolveFromShape gives a sublayer its shape, and opens with
-                //   `if (IsShapeResolved) return;` - so it is the one that matters for a sublayer the
-                //   shape-only pass left unresolved, and free for one it did not.
-                //
-                //   MaterializeParameters allocates, and declines on a layer whose shape is unresolved
-                //   (LayerBase gates it on IsShapeResolved) - so it is the one that matters for a
-                //   sublayer that already has its shape but no weights.
-                //
-                // Calling only MaterializeParameters was measured wrong: VideoCLIP's TEXT tower never
-                // runs a forward, so its sublayers were still unresolved here, every one of them
-                // declined, and the layer serialized 16,452 values - the MultiHeadAttentionLayer alone,
-                // which allocates without a shape because it is construction-sized - against the 49,792
-                // a restored copy expects. The VIDEO tower passed only because training had run real
-                // data through it and resolved its sublayers as a side effect. A save must not depend
-                // on which branch of a dual-tower model happened to execute.
-                ResolveAndMaterialize(_selfAttention, new[] { 1, _embeddingSize });
-                ResolveAndMaterialize(_norm1, subInputShape);
-                ResolveAndMaterialize(_feedForward1, subInputShape);
-                ResolveAndMaterialize(_feedForward2, new[] { _feedForwardDim });
-                ResolveAndMaterialize(_norm2, subInputShape);
-                _sublayerWeightsMaterialized = true;
-            }
+            // weights. The base decides whether that means shapes or weights; this layer only says
+            // which child takes which shape, in DeclaredSubLayerShapes below.
+            BringUpDeclaredSubLayers();
 
             _isInitialized = true;
         }
