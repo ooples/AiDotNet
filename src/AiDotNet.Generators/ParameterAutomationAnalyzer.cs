@@ -503,6 +503,32 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         return null;
     }
 
+    /// <summary>A list, array or dictionary of Vector/Matrix/Tensor over the element type.</summary>
+    private static bool IsWeightSequence(ITypeSymbol type, string elem)
+    {
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        ITypeSymbol? element = null;
+        if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
+        else if (bare is INamedTypeSymbol n)
+        {
+            var o = n.OriginalDefinition.ToDisplayString();
+            if (n.TypeArguments.Length == 1
+                && o.StartsWith("System.Collections.Generic.", System.StringComparison.Ordinal))
+                element = n.TypeArguments[0];
+            else if (n.TypeArguments.Length == 2
+                     && o.StartsWith("System.Collections.Generic.", System.StringComparison.Ordinal))
+                element = n.TypeArguments[1];
+        }
+        if (element is null) return false;
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (element is not INamedTypeSymbol en || en.TypeArguments.Length != 1) return false;
+        if (en.TypeArguments[0].ToDisplayString() != elem) return false;
+        var k = en.OriginalDefinition.ToDisplayString();
+        return k.StartsWith("AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal)
+            || k.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal)
+            || k.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
+    }
+
     private static bool IsLayerLike(ITypeSymbol type)
     {
         if (type is not INamedTypeSymbol named) return false;
@@ -663,6 +689,11 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             }
         }
         if (elem is null) return false;
+
+        // A SEQUENCE of weight-bearing values -- list, array or dictionary of Vector/Matrix/
+        // Tensor -- is discovered too, so it must not be reported. Mirrors
+        // ModelParameterGenerator.SequenceSourceFor.
+        if (IsWeightSequence(f.Type, elem)) return true;
 
         if (f.Type is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return false;
         if (named.TypeArguments[0].ToDisplayString() != elem) return false;
