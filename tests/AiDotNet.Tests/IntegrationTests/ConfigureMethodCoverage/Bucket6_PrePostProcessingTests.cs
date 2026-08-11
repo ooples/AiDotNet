@@ -307,6 +307,8 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
         // A pass-through test double owns no weights. Empty is the honest surface, and the
         // same answer nn.Module.parameters() gives for a module holding none.
         public long ParameterCount => 0;
+        public bool SupportsParameterInitialization => false;
+        public Vector<float> SanitizeParameters(Vector<float> parameters) => parameters;
         public Vector<float> GetParameters() => new Vector<float>(0);
         public void SetParameters(Vector<float> parameters)
         {

@@ -188,6 +188,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             // A pass-through test double owns no weights. Empty is the honest surface, and the
             // same answer nn.Module.parameters() gives for a module holding none.
             public long ParameterCount => 0;
+            public bool SupportsParameterInitialization => false;
+            public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
             public Vector<double> GetParameters() => new Vector<double>(0);
             public void SetParameters(Vector<double> parameters)
             {
