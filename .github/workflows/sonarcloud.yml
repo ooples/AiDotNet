@@ -1607,6 +1607,12 @@ jobs:
           ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
 
       - name: Run the sweep
+        env:
+          # See the identical note on the conformance window below: the hardening script's
+          # DOTNET_gcServer=0 goes into GITHUB_ENV, and this workflow's top-level
+          # DOTNET_gcServer: 1 is layered back over every step, so a separate hardening step
+          # cannot turn Server GC off. Step-level env outranks both.
+          DOTNET_gcServer: '0'
         # The reporting harness (ParameterEnumerationParityTests) classifies every override as
         # redundant / load-bearing / self-inconsistent / mandatory, by invoking the genuine
         # inherited implementation rather than approximating it. Its output is the input to the
@@ -1768,6 +1774,20 @@ jobs:
 
       - name: Run the conformance window
         env:
+          # WORKSTATION GC, SET HERE BECAUSE GITHUB_ENV CANNOT WIN THIS ARGUMENT. The hardening
+          # script exports DOTNET_gcServer=0 two ways: into its own process, and into GITHUB_ENV
+          # for a later step. Neither reaches here. This workflow declares DOTNET_gcServer: 1 at
+          # the top level, and workflow-level env is re-applied to every step ON TOP of whatever
+          # GITHUB_ENV holds -- so a separate hardening step gets Server GC put straight back.
+          # test-net10-sharded never hit this because it hardens INLINE in the same pwsh process
+          # that runs dotnet test, where $env: assignment is inherited by the child and no
+          # workflow env can override it.
+          #
+          # This is why serialization alone was not enough: the script is explicit that removing
+          # Server GC "is not optional -- with serialization alone a shard still died ~70s into
+          # serial execution, so the footprint, not the parallelism, was the remaining cause".
+          # Step-level env has the highest precedence of all, so it holds regardless.
+          DOTNET_gcServer: '0'
           ADNSHAPE_CONF_NAMESPACE: VisionLanguage
           ADNSHAPE_CONF_OFFSET: ${{ matrix.offset }}
           ADNSHAPE_CONF_BUDGET: '25'
