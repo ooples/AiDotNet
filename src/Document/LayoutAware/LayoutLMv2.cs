@@ -83,9 +83,6 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     private readonly List<ILayer<T>> _outputLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _spatialPositionEmbeddings;
-    private Tensor<T>? _visualPositionEmbeddings;
 
     #endregion
 
@@ -296,7 +293,10 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     //   [.. + TextEmbeddingLayerCount)                          = word-embedding / position / layernorm / dropout,
     //   [rest]                                                  = multimodal transformer encoder + classification head.
     private const int VisualBackboneLayerCount = 12;
-    private const int TextEmbeddingLayerCount = 4;
+    // Three, not four: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that
+    // used to open this section are now a single LayoutEmbeddingLayer, which also carries the 2D
+    // layout terms. The LayerNorm and Dropout after them are unchanged.
+    private const int TextEmbeddingLayerCount = 3;
 
     // Re-links the per-role forward-path sublists to the CURRENT Layers. The two-stream forward reads
     // these lists, not Layers directly, so they must be rebuilt whenever Layers is replaced — including
@@ -511,13 +511,7 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
-        _positionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _spatialPositionEmbeddings = Tensor<T>.CreateDefault([1024, _hiddenDim], NumOps.Zero);
-        _visualPositionEmbeddings = Tensor<T>.CreateDefault([(ImageSize / 16) * (ImageSize / 16), _hiddenDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_spatialPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_visualPositionEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)

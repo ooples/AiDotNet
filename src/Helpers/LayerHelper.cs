@@ -10592,7 +10592,8 @@ public static class LayerHelper<T>
         int vocabSize = 30522,
         int imageSize = 224,
         int visualBackboneChannels = 256,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
@@ -10624,11 +10625,12 @@ public static class LayerHelper<T>
 
         // === TEXT EMBEDDINGS ===
 
-        // Word embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-
-        // Position embeddings
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // One embedding block, as in the paper: word + learned 1D position + the four 2D-layout
+        // terms, summed. This replaces the EmbeddingLayer + PositionalEncodingLayer pair for two
+        // reasons -- the 2D table that carries a token's page position existed only as a model field
+        // nothing read, and PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids)
+        // where these BERT/XLM-R derived models use LEARNED positions. Token-only input is unchanged.
+        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
 
         // LayerNorm after embeddings
         yield return new LayerNormalizationLayer<T>();
@@ -11213,7 +11215,8 @@ public static class LayerHelper<T>
         int vocabSize = 250002,
         int imageSize = 224,
         int visualBackboneChannels = 256,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -11230,8 +11233,12 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDim, identityActivation);
 
         // XLM-RoBERTa embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // One embedding block, as in the paper: word + learned 1D position + the four 2D-layout
+        // terms, summed. This replaces the EmbeddingLayer + PositionalEncodingLayer pair for two
+        // reasons -- the 2D table that carries a token's page position existed only as a model field
+        // nothing read, and PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids)
+        // where these BERT/XLM-R derived models use LEARNED positions. Token-only input is unchanged.
+        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
