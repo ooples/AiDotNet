@@ -13203,9 +13203,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 current = Layers[i].Forward(current);
                 activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
             }
-            return activations;
+
+            // AN EMPTY RESULT IS ALSO A FAILURE TO ANSWER, not an answer of "no activations".
+            // Layers is empty for every model that keeps its real layers somewhere else -- an echo
+            // state network's reservoir and readout, InfoGAN's generator / discriminator / Q trio --
+            // and the fold then completes without throwing and reports nothing. Falling through
+            // covers that case with the same machinery as the branched one.
+            if (activations.Count > 0) return activations;
         }
-        catch (Exception) when (Layers is { Count: > 0 })
+        catch (Exception)
         {
             // The fold is invalid for this topology. Fall through and record what the model itself does.
             activations.Clear();
