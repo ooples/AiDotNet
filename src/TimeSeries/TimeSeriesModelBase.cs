@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 /// </para>
 /// </remarks>
 public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
-    ITrainingEpochReporter<T>
+    ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     /// <summary>
     /// Replaces the loss this model trains against, for the models that can accept one.
@@ -1177,10 +1177,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         // Serialize model parameters if trained
         if (IsTrained)
         {
-            writer.Write(ModelParameters.Length);
-            for (int i = 0; i < ModelParameters.Length; i++)
+            // The manifest-backed registry is the source of truth. ModelParameters remains the
+            // fallback for legacy models that have not migrated a concrete storage surface yet.
+            var parameterSnapshot = Components.Count > 0
+                ? _parameterRegistry.GetParameters()
+                : ModelParameters;
+            writer.Write(parameterSnapshot.Length);
+            for (int i = 0; i < parameterSnapshot.Length; i++)
             {
-                writer.Write(Convert.ToDouble(ModelParameters[i]));
+                writer.Write(Convert.ToDouble(parameterSnapshot[i]));
             }
 
             // Serialize evaluation metrics
@@ -1254,16 +1259,19 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
             // Deserialize trained state
             IsTrained = reader.ReadBoolean();
+            Vector<T>? parameterSnapshot = null;
+            bool restoreParametersAfterCore = false;
 
             // Deserialize model parameters if trained
             if (IsTrained)
             {
                 int parameterCount = reader.ReadInt32();
-                ModelParameters = new Vector<T>(parameterCount);
+                parameterSnapshot = new Vector<T>(parameterCount);
                 for (int i = 0; i < parameterCount; i++)
                 {
-                    ModelParameters[i] = NumOps.FromDouble(reader.ReadDouble());
+                    parameterSnapshot[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
+                ModelParameters = parameterSnapshot.Clone();
 
                 // Deserialize evaluation metrics
                 int metricsCount = reader.ReadInt32();
@@ -1286,8 +1294,30 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                 _autoGuardThreshold = 1e15; // Pre-patch model
             }
 
+            // Validate and restore the manifest before model-specific state. Specialized serializers
+            // may retain higher-precision internal storage (for example double fields in a float
+            // model), so their exact values intentionally win when DeserializeCore runs next.
+            if (parameterSnapshot is not null && Components.Count > 0)
+            {
+                var readiness = _parameterRegistry.ParameterLayout.Readiness;
+                if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred ||
+                    readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized)
+                {
+                    restoreParametersAfterCore = true;
+                }
+                else
+                {
+                    _parameterRegistry.SetParameters(parameterSnapshot);
+                }
+            }
+
             // Let derived classes deserialize their specific data
             DeserializeCore(reader);
+
+            // A shape-deferred source cannot accept its vector until model-specific deserialization
+            // has materialized it. This is the only case where the manifest must run second.
+            if (restoreParametersAfterCore && parameterSnapshot is not null)
+                _parameterRegistry.SetParameters(parameterSnapshot);
         }
         catch (Exception ex)
         {
@@ -1426,7 +1456,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     // and remains the surface for any model that registers nothing -- so an unconverted model
     // behaves exactly as it did.
 
-    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
     private bool _componentsRegistered;
 
     /// <summary>
@@ -1436,12 +1466,18 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </summary>
     protected void RegisterParameterComponent(IParameterSource<T>? component)
     {
-        if (component is null) return;
-        for (int i = 0; i < _parameterComponents.Count; i++)
-        {
-            if (ReferenceEquals(_parameterComponents[i], component)) return;
-        }
-        _parameterComponents.Add(component);
+        _parameterRegistry.Register(component);
+    }
+
+    /// <summary>
+    /// Declares a parameter component with a stable, serialization-safe identifier.
+    /// </summary>
+    protected void RegisterParameterComponent(
+        string stableId,
+        IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+    {
+        _parameterRegistry.Register(stableId, component, role);
     }
 
     /// <summary>
@@ -1466,14 +1502,40 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         {
             if (!_componentsRegistered)
             {
+                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                // Latch only once something registered. A model can be asked for its parameters
-                // before it is fitted, and the field sources tolerate a null field, so an early
-                // call would otherwise register nothing and still mark the job done -- leaving the
-                // model permanently reporting zero.
-                _componentsRegistered = _parameterComponents.Count > 0;
+                _componentsRegistered = true;
             }
-            return _parameterComponents;
+            return _parameterRegistry.Components;
+        }
+    }
+
+    /// <inheritdoc />
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get
+        {
+            _ = Components;
+            if (_parameterRegistry.HasComponents)
+                return _parameterRegistry.ParameterLayout;
+
+            long count = ModelParameters?.Length ?? 0;
+            var readiness = count == 0 && !IsTrained
+                ? AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
+                : count == 0
+                    ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                    : AiDotNet.Models.Parameters.ParameterReadiness.Materialized;
+            return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+                new[]
+                {
+                    new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                        $"{GetType().FullName}::model-parameters",
+                        AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                        readiness,
+                        readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred ? null : count,
+                        readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred ? null : 0)
+                });
         }
     }
 
@@ -1481,23 +1543,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     {
         var components = Components;
         if (components.Count > 0)
-        {
-            var parts = new Vector<T>[components.Count];
-            int total = 0;
-            for (int i = 0; i < components.Count; i++)
-            {
-                parts[i] = components[i].GetParameters();
-                total += parts[i].Length;
-            }
-
-            var folded = new Vector<T>(total);
-            int at = 0;
-            for (int i = 0; i < parts.Length; i++)
-            {
-                for (int j = 0; j < parts[i].Length; j++) folded[at++] = parts[i][j];
-            }
-            return folded;
-        }
+            return _parameterRegistry.GetParameters();
 
         if (!IsTrained && (ModelParameters == null || ModelParameters.Length == 0))
         {
@@ -1797,45 +1843,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         var components = Components;
         if (components.Count > 0)
         {
-            long expected = 0;
-            for (int i = 0; i < components.Count; i++) expected += components[i].ParameterCount;
-            if (parameters.Length != expected)
-            {
-                throw new ArgumentException(
-                    $"Expected {expected} parameters, but got {parameters.Length}", nameof(parameters));
-            }
-
-            int at = 0;
-            for (int i = 0; i < components.Count; i++)
-            {
-                int n = (int)components[i].ParameterCount;
-                var slice = new Vector<T>(n);
-                for (int j = 0; j < n; j++) slice[j] = parameters[at++];
-                components[i].SetParameters(slice);
-            }
-
+            _parameterRegistry.SetParameters(parameters);
             // Keep the packed copy consistent for the feature-index machinery that indexes it.
             ModelParameters = parameters.Clone();
             OnParametersRestored();
             return;
         }
 
-        // If model is untrained (empty parameters), resize to accept the new parameters
-        // This allows optimizers to initialize untrained models with random parameters
-        if (ModelParameters.Length == 0 && parameters.Length > 0)
-        {
-            ModelParameters = new Vector<T>(parameters.Length);
-        }
-
-        if (parameters.Length != ModelParameters.Length)
-        {
-            throw new ArgumentException($"Expected {ModelParameters.Length} parameters, but got {parameters.Length}", nameof(parameters));
-        }
-
-        for (int i = 0; i < ModelParameters.Length; i++)
-        {
-            ModelParameters[i] = parameters[i];
-        }
+        ApplyParameters(parameters);
+        OnParametersRestored();
     }
 
     /// <summary>
@@ -2208,11 +2224,8 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         get
         {
             var components = Components;
-            if (components.Count == 0) return ModelParameters.Length;
-
-            long total = 0;
-            for (int i = 0; i < components.Count; i++) total += components[i].ParameterCount;
-            return total;
+            if (components.Count == 0) return GetParameters().Length;
+            return _parameterRegistry.ParameterCount;
         }
     }
 

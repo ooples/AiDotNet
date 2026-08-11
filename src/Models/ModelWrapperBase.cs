@@ -27,7 +27,8 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
-    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>
+    IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
+    AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     /// <summary>
     /// Numeric operations for type T.
@@ -74,7 +75,7 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     /// The components this wrapper's parameters live in, in registration order, which is also the
     /// serialization order. Empty for a plain wrapper, which forwards to the model it wraps.
     /// </summary>
-    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
     private bool _componentsRegistered;
 
     /// <summary>
@@ -88,14 +89,11 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     /// registration is idempotent by reference.
     /// </remarks>
     protected void RegisterParameterComponent(IParameterSource<T>? component)
-    {
-        if (component is null) return;
-        for (int i = 0; i < _parameterComponents.Count; i++)
-        {
-            if (ReferenceEquals(_parameterComponents[i], component)) return;
-        }
-        _parameterComponents.Add(component);
-    }
+        => _parameterRegistry.Register(component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
 
     /// <summary>
     /// Declare this wrapper's own trainable components here with
@@ -118,10 +116,34 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
         {
             if (!_componentsRegistered)
             {
+                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                _componentsRegistered = _parameterComponents.Count > 0;
+                _componentsRegistered = true;
             }
-            return _parameterComponents;
+            return _parameterRegistry.Components;
+        }
+    }
+
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get
+        {
+            var components = Components;
+            if (components.Count > 0) return _parameterRegistry.ParameterLayout;
+            if (BaseModel is AiDotNet.Models.Parameters.IParameterManifestProvider manifest)
+                return manifest.ParameterLayout;
+            var parameterizable = InterfaceGuard.TryParameterizable(BaseModel);
+            long count = parameterizable?.ParameterCount ?? 0;
+            return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(new[]
+            {
+                new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                    $"{BaseModel.GetType().FullName}::wrapped-model",
+                    AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                    count == 0 ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                               : AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                    count)
+            });
         }
     }
 
@@ -136,25 +158,7 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
         if (components.Count == 0)
             return InterfaceGuard.TryParameterizable(BaseModel)?.GetParameters() ?? new Vector<T>(0);
 
-        var parts = new Vector<T>[components.Count];
-        int total = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            parts[i] = components[i].GetParameters();
-            total += parts[i].Length;
-        }
-
-        var result = new Vector<T>(total);
-        int offset = 0;
-        for (int i = 0; i < parts.Length; i++)
-        {
-            for (int j = 0; j < parts[i].Length; j++)
-            {
-                result[offset++] = parts[i][j];
-            }
-        }
-
-        return result;
+        return _parameterRegistry.GetParameters();
     }
 
     /// <inheritdoc/>
@@ -171,30 +175,7 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
             return;
         }
 
-        long expected = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            expected += components[i].ParameterCount;
-        }
-
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
-        }
-
-        int offset = 0;
-        for (int i = 0; i < components.Count; i++)
-        {
-            int n = checked((int)components[i].ParameterCount);
-            var slice = new Vector<T>(n);
-            for (int j = 0; j < n; j++)
-            {
-                slice[j] = parameters[offset++];
-            }
-            components[i].SetParameters(slice);
-        }
-
+        _parameterRegistry.SetParameters(parameters);
         OnParametersRestored();
     }
 
@@ -208,12 +189,7 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
             if (components.Count == 0)
                 return InterfaceGuard.TryParameterizable(BaseModel)?.ParameterCount ?? 0;
 
-            long total = 0;
-            for (int i = 0; i < components.Count; i++)
-            {
-                total += components[i].ParameterCount;
-            }
-            return total;
+            return _parameterRegistry.ParameterCount;
         }
     }
 

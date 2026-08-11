@@ -110,6 +110,7 @@ public partial class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
 
     // Causal structure: adjacency matrix W (numFeatures x numFeatures)
     // W[i,j] > 0 means feature i causally influences feature j
+    [Buffer(Name = "causal-adjacency")]
     private Matrix<T>? _adjacency;
 
     // Augmented Lagrangian parameters for NOTEARS DAG constraint

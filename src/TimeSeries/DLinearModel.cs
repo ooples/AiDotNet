@@ -28,9 +28,13 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
 
     // Two linear maps from the length-L window to a scalar next-step forecast (ForecastHorizon=1 in the
     // supervised harness): seasonal and trend weights + biases. Stored as double for the closed-form update.
+    [TrainableParameter]
     private readonly double[] _wSeasonal;
+    [TrainableParameter]
     private readonly double[] _wTrend;
+    [TrainableParameter]
     private double _bSeasonal;
+    [TrainableParameter]
     private double _bTrend;
 
     public DLinearModel(DLinearOptions<T>? options = null)
@@ -185,7 +189,6 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        ModelParameters = FlattenParameters();
     }
 
     public override T PredictSingle(Vector<T> input)
@@ -195,34 +198,6 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
         double pred = Forecast(trend, seasonal);
         return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
     }
-
-    private Vector<T> FlattenParameters()
-    {
-        var flat = new T[2 * _l + 2];
-        int k = 0;
-        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wSeasonal[j]); }
-        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wTrend[j]); }
-        flat[k++] = NumOps.FromDouble(_bSeasonal);
-        flat[k] = NumOps.FromDouble(_bTrend);
-        return new Vector<T>(flat);
-    }
-
-    /// <summary>The model's trainable weights: seasonal and trend weights then their biases -- 2*L + 2, the count the deleted formula stated.</summary>
-    /// <remarks>
-    /// Replaces a hand-written ParameterCount formula. The formula was CORRECT -- it was
-    /// checked against every allocation before this change -- but it was a second statement
-    /// of the same fact, kept in step by hand. Declaring the storage makes the count, the
-    /// vector and the restore read it instead.
-    /// </remarks>
-    protected override void RegisterComponents()
-    {
-        base.RegisterComponents();
-            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _wSeasonal));
-            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _wTrend));
-            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _bSeasonal, v => _bSeasonal = v));
-            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _bTrend, v => _bTrend = v));
-    }
-
 
     protected override void SerializeCore(BinaryWriter writer)
     {

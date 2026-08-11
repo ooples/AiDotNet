@@ -52,10 +52,6 @@ namespace AiDotNet.Finance.Trading.Agents;
 public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The online Q-network. Its target copy is excluded, as it was before -- a target is refreshed FROM these weights, not trained alongside them.</remarks>
-    protected override void RegisterComponents()
-        => RegisterParameterComponent(_qNetwork);
     #region Fields
 
     private readonly FinancialDQNAgentOptions<T> _options;

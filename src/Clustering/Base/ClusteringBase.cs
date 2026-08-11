@@ -21,7 +21,8 @@ namespace AiDotNet.Clustering.Base;
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>,
+    IParameterManifestProvider
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -505,6 +506,10 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     protected void RegisterParameterComponent(IParameterSource<T>? component)
         => _parameterRegistry.Register(component);
 
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
     /// <summary>
     /// Declare the trainable components of this model. Defaults to the cluster centres, which is
     /// what every one of the 27 models under this base actually stores -- none of them overrode
@@ -529,12 +534,16 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         {
             if (!_componentsRegistered)
             {
+                if (this is IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                _componentsRegistered = _parameterRegistry.HasComponents;
+                _componentsRegistered = true;
             }
             return _parameterRegistry;
         }
     }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
     /// <remarks>

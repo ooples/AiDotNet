@@ -333,6 +333,13 @@ public partial class NEAT<T> : NeuralNetworkBase<T>
             }));
     }
 
+    /// <summary>
+    /// NEAT evolves connection weights and does not compute gradient-descent derivatives.
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+        => throw new NotSupportedException(
+            "NEAT is an evolutionary optimizer and does not expose parameter gradients.");
+
     // Replaced by the declared parameter source below. Removed under AIDN082.
 
     /// <summary>

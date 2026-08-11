@@ -51,10 +51,6 @@ namespace AiDotNet.Finance.Trading.Agents;
 public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The policy network, the only trained component this agent exposed.</remarks>
-    protected override void RegisterComponents()
-        => RegisterParameterComponent(_policyNetwork);
     #region Fields
 
     private readonly INeuralNetwork<T> _policyNetwork;

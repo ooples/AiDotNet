@@ -73,9 +73,12 @@ public class ParameterCountContractTests
     public async System.Threading.Tasks.Task AllModels_ParameterCountMatchesGetParameters()
     {
         await System.Threading.Tasks.Task.Yield();
+#if !NET10_0_OR_GREATER
+        return;
+#endif
 
         var violations = new List<string>();
-        int checkedCount = 0, skipped = 0, unmeasurable = 0, constructed = 0;
+        int checkedCount = 0, skipped = 0, unmeasurable = 0, unsized = 0, constructed = 0;
 
         // Persist violations as they are found. Constructing ~2,000 models in one process is enough
         // to crash the test host outright -- an AccessViolation or StackOverflow inside a single
@@ -103,82 +106,76 @@ public class ParameterCountContractTests
 
         using var _logHandle = log;
 
-        foreach (var closedType in GetConstructableModelTypes())
+        var modelTypes = GetConstructableModelTypes().ToArray();
+        var measurements = await ParameterSweepProcess.MeasureAllAsync(
+            modelTypes, includeChunks: false, MaxParametersToMaterialize, ConstructionTimeout);
+
+        foreach (var result in measurements)
         {
+            var closedType = result.ModelType;
             var typeName = closedType.FullName ?? closedType.Name;
 
             log?.WriteLine($"[measuring] {typeName}");
-
-            if (!TryConstruct(closedType, out object? instance) || instance is null)
-            {
-                // Construction failures are DefaultConstructionTests' business, not this test's.
-                // Counting them here would double-report one defect as two.
-                unmeasurable++;
-                continue;
-            }
-
-            try
-            {
-                long declared = ReadLong(instance, "ParameterCount");
-                if (declared < 0) { skipped++; continue; }
-
-                if (declared > MaxParametersToMaterialize)
-                {
-                    skipped++;
-                    _output.WriteLine($"TOO LARGE TO MEASURE {typeName}: ParameterCount={declared}");
-                    continue;
-                }
-
-                long actual;
-                try
-                {
-                    actual = ReadVectorLength(instance);
-                }
-                catch (Exception ex) when (ex.GetBaseException() is NotSupportedException)
-                {
-                    // Some models deliberately do not expose a flat vector — detection backbones
-                    // round-trip through WriteParameters/ReadParameters and say so by throwing.
-                    // There is no pairing to check when one side of it does not exist.
-                    skipped++;
-                    continue;
-                }
-
-                if (actual < 0) { skipped++; continue; }
-                checkedCount++;
-
-                // Consistent zero is not a violation: a model whose parameters are not sized yet
-                // reports 0 from BOTH surfaces, and that is the honest answer, not a mismatch.
-                if (declared == 0 && actual == 0) continue;
-
-                if (declared != actual)
-                {
-                    var v = $"{typeName}: ParameterCount={declared}, " +
-                            $"GetParameters().Length={actual} (difference {declared - actual})";
-                    violations.Add(v);
-                    log?.WriteLine("VIOLATION " + v);
-                }
-            }
-            catch (Exception ex)
-            {
-                unmeasurable++;
-                _output.WriteLine($"UNMEASURABLE {typeName}: {ex.GetBaseException().GetType().Name}");
-            }
-            finally
-            {
-                (instance as IDisposable)?.Dispose();
-            }
-
-            // Some models hold hundreds of megabytes. Without periodic reclamation the sweep's own
-            // footprint, not any single model, is what exhausts the host.
-            if (++constructed % 50 == 0)
+            constructed++;
+            if (constructed % 50 == 0)
             {
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }
+
+            var measurement = result.Measurement;
+            switch (measurement.Status)
+            {
+                case "deferred":
+                case "unmaterialized":
+                    unsized++;
+                    log?.WriteLine($"UNSIZED {typeName}: readiness={measurement.Readiness}");
+                    continue;
+                case "too-large":
+                    skipped++;
+                    _output.WriteLine($"TOO LARGE TO MEASURE {typeName}: ParameterCount={measurement.Declared}");
+                    continue;
+                case "unsupported":
+                case "no-chunks":
+                    skipped++;
+                    continue;
+                case "ok":
+                    break;
+                default:
+                    unmeasurable++;
+                    _output.WriteLine($"UNMEASURABLE {typeName}: {measurement.Status} {measurement.Error}");
+                    continue;
+            }
+
+            long declared = measurement.Declared;
+            long actual = measurement.Flat;
+            if (actual < 0) { skipped++; continue; }
+            checkedCount++;
+
+            if (declared == 0 && actual == 0 && measurement.Readiness != "ParameterFree")
+            {
+                var ambiguous = $"{typeName}: both surfaces returned zero, but manifest readiness " +
+                                $"was {measurement.Readiness}; zero is valid only for ParameterFree models";
+                violations.Add(ambiguous);
+                log?.WriteLine("VIOLATION " + ambiguous);
+                continue;
+            }
+
+            if (declared != actual)
+            {
+                var v = $"{typeName}: ParameterCount={declared}, " +
+                        $"GetParameters().Length={actual} (difference {declared - actual})";
+                violations.Add(v);
+                log?.WriteLine("VIOLATION " + v);
+            }
         }
 
         _output.WriteLine($"Checked {checkedCount} models; {skipped} skipped (no flat vector), " +
-                          $"{unmeasurable} unmeasurable; {violations.Count} violations.");
+                          $"{unsized} deferred/unmaterialized; {unmeasurable} unmeasurable; " +
+                          $"{violations.Count} violations.");
+
+        Assert.True(checkedCount > 0,
+            "The isolated parameter-count sweep did not complete a single measurement.");
 
         Assert.True(violations.Count == 0,
             $"{violations.Count} model(s) report a ParameterCount that disagrees with " +

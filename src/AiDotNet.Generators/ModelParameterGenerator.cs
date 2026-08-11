@@ -50,6 +50,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
 {
     private const string ScratchAttributeName = "AiDotNet.Attributes.ScratchAttribute";
     private const string BufferAttributeName = "AiDotNet.Attributes.BufferAttribute";
+    private const string ParameterAliasAttributeName = "AiDotNet.Attributes.ParameterAliasAttribute";
+    private const string TrainableParameterAttributeName = "AiDotNet.Attributes.TrainableParameterAttribute";
     private const string TensorTypeName = "AiDotNet.Tensors.LinearAlgebra.Tensor";
     private const string MatrixTypeName = "AiDotNet.Tensors.LinearAlgebra.Matrix";
     private const string VectorTypeName = "AiDotNet.Tensors.LinearAlgebra.Vector";
@@ -81,6 +83,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
         var scratchSymbol = compilation.GetTypeByMetadataName(ScratchAttributeName);
         var bufferSymbol = compilation.GetTypeByMetadataName(BufferAttributeName);
+        var aliasSymbol = compilation.GetTypeByMetadataName(ParameterAliasAttributeName);
+        var trainableParameterSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
 
         var processed = new HashSet<string>();
 
@@ -98,26 +102,12 @@ public class ModelParameterGenerator : IIncrementalGenerator
             // ModelBase and its descendants have the component registry, which takes a source per
             // field and so can carry tensors, matrices and vectors alike.
             //
-            // NeuralNetworkBase has no registry; it has GetExtraTrainableTensors(), and that hook is
-            // ALREADY consumed in fourteen places -- ParameterCount, GetParameters, SetParameters,
-            // serialization, cloning, gradient collection, GPU mirroring. Bolting a second registry
-            // onto that base would mean threading it through every one of them, and missing one is
-            // precisely how a weight goes quiet. Emitting into the hook that is already wired costs
-            // nothing and cannot miss a site. Its element type is Tensor<T>, so only tensor fields
-            // are automated there; matrices and vectors on that trunk stay reported.
-            // The NeuralNetworkBase trunk is decided by its HOOKS, not by whether a registry
-            // exists. That base gained a registry so a computed surface could be declared, and
-            // gating the trunk on `!hasRegistry` silently switched the layers path off for every
-            // model on it -- WGAN generated nothing at all, and LayoutLM, Blip2 and SileroVad
-            // fell through to a field-only path that cannot see a sub-network or a layer
-            // collection. Nothing reported it, because those classes were already partial.
-            //
-            // On that trunk the tensors and layers hooks carry everything the generator emits;
-            // the registry there is for sources an author declares by hand.
+            // NeuralNetworkBase uses its tensor/layer hooks for trainable storage because those hooks
+            // are already consumed by flat restore, gradient collection and GPU mirroring. It also has
+            // a registry for persistent non-trainable state. Keeping the two roles separate prevents a
+            // buffer from entering the optimizer while still making it checkpoint-visible.
             bool onNetworkTrunk = InheritsExtraTensorsHook(classSymbol);
-            bool hasRegistry = !onNetworkTrunk
-                               && InheritsRegistry(classSymbol)
-                               && !DeclaresOwn(classSymbol, RegisterHook);
+            bool hasRegistry = InheritsRegistry(classSymbol);
 
             // The two hooks are suppressed INDEPENDENTLY. Coupling them was a bug: Flamingo declares
             // its own GetExtraTrainableTensors, which silently also suppressed the layers hook, so
@@ -129,29 +119,31 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
             if (!processed.Add(classSymbol.ToDisplayString())) continue;
 
-            if (emitTensors || emitLayers)
+            if (onNetworkTrunk)
             {
                 var tensors = new List<string>();
-                var tensorSequences = new List<string>();
                 var layerGroups = new List<string>();
+                var persistentFields = new List<(string Name, string SourceExpression, string Role)>();
                 foreach (var member in classSymbol.GetMembers())
                 {
                     if (member is IFieldSymbol tf)
                     {
-                        if (!IsRegisterableField(tf, scratchSymbol, bufferSymbol)) continue;
-                        if (SourceFor(tf.Type, elem) == "TensorFieldParameterSource")
+                        if (!IsRegisterableField(tf, scratchSymbol, bufferSymbol, aliasSymbol)) continue;
+                        bool isBuffer = HasAttr(tf, bufferSymbol);
+                        if (isBuffer && hasRegistry)
                         {
-                            if (emitTensors) tensors.Add(tf.Name);
-                            continue;
+                            var persistentSource = SourceExpressionFor(tf, elem, allowPrimitive: true);
+                            if (persistentSource is not null)
+                            {
+                                persistentFields.Add((tf.Name, persistentSource, RoleExpression(isBuffer: true)));
+                                continue;
+                            }
                         }
-                        // A SEQUENCE of tensors -- InstantNGP's multiresolution hash tables are a
-                        // Dictionary<int, Tensor<T>> -- belongs on the tensors hook too. The
-                        // registry path is not taken on this trunk, so without this the whole
-                        // collection is invisible.
-                        if (emitTensors)
+                        var tensorAccessor = TensorAccessorFor(tf.Type, tf.Name, elem);
+                        if (tensorAccessor is not null)
                         {
-                            var tseq = TensorSequenceAccessor(tf.Type, tf.Name, elem);
-                            if (tseq is not null) { tensorSequences.Add(tseq); continue; }
+                            if (emitTensors) tensors.Add(tensorAccessor);
+                            continue;
                         }
                         if (!emitLayers) continue;
                         var acc = LayerAccessorFor(tf.Type, tf.Name, elem);
@@ -163,21 +155,30 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         // Discriminator, StyleGAN's MappingNetwork). Fields alone would miss them.
                         if (!emitLayers) continue;
                         if (tp.IsStatic || tp.IsImplicitlyDeclared || tp.GetMethod is null) continue;
-                        if (HasAttr2(tp, scratchSymbol) || HasAttr2(tp, bufferSymbol)) continue;
+                        if (HasAttr2(tp, scratchSymbol) || HasAttr2(tp, bufferSymbol) || HasAttr2(tp, aliasSymbol)) continue;
                         var acc = LayerAccessorFor(tp.Type, tp.Name, elem);
                         if (acc is not null) layerGroups.Add(acc);
                     }
                 }
 
-                if (tensors.Count == 0 && tensorSequences.Count == 0 && layerGroups.Count == 0) continue;
-                context.AddSource(
-                    HintName(classSymbol) + ".ModelExtraTensors.g.cs",
-                    GenerateExtraTensorsSource(classSymbol, elem, tensors, tensorSequences, layerGroups));
+                if (tensors.Count > 0 || layerGroups.Count > 0)
+                {
+                    context.AddSource(
+                        HintName(classSymbol) + ".ModelExtraTensors.g.cs",
+                        GenerateExtraTensorsSource(classSymbol, elem, tensors, layerGroups));
+                }
+                if (persistentFields.Count > 0)
+                {
+                    context.AddSource(
+                        HintName(classSymbol) + ".ModelPersistentState.g.cs",
+                        GenerateSource(classSymbol, elem, persistentFields,
+                            new List<(string Name, string SourceExpression, string Role)>()));
+                }
                 continue;
             }
 
-            var fields = new List<(string Name, string SourceType)>();
-            var components = new List<string>();
+            var fields = new List<(string Name, string SourceExpression, string Role)>();
+            var components = new List<(string Name, string SourceExpression, string Role)>();
             foreach (var member in classSymbol.GetMembers())
             {
                 // A member that IS a parameterized component, or a collection of them. Every
@@ -187,29 +188,36 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 // because members are routinely added after the one lazy registration has run.
                 if (member is IFieldSymbol or IPropertySymbol
                     && !member.IsStatic && !member.IsImplicitlyDeclared
-                    && !HasAttr2(member, scratchSymbol) && !HasAttr2(member, bufferSymbol))
+                    && !HasAttr2(member, scratchSymbol) && !HasAttr2(member, bufferSymbol)
+                    && !HasAttr2(member, aliasSymbol))
                 {
                     var kind = ComponentKindFor(MemberType(member), elem);
                     if (kind == "one")
                     {
-                        components.Add($"{member.Name}");
+                        components.Add((member.Name,
+                            $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
+                            RoleExpression(HasAttr2(member, bufferSymbol))));
                         continue;
                     }
                     if (kind == "many")
                     {
-                        components.Add($"new ComponentCollectionParameterSource<{elem}>(() => {member.Name})");
+                        components.Add((member.Name,
+                            $"new ComponentCollectionParameterSource<{elem}>(() => {member.Name})",
+                            RoleExpression(HasAttr2(member, bufferSymbol))));
                         continue;
                     }
                 }
 
                 if (member is not IFieldSymbol f) continue;
-                if (!IsRegisterableField(f, scratchSymbol, bufferSymbol)) continue;
+                if (!IsRegisterableField(f, scratchSymbol, bufferSymbol, aliasSymbol)) continue;
 
-                var src = SourceFor(f.Type, elem);
-                if (src is not null) { fields.Add((f.Name, src)); continue; }
-
-                var seq = SequenceSourceFor(f.Type, f.Name, elem);
-                if (seq is not null) components.Add(seq);
+                // Primitive CLR storage is ambiguous: a double may be a trainable bias, a threshold,
+                // a tolerance, or a hyperparameter. Unlike Tensor/Matrix/Vector fields, it is only
+                // automated when the author supplies an explicit semantic role.
+                bool allowPrimitive = HasAttr(f, trainableParameterSymbol) || HasAttr(f, bufferSymbol);
+                var sourceExpression = SourceExpressionFor(f, elem, allowPrimitive);
+                if (sourceExpression is null) continue;
+                fields.Add((f.Name, sourceExpression, RoleExpression(HasAttr(f, bufferSymbol))));
             }
 
             if (fields.Count == 0 && components.Count == 0) continue;
@@ -225,12 +233,13 @@ public class ModelParameterGenerator : IIncrementalGenerator
     /// <summary>Field-level gates shared by both emission paths.</summary>
     private static bool IsRegisterableField(IFieldSymbol f,
                                             INamedTypeSymbol? scratchSymbol,
-                                            INamedTypeSymbol? bufferSymbol)
+                                            INamedTypeSymbol? bufferSymbol,
+                                            INamedTypeSymbol? aliasSymbol)
     {
         if (f.IsStatic || f.IsConst) return false;
         // Auto-property backing fields have names that are not valid C# to emit.
         if (f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) return false;
-        if (HasAttr(f, scratchSymbol) || HasAttr(f, bufferSymbol)) return false;
+        if (HasAttr(f, scratchSymbol) || HasAttr(f, aliasSymbol)) return false;
         // A gradient accumulator is sized like a weight and is not one. The layer path uses the
         // same suffix convention.
         if (f.Name.EndsWith("Gradient", System.StringComparison.Ordinal) ||
@@ -333,12 +342,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
     }
 
     private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
-                                                     List<string> tensors, List<string> tensorSequences,
-                                                     List<string> layerGroups)
+                                                     List<string> tensors, List<string> layerGroups)
     {
         var sb = OpenPartial(classSymbol, out var closers);
 
-        if (tensors.Count > 0 || tensorSequences.Count > 0)
+        if (tensors.Count > 0)
         {
             sb.AppendLine("    /// <summary>");
             sb.AppendLine("    /// Auto-generated: surfaces this model's tensor weights that live outside Layers,");
@@ -352,13 +360,12 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override global::System.Collections.Generic.IEnumerable<Tensor<{elem}>> {ExtraTensorsHook}()");
             sb.AppendLine("    {");
             sb.AppendLine($"        foreach (var __t in base.{ExtraTensorsHook}()) yield return __t;");
-            foreach (var name in tensors)
+            foreach (var accessor in tensors)
             {
-                sb.AppendLine($"        if ({name} is not null) yield return {name};");
-            }
-            foreach (var seq in tensorSequences)
-            {
-                sb.AppendLine($"        foreach (var __ts in {seq}) {{ if (__ts is not null) yield return __ts; }}");
+                sb.AppendLine($"        foreach (var __extra in {accessor})");
+                sb.AppendLine("        {");
+                sb.AppendLine("            if (__extra is not null) yield return __extra;");
+                sb.AppendLine("        }");
             }
             sb.AppendLine("    }");
         }
@@ -476,17 +483,18 @@ public class ModelParameterGenerator : IIncrementalGenerator
             }
         }
         if (element is null) return null;
-        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
-        // A collection of SUB-NETWORKS, not of layers: a multi-scale model holding one network
-        // per scale, a mixture of experts, an ensemble of networks. Each contributes its own
-        // Layers, so the accessor flattens them in list order.
+        // A collection of sub-networks owns a collection of layer collections. Flatten those in
+        // the author's stable collection order so multi-scale networks and expert banks do not
+        // disappear merely because the network boundary is one level deeper.
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
         for (var c = element as INamedTypeSymbol; c is not null; c = c.BaseType)
         {
             if (c.OriginalDefinition.ToDisplayString()
                  .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
             {
-                return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{element.ToDisplayString()}>)global::System.Array.Empty<{element.ToDisplayString()}>()).SelectMany(__n => (global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)__n.Layers)";
+                var networkType = element.ToDisplayString();
+                return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{networkType}>)global::System.Array.Empty<{networkType}>()).SelectMany(__n => (global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)__n.Layers)";
             }
         }
 
@@ -636,86 +644,114 @@ public class ModelParameterGenerator : IIncrementalGenerator
         return null;
     }
 
-    /// <summary>
-    /// A full <c>new XSequenceParameterSource&lt;T&gt;(...)</c> expression for a member holding a
-    /// SEQUENCE of weight-bearing values, or null.
-    /// </summary>
-    /// <remarks>
-    /// Covers a list, an array or a dictionary of Vector/Matrix/Tensor. Dictionary VALUES are
-    /// ordered by key rather than taken in enumeration order: dictionary order is an implementation
-    /// detail, and a rehash would silently permute every existing checkpoint.
-    /// </remarks>
-    private static string? SequenceSourceFor(ITypeSymbol? type, string name, string elem)
+    private static string? SourceExpressionFor(IFieldSymbol field, string elem, bool allowPrimitive = false)
     {
-        if (type is null) return null;
+        var scalar = SourceFor(field.Type, elem);
+        if (scalar is not null) return $"new {scalar}<{elem}>(() => {field.Name})";
+
+        if (allowPrimitive)
+        {
+            var bare = field.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            if (bare.SpecialType == SpecialType.System_Double)
+            {
+                if (field.IsReadOnly) return null;
+                return $"new DoubleScalarParameterSource<{elem}>(() => {field.Name}, value => {field.Name} = value)";
+            }
+            if (bare is IArrayTypeSymbol array && array.ElementType.SpecialType == SpecialType.System_Double)
+                return $"new DoubleArrayParameterSource<{elem}>(() => {field.Name})";
+            if (bare is IArrayTypeSymbol outer && outer.ElementType is IArrayTypeSymbol inner &&
+                inner.ElementType.SpecialType == SpecialType.System_Double)
+                return $"new DoubleJaggedParameterSource<{elem}>(() => {field.Name})";
+        }
+
+        var element = CollectionElementType(field.Type);
+        var family = element is null ? null : NumericFamilyFor(element, elem);
+        if (family is not null)
+            return $"new {family}CollectionParameterSource<{elem}>(() => {field.Name})";
+
+        if (DictionaryTypes(field.Type, out var key, out var value))
+        {
+            family = NumericFamilyFor(value!, elem);
+            if (family is not null)
+            {
+                var keyType = key!.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+                return $"new Keyed{family}CollectionParameterSource<{elem}, {keyType}>(() => {field.Name})";
+            }
+        }
+        return null;
+    }
+
+    private static string? TensorAccessorFor(ITypeSymbol type, string name, string elem)
+    {
+        if (NumericFamilyFor(type, elem) == "Tensor")
+            return $"new Tensor<{elem}>?[] {{ {name} }}";
+
+        var element = CollectionElementType(type);
+        if (element is not null && NumericFamilyFor(element, elem) == "Tensor")
+            return $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull({name})";
+
+        if (DictionaryTypes(type, out _, out var value) &&
+            value is not null && NumericFamilyFor(value, elem) == "Tensor")
+            return $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.OrderedValues({name})";
+
+        return null;
+    }
+
+    private static string? NumericFamilyFor(ITypeSymbol type, string elem)
+    {
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-
-        ITypeSymbol? element = null;
-        bool byKey = false;
-
-        if (bare is IArrayTypeSymbol arr)
-        {
-            element = arr.ElementType;
-        }
-        else if (bare is INamedTypeSymbol named)
-        {
-            var open = named.OriginalDefinition.ToDisplayString();
-            if (named.TypeArguments.Length == 1
-                && (open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal)
-                    || open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal)
-                    || open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal)
-                    || open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal)))
-            {
-                element = named.TypeArguments[0];
-            }
-            else if (named.TypeArguments.Length == 2
-                     && (open.StartsWith("System.Collections.Generic.Dictionary<", System.StringComparison.Ordinal)
-                         || open.StartsWith("System.Collections.Generic.IDictionary<", System.StringComparison.Ordinal)
-                         || open.StartsWith("System.Collections.Generic.IReadOnlyDictionary<", System.StringComparison.Ordinal)))
-            {
-                element = named.TypeArguments[1];
-                byKey = true;
-            }
-        }
-        if (element is null) return null;
-        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-
-        var kind = element.OriginalDefinition.ToDisplayString();
-        string? source = null;
-        if (kind.StartsWith(TensorTypeName + "<", System.StringComparison.Ordinal)) source = "TensorSequenceParameterSource";
-        else if (kind.StartsWith(MatrixTypeName + "<", System.StringComparison.Ordinal)) source = "MatrixSequenceParameterSource";
-        else if (kind.StartsWith(VectorTypeName + "<", System.StringComparison.Ordinal)) source = "VectorSequenceParameterSource";
-        if (source is null) return null;
-        if (element is not INamedTypeSymbol en || en.TypeArguments.Length != 1
-            || en.TypeArguments[0].ToDisplayString() != elem) return null;
-
-        var access = byKey
-            ? $"{name} is null ? null : global::System.Linq.Enumerable.Select("
-              + $"global::System.Linq.Enumerable.OrderBy({name}, __kv => __kv.Key), __kv => __kv.Value)"
-            : $"{name}";
-        return $"new {source}<{elem}>(() => {access})";
+        if (bare is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return null;
+        if (named.TypeArguments[0].ToDisplayString() != elem) return null;
+        var open = named.OriginalDefinition.ToDisplayString();
+        if (open.StartsWith(TensorTypeName + "<", System.StringComparison.Ordinal)) return "Tensor";
+        if (open.StartsWith(MatrixTypeName + "<", System.StringComparison.Ordinal)) return "Matrix";
+        if (open.StartsWith(VectorTypeName + "<", System.StringComparison.Ordinal)) return "Vector";
+        return null;
     }
 
-    /// <summary>An enumerable-of-tensors expression for a sequence member, or null.</summary>
-    /// <remarks>Dictionary values are ordered by KEY: dictionary order is an implementation
-    /// detail and a rehash would silently permute an existing checkpoint.</remarks>
-    private static string? TensorSequenceAccessor(ITypeSymbol? type, string name, string elem)
+    private static ITypeSymbol? CollectionElementType(ITypeSymbol type)
     {
-        var full = SequenceSourceFor(type, name, elem);
-        if (full is null || !full.StartsWith("new TensorSequenceParameterSource<", System.StringComparison.Ordinal))
-            return null;
-        int i = full.IndexOf("() => ", System.StringComparison.Ordinal);
-        var inner = full.Substring(i + 6, full.Length - (i + 6) - 1);
-        return $"({inner}) ?? global::System.Linq.Enumerable.Empty<Tensor<{elem}>>()";
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (bare is IArrayTypeSymbol array) return array.ElementType;
+        if (bare is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return null;
+        var open = named.OriginalDefinition.ToDisplayString();
+        return open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal) ||
+               open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal) ||
+               open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal) ||
+               open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal) ||
+               open.StartsWith("System.Collections.Generic.IReadOnlyCollection<", System.StringComparison.Ordinal)
+            ? named.TypeArguments[0]
+            : null;
     }
+
+    private static bool DictionaryTypes(ITypeSymbol type, out ITypeSymbol? key, out ITypeSymbol? value)
+    {
+        key = null;
+        value = null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (bare is not INamedTypeSymbol named || named.TypeArguments.Length != 2) return false;
+        var open = named.OriginalDefinition.ToDisplayString();
+        if (!open.StartsWith("System.Collections.Generic.Dictionary<", System.StringComparison.Ordinal) &&
+            !open.StartsWith("System.Collections.Generic.IDictionary<", System.StringComparison.Ordinal) &&
+            !open.StartsWith("System.Collections.Generic.IReadOnlyDictionary<", System.StringComparison.Ordinal))
+            return false;
+        key = named.TypeArguments[0];
+        value = named.TypeArguments[1];
+        return true;
+    }
+
 
     private static bool HasAttr(IFieldSymbol field, INamedTypeSymbol? attr) =>
         attr is not null && field.GetAttributes()
             .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attr));
 
+    private static string RoleExpression(bool isBuffer) => isBuffer
+        ? "global::AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState"
+        : "global::AiDotNet.Models.Parameters.ParameterSlotRole.Trainable";
+
     private static string GenerateSource(INamedTypeSymbol classSymbol, string elem,
-                                         List<(string Name, string SourceType)> fields,
-                                     List<string> components)
+                                         List<(string Name, string SourceExpression, string Role)> fields,
+                                         List<(string Name, string SourceExpression, string Role)> components)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
         var typeParams = classSymbol.TypeParameters.Length > 0
@@ -746,27 +782,22 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("{");
         }
 
-        sb.AppendLine($"partial class {classSymbol.Name}{typeParams}");
+        sb.AppendLine($"partial class {classSymbol.Name}{typeParams} : global::AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<{elem}>");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>");
-        sb.AppendLine("    /// Auto-generated: registers this model's weight-bearing fields, in declaration");
-        sb.AppendLine("    /// order, which is the serialization order.");
+        sb.AppendLine("    /// Auto-generated stable-ID registration for this model's weight-bearing members.");
         sb.AppendLine("    /// </summary>");
-        sb.AppendLine("    /// <remarks>");
-        sb.AppendLine("    /// Fields marked [Scratch] or [Buffer] are excluded. To take ownership of the");
-        sb.AppendLine("    /// order or the contents, declare RegisterComponents() by hand and this");
-        sb.AppendLine("    /// generated override disappears.");
-        sb.AppendLine("    /// </remarks>");
-        sb.AppendLine($"    protected override void {RegisterHook}()");
+        sb.AppendLine($"    void global::AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<{elem}>.RegisterGeneratedParameters(");
+        sb.AppendLine($"        global::AiDotNet.Models.Parameters.ParameterComponentRegistry<{elem}> registry)");
         sb.AppendLine("    {");
-        sb.AppendLine($"        base.{RegisterHook}();");
-        foreach (var f in fields)
+        string ownerId = classSymbol.ToDisplayString().Replace("\\", "\\\\").Replace("\"", "\\\"");
+        foreach (var f in fields.OrderBy(item => item.Name, System.StringComparer.Ordinal))
         {
-            sb.AppendLine($"        {RegisterCall}(new {f.SourceType}<{elem}>(() => {f.Name}));");
+            sb.AppendLine($"        registry.Register(\"{ownerId}::{f.Name}\", {f.SourceExpression}, {f.Role});");
         }
-        foreach (var c in components)
+        foreach (var c in components.OrderBy(item => item.Name, System.StringComparer.Ordinal))
         {
-            sb.AppendLine($"        {RegisterCall}({c});");
+            sb.AppendLine($"        registry.Register(\"{ownerId}::{c.Name}\", {c.SourceExpression}, {c.Role});");
         }
         sb.AppendLine("    }");
         sb.AppendLine("}");

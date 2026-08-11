@@ -54,6 +54,7 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
     /// <remarks>
     /// <b>For Beginners:</b> In operations like addition (a + b), the left child represents 'a'.
     /// </remarks>
+    [ParameterAlias(nameof(Coefficients))]
     public ExpressionTree<T, TInput, TOutput>? Left { get; private set; }
 
     /// <summary>
@@ -62,11 +63,13 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
     /// <remarks>
     /// <b>For Beginners:</b> In operations like addition (a + b), the right child represents 'b'.
     /// </remarks>
+    [ParameterAlias(nameof(Coefficients))]
     public ExpressionTree<T, TInput, TOutput>? Right { get; private set; }
 
     /// <summary>
     /// Gets the parent node of this node.
     /// </summary>
+    [ParameterAlias(nameof(Coefficients))]
     public ExpressionTree<T, TInput, TOutput>? Parent { get; private set; }
 
     /// <summary>
