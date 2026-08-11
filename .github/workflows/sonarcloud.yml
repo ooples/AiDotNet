@@ -1587,6 +1587,25 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # THE HARDENING THIS JOB WAS BORN WITHOUT. harden-xunit-runner.ps1 is the single source of
+      # the exit-143 fix, but it was only ever applied inline inside test-net10-sharded, so this
+      # job -- authored later -- inherited none of it and died with "The runner has received a
+      # shutdown signal" / exit code 143 roughly 85 seconds in, against a 60-minute budget. Exit
+      # 143 well inside the budget is the runner being killed for memory, not a timeout.
+      #
+      # The script rewrites xunit.runner.json in the BUILD OUTPUT, which is the only copy the
+      # xunit.runner.visualstudio adapter honors. That file does not exist until the project is
+      # built, and this job used to let `dotnet test` build implicitly -- so there was nothing to
+      # harden until discovery had already enumerated ~72k cases and blown the runner's memory.
+      # Building as its own step is what makes the hardening reachable at all.
+      - name: Build test project
+        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo
+
+      - name: Harden xUnit runner
+        shell: pwsh
+        run: |
+          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+
       - name: Run the sweep
         # The reporting harness (ParameterEnumerationParityTests) classifies every override as
         # redundant / load-bearing / self-inconsistent / mandatory, by invoking the genuine
@@ -1620,7 +1639,10 @@ jobs:
           # pipeline succeeded whenever tee did and `|| true` was measuring nothing. The real
           # exit code is captured before anything else can overwrite it.
           set -o pipefail
+          # --no-build/--no-restore are what make the hardening stick: a rebuild here would
+          # regenerate xunit.runner.json from the checked-in copy and silently undo the step above.
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+            --no-build --no-restore \
             --filter "FullyQualifiedName~${{ matrix.sweep }}" \
             --logger 'console;verbosity=detailed' \
             --logger 'trx;LogFileName=sweep.trx' \
@@ -1732,6 +1754,18 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # Same omission as the parameter sweep above, same consequence: these seven windows were
+      # authored after harden-xunit-runner.ps1 and never called it, so every one of them died on
+      # exit 143 with a shutdown signal minutes into a 60-minute budget. Build first so the runner
+      # config exists in the build output for the hardening step to rewrite.
+      - name: Build test project
+        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo
+
+      - name: Harden xUnit runner
+        shell: pwsh
+        run: |
+          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+
       - name: Run the conformance window
         env:
           ADNSHAPE_CONF_NAMESPACE: VisionLanguage
@@ -1741,7 +1775,10 @@ jobs:
           # PIPESTATUS, not the pipe: `dotnet test | tee` reports tee's status, so a failing run
           # would look green. Same trap the parameter sweep above documents.
           set -o pipefail
+          # --no-build/--no-restore: a rebuild would regenerate xunit.runner.json and undo the
+          # hardening step above.
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --nologo \
+            --no-build --no-restore \
             --filter "FullyQualifiedName~ModelContractConformanceTests" \
             --logger 'console;verbosity=detailed' \
             --results-directory TestResults 2>&1 | tee window-output.txt
