@@ -284,7 +284,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
 
     private Tensor<T> _kernels;
 
@@ -307,7 +307,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth")]
 
     private Tensor<T> _biases;
 
@@ -1032,6 +1032,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
+
+        // Restored before the first forward: keep what arrived. Rule in LayerBase,
+        // shapes from the [TrainableParameter(Shape = ...)] annotations.
+        if (TryAdoptRestoredParameters())
+        {
+            _isInitialized = true;
+            return;
+        }
 
         // A convolution's WEIGHTS depend only on the channel counts and kernel size — the kernel is
         // [outputDepth, inputDepth/groups, k, k], with no height or width in it, exactly as in
