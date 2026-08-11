@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
-    ISupportsLossFunction<T>
+    ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -622,7 +622,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     // Registered LAST so that every model that registers nothing keeps byte-identical
     // serialization order.
 
-    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
     private bool _componentsRegistered;
 
     /// <summary>
@@ -631,14 +631,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// reference.
     /// </summary>
     protected void RegisterParameterComponent(IParameterSource<T>? component)
-    {
-        if (component is null) return;
-        for (int i = 0; i < _parameterComponents.Count; i++)
-        {
-            if (ReferenceEquals(_parameterComponents[i], component)) return;
-        }
-        _parameterComponents.Add(component);
-    }
+        => _parameterRegistry.Register(component);
+
+    /// <summary>Registers an exceptional component by stable identity and semantic role.</summary>
+    protected void RegisterParameterComponent(
+        string stableId,
+        IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role =
+            AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
 
     /// <summary>
     /// Declare components here with <see cref="RegisterParameterComponent"/>. Called once, lazily,
@@ -655,14 +656,127 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (!_componentsRegistered)
             {
+                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                // Latch only once something registered: a model can be asked for its parameters
-                // before it has built them, and registration tolerates null, so an early call would
-                // otherwise mark the job done and leave the model reporting zero for ever.
-                _componentsRegistered = _parameterComponents.Count > 0;
+                _componentsRegistered = true;
             }
-            return _parameterComponents;
+            return _parameterRegistry.Components;
         }
+    }
+
+    /// <inheritdoc />
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get => BuildParameterLayout();
+    }
+
+    private AiDotNet.Models.Parameters.ParameterLayoutSnapshot BuildParameterLayout()
+    {
+        EnsureParametersReady();
+        ResolveLazyLayerShapes();
+
+        var slots = new List<AiDotNet.Models.Parameters.ParameterSlotDescriptor>();
+        long offset = 0;
+        bool offsetKnown = true;
+
+        void AddSlot(
+            string stableId,
+            AiDotNet.Models.Parameters.ParameterSlotRole role,
+            AiDotNet.Models.Parameters.ParameterReadiness readiness,
+            long? count)
+        {
+            slots.Add(new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                stableId, role, readiness, count, offsetKnown ? offset : (long?)null));
+            if (count.HasValue && offsetKnown)
+                offset = checked(offset + count.Value);
+            else
+                offsetKnown = false;
+        }
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var readiness = GetLayerParameterReadiness(Layers[i]);
+            long? count = readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
+                ? null
+                : Layers[i].ParameterCount;
+            AddSlot(
+                $"layers/{i:D8}",
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                readiness,
+                count);
+        }
+
+        int extraLayerIndex = 0;
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is null) continue;
+            var readiness = GetLayerParameterReadiness(layer);
+            long? count = readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
+                ? null
+                : layer.ParameterCount;
+            AddSlot(
+                $"extra-layers/{extraLayerIndex++:D8}",
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                readiness,
+                count);
+        }
+
+        int tensorIndex = 0;
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null) continue;
+            AddSlot(
+                $"extra-tensors/{tensorIndex++:D8}",
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                tensor.Length == 0
+                    ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                    : AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                tensor.Length);
+        }
+
+        _ = ParameterComponents;
+        var componentLayout = _parameterRegistry.ParameterLayout;
+        for (int i = 0; i < componentLayout.Slots.Count; i++)
+        {
+            var slot = componentLayout.Slots[i];
+            AddSlot(
+                "components/" + slot.StableId,
+                slot.Role,
+                slot.Readiness,
+                slot.ParameterCount);
+        }
+
+        return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(slots);
+    }
+
+    private static AiDotNet.Models.Parameters.ParameterReadiness GetLayerParameterReadiness(ILayer<T> layer)
+    {
+        var readiness = AiDotNet.Models.Parameters.ParameterReadiness.Materialized;
+
+        if (layer is Layers.LayerBase<T> layerBase)
+        {
+            if (layerBase.HasUninitializedParameters)
+                return AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred;
+            if (layerBase.IsShapeResolved && !layerBase.IsInitialized)
+                readiness = AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized;
+        }
+
+        var subLayers = layer.GetSubLayers();
+        for (int i = 0; i < subLayers.Count; i++)
+        {
+            var childReadiness = GetLayerParameterReadiness(subLayers[i]);
+            if (childReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred)
+                return childReadiness;
+            if (childReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized)
+                readiness = childReadiness;
+        }
+
+        if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.Materialized &&
+            layer.ParameterCount == 0)
+            readiness = AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree;
+
+        return readiness;
     }
 
     /// <summary>Total across the registered components, or zero when none are registered.</summary>
@@ -670,10 +784,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         get
         {
-            long total = 0;
-            var components = ParameterComponents;
-            for (int i = 0; i < components.Count; i++) total += components[i].ParameterCount;
-            return total;
+            _ = ParameterComponents;
+            return _parameterRegistry.ParameterCount;
         }
     }
 

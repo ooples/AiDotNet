@@ -23,7 +23,8 @@ namespace AiDotNet.Diffusion.VAE;
 /// They are essential for efficient latent diffusion models like Stable Diffusion.
 /// </para>
 /// </remarks>
-public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
+public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
+    AiDotNet.Models.Parameters.IParameterManifestProvider
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -163,7 +164,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     public abstract double LatentScaleFactor { get; }
 
     /// <summary>Components whose parameters belong to this VAE, in registration order.</summary>
-    private readonly List<IParameterSource<T>> _parameterComponents = new();
+    private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
 
     private bool _componentsRegistered;
 
@@ -183,19 +184,27 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (_componentsRegistered) return;
         _componentsRegistered = true;
+        if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
+            generated.RegisterGeneratedParameters(_parameterRegistry);
         RegisterComponents();
     }
 
     /// <summary>Declares a child component as part of this VAE's parameter surface.</summary>
     /// <remarks>Identity-based and idempotent; null is ignored.</remarks>
     protected void RegisterParameterComponent(IParameterSource<T>? component)
+        => _parameterRegistry.Register(component);
+
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
+    protected virtual void OnParametersRestored()
     {
-        if (component is null) return;
-        for (int i = 0; i < _parameterComponents.Count; i++)
-        {
-            if (ReferenceEquals(_parameterComponents[i], component)) return;
-        }
-        _parameterComponents.Add(component);
+    }
+
+    public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
+    {
+        get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }
     }
 
     /// <inheritdoc />
@@ -208,9 +217,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         get
         {
             EnsureComponentsRegistered();
-            long total = 0;
-            for (int i = 0; i < _parameterComponents.Count; i++) total += _parameterComponents[i].ParameterCount;
-            return total;
+            return _parameterRegistry.ParameterCount;
         }
     }
 
@@ -404,24 +411,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     public virtual Vector<T> GetParameters()
     {
         EnsureComponentsRegistered();
-        if (_parameterComponents.Count == 0) return new Vector<T>(0);
-
-        // Sized from the components' own vectors, never from the virtual ParameterCount: a
-        // subclass overriding the count inconsistently would otherwise overflow this buffer.
-        var parts = new Vector<T>[_parameterComponents.Count];
-        int total = 0;
-        for (int i = 0; i < parts.Length; i++)
-        {
-            parts[i] = _parameterComponents[i].GetParameters();
-            total += parts[i].Length;
-        }
-        var result = new Vector<T>(total);
-        int offset = 0;
-        for (int i = 0; i < parts.Length; i++)
-        {
-            for (int j = 0; j < parts[i].Length; j++) result[offset++] = parts[i][j];
-        }
-        return result;
+        return _parameterRegistry.GetParameters();
     }
 
     /// <inheritdoc />
@@ -431,7 +421,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         EnsureComponentsRegistered();
-        if (_parameterComponents.Count == 0)
+        if (!_parameterRegistry.HasComponents)
         {
             if (parameters.Length == 0) return;
             throw new ArgumentException(
@@ -439,29 +429,8 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
                 $"{parameters.Length} parameters.", nameof(parameters));
         }
 
-        var widths = new int[_parameterComponents.Count];
-        int expected = 0;
-        for (int i = 0; i < widths.Length; i++)
-        {
-            widths[i] = _parameterComponents[i].GetParameters().Length;
-            expected += widths[i];
-        }
-        if (parameters.Length != expected)
-        {
-            throw new ArgumentException(
-                $"Expected {expected} parameters, but got {parameters.Length} " +
-                $"(model {GetType().Name}, {_parameterComponents.Count} components).",
-                nameof(parameters));
-        }
-
-        int offset = 0;
-        for (int i = 0; i < widths.Length; i++)
-        {
-            if (widths[i] == 0) continue;
-            var slice = new Vector<T>(widths[i]);
-            for (int j = 0; j < widths[i]; j++) slice[j] = parameters[offset++];
-            _parameterComponents[i].SetParameters(slice);
-        }
+        _parameterRegistry.SetParameters(parameters);
+        OnParametersRestored();
     }
 
     /// <summary>

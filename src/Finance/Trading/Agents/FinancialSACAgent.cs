@@ -53,21 +53,15 @@ namespace AiDotNet.Finance.Trading.Agents;
 public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Actor then both critics, the order all three hand-written surfaces used. Soft actor-critic trains twin critics to damp overestimation bias -- they are independent parameters, not copies of each other. The TARGET critics stay out, as they did before: a target is refreshed from these weights rather than trained.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(_actor);
-        RegisterParameterComponent(_critic1);
-        RegisterParameterComponent(_critic2);
-    }
     #region Fields
 
     private readonly FinancialSACAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic1;
     private readonly INeuralNetwork<T> _critic2;
+    [Buffer]
     private readonly INeuralNetwork<T> _targetCritic1;
+    [Buffer]
     private readonly INeuralNetwork<T> _targetCritic2;
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _actorArchitecture;

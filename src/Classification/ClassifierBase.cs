@@ -31,7 +31,7 @@ namespace AiDotNet.Classification;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>, IModelShape
+public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>, IModelShape, IParameterManifestProvider
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -650,6 +650,10 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     protected void RegisterParameterComponent(IParameterSource<T>? component)
         => _parameterRegistry.Register(component);
 
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
     /// <summary>
     /// Declare the trainable components of this classifier here. Called once, lazily, so it runs
     /// after fitting has built them.
@@ -671,12 +675,16 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
         {
             if (!_componentsRegistered)
             {
+                if (this is IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                _componentsRegistered = _parameterRegistry.HasComponents;
+                _componentsRegistered = true;
             }
             return _parameterRegistry;
         }
     }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <summary>
     /// Gets this classifier's parameters as a flat vector.

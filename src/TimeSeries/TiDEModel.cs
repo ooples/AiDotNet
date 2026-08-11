@@ -28,20 +28,30 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
     private readonly int _h;
 
     // Encoder: hidden = ReLU(W1·x + b1). Decoder: out = W2·hidden + b2. Linear skip: + Wr·x + br.
+    [TrainableParameter]
     private readonly double[][] _w1; // [H][L]
+    [TrainableParameter]
     private readonly double[] _b1;   // [H]
+    [TrainableParameter]
     private readonly double[] _w2;   // [H]
+    [TrainableParameter]
     private double _b2;
+    [TrainableParameter]
     private readonly double[] _wr;   // [L]
+    [TrainableParameter]
     private double _br;
 
     // TiDE's reference implementation optionally normalizes each series before
     // the dense encoder and restores its scale after decoding. This supervised
     // Matrix/Vector adaptation keeps equivalent training-set statistics so raw
     // time indices and large target offsets do not destabilize the MLP.
+    [Buffer]
     private readonly double[] _inputMeans;
+    [Buffer]
     private readonly double[] _inputStds;
+    [Buffer]
     private double _targetMean;
+    [Buffer]
     private double _targetStd = 1.0;
 
     public TiDEModel(TiDEOptions<T>? options = null)
@@ -262,27 +272,6 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        ModelParameters = FlattenParameters();
-    }
-
-    /// <summary>
-    /// Flattens every learned weight (<c>_w1</c>, <c>_b1</c>, <c>_w2</c>, <c>_b2</c>, <c>_wr</c>,
-    /// <c>_br</c>) into a single contiguous vector, in the same layout <see cref="ParameterCount"/>
-    /// describes. This is the real parameter set the base-class contract expects for model inspection,
-    /// checkpointing, and parameter transfer — not a one-element placeholder.
-    /// </summary>
-    private Vector<T> FlattenParameters()
-    {
-        var flat = new T[ParameterCount];
-        int k = 0;
-        for (int i = 0; i < _h; i++)
-            for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_w1[i][j]); }
-        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_b1[i]); }
-        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_w2[i]); }
-        flat[k++] = NumOps.FromDouble(_b2);
-        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wr[j]); }
-        flat[k] = NumOps.FromDouble(_br);
-        return new Vector<T>(flat);
     }
 
     public override T PredictSingle(Vector<T> input)
@@ -297,25 +286,6 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         // a second line of defence for the recursive-forecast path.
         return GuardPrediction(ToFiniteT(pred));
     }
-
-    /// <summary>The model's trainable weights: H*L + H + H + 1 + L + 1, in the order the deleted formula summed. _inputMeans and _inputStds are normalization statistics and are correctly absent.</summary>
-    /// <remarks>
-    /// Replaces a hand-written ParameterCount formula. The formula was CORRECT -- it was
-    /// checked against every allocation before this change -- but it was a second statement
-    /// of the same fact, kept in step by hand. Declaring the storage makes the count, the
-    /// vector and the restore read it instead.
-    /// </remarks>
-    protected override void RegisterComponents()
-    {
-        base.RegisterComponents();
-            RegisterParameterComponent(new DoubleJaggedParameterSource<T>(() => _w1));
-            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _b1));
-            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _w2));
-            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _b2, v => _b2 = v));
-            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _wr));
-            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _br, v => _br = v));
-    }
-
 
     protected override void SerializeCore(BinaryWriter writer)
     {

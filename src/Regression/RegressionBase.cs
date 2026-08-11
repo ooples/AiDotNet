@@ -1,8 +1,8 @@
 global using AiDotNet.Factories;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
-using Newtonsoft.Json;
-using System.Collections.Generic;
+using AiDotNet.Models.Parameters;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
 
@@ -31,8 +31,66 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>,
+    IParameterManifestProvider
 {
+    private readonly ParameterComponentRegistry<T> _additionalParameterRegistry = new();
+    private bool _additionalParametersRegistered;
+
+    /// <summary>Registers an exceptional parameter component not discovered from a field.</summary>
+    protected void RegisterParameterComponent(IParameterSource<T>? component)
+        => _additionalParameterRegistry.Register(component);
+
+    /// <summary>Registers an exceptional component by stable identity and semantic role.</summary>
+    protected void RegisterParameterComponent(
+        string stableId,
+        IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _additionalParameterRegistry.Register(stableId, component, role);
+
+    /// <summary>Override only for exceptional components the generator cannot discover.</summary>
+    protected virtual void RegisterComponents()
+    {
+    }
+
+    private ParameterComponentRegistry<T> AdditionalParameterRegistry
+    {
+        get
+        {
+            if (!_additionalParametersRegistered)
+            {
+                if (this is IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_additionalParameterRegistry);
+                RegisterComponents();
+                _additionalParametersRegistered = true;
+            }
+            return _additionalParameterRegistry;
+        }
+    }
+
+    /// <inheritdoc />
+    public ParameterLayoutSnapshot ParameterLayout
+    {
+        get
+        {
+            var additional = AdditionalParameterRegistry.ParameterLayout;
+            var slots = new List<ParameterSlotDescriptor>(additional.Slots.Count + 1)
+            {
+                new ParameterSlotDescriptor(
+                    "AiDotNet.Regression.RegressionBase::core",
+                    ParameterSlotRole.Trainable,
+                    Coefficients.Length == 0 && TrainingFeatureCount == 0
+                        ? ParameterReadiness.ShapeDeferred
+                        : ParameterReadiness.Materialized,
+                    Coefficients.Length == 0 && TrainingFeatureCount == 0
+                        ? null
+                        : (long?)ExpectedParameterCount)
+            };
+            for (int i = 0; i < additional.Slots.Count; i++) slots.Add(additional.Slots[i]);
+            return new ParameterLayoutSnapshot(slots);
+        }
+    }
+
     /// <summary>
     /// Gets the numeric operations for the specified type T.
     /// </summary>
@@ -525,72 +583,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// the ones that give the most accurate predictions.
     /// </para>
     /// </remarks>
-    // --- Parameter component registry -------------------------------------------------------
-    //
-    // RegressionBase implements its interfaces directly instead of deriving from ModelBase, so it
-    // never had the registry the other roots grew. Its surface is Coefficients plus an optional
-    // Intercept, which is right for a plain linear model and not enough for one that fits anything
-    // else -- a GAM's per-feature coefficient blocks, a mixed model's fixed effects, a multinomial
-    // classifier whose real weights are a MATRIX of which Coefficients exposes one column.
-    //
-    // Components fold LAST, after coefficients and intercept, so a model registering nothing keeps
-    // byte-identical serialization and no existing checkpoint layout moves.
-
-    private readonly List<IParameterSource<T>> _parameterComponents = new();
-    private bool _componentsRegistered;
-
-    /// <summary>
-    /// Declares a component whose parameters belong to this model's surface. Registration order is
-    /// serialization order. Null is tolerated and registration is idempotent by reference.
-    /// </summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-    {
-        if (component is null) return;
-        for (int i = 0; i < _parameterComponents.Count; i++)
-        {
-            if (ReferenceEquals(_parameterComponents[i], component)) return;
-        }
-        _parameterComponents.Add(component);
-    }
-
-    /// <summary>
-    /// Declare this model's trainable components here. Called once, lazily, so it runs after the
-    /// constructor has built them.
-    /// </summary>
-    protected virtual void RegisterComponents()
-    {
-    }
-
-    /// <summary>The registered components, registering them on first use.</summary>
-    protected IReadOnlyList<IParameterSource<T>> ParameterComponents
-    {
-        get
-        {
-            if (!_componentsRegistered)
-            {
-                RegisterComponents();
-                // Latch only once something registered: a model can be asked for its parameters
-                // before it is fitted, and the field sources tolerate a null field, so an early
-                // call would otherwise mark the job done and leave it reporting zero for ever.
-                _componentsRegistered = _parameterComponents.Count > 0;
-            }
-            return _parameterComponents;
-        }
-    }
-
-    /// <summary>Total across the registered components.</summary>
-    protected long RegisteredComponentCount
-    {
-        get
-        {
-            long total = 0;
-            var components = ParameterComponents;
-            for (int i = 0; i < components.Count; i++) total += components[i].ParameterCount;
-            return total;
-        }
-    }
-
-    public virtual Vector<T> GetParameters()
+    private Vector<T> GetCoreParameters()
     {
         // Create a new vector with enough space for coefficients + intercept (if used)
         int paramCount = Coefficients.Length + (Options.UseIntercept ? 1 : 0);
@@ -608,29 +601,23 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
             parameters[Coefficients.Length] = Intercept;
         }
 
+        return parameters;
+    }
 
-        var __components = ParameterComponents;
-        if (__components.Count == 0) return parameters;
+    /// <summary>
+    /// Returns the base coefficient surface followed by generated, stable-ID additional state.
+    /// </summary>
+    public virtual Vector<T> GetParameters()
+    {
+        var core = GetCoreParameters();
+        var registry = AdditionalParameterRegistry;
+        if (!registry.HasComponents) return core;
 
-        // Registered components last, matching ParameterCount and SetParameters, so all three
-        // describe one parameter set in one order.
-        var __extra = new List<Vector<T>>(__components.Count);
-        int __extraTotal = 0;
-        for (int __ci = 0; __ci < __components.Count; __ci++)
-        {
-            var __part = __components[__ci].GetParameters();
-            __extra.Add(__part);
-            __extraTotal += __part.Length;
-        }
-
-        var __combined = new Vector<T>(parameters.Length + __extraTotal);
-        for (int __i = 0; __i < parameters.Length; __i++) __combined[__i] = parameters[__i];
-        int __at2 = parameters.Length;
-        for (int __ci = 0; __ci < __extra.Count; __ci++)
-        {
-            for (int __j = 0; __j < __extra[__ci].Length; __j++) __combined[__at2++] = __extra[__ci][__j];
-        }
-        return __combined;
+        var additional = registry.GetParameters();
+        var result = new Vector<T>(checked(core.Length + additional.Length));
+        for (int i = 0; i < core.Length; i++) result[i] = core[i];
+        for (int i = 0; i < additional.Length; i++) result[core.Length + i] = additional[i];
+        return result;
     }
 
     /// <summary>
@@ -679,29 +666,6 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
         }
 
         int expectedCount = coefficientCount + (Options.UseIntercept ? 1 : 0);
-
-        // Split the component tail off first, so the length check below still describes exactly the
-        // coefficients-and-intercept prefix it was written for. Components fold LAST, matching
-        // ParameterCount and GetParameters.
-        var __registered = ParameterComponents;
-        if (__registered.Count > 0 && parameters.Length > expectedCount)
-        {
-            int __at = expectedCount;
-            for (int __ci = 0; __ci < __registered.Count; __ci++)
-            {
-                int __n = (int)__registered[__ci].ParameterCount;
-                if (__n == 0 || __at + __n > parameters.Length) continue;
-                var __slice = new Vector<T>(__n);
-                for (int __j = 0; __j < __n; __j++) __slice[__j] = parameters[__at + __j];
-                __registered[__ci].SetParameters(__slice);
-                __at += __n;
-            }
-
-            var __head = new Vector<T>(expectedCount);
-            for (int __i = 0; __i < expectedCount; __i++) __head[__i] = parameters[__i];
-            parameters = __head;
-        }
-
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException($"Expected {expectedCount} parameters, but got {parameters.Length}", nameof(parameters));
@@ -827,7 +791,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// the intercept (the baseline value).
     /// </para>
     /// </remarks>
-    public virtual void SetParameters(Vector<T> parameters)
+    private void SetCoreParameters(Vector<T> parameters)
     {
         // Handle untrained models: if Coefficients are empty, infer coefficient count from parameters
         int coefficientCount = Coefficients.Length;
@@ -842,29 +806,6 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
         }
 
         int expectedCount = coefficientCount + (Options.UseIntercept ? 1 : 0);
-
-        // Split the component tail off first, so the length check below still describes exactly the
-        // coefficients-and-intercept prefix it was written for. Components fold LAST, matching
-        // ParameterCount and GetParameters.
-        var __registered = ParameterComponents;
-        if (__registered.Count > 0 && parameters.Length > expectedCount)
-        {
-            int __at = expectedCount;
-            for (int __ci = 0; __ci < __registered.Count; __ci++)
-            {
-                int __n = (int)__registered[__ci].ParameterCount;
-                if (__n == 0 || __at + __n > parameters.Length) continue;
-                var __slice = new Vector<T>(__n);
-                for (int __j = 0; __j < __n; __j++) __slice[__j] = parameters[__at + __j];
-                __registered[__ci].SetParameters(__slice);
-                __at += __n;
-            }
-
-            var __head = new Vector<T>(expectedCount);
-            for (int __i = 0; __i < expectedCount; __i++) __head[__i] = parameters[__i];
-            parameters = __head;
-        }
-
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException($"Expected {expectedCount} parameters, but got {parameters.Length}", nameof(parameters));
@@ -881,6 +822,39 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
         {
             Intercept = parameters[coefficientCount];
         }
+    }
+
+    /// <summary>
+    /// Restores the base coefficient surface and generated additional state from one exact layout.
+    /// </summary>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        var registry = AdditionalParameterRegistry;
+        if (!registry.HasComponents)
+        {
+            SetCoreParameters(parameters);
+            return;
+        }
+
+        var additionalLayout = registry.ParameterLayout;
+        if (!additionalLayout.ParameterCount.HasValue)
+            throw new ParameterLayoutNotReadyException("restore", ParameterLayout);
+
+        int coreCount = ExpectedParameterCount;
+        int additionalCount = checked((int)additionalLayout.ParameterCount.Value);
+        if (parameters.Length != coreCount + additionalCount)
+            throw new ArgumentException(
+                $"Expected {coreCount + additionalCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+
+        var core = new Vector<T>(coreCount);
+        for (int i = 0; i < coreCount; i++) core[i] = parameters[i];
+        SetCoreParameters(core);
+
+        var additional = new Vector<T>(additionalCount);
+        for (int i = 0; i < additionalCount; i++) additional[i] = parameters[coreCount + i];
+        registry.SetParameters(additional);
     }
 
     /// <summary>
@@ -1056,7 +1030,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
 
     public virtual long ParameterCount
     {
-        get { return ExpectedParameterCount + RegisteredComponentCount; }
+        get { return checked(ExpectedParameterCount + AdditionalParameterRegistry.ParameterCount); }
     }
 
     /// <inheritdoc/>

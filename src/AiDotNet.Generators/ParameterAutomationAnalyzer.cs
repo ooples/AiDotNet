@@ -233,7 +233,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                             && type.GetMembers().Any(m =>
                                    !m.IsStatic && !m.IsImplicitlyDeclared
                                    && !HasAnyAttribute(m, "BufferAttribute", "Buffer",
-                                                          "ScratchAttribute", "Scratch")
+                                                          "ScratchAttribute", "Scratch",
+                                                          "ParameterAliasAttribute", "ParameterAlias")
                                    && ((!coversFields && m is IFieldSymbol f
                                         && f.AssociatedSymbol is null
                                         && IsWeightCapableType(f.Type))
@@ -245,21 +246,20 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                 MissingPartialForAutomation, modelLoc, type.Name));
                         }
 
-                        // The registry path carries tensors, matrices and vectors alike.
-                        bool generatorWillRegister = automatable && InheritsRegistry(type);
-
-                        // The NeuralNetworkBase trunk has no registry, only GetExtraTrainableTensors(),
-                        // whose element type is Tensor<T>. Only tensor fields are automated there; a
-                        // matrix or vector on that trunk stays reported, correctly -- nothing collects it.
-                        bool generatorWillYieldTensors = automatable && !generatorWillRegister
-                                                         && InheritsExtraTensorsHook(type);
+                        // Neural networks use their already-wired tensor/layer hooks. Other roots use
+                        // the generated stable-ID component registrar. Keeping this precedence in sync
+                        // with ModelParameterGenerator prevents a tensor from reaching both folds.
+                        bool generatorWillYieldTensors = automatable && InheritsExtraTensorsHook(type);
+                        bool generatorWillRegister = automatable && !generatorWillYieldTensors
+                                                     && InheritsRegistry(type);
 
                         if (!declares)
                         {
                             foreach (var f in type.GetMembers().OfType<IFieldSymbol>())
                             {
                                 if (f.IsStatic || f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) continue;
-                                if (HasAnyAttribute(f, "BufferAttribute", "Buffer", "ScratchAttribute", "Scratch")) continue;
+                                if (HasAnyAttribute(f, "BufferAttribute", "Buffer", "ScratchAttribute", "Scratch",
+                                                       "ParameterAliasAttribute", "ParameterAlias")) continue;
                                 if (!IsWeightCapableType(f.Type)) continue;
                                 if (generatorWillRegister && GeneratorHandles(f, type)) continue;
                                 if (generatorWillYieldTensors && GeneratorHandles(f, type)
@@ -375,12 +375,33 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
 
     private static bool IsTensorType(ITypeSymbol type)
     {
-        for (var c = type; c is not null; c = c.BaseType)
-        {
-            if (c.OriginalDefinition.ToDisplayString()
-                .StartsWith("AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal))
-                return true;
-        }
+        var normalized = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (normalized is IArrayTypeSymbol arrayType)
+            return IsTensorType(arrayType.ElementType);
+        if (normalized is not INamedTypeSymbol namedType)
+            return false;
+
+        string definition = namedType.OriginalDefinition.ToDisplayString();
+        if (definition.StartsWith(
+                "AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal))
+            return true;
+
+        bool indexedCollection = namedType.TypeArguments.Length == 1 &&
+            (definition.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal) ||
+             definition.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal) ||
+             definition.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal) ||
+             definition.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal) ||
+             definition.StartsWith("System.Collections.Generic.IReadOnlyCollection<", System.StringComparison.Ordinal));
+        if (indexedCollection)
+            return IsTensorType(namedType.TypeArguments[0]);
+
+        bool keyedCollection = namedType.TypeArguments.Length == 2 &&
+            (definition.StartsWith("System.Collections.Generic.Dictionary<", System.StringComparison.Ordinal) ||
+             definition.StartsWith("System.Collections.Generic.IDictionary<", System.StringComparison.Ordinal) ||
+             definition.StartsWith("System.Collections.Generic.IReadOnlyDictionary<", System.StringComparison.Ordinal));
+        if (keyedCollection)
+            return IsTensorType(namedType.TypeArguments[1]);
+
         return false;
     }
 
@@ -501,32 +522,6 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             return t.ToDisplayString();
 
         return null;
-    }
-
-    /// <summary>A list, array or dictionary of Vector/Matrix/Tensor over the element type.</summary>
-    private static bool IsWeightSequence(ITypeSymbol type, string elem)
-    {
-        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-        ITypeSymbol? element = null;
-        if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
-        else if (bare is INamedTypeSymbol n)
-        {
-            var o = n.OriginalDefinition.ToDisplayString();
-            if (n.TypeArguments.Length == 1
-                && o.StartsWith("System.Collections.Generic.", System.StringComparison.Ordinal))
-                element = n.TypeArguments[0];
-            else if (n.TypeArguments.Length == 2
-                     && o.StartsWith("System.Collections.Generic.", System.StringComparison.Ordinal))
-                element = n.TypeArguments[1];
-        }
-        if (element is null) return false;
-        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-        if (element is not INamedTypeSymbol en || en.TypeArguments.Length != 1) return false;
-        if (en.TypeArguments[0].ToDisplayString() != elem) return false;
-        var k = en.OriginalDefinition.ToDisplayString();
-        return k.StartsWith("AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal)
-            || k.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal)
-            || k.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
     }
 
     private static bool IsLayerLike(ITypeSymbol type)
@@ -652,55 +647,77 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
     }
 
     /// <summary>
-    /// A Tensor/Matrix/Vector over the model's own element type, which is what the generator has a
-    /// field source for. Collections, arrays and tensors over another element type are excluded --
-    /// the generator cannot infer an ordering for them, so they stay reported.
+    /// Mirrors ModelParameterGenerator's scalar, indexed-collection and keyed-collection support.
     /// </summary>
     private static bool GeneratorHandles(IFieldSymbol f, INamedTypeSymbol type)
     {
         if (f.Name.EndsWith("Gradient", System.StringComparison.Ordinal) ||
             f.Name.EndsWith("Gradients", System.StringComparison.Ordinal)) return false;
 
-        string? elem = null;
-        for (var c = type; c is not null && elem is null; c = c.ContainingType)
+        string? elementType = null;
+        for (var current = type; current is not null && elementType is null; current = current.ContainingType)
         {
-            foreach (var tp in c.TypeParameters)
+            foreach (var typeParameter in current.TypeParameters)
             {
-                if (tp.Name == "T") { elem = tp.Name; break; }
+                if (typeParameter.Name != "T") continue;
+                elementType = typeParameter.Name;
+                break;
             }
         }
-        if (elem is null && type.TypeParameters.Length > 0) elem = type.TypeParameters[0].Name;
-        if (elem is null)
+        if (elementType is null && type.TypeParameters.Length > 0)
+            elementType = type.TypeParameters[0].Name;
+        if (elementType is null)
         {
-            // A model that CLOSES over its scalar has no type parameter to find; the element
-            // type is the base's first type ARGUMENT. The generator learned this and this did
-            // not, so LinearVectorModel was registered by the generator AND reported here --
-            // the two must ask the same question or the build contradicts itself.
-            for (var b = type.BaseType; b is not null && elem is null; b = b.BaseType)
+            for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
             {
-                var baseOpen = b.OriginalDefinition.ToDisplayString();
-                if ((baseOpen.StartsWith("AiDotNet.Models.ModelBase<", System.StringComparison.Ordinal)
-                     || baseOpen.StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
-                    && b.TypeArguments.Length > 0
-                    && b.TypeArguments[0].TypeKind != TypeKind.TypeParameter)
-                {
-                    elem = b.TypeArguments[0].ToDisplayString();
-                }
+                string definition = baseType.OriginalDefinition.ToDisplayString();
+                bool parameterRoot =
+                    definition.StartsWith("AiDotNet.Models.ModelBase<", System.StringComparison.Ordinal) ||
+                    definition.StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal);
+                if (!parameterRoot || baseType.TypeArguments.Length == 0 ||
+                    baseType.TypeArguments[0].TypeKind == TypeKind.TypeParameter) continue;
+
+                elementType = baseType.TypeArguments[0].ToDisplayString();
+                break;
             }
         }
-        if (elem is null) return false;
+        return elementType is not null && GeneratorNumericType(f.Type, elementType);
+    }
 
-        // A SEQUENCE of weight-bearing values -- list, array or dictionary of Vector/Matrix/
-        // Tensor -- is discovered too, so it must not be reported. Mirrors
-        // ModelParameterGenerator.SequenceSourceFor.
-        if (IsWeightSequence(f.Type, elem)) return true;
+    private static bool GeneratorNumericType(ITypeSymbol type, string elementType)
+    {
+        var normalized = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (normalized is IArrayTypeSymbol arrayType)
+            return GeneratorNumericType(arrayType.ElementType, elementType);
+        if (normalized is not INamedTypeSymbol namedType)
+            return false;
 
-        if (f.Type is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return false;
-        if (named.TypeArguments[0].ToDisplayString() != elem) return false;
+        string definition = namedType.OriginalDefinition.ToDisplayString();
+        if (namedType.TypeArguments.Length == 1)
+        {
+            bool numericContainer = namedType.TypeArguments[0].ToDisplayString() == elementType &&
+                (definition.StartsWith("AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal) ||
+                 definition.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal) ||
+                 definition.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal));
+            if (numericContainer) return true;
 
-        var open = named.OriginalDefinition.ToDisplayString();
-        return open.StartsWith("AiDotNet.Tensors.LinearAlgebra.Tensor<", System.StringComparison.Ordinal)
-            || open.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal)
-            || open.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
+            bool indexedCollection =
+                definition.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal) ||
+                definition.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal) ||
+                definition.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal) ||
+                definition.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal) ||
+                definition.StartsWith("System.Collections.Generic.IReadOnlyCollection<", System.StringComparison.Ordinal);
+            return indexedCollection && GeneratorNumericType(namedType.TypeArguments[0], elementType);
+        }
+
+        if (namedType.TypeArguments.Length == 2)
+        {
+            bool keyedCollection =
+                definition.StartsWith("System.Collections.Generic.Dictionary<", System.StringComparison.Ordinal) ||
+                definition.StartsWith("System.Collections.Generic.IDictionary<", System.StringComparison.Ordinal) ||
+                definition.StartsWith("System.Collections.Generic.IReadOnlyDictionary<", System.StringComparison.Ordinal);
+            return keyedCollection && GeneratorNumericType(namedType.TypeArguments[1], elementType);
+        }
+        return false;
     }
 }

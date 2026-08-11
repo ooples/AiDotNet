@@ -16,12 +16,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
     public abstract class PolicyBase<T> : ModelBase<T, Vector<T>, Vector<T>>, IPolicy<T>
     {
 
-        /// <inheritdoc />
-        /// <remarks>Every network this policy exposes, in the order GetNetworks returns them -- the order the hand-written concatenation walked, and therefore the serialization order. The old SetParameters sliced each network by its own GetParameters().Length; the base slices by ParameterCount, which is the same number and is now folded from the same enumeration rather than agreed with it.</remarks>
-        protected override void RegisterComponents()
-        {
-            foreach (var network in GetNetworks()) RegisterParameterComponent(network);
-        }
         // NumOps inherited from ModelBase
 
         /// <summary>

@@ -308,8 +308,17 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
         // same answer nn.Module.parameters() gives for a module holding none.
         public long ParameterCount => 0;
         public Vector<float> GetParameters() => new Vector<float>(0);
-        public void SetParameters(Vector<float> parameters) { }
-        public IFullModel<float, Tensor<float>, Tensor<float>> WithParameters(Vector<float> parameters) => this;
+        public void SetParameters(Vector<float> parameters)
+        {
+            if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+            if (parameters.Length != 0)
+                throw new ArgumentException("This test model is parameter-free.", nameof(parameters));
+        }
+        public IFullModel<float, Tensor<float>, Tensor<float>> WithParameters(Vector<float> parameters)
+        {
+            SetParameters(parameters);
+            return this;
+        }
 
         public int TrainCalls { get; private set; }
 

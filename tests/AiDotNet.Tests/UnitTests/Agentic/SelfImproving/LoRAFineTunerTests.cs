@@ -189,8 +189,17 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             // same answer nn.Module.parameters() gives for a module holding none.
             public long ParameterCount => 0;
             public Vector<double> GetParameters() => new Vector<double>(0);
-            public void SetParameters(Vector<double> parameters) { }
-            public IFullModel<double, string, string> WithParameters(Vector<double> parameters) => this;
+            public void SetParameters(Vector<double> parameters)
+            {
+                if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+                if (parameters.Length != 0)
+                    throw new ArgumentException("This test model is parameter-free.", nameof(parameters));
+            }
+            public IFullModel<double, string, string> WithParameters(Vector<double> parameters)
+            {
+                SetParameters(parameters);
+                return this;
+            }
 
             public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 

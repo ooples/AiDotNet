@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
-using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Models.Parameters;
@@ -30,7 +29,7 @@ namespace AiDotNet.Models.Parameters;
 
 /// <summary>A <see cref="Tensor{T}"/> field exposed as a parameter surface, written through.</summary>
 /// <typeparam name="T">The numeric type of the values.</typeparam>
-public sealed class TensorFieldParameterSource<T> : IParameterSource<T>
+public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParameterLayoutSource
 {
     private readonly Func<Tensor<T>?> _get;
 
@@ -42,6 +41,21 @@ public sealed class TensorFieldParameterSource<T> : IParameterSource<T>
 
     /// <inheritdoc />
     public long ParameterCount => _get()?.Length ?? 0;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var value = _get();
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable,
+                value is null ? ParameterReadiness.ShapeDeferred
+                    : value.Length == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
+                    : ParameterReadiness.Materialized,
+                value is null ? null : (long?)value.Length)
+        };
+    }
 
     /// <inheritdoc />
     public Vector<T> GetParameters()
@@ -70,7 +84,7 @@ public sealed class TensorFieldParameterSource<T> : IParameterSource<T>
 /// Row-major, matching <see cref="AiDotNet.ReinforcementLearning.Parameters.MatrixParameterSource{T}"/>,
 /// so a model that moves between the two keeps its serialization layout.
 /// </remarks>
-public sealed class MatrixFieldParameterSource<T> : IParameterSource<T>
+public sealed class MatrixFieldParameterSource<T> : IParameterSource<T>, IParameterLayoutSource
 {
     private readonly Func<Matrix<T>?> _get;
 
@@ -84,6 +98,22 @@ public sealed class MatrixFieldParameterSource<T> : IParameterSource<T>
     public long ParameterCount
     {
         get { var m = _get(); return m is null ? 0 : (long)m.Rows * m.Columns; }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var value = _get();
+        long? count = value is null ? null : (long)value.Rows * value.Columns;
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable,
+                value is null ? ParameterReadiness.ShapeDeferred
+                    : count == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
+                    : ParameterReadiness.Materialized,
+                count)
+        };
     }
 
     /// <inheritdoc />
@@ -121,7 +151,7 @@ public sealed class MatrixFieldParameterSource<T> : IParameterSource<T>
 /// and therefore needs a setter. This one writes into the existing instance, so it works on a
 /// <c>readonly</c> field and cannot leave a caller holding a detached vector.
 /// </remarks>
-public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>
+public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>, IParameterLayoutSource
 {
     private readonly Func<Vector<T>?> _get;
 
@@ -133,6 +163,21 @@ public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>
 
     /// <inheritdoc />
     public long ParameterCount => _get()?.Length ?? 0;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var value = _get();
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable,
+                value is null ? ParameterReadiness.ShapeDeferred
+                    : value.Length == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
+                    : ParameterReadiness.Materialized,
+                value is null ? null : (long?)value.Length)
+        };
+    }
 
     /// <inheritdoc />
     public Vector<T> GetParameters()
@@ -174,7 +219,7 @@ public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>
 /// which for an ensemble is the normal case, not an edge one.
 /// </para>
 /// </remarks>
-public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>
+public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>, IParameterLayoutSource
 {
     private readonly Func<IEnumerable<IParameterSource<T>>?> _get;
 
@@ -203,6 +248,27 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>
             foreach (var m in Members()) total += m.ParameterCount;
             return total;
         }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var slots = new List<ParameterSlotDescriptor>();
+        int index = 0;
+        foreach (var member in Members())
+        {
+            long count = member.ParameterCount;
+            slots.Add(new ParameterSlotDescriptor(
+                $"index={index++:D8}", ParameterSlotRole.Trainable,
+                count == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
+                count));
+        }
+        if (slots.Count == 0)
+        {
+            slots.Add(new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ParameterFree, 0));
+        }
+        return slots;
     }
 
     /// <inheritdoc />
@@ -242,309 +308,73 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>
     }
 }
 
-// Sources over RAW double storage in a generic model. Several time-series models keep their
-// weights as double[] or double[][] even though the model is generic over T -- the values are
-// converted at the boundary. That is a precision decision those models already made; these let
-// such storage take part in the parameter surface without first rewriting it, so the surface is
-// not held hostage to a separate refactor.
-
-/// <summary>A <c>double[]</c> field exposed as a parameter surface, written through.</summary>
-/// <typeparam name="T">The numeric type of the surface.</typeparam>
-public sealed class DoubleArrayParameterSource<T> : IParameterSource<T>
+/// <summary>
+/// A lazily obtained component whose identity is registered before the component itself exists.
+/// </summary>
+public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, IParameterLayoutSource
 {
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
-    private readonly Func<double[]?> _get;
+    private readonly Func<IParameterSource<T>?> _get;
 
-    /// <summary>Creates a source over whatever array <paramref name="accessor"/> returns.</summary>
-    public DoubleArrayParameterSource(Func<double[]?> accessor)
-    {
-        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
-    }
-
-    /// <inheritdoc />
-    public long ParameterCount => _get()?.Length ?? 0;
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        var a = _get();
-        if (a is null) return new Vector<T>(0);
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++) result[i] = Ops.FromDouble(a[i]);
-        return result;
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        var a = _get();
-        if (a is null) return;
-        int n = Math.Min(a.Length, parameters.Length);
-        for (int i = 0; i < n; i++) a[i] = Ops.ToDouble(parameters[i]);
-    }
-}
-
-/// <summary>A jagged <c>double[][]</c> field exposed as a parameter surface, row-major.</summary>
-/// <typeparam name="T">The numeric type of the surface.</typeparam>
-public sealed class DoubleJaggedParameterSource<T> : IParameterSource<T>
-{
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
-    private readonly Func<double[][]?> _get;
-
-    /// <summary>Creates a source over whatever jagged array <paramref name="accessor"/> returns.</summary>
-    public DoubleJaggedParameterSource(Func<double[][]?> accessor)
-    {
-        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
-    }
-
-    /// <inheritdoc />
-    public long ParameterCount
-    {
-        get
-        {
-            var rows = _get();
-            if (rows is null) return 0;
-            long total = 0;
-            for (int i = 0; i < rows.Length; i++) total += rows[i]?.Length ?? 0;
-            return total;
-        }
-    }
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        var rows = _get();
-        if (rows is null) return new Vector<T>(0);
-        var result = new Vector<T>((int)ParameterCount);
-        int at = 0;
-        for (int i = 0; i < rows.Length; i++)
-        {
-            var row = rows[i];
-            if (row is null) continue;
-            for (int j = 0; j < row.Length; j++) result[at++] = Ops.FromDouble(row[j]);
-        }
-        return result;
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        var rows = _get();
-        if (rows is null) return;
-        int at = 0;
-        for (int i = 0; i < rows.Length; i++)
-        {
-            var row = rows[i];
-            if (row is null) continue;
-            for (int j = 0; j < row.Length && at < parameters.Length; j++)
-                row[j] = Ops.ToDouble(parameters[at++]);
-        }
-    }
-}
-
-/// <summary>A single <c>double</c> field exposed as a one-element parameter surface.</summary>
-/// <typeparam name="T">The numeric type of the surface.</typeparam>
-public sealed class DoubleScalarParameterSource<T> : IParameterSource<T>
-{
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
-    private readonly Func<double> _get;
-    private readonly Action<double> _set;
-
-    /// <summary>Creates a source over a scalar double field.</summary>
-    public DoubleScalarParameterSource(Func<double> get, Action<double> set)
+    /// <summary>Creates a source that re-reads the component on every operation.</summary>
+    public ComponentAccessorParameterSource(Func<IParameterSource<T>?> get)
     {
         _get = get ?? throw new ArgumentNullException(nameof(get));
-        _set = set ?? throw new ArgumentNullException(nameof(set));
     }
 
     /// <inheritdoc />
-    public long ParameterCount => 1;
+    public long ParameterCount => _get()?.ParameterCount ?? 0;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var component = _get();
+        if (component is null)
+        {
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+            };
+        }
+
+        if (component is IParameterManifestProvider manifest)
+        {
+            var layout = manifest.ParameterLayout;
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable, layout.Readiness, layout.ParameterCount)
+            };
+        }
+        if (component is IParameterLayoutSource source)
+            return source.GetParameterLayout();
+
+        long count = component.ParameterCount;
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable,
+                count == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
+                count)
+        };
+    }
 
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var v = new Vector<T>(1);
-        v[0] = Ops.FromDouble(_get());
-        return v;
+        var component = _get();
+        if (component is null)
+            throw new ParameterLayoutNotReadyException("read", new ParameterLayoutSnapshot(GetParameterLayout()));
+        return component.GetParameters();
     }
 
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        if (parameters.Length > 0) _set(Ops.ToDouble(parameters[0]));
-    }
-}
-
-// Sequences of weight-bearing values. A model whose parameters live in a LIST or ARRAY of vectors
-// or matrices -- a mixture model's per-component means, a boosted model's per-feature shape
-// functions, a meta-learner's per-block parameters -- had no way to reach the surface, because a
-// single field source describes one value and the layer path describes layers.
-//
-// Concatenated in enumeration order. For a Dictionary the caller must impose an order (see the
-// generated registration, which sorts by key): dictionary enumeration order is an implementation
-// detail, and serialization layout cannot rest on one.
-
-/// <summary>A sequence of <see cref="Vector{T}"/> exposed as one parameter surface.</summary>
-/// <typeparam name="T">The numeric type of the values.</typeparam>
-public sealed class VectorSequenceParameterSource<T> : IParameterSource<T>
-{
-    private readonly Func<IEnumerable<Vector<T>>?> _get;
-
-    /// <summary>Creates a source over whatever sequence <paramref name="accessor"/> returns.</summary>
-    public VectorSequenceParameterSource(Func<IEnumerable<Vector<T>>?> accessor)
-    {
-        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
-    }
-
-    private IEnumerable<Vector<T>> Items()
-    {
-        var items = _get();
-        if (items is null) yield break;
-        foreach (var v in items)
-        {
-            if (v is not null) yield return v;
-        }
-    }
-
-    /// <inheritdoc />
-    public long ParameterCount
-    {
-        get { long n = 0; foreach (var v in Items()) n += v.Length; return n; }
-    }
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        var result = new Vector<T>((int)ParameterCount);
-        int at = 0;
-        foreach (var v in Items())
-        {
-            for (int i = 0; i < v.Length; i++) result[at++] = v[i];
-        }
-        return result;
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int at = 0;
-        foreach (var v in Items())
-        {
-            for (int i = 0; i < v.Length && at < parameters.Length; i++) v[i] = parameters[at++];
-        }
-    }
-}
-
-/// <summary>A sequence of <see cref="Matrix{T}"/> exposed as one parameter surface, row-major.</summary>
-/// <typeparam name="T">The numeric type of the values.</typeparam>
-public sealed class MatrixSequenceParameterSource<T> : IParameterSource<T>
-{
-    private readonly Func<IEnumerable<Matrix<T>>?> _get;
-
-    /// <summary>Creates a source over whatever sequence <paramref name="accessor"/> returns.</summary>
-    public MatrixSequenceParameterSource(Func<IEnumerable<Matrix<T>>?> accessor)
-    {
-        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
-    }
-
-    private IEnumerable<Matrix<T>> Items()
-    {
-        var items = _get();
-        if (items is null) yield break;
-        foreach (var m in items)
-        {
-            if (m is not null) yield return m;
-        }
-    }
-
-    /// <inheritdoc />
-    public long ParameterCount
-    {
-        get { long n = 0; foreach (var m in Items()) n += (long)m.Rows * m.Columns; return n; }
-    }
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        var result = new Vector<T>((int)ParameterCount);
-        int at = 0;
-        foreach (var m in Items())
-        {
-            for (int r = 0; r < m.Rows; r++)
-            for (int c = 0; c < m.Columns; c++) result[at++] = m[r, c];
-        }
-        return result;
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int at = 0;
-        foreach (var m in Items())
-        {
-            for (int r = 0; r < m.Rows; r++)
-            for (int c = 0; c < m.Columns && at < parameters.Length; c++) m[r, c] = parameters[at++];
-        }
-    }
-}
-
-/// <summary>A sequence of <see cref="Tensor{T}"/> exposed as one parameter surface.</summary>
-/// <typeparam name="T">The numeric type of the values.</typeparam>
-/// <remarks>
-/// Written THROUGH, so a tensor's aliased storage stays valid for whatever else holds it -- the
-/// same reason the single-field tensor source does not rebind.
-/// </remarks>
-public sealed class TensorSequenceParameterSource<T> : IParameterSource<T>
-{
-    private readonly Func<IEnumerable<Tensor<T>>?> _get;
-
-    /// <summary>Creates a source over whatever sequence <paramref name="accessor"/> returns.</summary>
-    public TensorSequenceParameterSource(Func<IEnumerable<Tensor<T>>?> accessor)
-    {
-        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
-    }
-
-    private IEnumerable<Tensor<T>> Items()
-    {
-        var items = _get();
-        if (items is null) yield break;
-        foreach (var t in items)
-        {
-            if (t is not null) yield return t;
-        }
-    }
-
-    /// <inheritdoc />
-    public long ParameterCount
-    {
-        get { long n = 0; foreach (var t in Items()) n += t.Length; return n; }
-    }
-
-    /// <inheritdoc />
-    public Vector<T> GetParameters()
-    {
-        var result = new Vector<T>((int)ParameterCount);
-        int at = 0;
-        foreach (var t in Items())
-        {
-            for (int i = 0; i < t.Length; i++) result[at++] = t[i];
-        }
-        return result;
-    }
-
-    /// <inheritdoc />
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int at = 0;
-        foreach (var t in Items())
-        {
-            for (int i = 0; i < t.Length && at < parameters.Length; i++) t[i] = parameters[at++];
-        }
+        var component = _get();
+        if (component is null)
+            throw new ParameterLayoutNotReadyException("restore", new ParameterLayoutSnapshot(GetParameterLayout()));
+        component.SetParameters(parameters);
     }
 }

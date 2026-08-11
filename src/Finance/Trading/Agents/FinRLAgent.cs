@@ -47,10 +47,6 @@ namespace AiDotNet.Finance.Trading.Agents;
 public partial class FinRLAgent<T> : TradingAgentBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The wrapped agent this one delegates to. All three hand-written surfaces forwarded straight to it.</remarks>
-    protected override void RegisterComponents()
-        => RegisterParameterComponent(_innerAgent);
     #region Fields
 
     private readonly FinRLAgentOptions<T> _options;

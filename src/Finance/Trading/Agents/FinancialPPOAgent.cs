@@ -55,13 +55,6 @@ namespace AiDotNet.Finance.Trading.Agents;
 public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
-    /// <inheritdoc />
-    /// <remarks>Actor then critic, the order all three hand-written surfaces used. PPO optimises the policy against a learned value baseline, and both are trained.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(_actor);
-        RegisterParameterComponent(_critic);
-    }
     #region Fields
 
     private const string ObservationNormalizerMarker = "AiDotNet.FinancialPPOAgent.ObservationNormalizer.v1";
@@ -72,6 +65,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
     private readonly Trajectory<T> _trajectory;
+    [Scratch]
     private readonly List<Vector<T>> _nextStates;
     private readonly Random _random;
     private readonly NeuralNetworkArchitecture<T> _actorArchitecture;
@@ -79,9 +73,13 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private double[]? _observationMean;
     private double[]? _observationM2;
     private long _observationCount;
+    [Scratch]
     private Vector<T>? _lastActionRawState;
+    [Scratch]
     private Vector<T>? _lastActionNormalizedState;
+    [Scratch]
     private Vector<T>? _lastActionVector;
+    [Scratch]
     private Vector<T>? _lastStoredNextRawState;
     private T _lastActionLogProb = default!;
     private bool _hasLastActionLogProb;

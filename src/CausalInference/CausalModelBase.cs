@@ -31,7 +31,7 @@ namespace AiDotNet.CausalInference;
 /// - Managing fitted model state
 /// </para>
 /// </remarks>
-public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
+public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParameterManifestProvider
 {
     /// <summary>
     /// Gets the hardware-accelerated computation engine for vectorized operations.
@@ -88,6 +88,10 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     protected void RegisterParameterComponent(IParameterSource<T>? component)
         => _parameterRegistry.Register(component);
 
+    protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
+        ParameterSlotRole role = ParameterSlotRole.Trainable)
+        => _parameterRegistry.Register(stableId, component, role);
+
     /// <summary>
     /// Declare the trainable components of this model here with
     /// <see cref="RegisterParameterComponent"/>. Called once, lazily, so it runs after the
@@ -110,12 +114,16 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
         {
             if (!_componentsRegistered)
             {
+                if (this is IGeneratedParameterRegistrar<T> generated)
+                    generated.RegisterGeneratedParameters(_parameterRegistry);
                 RegisterComponents();
-                _componentsRegistered = _parameterRegistry.HasComponents;
+                _componentsRegistered = true;
             }
             return _parameterRegistry;
         }
     }
+
+    public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
     /// <remarks>

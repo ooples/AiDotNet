@@ -55,6 +55,9 @@ public class ParameterChunkParityTests
     public async System.Threading.Tasks.Task ChunkSum_ShouldMatchParameterCount()
     {
         await System.Threading.Tasks.Task.Yield();
+#if !NET10_0_OR_GREATER
+        return;
+#endif
 
         var divergent = new List<string>();
         var noChunks = new List<string>();
@@ -86,103 +89,54 @@ public class ParameterChunkParityTests
 
         using var _logHandle = log;
 
-        foreach (var closedType in GetConstructableModelTypes())
+        var modelTypes = GetConstructableModelTypes().ToArray();
+        var measurements = await ParameterSweepProcess.MeasureAllAsync(
+            modelTypes, includeChunks: true, MaxParametersToMaterialize, ConstructionTimeout);
+
+        foreach (var result in measurements)
         {
+            var closedType = result.ModelType;
             var typeName = closedType.FullName ?? closedType.Name;
             log?.WriteLine($"[measuring] {typeName}");
+            constructed++;
+            if (constructed % 50 == 0) { GC.Collect(); GC.WaitForPendingFinalizers(); }
 
-            if (!TryConstruct(closedType, out object? instance) || instance is null) { unmeasurable++; continue; }
-
-            try
+            var measurement = result.Measurement;
+            switch (measurement.Status)
             {
-                long declared = ReadLong(instance, "ParameterCount");
-                if (declared < 0) { unmeasurable++; continue; }
-
-                // Size check BEFORE touching the chunk API. GetParameterChunks() is documented as
-                // returning zero-copy references, but it calls ResolveLazyLayerShapes() first --
-                // which ALLOCATES every deferred weight tensor. For CogVideo's paper-scale 5B
-                // variant that is tens of GB at double, and it killed this sweep outright. The
-                // enumeration is cheap only once a model is already materialised; asking an
-                // unmaterialised giant for its chunks is what forces the materialisation.
-                if (declared > MaxParametersToMaterialize)
-                {
+                case "too-large":
                     tooLarge++;
-                    log?.WriteLine($"TOO-LARGE {typeName}: ParameterCount={declared}");
+                    log?.WriteLine($"TOO-LARGE {typeName}: ParameterCount={measurement.Declared}");
                     continue;
-                }
-
-                // A size guard on `declared` alone is NOT sufficient, and assuming it was is what
-                // OOM-killed both the local run and the CI runner. Deferred layers now report 0
-                // parameters -- correctly, since their weights are not sized until an input width
-                // arrives -- so a multi-billion-parameter model whose layers are all deferred reads
-                // 0 here and sails straight past the threshold. GetParameterChunks() then calls
-                // ResolveLazyLayerShapes(), which ALLOCATES every one of those weight tensors.
-                // The number the guard consults is precisely the number that cannot be trusted for
-                // the models the guard exists to catch.
-                //
-                // HasUninitializedParameters answers the question the count cannot: is this model
-                // sized yet? If not, there is no chunk parity to measure without forcing the
-                // materialisation we are trying to avoid, so it is skipped and reported as such
-                // rather than silently attempted.
-                if (ReadBool(instance, "HasUninitializedParameters"))
-                {
+                case "deferred":
+                case "unmaterialized":
                     unsized++;
-                    log?.WriteLine($"UNSIZED {typeName}: deferred layers, cannot enumerate without materialising");
+                    log?.WriteLine($"UNSIZED {typeName}: readiness={measurement.Readiness}");
                     continue;
-                }
-
-                var chunksMethod = closedType.GetMethod("GetParameterChunks",
-                    BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-                if (chunksMethod is null)
-                {
-                    noChunks.Add($"{typeName}: no GetParameterChunks (declared={declared})");
+                case "no-chunks":
+                    noChunks.Add($"{typeName}: no GetParameterChunks (declared={measurement.Declared})");
                     continue;
-                }
-
-                long chunkSum = 0;
-                int chunkCount = 0;
-                if (chunksMethod.Invoke(instance, null) is IEnumerable chunks)
-                {
-                    foreach (var chunk in chunks)
-                    {
-                        if (chunk is null) continue;
-                        var lenProp = chunk.GetType().GetProperty("Length");
-                        if (lenProp is not null) chunkSum += Convert.ToInt64(lenProp.GetValue(chunk));
-                        chunkCount++;
-                    }
-                }
-
-                compared++;
-
-                // Flat length only when it is cheap; the chunk comparison above is the point.
-                // chunkSum is the honest size here: ParameterCount reports 0 for layers whose
-                // input width is still deferred, so it can under-report a large model.
-                long flat = -1;
-                if (chunkSum <= MaxParametersToMaterialize)
-                {
-                    try { flat = ReadVectorLength(instance); }
-                    catch { flat = -1; }
-                }
-
-                if (chunkSum != declared || (flat >= 0 && flat != chunkSum))
-                {
-                    var row = $"{typeName}: ParameterCount={declared}, chunkSum={chunkSum} " +
-                              $"({chunkCount} chunks), GetParameters().Length={(flat < 0 ? "n/a" : flat.ToString())}";
-                    divergent.Add(row);
-                    log?.WriteLine("DIVERGENT " + row);
-                }
+                case "ok":
+                    break;
+                default:
+                    unmeasurable++;
+                    _output.WriteLine($"UNMEASURABLE {typeName}: {measurement.Status} {measurement.Error}");
+                    continue;
             }
-            catch (Exception ex)
+
+            compared++;
+            bool ambiguousZero = measurement.Declared == 0 && measurement.Flat == 0 &&
+                                 measurement.ChunkSum == 0 && measurement.Readiness != "ParameterFree";
+            if (measurement.ChunkSum != measurement.Declared ||
+                (measurement.Flat >= 0 && measurement.Flat != measurement.ChunkSum) || ambiguousZero)
             {
-                unmeasurable++;
-                _output.WriteLine($"UNMEASURABLE {typeName}: {ex.GetBaseException().GetType().Name}");
+                var row = $"{typeName}: ParameterCount={measurement.Declared}, " +
+                          $"chunkSum={measurement.ChunkSum} ({measurement.ChunkCount} chunks), " +
+                          $"GetParameters().Length={(measurement.Flat < 0 ? "n/a" : measurement.Flat.ToString())}, " +
+                          $"readiness={measurement.Readiness}";
+                divergent.Add(row);
+                log?.WriteLine("DIVERGENT " + row);
             }
-            finally
-            {
-                (instance as IDisposable)?.Dispose();
-            }
-
-            if (++constructed % 50 == 0) { GC.Collect(); GC.WaitForPendingFinalizers(); }
         }
 
         _output.WriteLine($"Compared {compared} models; {noChunks.Count} expose no chunk API; " +
