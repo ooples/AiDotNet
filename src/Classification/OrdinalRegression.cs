@@ -765,7 +765,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
     /// <param name="parameters">A vector containing all model parameters.</param>
     /// <returns>A new model instance with the specified parameters.</returns>
     /// <exception cref="ArgumentException">Thrown when the parameters vector has an incorrect length.</exception>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = new OrdinalRegression<T>(_options, Regularization);
         newModel.NumFeatures = NumFeatures;

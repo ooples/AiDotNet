@@ -157,4 +157,32 @@ public sealed class OnnxFullModelAdapter<T> : IFullModel<T, Tensor<T>, Tensor<T>
 
     /// <inheritdoc/>
     public void Dispose() => _model.Dispose();
+
+    // --- Parameter surface -------------------------------------------------------------------
+    //
+    // The weights belong to the loaded ONNX graph, not to this adapter, so there is no vector to
+    // hand out and nothing to write into. Reporting zero and refusing writes is the truthful
+    // answer, and it is stated here rather than inherited because this adapter implements
+    // IFullModel directly instead of deriving from a model base.
+
+    /// <summary>Always zero: the graph owns its weights, this adapter does not.</summary>
+    public long ParameterCount => 0;
+
+    /// <summary>An empty vector, matching <see cref="ParameterCount"/>.</summary>
+    public Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <summary>Refused: the weights belong to the loaded graph.</summary>
+    public void SetParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            "An ONNX-backed model's weights belong to the loaded graph, not to this adapter, so "
+            + "they cannot be written. Load the model in a native mode to train or restore "
+            + "parameters. Reading -- ParameterCount and GetParameters -- reports zero, which is "
+            + "the honest count of what this adapter owns.");
+
+    /// <inheritdoc />
+    public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            "An ONNX-backed model cannot be rebuilt from a parameter vector; its weights live in "
+            + "the loaded graph.");
+
 }

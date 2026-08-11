@@ -1136,7 +1136,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// this just creates a new instance with the same configuration.
     /// </para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new LabelSpreading<T>(_kernel, _maxIterations, _tolerance, _alpha, _random.Next());
     }

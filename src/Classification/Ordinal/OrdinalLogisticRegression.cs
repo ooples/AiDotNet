@@ -610,7 +610,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     /// <para><b>For Beginners:</b> Creates a fresh copy of the model with specific parameter
     /// values. Useful for optimization algorithms that explore different parameter settings.</para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new OrdinalLogisticRegression<T>(_learningRate, _maxIterations, _tolerance, _regularizationStrength);
         model.NumFeatures = NumFeatures;

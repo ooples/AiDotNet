@@ -718,6 +718,18 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// expectation; it is simply no longer mistaken for the count of what is serialized.
     /// </para>
     /// </remarks>
+    /// <summary>Returns a copy of this classifier carrying the given parameters.</summary>
+    /// <remarks>
+    /// Clone-then-set rather than a separate construction path, so the copy is produced by the same
+    /// code that produces every other clone and cannot drift from it.
+    /// </remarks>
+    public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = (ClassifierBase<T>)Clone();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
     public virtual long ParameterCount => Registry.ParameterCount;
 
     /// <summary>

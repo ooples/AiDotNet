@@ -726,7 +726,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// <summary>
     /// Returns a fresh instance — tree structure cannot be reconstructed from flat parameters.
     /// </summary>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
         => new HoeffdingTreeClassifier<T>(_options);
 
     /// <inheritdoc />
