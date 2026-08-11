@@ -259,7 +259,12 @@ public class LayoutAwareDocumentTests
     {
         var arch = CreateArchitecture();
         var model = new LiLT<float>(arch);
-        var input = CreateSmallImage();
+        // LiLT (Wang et al., ACL 2022) is text + layout with NO vision stream — decoupling the two is
+        // the paper's whole point, which is what lets one layout encoder pair with any language's text
+        // encoder. Handing it a document IMAGE fed float pixels straight into its front EmbeddingLayer,
+        // which correctly refused them ("requires token indices, but element 0 is 0.0655..."). Same
+        // fixture mistake already corrected for LayoutLM above.
+        var input = CreateTokenSequence();
         var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");

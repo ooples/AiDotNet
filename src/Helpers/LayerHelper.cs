@@ -10503,7 +10503,8 @@ public static class LayerHelper<T>
         int vocabSize = 30522,
         int maxSequenceLength = 512,
         int numClasses = 7,
-        int patchSize = 16)
+        int patchSize = 16,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -10512,14 +10513,21 @@ public static class LayerHelper<T>
         // LayoutLM v1 (Xu et al. 2020, KDD) is a TEXT + 2D-layout model: its input is a sequence of
         // token IDs (the image-region features of the paper come from an EXTERNAL detector and are an
         // optional downstream add-on, not part of the core encoder — the visual patch stream first
-        // appears in LayoutLMv2/v3). The generated tests feed a rank-1 token-ID sequence accordingly,
-        // so the token EmbeddingLayer is the front of the stack. A leading PatchEmbeddingLayer (added
-        // when the tests briefly fed a document IMAGE) is wrong for token input and threw
-        // "PatchEmbeddingLayer requires rank-3/4 input; got rank 1" on every forward.
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-
-        // Position embeddings
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // appears in LayoutLMv2/v3). A leading PatchEmbeddingLayer (added when the tests briefly fed
+        // a document IMAGE) is wrong for token input and threw "PatchEmbeddingLayer requires rank-3/4
+        // input; got rank 1" on every forward.
+        //
+        // The whole embedding block is ONE layer, as in the paper: word + learned 1D position + the
+        // four 2D-layout terms, summed. It replaces the EmbeddingLayer + PositionalEncodingLayer pair
+        // that used to sit here, for two reasons. The layout terms had no representation at all — the
+        // model carried x/y/w/h tables as fields that were allocated, counted, serialized and trained,
+        // and read by nothing, so LayoutLM was a BERT that ignored the page. And the position half was
+        // the wrong KIND: PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids),
+        // whereas LayoutLM inherits BERT's LEARNED position embeddings.
+        //
+        // Token-only input still works unchanged (see LayoutEmbeddingLayer's input contract), so a
+        // caller with no OCR boxes gets exactly the previous behaviour.
+        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
 
         // LayerNorm after embeddings
         yield return new LayerNormalizationLayer<T>();
