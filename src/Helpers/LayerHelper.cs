@@ -10688,7 +10688,8 @@ public static class LayerHelper<T>
         int vocabSize = 30522,
         int imageSize = 224,
         int spatialDim = 128,
-        int numClasses = 16)
+        int numClasses = 16,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
@@ -10712,8 +10713,12 @@ public static class LayerHelper<T>
 
         // === TEXT EMBEDDINGS ===
 
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // One embedding block, as in the paper. DocFormer (Appalaraju et al., ICCV 2021) is a
+        // multi-modal model whose spatial features are summed into the text stream; the two spatial
+        // tables that were supposed to carry them lived as model fields, were counted and serialized,
+        // and were read by nothing. Folding them in here means the text stream can actually see where
+        // a token sits. Token-only input is unchanged when no boxes accompany it.
+        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
 
         // === SPATIAL ENCODINGS (shared) ===
 

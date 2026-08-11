@@ -81,9 +81,9 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     private readonly List<ILayer<T>> _multiModalLayers = [];
     private readonly List<ILayer<T>> _outputLayers = [];
 
-    // Learnable spatial embeddings
-    private Tensor<T>? _spatialXEmbeddings;
-    private Tensor<T>? _spatialYEmbeddings;
+    // The spatial X/Y tables used to be model fields here. They are now inside the
+    // LayoutEmbeddingLayer that fronts the text stream, where the forward pass reads them --
+    // see LayerHelper.CreateDefaultDocFormerLayers.
 
     #endregion
 
@@ -268,7 +268,6 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
         InitializeLayers();
-        InitializeSpatialEmbeddings();
     }
 
     #endregion
@@ -298,29 +297,6 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
             imageSize: ImageSize,
             spatialDim: _spatialDim,
             numClasses: _numClasses));
-    }
-
-    private void InitializeSpatialEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        // Shared spatial embeddings for X and Y coordinates
-        _spatialXEmbeddings = Tensor<T>.CreateDefault([1024, _spatialDim], NumOps.Zero);
-        _spatialYEmbeddings = Tensor<T>.CreateDefault([1024, _spatialDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_spatialXEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_spatialYEmbeddings, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
     }
 
     #endregion
@@ -606,7 +582,10 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     // feeding the shared stack. Without it the base linear walk sends the rank-1 token vector into the
     // rank-4-only Conv backbone and throws ("ConvolutionalLayer expects rank-3/rank-4 input; got rank 1").
     private const int VisualEncoderLayerCount = 8;
-    private const int TextEncoderLayerCount = 2;
+    // One, not two: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that used to
+    // sit here are now a single LayoutEmbeddingLayer, which also carries the 2D layout terms and uses
+    // LEARNED positions (BERT's, which DocFormer inherits) rather than fixed sinusoids.
+    private const int TextEncoderLayerCount = 1;
 
     private Tensor<T> RunModalityForward(Tensor<T> input)
     {

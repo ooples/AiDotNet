@@ -523,4 +523,84 @@ public class LayoutAwareDocumentTests
     }
 
     #endregion
+
+    #region DocFormer Tests
+
+    private static DocFormer<float> CreateSmallDocFormer()
+        => new DocFormer<float>(CreateArchitecture(imageSize: 32), numClasses: 7, imageSize: 32,
+            maxSequenceLength: 64, hiddenDim: 64, numLayers: 2, numHeads: 4, vocabSize: 100);
+
+    /// <summary>
+    /// DocFormer routes by input rank, and its text stream is now ONE LayoutEmbeddingLayer where it
+    /// used to be an EmbeddingLayer + PositionalEncodingLayer pair. That collapse moved every index
+    /// after it, so both branches are exercised here: the shared stack starts one slot earlier and a
+    /// mistake would either run the text embedding over image features or skip the first shared layer.
+    /// The generated DocFormerTests cannot catch it — all 26 of them fail in their warm-up Predict on
+    /// a pre-existing fixture problem (continuous floats fed to a rank-1 token input), so they would
+    /// stay red either way and prove nothing about the routing.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DocFormer_BothModalities_RouteAndStayFinite()
+    {
+        await Task.Yield();
+        var model = CreateSmallDocFormer();
+        model.SetTrainingMode(false);
+
+        var imageOnly = model.Predict(CreateSmallImage(32));   // visual backbone, then the shared stack
+        AssertAllFinite(imageOnly, "DocFormer image-only");
+
+        var textOnly = model.Predict(CreateTokenIds(16));      // layout embedding, then the shared stack
+        AssertAllFinite(textOnly, "DocFormer text-only");
+    }
+
+    /// <summary>
+    /// The point of the change: DocFormer's spatial tables were model fields that nothing read, so
+    /// two tokens printed in different places produced identical vectors. Feeding the same token IDs
+    /// with different boxes must now move the output.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DocFormer_BoundingBoxes_ChangeTheOutput()
+    {
+        await Task.Yield();
+        var model = CreateSmallDocFormer();
+        model.SetTrainingMode(false);
+
+        var topLeft = model.Predict(CreatePackedTokens(8, x0: 0, y0: 0));
+        var bottomRight = model.Predict(CreatePackedTokens(8, x0: 300, y0: 400));
+
+        AssertAllFinite(topLeft, "DocFormer packed top-left");
+        AssertAllFinite(bottomRight, "DocFormer packed bottom-right");
+
+        bool differs = false;
+        for (int i = 0; i < topLeft.Length && i < bottomRight.Length && !differs; i++)
+        {
+            if (System.Math.Abs(topLeft.Data.Span[i] - bottomRight.Data.Span[i]) > 1e-9f)
+                differs = true;
+        }
+
+        Assert.True(differs,
+            "Identical tokens at different page positions gave identical output, so DocFormer's " +
+            "spatial embeddings still are not reaching the forward pass.");
+    }
+
+    /// <summary>
+    /// Builds LayoutEmbeddingLayer's packed row: [seq, 5] of (tokenId, x0, y0, x1, y1).
+    /// </summary>
+    private static Tensor<float> CreatePackedTokens(int count, int x0, int y0, int vocab = 100)
+    {
+        var data = new Vector<float>(count * 5);
+        for (int i = 0; i < count; i++)
+        {
+            int b = i * 5;
+            data[b] = i % vocab;
+            data[b + 1] = x0 + i;         // boxes march along the line
+            data[b + 2] = y0;
+            data[b + 3] = x0 + i + 10;
+            data[b + 4] = y0 + 12;
+        }
+
+        return new Tensor<float>(new[] { count, 5 }, data);
+    }
+
+    #endregion
 }
