@@ -105,8 +105,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
             // precisely how a weight goes quiet. Emitting into the hook that is already wired costs
             // nothing and cannot miss a site. Its element type is Tensor<T>, so only tensor fields
             // are automated there; matrices and vectors on that trunk stay reported.
-            bool hasRegistry = InheritsRegistry(classSymbol) && !DeclaresOwn(classSymbol, RegisterHook);
-            bool onNetworkTrunk = !hasRegistry && InheritsExtraTensorsHook(classSymbol);
+            // The NeuralNetworkBase trunk is decided by its HOOKS, not by whether a registry
+            // exists. That base gained a registry so a computed surface could be declared, and
+            // gating the trunk on `!hasRegistry` silently switched the layers path off for every
+            // model on it -- WGAN generated nothing at all, and LayoutLM, Blip2 and SileroVad
+            // fell through to a field-only path that cannot see a sub-network or a layer
+            // collection. Nothing reported it, because those classes were already partial.
+            //
+            // On that trunk the tensors and layers hooks carry everything the generator emits;
+            // the registry there is for sources an author declares by hand.
+            bool onNetworkTrunk = InheritsExtraTensorsHook(classSymbol);
+            bool hasRegistry = !onNetworkTrunk
+                               && InheritsRegistry(classSymbol)
+                               && !DeclaresOwn(classSymbol, RegisterHook);
 
             // The two hooks are suppressed INDEPENDENTLY. Coupling them was a bug: Flamingo declares
             // its own GetExtraTrainableTensors, which silently also suppressed the layers hook, so
