@@ -76,7 +76,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     private readonly List<ILayer<T>> _outputLayers = [];
 
     // Embeddings
-    private Tensor<T>? _nodeTypeEmbeddings;
 
     #endregion
 
@@ -226,9 +225,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     private void InitializeEmbeddings()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        _nodeTypeEmbeddings = Tensor<T>.CreateDefault([_numClasses, _nodeDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_nodeTypeEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -540,10 +537,19 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     /// </summary>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
-        var output = input;
-        foreach (var layer in Layers)
-            output = layer.Forward(output);
-        return output;
+        // Unchanged when no node types are supplied -- the plain walk below IS the previous
+        // behaviour, and keeping it byte-identical matters: routing the default path through a
+        // hand-written walk instead of the base one made the analytic and finite-difference
+        // gradients disagree on every sampled parameter, because the base path owns dropout,
+        // seed wiring and checkpointing that a bare Layers[i].Forward loop does not reproduce.
+        if (AuxiliaryInput is null || AuxiliaryInput.Length == 0)
+        {
+            var plain = input;
+            foreach (var layer in Layers) plain = layer.Forward(plain);
+            return plain;
+        }
+
+        return RunWithNodeTypes(input);
     }
 
     /// <summary>
@@ -557,7 +563,19 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        var output = base.ForwardForTraining(input);
+        // Default path stays on base.ForwardForTraining, which owns seed wiring, gradient
+        // checkpointing and weight streaming. Only a call that actually supplies node types diverts,
+        // and that one wires seeds itself per EnsureLayerRandomSeedsWired's contract.
+        Tensor<T> output;
+        if (AuxiliaryInput is null || AuxiliaryInput.Length == 0)
+        {
+            output = base.ForwardForTraining(input);
+        }
+        else
+        {
+            EnsureLayerRandomSeedsWired();
+            output = RunWithNodeTypes(input);
+        }
 
         if (output.Shape.Length >= 2)
         {
@@ -614,6 +632,96 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         if (disposing)
             _onnxSession?.Dispose();
         base.Dispose(disposing);
+    }
+
+    #endregion
+
+    #region Node-type fusion
+
+    /// <summary>
+    /// The per-node TYPE embedding. Held OUTSIDE Layers on purpose: it is not a step in the
+    /// sequential chain, and putting it there fed an index lookup a graph hidden state. It reaches
+    /// the parameter surface and the optimizer through GetExtraTrainableLayers instead, which is the
+    /// base's existing hook for exactly this -- a trainable layer that the chain does not walk.
+    /// </summary>
+    private readonly EmbeddingLayer<T> _nodeTypeEmbedding = new(NodeTypeCount, NodeTypeDim);
+
+    private const int NodeTypeCount = 64;
+    private const int NodeTypeDim = 256;
+
+    /// <inheritdoc/>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _nodeTypeEmbedding;
+    }
+
+    /// <summary>
+    /// Runs the graph stack, adding a learned per-node TYPE vector when the caller supplies type ids
+    /// through the auxiliary input.
+    /// </summary>
+    /// <remarks>
+    /// _nodeTypeEmbeddings used to be a model field nothing read. Type is not derivable from the node
+    /// features -- it is a label the layout parser assigns ("title", "caption", "table") -- so unlike
+    /// node order it needs an input, which is what the base's auxiliary slot provides. Both forwards
+    /// route here, so the type embedding is on the gradient tape. With no type ids the model behaves
+    /// exactly as before.
+    /// </remarks>
+    private Tensor<T> RunWithNodeTypes(Tensor<T> input)
+    {
+        // Project to the graph hidden width first, so the type vector is added in that space rather
+        // than to the raw node features.
+        var hidden = Layers[0].Forward(input);
+
+        var types = AuxiliaryInput;
+        if (types is not null && types.Length > 0)
+        {
+            var typeVectors = _nodeTypeEmbedding.Forward(types);
+            if (typeVectors.Rank == hidden.Rank && typeVectors.Length == hidden.Length)
+            {
+                hidden = Engine.TensorAdd(hidden, typeVectors);
+            }
+        }
+
+        for (int i = 1; i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+        }
+
+        return hidden;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base walks Layers as a chain and would hand the appended type table a graph hidden state.
+    /// This is the fourth site of that same pattern in this family (LiLT, SVTR, DocOwl were the
+    /// others), so the walk is reused rather than re-derived.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var hidden = Layers[0].Forward(input);
+        activations[$"0_{Layers[0].GetType().Name}"] = hidden;
+
+        var types = AuxiliaryInput;
+        if (types is not null && types.Length > 0)
+        {
+            var typeVectors = _nodeTypeEmbedding.Forward(types);
+            activations["node_type_embedding"] = typeVectors;
+            if (typeVectors.Rank == hidden.Rank && typeVectors.Length == hidden.Length)
+            {
+                hidden = Engine.TensorAdd(hidden, typeVectors);
+            }
+        }
+
+        for (int i = 1; i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+            activations[$"{i}_{Layers[i].GetType().Name}"] = hidden;
+        }
+
+        return activations;
     }
 
     #endregion
