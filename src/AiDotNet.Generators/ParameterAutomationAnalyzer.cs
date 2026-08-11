@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -124,9 +125,59 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                    + "for -- were in neither surface and were lost on every save.");
 
 
+
+    private static readonly DiagnosticDescriptor CountUsedAsReadiness = new(
+        id: "AIDN087",
+        title: "ParameterCount compared against zero as a readiness test",
+        messageFormat: "'{0}' tests ParameterCount against zero; a zero count means \"not sized yet\", "
+                     + "not \"has no parameters\", so this branch treats a deferred component as an "
+                     + "empty one",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Ask about READINESS instead. A lazily sized component reports 0 until its shape "
+                   + "arrives, so `count == 0` conflates 'nothing to do' with 'ask me later' and the two "
+                   + "need opposite handling: the first is a no-op, the second must park the payload and "
+                   + "replay it at materialization. This is not hypothetical -- LayerBase carried a "
+                   + "comment saying a zero count 'is not a claim that the layer has no parameters; it is "
+                   + "the layer saying it does not know yet' directly above a guard that threw on exactly "
+                   + "that, rejecting every restore into a deferred layer and accounting for ~104 CI "
+                   + "failures. Prefer ParameterLayoutSnapshot readiness (ParameterFree vs ShapeDeferred "
+                   + "vs ShapeResolvedUnmaterialized vs Materialized), or on a layer the local pair "
+                   + "IsShapeResolved || ParametersAreConstructionSized. ParameterFree is the only state "
+                   + "that genuinely means zero.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // AIDN087 is a CONSUMPTION rule, so it works over expressions rather than declarations: the
+        // other rules in this file catch "you wrote a surface you should not have", and this one
+        // catches "you asked the surface the wrong question". Both failure modes ship silently.
+        var zeroCountComparisons = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => IsParameterCountZeroComparison(node),
+                transform: static (ctx, _) => ctx.Node.GetLocation())
+            .Where(static loc => loc is not null);
+
+        context.RegisterSourceOutput(zeroCountComparisons.Collect(), static (spc, locations) =>
+        {
+            foreach (var loc in locations)
+            {
+                if (loc is null) continue;
+                var file = loc.SourceTree?.FilePath ?? string.Empty;
+
+                // The manifest and the layer base are where the readiness distinction is DEFINED, so
+                // they are the two places allowed to compare against zero while implementing it.
+                if (file.EndsWith("ParameterManifest.cs", System.StringComparison.OrdinalIgnoreCase)
+                    || file.EndsWith("ParameterComponentRegistry.cs", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    CountUsedAsReadiness, loc, System.IO.Path.GetFileNameWithoutExtension(file)));
+            }
+        });
+
         var classes = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
                 transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
@@ -720,4 +771,30 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         }
         return false;
     }
+
+    /// <summary>
+    /// True for <c>X.ParameterCount == 0</c> / <c>!= 0</c> in either operand order, including
+    /// <c>ParameterCount</c> reached without a receiver.
+    /// </summary>
+    private static bool IsParameterCountZeroComparison(SyntaxNode node)
+    {
+        if (node is not BinaryExpressionSyntax binary) return false;
+        if (!binary.IsKind(SyntaxKind.EqualsExpression) && !binary.IsKind(SyntaxKind.NotEqualsExpression))
+            return false;
+
+        return (NamesParameterCount(binary.Left) && IsZero(binary.Right))
+            || (NamesParameterCount(binary.Right) && IsZero(binary.Left));
+    }
+
+    private static bool NamesParameterCount(ExpressionSyntax expression) => expression switch
+    {
+        MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText == "ParameterCount",
+        IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "ParameterCount",
+        _ => false,
+    };
+
+    private static bool IsZero(ExpressionSyntax expression)
+        => expression is LiteralExpressionSyntax literal
+           && literal.IsKind(SyntaxKind.NumericLiteralExpression)
+           && literal.Token.ValueText == "0";
 }
