@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -150,5 +151,92 @@ public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>
         if (v is null) return;
         int n = Math.Min(v.Length, parameters.Length);
         for (int i = 0; i < n; i++) v[i] = parameters[i];
+    }
+}
+
+/// <summary>
+/// A COLLECTION of parameterized components exposed as one parameter surface, concatenated in
+/// enumeration order.
+/// </summary>
+/// <typeparam name="T">The numeric type of the values.</typeparam>
+/// <remarks>
+/// <para>
+/// For a model whose parameters live in a variable set of sub-models rather than in fields: an
+/// ensemble, a mixture of experts, a stacked or boosted collection. Every <c>IFullModel</c> is an
+/// <see cref="IParameterSource{T}"/> already, so nothing had to be adapted -- what was missing was
+/// a way to register the COLLECTION rather than a fixed number of members.
+/// </para>
+/// <para>
+/// The collection is re-read on every call rather than captured. Registration happens once and
+/// lazily, so a source that snapshotted the members would freeze whatever the ensemble held at that
+/// instant and then silently disagree with itself the moment a member was added or replaced --
+/// which for an ensemble is the normal case, not an edge one.
+/// </para>
+/// </remarks>
+public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>
+{
+    private readonly Func<IEnumerable<IParameterSource<T>>?> _get;
+
+    /// <summary>Creates a source over whatever components <paramref name="accessor"/> returns.</summary>
+    public ComponentCollectionParameterSource(Func<IEnumerable<IParameterSource<T>>?> accessor)
+    {
+        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
+    }
+
+    private IEnumerable<IParameterSource<T>> Members()
+    {
+        var items = _get();
+        if (items is null) yield break;
+        foreach (var m in items)
+        {
+            if (m is not null) yield return m;
+        }
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var m in Members()) total += m.ParameterCount;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var parts = new List<Vector<T>>();
+        int total = 0;
+        foreach (var m in Members())
+        {
+            var p = m.GetParameters();
+            parts.Add(p);
+            total += p.Length;
+        }
+
+        var result = new Vector<T>(total);
+        int at = 0;
+        for (int i = 0; i < parts.Count; i++)
+        {
+            for (int j = 0; j < parts[i].Length; j++) result[at++] = parts[i][j];
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int at = 0;
+        foreach (var m in Members())
+        {
+            int n = (int)m.ParameterCount;
+            if (at + n > parameters.Length) break;
+            var slice = new Vector<T>(n);
+            for (int j = 0; j < n; j++) slice[j] = parameters[at++];
+            m.SetParameters(slice);
+        }
     }
 }

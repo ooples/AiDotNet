@@ -156,8 +156,31 @@ public class ModelParameterGenerator : IIncrementalGenerator
             }
 
             var fields = new List<(string Name, string SourceType)>();
+            var components = new List<string>();
             foreach (var member in classSymbol.GetMembers())
             {
+                // A member that IS a parameterized component, or a collection of them. Every
+                // IFullModel is an IParameterSource<T> already -- IParameterizable derives from it --
+                // so an ensemble, a mixture of experts or a stacked model needs no adapter, only
+                // discovery. The collection form is re-read on each access rather than snapshotted,
+                // because members are routinely added after the one lazy registration has run.
+                if (member is IFieldSymbol or IPropertySymbol
+                    && !member.IsStatic && !member.IsImplicitlyDeclared
+                    && !HasAttr2(member, scratchSymbol) && !HasAttr2(member, bufferSymbol))
+                {
+                    var kind = ComponentKindFor(MemberType(member), elem);
+                    if (kind == "one")
+                    {
+                        components.Add($"{member.Name}");
+                        continue;
+                    }
+                    if (kind == "many")
+                    {
+                        components.Add($"new ComponentCollectionParameterSource<{elem}>(() => {member.Name})");
+                        continue;
+                    }
+                }
+
                 if (member is not IFieldSymbol f) continue;
                 if (!IsRegisterableField(f, scratchSymbol, bufferSymbol)) continue;
 
@@ -166,10 +189,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 fields.Add((f.Name, src));
             }
 
-            if (fields.Count == 0) continue;
+            if (fields.Count == 0 && components.Count == 0) continue;
 
             context.AddSource(HintName(classSymbol) + ".ModelParameters.g.cs",
-                              GenerateSource(classSymbol, elem, fields));
+                              GenerateSource(classSymbol, elem, fields, components));
         }
     }
 
@@ -190,6 +213,86 @@ public class ModelParameterGenerator : IIncrementalGenerator
         if (f.Name.EndsWith("Gradient", System.StringComparison.Ordinal) ||
             f.Name.EndsWith("Gradients", System.StringComparison.Ordinal)) return false;
         return true;
+    }
+
+    private static ITypeSymbol? MemberType(ISymbol m) => m switch
+    {
+        IFieldSymbol f when f.AssociatedSymbol is null => f.Type,
+        IPropertySymbol p when p.GetMethod is not null => p.Type,
+        _ => null,
+    };
+
+    /// <summary>
+    /// "one" when the member IS a parameterized component, "many" when it is a collection of them,
+    /// null otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the shape an ensemble, a mixture of experts, a stacked or boosted model has: the
+    /// parameters are not in fields at all, they are in sub-models. Nothing needed adapting for it
+    /// -- <c>IParameterizable&lt;T, TInput, TOutput&gt;</c> derives from
+    /// <c>IParameterSource&lt;T&gt;</c>, so every <c>IFullModel</c> can already be registered. What
+    /// was missing was discovery.
+    /// </para>
+    /// <para>
+    /// Deliberately does NOT match a sub-network on the NeuralNetworkBase trunk: those are surfaced
+    /// as LAYERS through GetExtraTrainableLayers, and matching them here as well would register the
+    /// same weights twice through two different routes.
+    /// </para>
+    /// </remarks>
+    private static string? ComponentKindFor(ITypeSymbol? type, string elem)
+    {
+        if (type is null) return null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        if (IsParameterSourceOf(bare, elem) && !IsNeuralNetworkBase(bare)) return "one";
+
+        ITypeSymbol? element = null;
+        if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
+        else if (bare is INamedTypeSymbol named && named.TypeArguments.Length == 1)
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal) ||
+                open.StartsWith("System.Collections.Generic.IReadOnlyCollection<", System.StringComparison.Ordinal))
+                element = named.TypeArguments[0];
+        }
+        if (element is null) return null;
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (IsParameterSourceOf(element, elem) && !IsNeuralNetworkBase(element)) return "many";
+        return null;
+    }
+
+    private static bool IsParameterSourceOf(ITypeSymbol type, string elem)
+    {
+        foreach (var i in type.AllInterfaces)
+        {
+            if (i.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.Interfaces.IParameterSource<", System.StringComparison.Ordinal)
+                && i.TypeArguments.Length == 1
+                && i.TypeArguments[0].ToDisplayString() == elem)
+                return true;
+        }
+        if (type is INamedTypeSymbol n
+            && n.OriginalDefinition.ToDisplayString()
+                .StartsWith("AiDotNet.Interfaces.IParameterSource<", System.StringComparison.Ordinal)
+            && n.TypeArguments.Length == 1
+            && n.TypeArguments[0].ToDisplayString() == elem)
+            return true;
+        return false;
+    }
+
+    private static bool IsNeuralNetworkBase(ITypeSymbol type)
+    {
+        for (var c = type as INamedTypeSymbol; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>An overridable <c>GetExtraTrainableTensors()</c> is reachable on a base type.</summary>
@@ -496,7 +599,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
             .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attr));
 
     private static string GenerateSource(INamedTypeSymbol classSymbol, string elem,
-                                         List<(string Name, string SourceType)> fields)
+                                         List<(string Name, string SourceType)> fields,
+                                     List<string> components)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
         var typeParams = classSymbol.TypeParameters.Length > 0
@@ -544,6 +648,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
         foreach (var f in fields)
         {
             sb.AppendLine($"        {RegisterCall}(new {f.SourceType}<{elem}>(() => {f.Name}));");
+        }
+        foreach (var c in components)
+        {
+            sb.AppendLine($"        {RegisterCall}({c});");
         }
         sb.AppendLine("    }");
         sb.AppendLine("}");
