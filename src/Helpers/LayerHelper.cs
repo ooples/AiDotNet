@@ -11397,7 +11397,7 @@ public static class LayerHelper<T>
                 CreateDessurtDecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
     }
 
-    private static IEnumerable<ILayer<T>> CreateDessurtEncoderLayers(int hiddenDim, int numLayers, int numHeads)
+    private static IEnumerable<ILayer<T>> CreateDessurtEncoderLayers(int hiddenDim, int numLayers, int numHeads, int maxPatches = 1025)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -11406,6 +11406,12 @@ public static class LayerHelper<T>
         // Patch embedding
         yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
         yield return new LayerNormalizationLayer<T>();
+
+        // Dessurt's encoder had NO positional signal at all: _encoderPositionEmbeddings
+        // [numPatches + 1, encoderDim] sat as a dead model field and, unlike the decoder, nothing
+        // in the stack replaced it. A patch transformer without positions cannot tell one region of
+        // the page from another, which for a document model is the whole task.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxPatches, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -11843,6 +11849,16 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(hiddenDim, kernelSize: 3, stride: 2, padding: 1, identityActivation);
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(reluActivation);
+
+        // SVTR (Du et al., 2022) adds a learned position to each column of the conv stem's output
+        // before the mixing blocks. _positionEmbeddings [numPatches, embedDim] was that table, held
+        // as a model field and read by nothing, and no positional layer stood in for it -- so the
+        // mixing blocks saw an unordered set of columns and had to recover reading order from the
+        // features themselves.
+        // The conv stem halves twice in BOTH axes, so the token sequence is (W/4)*(H/4) long --
+        // seqLen alone counts only the columns and would clamp most positions onto the last row.
+        yield return new LearnedPositionalEmbeddingLayer<T>(
+            Math.Max(1, (imageWidth / 4) * (imageHeight / 4)), hiddenDim);
 
         // Mixing blocks. SVTR's mixing block is a standard pre-norm transformer block WITH residual
         // connections (local/global attention + MLP, each wrapped in x = x + f(LN(x))). The composite
