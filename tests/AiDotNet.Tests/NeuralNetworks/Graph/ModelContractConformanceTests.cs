@@ -1,12 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
-using AiDotNet.Enums;
-using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -81,9 +77,9 @@ public class ModelContractConformanceTests
         if (budget < models.Count) models = models.Take(budget).ToList();
         _out.WriteLine($"window: offset={offset} budget={budget} -> {models.Count} candidates");
 
-        int declared = 0, agreed = 0, declined = 0;
+        int declared = 0, concrete = 0, unavailable = 0, agreed = 0, declined = 0;
         var disagreed = new List<string>();
-        var skipped = new List<string>();
+        var unverified = new List<string>();
 
         foreach (var open in models)
         {
@@ -91,189 +87,70 @@ public class ModelContractConformanceTests
             try { closed = open.MakeGenericType(typeof(double)); }
             catch { continue; }
 
-            // TRY EACH INPUT TYPE the families actually use, and keep the first that produces a real
-            // comparison. Building every model as a 3-D image made the entire audio family report
-            // "declined": its contract declares rank 2, the harness fed rank 4, and the contract
-            // correctly declined on RANK - which looks identical to declining for want of a width.
-            // A harness that cannot tell those apart reports a family as unverified when it is simply
-            // being asked the wrong question.
-            object? model = null;
-            IShapeContract? contract = null;
-            int[]? shape = null;
-            string? lastNote = null;
+            declared++;
 
-            // TwoDimensional is here because its per-sample shape is [Height, Width] - rank 3 once
-            // batched - and NOTHING else in this list produces rank 3. Without it the whole forecasting
-            // family reported 71 declared / 0 agreed / 71 DECLINED, which reads as "no model conforms"
-            // when the truth was that the harness never asked them a rank-3 question. A sweep that can
-            // only pose two of the three ranks the library uses cannot tell a wrong contract from an
-            // unasked one.
-            foreach (var inputType in new[]
-                     { InputType.ThreeDimensional, InputType.TwoDimensional, InputType.OneDimensional })
+            // Capability is inspected before construction. VisionLanguageModelBase explicitly marks
+            // its honest family-wide null as unavailable, so 170 paper-scale descendants no longer
+            // have to allocate billions of parameters merely to return that null. An override resolves
+            // to a different interface target and is therefore a real contract that must be probed.
+            if (!ShapeInference.HasDeclaredOutputShapeContract(closed))
             {
-                object? candidate = null;
-                try { candidate = Construct(closed, inputType); }
-                catch (Exception ex) { lastNote ??= $"{Unwrap(ex).GetType().Name} constructing"; continue; }
-                if (candidate is null) { lastNote ??= "no usable constructor"; continue; }
-
-                if (candidate is not IShapeContract c) { (candidate as IDisposable)?.Dispose(); lastNote ??= "not IShapeContract"; continue; }
-
-                int[]? per = TryArchitectureInputShape(candidate);
-                if (per is null || per.Length == 0 || per.Any(d => d <= 0))
-                {
-                    (candidate as IDisposable)?.Dispose();
-                    lastNote ??= "no concrete declared input shape";
-                    continue;
-                }
-
-                var candidateShape = new int[per.Length + 1];
-                candidateShape[0] = 1;
-                for (int i = 0; i < per.Length; i++) candidateShape[i + 1] = Math.Min(per[i], Extent);
-
-                // Prefer an input type whose rank the contract actually answers for.
-                bool answers = ShapeInference.InferOutputShape(c, candidateShape) is not null;
-                if (model is null || answers)
-                {
-                    (model as IDisposable)?.Dispose();
-                    model = candidate; contract = c; shape = candidateShape;
-                    if (answers) break;
-                }
-                else { (candidate as IDisposable)?.Dispose(); }
-            }
-
-            if (model is null || contract is null || shape is null)
-            {
-                skipped.Add($"{open.Name}: {lastNote ?? "no usable input type"}");
+                unavailable++;
+                declined++;
                 continue;
             }
 
-            try
+            concrete++;
+            var result = await ModelShapeConformanceProcess.ProbeAsync(
+                closed, Extent, Classes, TimeSpan.FromMinutes(3));
+
+            if (result.Status == "agreed")
             {
-                declared++;
-
-                // What the CONTRACT says, without running the model.
-                int[]? predictedShape = ShapeInference.InferOutputShape(contract, shape);
-                if (predictedShape is null)
-                {
-                    declined++;
-                    continue;
-                }
-
-                // What the model ACTUALLY does.
-                var (actual, failure) = TryPredict(model, shape);
-
-                // NOTE on a skip this harness cannot fix, seen with the vocoders. Every axis is
-                // clamped to Extent to keep a probe cheap, and for HiFiGAN that handed 64 mel
-                // channels to kernels built for 80: "Input channels (64) must match kernel
-                // in_channels (80)". Retrying UNCLAMPED does not help, because the architecture the
-                // harness constructed also says 64 - the 80 comes from the model's own options and is
-                // never reflected back into the architecture it was handed. That is a model-side
-                // inconsistency, not a clamp that can be widened, so those models are verified by
-                // VocoderShapeContractTests instead, which builds them at their real mel width.
-                if (actual is null) { skipped.Add($"{open.Name}: {failure}"); continue; }
-
-                if (predictedShape.SequenceEqual(actual)) { agreed++; continue; }
-
-                disagreed.Add($"{open.Name}: in [{string.Join(",", shape)}] "
-                    + $"contract says [{string.Join(",", predictedShape)}] "
-                    + $"but Predict returned [{string.Join(",", actual)}]");
+                agreed++;
+                continue;
             }
-            finally { (model as IDisposable)?.Dispose(); }
+
+            if (result.Status == "disagreed")
+            {
+                disagreed.Add($"{open.Name}: in [{Join(result.InputShape)}] "
+                    + $"contract says [{Join(result.PredictedShape)}] "
+                    + $"but Predict returned [{Join(result.ActualShape)}]");
+                continue;
+            }
+
+            if (result.Status == "declined") declined++;
+            unverified.Add($"{open.Name}: {result.Status}"
+                + (string.IsNullOrWhiteSpace(result.Error) ? string.Empty : $" - {result.Error}"));
         }
 
         _out.WriteLine($"models declaring a contract : {declared}");
+        _out.WriteLine($"  concrete contracts           : {concrete}");
+        _out.WriteLine($"  explicitly unavailable       : {unavailable}");
         _out.WriteLine($"  contract agreed with Predict : {agreed}");
         _out.WriteLine($"  contract declined (null)     : {declined}");
         _out.WriteLine($"  DISAGREED                    : {disagreed.Count}");
-        _out.WriteLine($"  skipped                      : {skipped.Count}");
-        foreach (var s in skipped.Take(15)) _out.WriteLine($"    skipped: {s}");
+        _out.WriteLine($"  unverified                   : {unverified.Count}");
+        foreach (var s in unverified.Take(15)) _out.WriteLine($"    unverified: {s}");
         foreach (var d in disagreed) _out.WriteLine($"    DISAGREED: {d}");
 
-        // Assert the EXERCISED count too. Without it, a run where every model failed to construct
-        // would pass while verifying nothing - the vacuous-sweep failure that hid 13 dead layer
-        // contracts until the layer sweep printed its own counts.
-        Assert.True(agreed > 0,
-            "no model contract was verified against a real forward pass, so this proved nothing");
+        // A window made exclusively of EXPLICIT unavailability declarations is a valid inventory
+        // result, not a failed conformance run. The old agreed > 0 assertion made 34 arbitrary
+        // windows fail even though none contained a concrete contract. Non-vacuity is now exact:
+        // every concrete contract in this window must complete a real comparison, while every
+        // unavailable contract is accounted for without construction.
+        Assert.True(declared > 0, "the conformance window selected no model contracts");
+        Assert.Equal(declared, concrete + unavailable);
+        Assert.True(unverified.Count == 0,
+            $"{unverified.Count} concrete model contract(s) could not be verified."
+            + Environment.NewLine + string.Join(Environment.NewLine, unverified));
+        Assert.Equal(concrete, agreed + disagreed.Count);
 
         Assert.True(disagreed.Count == 0,
             $"{disagreed.Count} model contract(s) claim a shape their own Predict does not produce."
             + Environment.NewLine + string.Join(Environment.NewLine, disagreed));
     }
 
-    private static object? Construct(Type closed, InputType inputType)
-    {
-        var ctor = closed.GetConstructors().FirstOrDefault(c =>
-        {
-            var ps = c.GetParameters();
-            return ps.Length > 0
-                && ps[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
-                && ps.Skip(1).All(p => p.HasDefaultValue);
-        });
-
-        if (ctor is null)
-        {
-            return closed.GetConstructor(Type.EmptyTypes) is not null
-                ? Activator.CreateInstance(closed) : null;
-        }
-
-        var pars = ctor.GetParameters();
-        var args = new object?[pars.Length];
-        args[0] = inputType switch
-        {
-            InputType.OneDimensional => new NeuralNetworkArchitecture<double>(
-                InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-                inputSize: Extent, outputSize: Classes),
-
-            // [Height, Width] per sample, so [1, Extent, Extent] batched. For a sequence family that
-            // reads as [Batch, SequenceLength, NumFeatures].
-            InputType.TwoDimensional => new NeuralNetworkArchitecture<double>(
-                InputType.TwoDimensional, NeuralNetworkTaskType.Regression,
-                inputHeight: Extent, inputWidth: Extent, outputSize: Classes),
-
-            _ => new NeuralNetworkArchitecture<double>(
-                InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
-                inputDepth: 3, inputHeight: Extent, inputWidth: Extent, outputSize: Classes),
-        };
-
-        for (int i = 1; i < pars.Length; i++)
-        {
-            var p = pars[i];
-            bool isClassCount = p.ParameterType == typeof(int)
-                && (p.Name?.IndexOf("numClasses", StringComparison.OrdinalIgnoreCase) >= 0
-                    || p.Name?.IndexOf("classCount", StringComparison.OrdinalIgnoreCase) >= 0);
-            args[i] = isClassCount ? Classes : p.DefaultValue;
-        }
-
-        return ctor.Invoke(args);
-    }
-
-    private static int[]? TryArchitectureInputShape(object model)
-    {
-        try
-        {
-            dynamic arch = ((dynamic)model).GetArchitecture();
-            int[] shape = arch.GetInputShape();
-            return shape;
-        }
-        catch { return null; }
-    }
-
-    private static (int[]? Shape, string? Failure) TryPredict(object model, int[] shape)
-    {
-        try
-        {
-            var probe = new Tensor<double>(shape);
-            for (int i = 0; i < probe.Length; i++) probe[i] = (i * 7) % 13;
-            var result = ((dynamic)model).Predict(probe);
-            return result is null ? (null, "Predict returned null") : ((int[])result._shape, null);
-        }
-        catch (Exception ex)
-        {
-            var root = Unwrap(ex);
-            var msg = root.Message.Split('\n')[0].Trim();
-            return (null, $"{root.GetType().Name}: {(msg.Length > 80 ? msg.Substring(0, 80) + "..." : msg)}");
-        }
-    }
+    private static string Join(int[]? shape) => shape is null ? "?" : string.Join(",", shape);
 
     private static int EnvInt(string name, int fallback, int minimum) =>
         int.TryParse(Environment.GetEnvironmentVariable(name), out int v) && v >= minimum ? v : fallback;
@@ -287,7 +164,4 @@ public class ModelContractConformanceTests
         }
         return false;
     }
-
-    private static Exception Unwrap(Exception ex) =>
-        ex is TargetInvocationException { InnerException: not null } tie ? tie.InnerException : ex;
 }

@@ -124,10 +124,11 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
     public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
     {
         // Return non-zero gradients for benchmarking
-        // ParameterCount is long to match IParameterSource; Vector<T> is int-indexed, and a
-        // mock this size can never exceed int range.
-        var gradients = new Vector<T>((int)ParameterCount);
-        for (int i = 0; i < ParameterCount; i++)
+        // The backing vector is the allocation authority. Using its native int length avoids a
+        // narrowing conversion from the public long ParameterCount contract and keeps this mock
+        // correct if the reporting surface changes independently of its storage.
+        var gradients = new Vector<T>(_parameters.Length);
+        for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = NumOps.FromDouble(0.1 * (i + 1));
         }

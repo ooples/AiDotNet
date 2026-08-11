@@ -3,7 +3,9 @@ using System.Reflection;
 using System.Text.Json;
 using AiDotNet.Models.Parameters;
 
-return ParameterSweepWorker.Run(args);
+return args.Length > 0 && string.Equals(args[0], "shape", StringComparison.Ordinal)
+    ? ShapeConformanceWorker.Run(args.Skip(1).ToArray())
+    : ParameterSweepWorker.Run(args);
 
 internal static class ParameterSweepWorker
 {

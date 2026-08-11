@@ -76,6 +76,8 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>, IShapeC
     /// stays visible in the sweep instead of being hidden behind a confident default.
     /// </para>
     /// </remarks>
+    [ShapeContractUnavailable(
+        "Vision-language models have several measured output laws, so an unmeasured derived model must decline rather than inherit a guessed family default.")]
     public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
 
     /// <summary>The pooled law: <c>[Batch, EmbeddingDim]</c>, whatever the input rank above 1.</summary>

@@ -28,7 +28,7 @@ public class BertEmbeddingLayerTests
         var domain = layer.GetInputDomain([1, 4]);
         Assert.True(domain.IsIndices);
         Assert.Equal(32, domain.MaxExclusive);
-        Assert.Equal(new[] { 1, 4, 8 }, output.Shape);
+        Assert.Equal(new[] { 1, 4, 8 }, output.Shape.ToArray());
     }
 
     [Fact]
