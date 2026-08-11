@@ -83,7 +83,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     private readonly List<ILayer<T>> _languageModelLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _visionPositionEmbeddings;
     private Tensor<T>? _languageEmbeddings;
 
     #endregion
@@ -278,10 +277,8 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         var random = RandomHelper.CreateSeededRandom(42);
         int numPatches = (ImageSize / 14) * (ImageSize / 14);
 
-        _visionPositionEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionDim], NumOps.Zero);
         _languageEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _languageDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_visionPositionEmbeddings, random, 0.02);
         InitializeWithSmallRandomValues(_languageEmbeddings, random, 0.02);
     }
 

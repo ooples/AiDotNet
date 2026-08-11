@@ -11425,7 +11425,9 @@ public static class LayerHelper<T>
         int maxSequenceLength = 512;
 
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and Dessurt's decoder
+        // learns its positions -- the dead _decoderPositionEmbeddings field was that table, allocated and never read.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -11500,7 +11502,9 @@ public static class LayerHelper<T>
         int maxSequenceLength = 512;
 
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and MATCHA's decoder
+        // learns its positions -- the dead _decoderPositionEmbeddings field was that table, allocated and never read.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -11557,7 +11561,9 @@ public static class LayerHelper<T>
             patchSize: 14,
             embeddingDim: visionDim,
             expectedInputChannels: 3);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, visionDim);
+        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and DocOwl's ViT-family vision encoder
+        // learns its positions -- the dead _visionPositionEmbeddings field was that table, allocated and never read.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, visionDim);
 
         for (int i = 0; i < visionLayers; i++)
         {
@@ -11644,7 +11650,9 @@ public static class LayerHelper<T>
         // visual activations through EmbeddingLayer as if they were integer token IDs.
         yield return new PatchEmbeddingLayer<T>(16, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
-        yield return new PositionalEncodingLayer<T>(numPatches, visionDim);
+        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and InfographicVQA's ViT-family vision encoder
+        // learns its positions -- the dead _visionPositionEmbeddings field was that table, allocated and never read.
+        yield return new LearnedPositionalEmbeddingLayer<T>(numPatches, visionDim);
 
         for (int i = 0; i < visionLayers; i++)
         {

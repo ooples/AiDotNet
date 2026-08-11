@@ -83,7 +83,6 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
     private readonly List<ILayer<T>> _answerDecoderLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _visionPositionEmbeddings;
     private Tensor<T>? _textEmbeddings;
 
     #endregion
@@ -253,10 +252,8 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         var random = RandomHelper.CreateSeededRandom(42);
         int numPatches = (ImageSize / 16) * (ImageSize / 16);
 
-        _visionPositionEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionDim], NumOps.Zero);
         _textEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _textDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_visionPositionEmbeddings, random, 0.02);
         InitializeWithSmallRandomValues(_textEmbeddings, random, 0.02);
     }
 

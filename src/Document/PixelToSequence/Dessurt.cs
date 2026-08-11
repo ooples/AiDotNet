@@ -82,7 +82,6 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
     // Learnable embeddings
     private Tensor<T>? _encoderPositionEmbeddings;
-    private Tensor<T>? _decoderPositionEmbeddings;
 
     #endregion
 
@@ -263,10 +262,8 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numPatches = (ImageSize / 16) * (ImageSize / 16);
 
         _encoderPositionEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _encoderDim], NumOps.Zero);
-        _decoderPositionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _decoderDim], NumOps.Zero);
 
         InitializeWithSmallRandomValues(_encoderPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
     }
 
     /// <summary>
