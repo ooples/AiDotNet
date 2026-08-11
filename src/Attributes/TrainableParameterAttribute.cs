@@ -82,4 +82,32 @@ public sealed class TrainableParameterAttribute : Attribute
     /// </para>
     /// </remarks>
     public bool Optional { get; set; }
+
+    /// <summary>
+    /// Gets or sets the shape this parameter must have once the layer's own shapes are resolved,
+    /// written as a comma-separated list of C# expressions evaluated in the layer's own scope —
+    /// for example <c>"InputShape[0], OutputShape[0]"</c> for a weight matrix and
+    /// <c>"OutputShape[0]"</c> for its biases.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declaring it here is what lets the generator emit <c>DeclaredParameterShapes()</c>, which
+    /// <c>LayerBase.TryAdoptRestoredParameters</c> uses to tell a completed restore apart from a
+    /// half-delivered one. Without it the base can see THAT a tensor was supplied but not whether
+    /// its shape is right, and an earlier attempt that skipped initialization on the former alone
+    /// silently accepted incompatible weights.
+    /// </para>
+    /// <para>
+    /// Use <c>*</c> for an axis the layer adapts rather than fixes. <c>FeedForwardLayer</c> needs
+    /// <c>"*, OutputShape[0]"</c>: its <c>EnsureWeightShapeForInput</c> resizes the FIRST axis when a
+    /// caller's feature width disagrees, so a mismatch there is normal operation, not a broken
+    /// restore. Annotating it with a fixed first axis was measured to throw on healthy layers.
+    /// </para>
+    /// <para>
+    /// Leave it null when the layer's parameters are sized entirely by its constructor and cannot
+    /// disagree with a restore, or when the shape is not expressible as a simple axis list. A null
+    /// shape contributes no declaration, and the base then leaves that layer's initialization alone.
+    /// </para>
+    /// </remarks>
+    public string? Shape { get; set; }
 }

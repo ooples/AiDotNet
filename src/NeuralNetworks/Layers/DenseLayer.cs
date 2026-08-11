@@ -237,7 +237,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// and weights close to zero mean the connection is weak or unimportant.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "InputShape[0], OutputShape[0]")]
 
     private Tensor<T> _weights;
 
@@ -261,7 +261,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// while a negative bias would require stronger input signals to activate.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputShape[0]")]
 
     private Tensor<T> _biases;
 
@@ -591,27 +591,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// <summary>
     /// Ensures that weights are allocated and initialized for lazy initialization.
     /// </summary>
-    /// <inheritdoc />
-    /// <remarks>
-    /// Weights are <c>[inputSize, outputSize]</c> and biases <c>[outputSize]</c>, read off the same
-    /// resolved shapes the allocation below uses. Empty while the input width is still the -1
-    /// sentinel, which is the base's signal that this layer cannot answer yet.
-    /// </remarks>
-    protected override IReadOnlyList<(Tensor<T>? Tensor, TensorShape Expected, PersistentTensorRole Role)>
-        DeclaredParameterShapes()
-    {
-        int inputSize = InputShape[0];
-        int outputSize = OutputShape[0];
-        if (inputSize < 0 || outputSize < 0)
-            return System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
-
-        return new (Tensor<T>?, TensorShape, PersistentTensorRole)[]
-        {
-            (_weights, ShapeOf(inputSize, outputSize), PersistentTensorRole.Weights),
-            (_biases,  ShapeOf(outputSize),            PersistentTensorRole.Biases),
-        };
-    }
-
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;

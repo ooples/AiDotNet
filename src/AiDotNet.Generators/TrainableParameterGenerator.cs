@@ -139,6 +139,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     var role = "PersistentTensorRole.Weights";
                     var order = 0;
                     var optional = false;
+                    string? shape = null;
 
                     foreach (var namedArg in attr.NamedArguments)
                     {
@@ -148,6 +149,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             order = orderVal;
                         else if (namedArg.Key == "Optional" && namedArg.Value.Value is bool optVal)
                             optional = optVal;
+                        else if (namedArg.Key == "Shape" && namedArg.Value.Value is string shapeVal)
+                            shape = shapeVal;
                     }
 
                     // A nullable field carrying an explicit [TrainableParameter] is Optional by
@@ -163,7 +166,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     paramFields.Add(new ParameterFieldInfo(
                         field.Name, role, order, DeclIndex: 0,
                         TypeName: field.Type.ToDisplayString(),
-                        Optional: optional || explicitNullable, Nullable: explicitNullable));
+                        Optional: optional || explicitNullable, Nullable: explicitNullable,
+                        Shape: shape));
                 }
 
                 // Inverted default: an unmarked, non-nullable, non-readonly tensor field IS a
@@ -420,6 +424,57 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+
+        // DeclaredParameterShapes — emitted from [TrainableParameter(Shape = "...")].
+        //
+        // This is the whole point of the Shape argument: LayerBase.TryAdoptRestoredParameters can see
+        // THAT a tensor was supplied before the first forward but not whether its shape is right, and
+        // only the layer knows that its weights are [inputSize, outputSize]. Declaring it on the field
+        // lets the generator supply that fact, so no layer hand-writes the override.
+        var shapedFields = paramFields.Where(p => !string.IsNullOrWhiteSpace(p.Shape)).ToList();
+        if (shapedFields.Count > 0)
+        {
+            string tp = GetTypeParamName(classSymbol);
+            string tupleType = $"(Tensor<{tp}>? Tensor, AiDotNet.Tensors.LinearAlgebra.TensorShape Expected, PersistentTensorRole Role)";
+            string arrayType = $"(Tensor<{tp}>?, AiDotNet.Tensors.LinearAlgebra.TensorShape, PersistentTensorRole)";
+
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// The shape each [TrainableParameter] must have once this layer's shapes are resolved.");
+            sb.AppendLine("    /// Auto-generated — do not modify. Edit the [TrainableParameter(Shape = \"...\")] arguments instead.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    /// <remarks>");
+            sb.AppendLine("    /// Returns empty while any declared axis is still the -1 lazy sentinel, which is the base's");
+            sb.AppendLine("    /// signal that this layer cannot answer yet. An axis written as * becomes -2, meaning the layer");
+            sb.AppendLine("    /// adapts that axis and a mismatch there is normal rather than a broken restore.");
+            sb.AppendLine("    /// </remarks>");
+            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{tupleType}> DeclaredParameterShapes()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var __declared = new {arrayType}[]");
+            sb.AppendLine("        {");
+            foreach (var pf in shapedFields)
+            {
+                var axes = pf.Shape!.Split(',')
+                    .Select(a => a.Trim())
+                    .Where(a => a.Length > 0)
+                    .Select(a => a == "*" ? "-2" : a);
+                sb.AppendLine($"            ({pf.Name}, ShapeOf({string.Join(", ", axes)}), {pf.Role}),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+            sb.AppendLine("        for (int __i = 0; __i < __declared.Length; __i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var __s = __declared[__i].Item2;");
+            sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                if (__s[__d] < 0 && __s[__d] != -2)");
+            sb.AppendLine($"                    return System.Array.Empty<{arrayType}>();");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine("        return __declared;");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
 
         // GetTrainableParameters
         bool hasOptional = paramFields.Any(p => p.Optional);
@@ -1089,7 +1144,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     private static string PresenceExpr(ParameterFieldInfo pf)
         => pf.Nullable ? $"{pf.Name} is not null && {pf.Name}.Length > 0" : $"{pf.Name}.Length > 0";
 
-    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false, bool Nullable = false);
+    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false, bool Nullable = false, string? Shape = null);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
     private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection);
 }

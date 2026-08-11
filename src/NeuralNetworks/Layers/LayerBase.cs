@@ -761,6 +761,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (actual.Length != expected.Length) return false;
         for (int i = 0; i < actual.Length; i++)
         {
+            // -2 is an axis the layer adapts rather than fixes, written as * in the attribute.
+            // FeedForwardLayer resizes the first axis of its weights when a caller's feature width
+            // disagrees, so pinning that axis here reported a broken restore on a healthy layer.
+            if (expected[i] == -2) continue;
             if (actual[i] != expected[i]) return false;
         }
         return true;
