@@ -103,26 +103,12 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         Complexity = _parameters.Length
     };
 
-    /// <inheritdoc/>
-    public override Vector<double> GetParameters() => _parameters.Clone();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<double> parameters)
-    {
-        Guard.NotNull(parameters);
-        if (parameters.Length != _parameters.Length)
-        {
-            throw new ArgumentException(
-                $"Parameter count mismatch: expected {_parameters.Length}, got {parameters.Length}",
-                nameof(parameters));
-        }
-
-        _parameters = parameters.Clone();
-    }
-
-    /// <inheritdoc/>
-    public override long ParameterCount => _parameters.Length;
-
+    // GetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // SetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
