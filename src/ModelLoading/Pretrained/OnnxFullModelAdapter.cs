@@ -171,18 +171,37 @@ public sealed class OnnxFullModelAdapter<T> : IFullModel<T, Tensor<T>, Tensor<T>
     /// <summary>An empty vector, matching <see cref="ParameterCount"/>.</summary>
     public Vector<T> GetParameters() => new Vector<T>(0);
 
-    /// <summary>Refused: the weights belong to the loaded graph.</summary>
-    public void SetParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            "An ONNX-backed model's weights belong to the loaded graph, not to this adapter, so "
-            + "they cannot be written. Load the model in a native mode to train or restore "
-            + "parameters. Reading -- ParameterCount and GetParameters -- reports zero, which is "
-            + "the honest count of what this adapter owns.");
+    /// <summary>
+    /// Writes a parameter vector into this adapter. Only an EMPTY vector is accepted.
+    /// </summary>
+    /// <remarks>
+    /// The weights belong to the loaded ONNX graph, so this adapter owns none and reports zero.
+    /// Accepting the empty vector that implies -- rather than throwing on any call -- is what keeps
+    /// a caller that walks every model uniformly from having to special-case ONNX-backed ones. A
+    /// non-empty vector still fails on the length.
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length == 0) return;
+
+        throw new ArgumentException(
+            "Expected 0 parameters: an ONNX-backed model's weights belong to the loaded graph, not "
+            + $"to this adapter, so none can be written. Got {parameters.Length}. Load the model in "
+            + "a native mode to train or restore parameters.",
+            nameof(parameters));
+    }
 
     /// <inheritdoc />
-    public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
-        throw new NotSupportedException(
-            "An ONNX-backed model cannot be rebuilt from a parameter vector; its weights live in "
-            + "the loaded graph.");
+    public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length == 0) return this;
+
+        throw new ArgumentException(
+            "Expected 0 parameters: an ONNX-backed model cannot be rebuilt from a parameter vector; "
+            + $"its weights live in the loaded graph. Got {parameters.Length}.",
+            nameof(parameters));
+    }
 
 }
