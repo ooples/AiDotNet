@@ -683,20 +683,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             finally { SetTrainingMode(false); }
         }
 
-        /// <inheritdoc/>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int offset = 0;
-
-            foreach (var network in _scaleNetworks)
-            {
-                int paramCount = (int)network.GetParameterCount();
-                var subParams = parameters.GetSubVector(offset, paramCount);
-                network.UpdateParameters(subParams);
-                offset += paramCount;
-            }
-        }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
         // ParameterCount and GetParameters were overridden here to fold the scale sub-networks
         // directly. InitializeLayers already does Layers.AddRange(scaleNet.Layers) for every scale,
         // and each scale network is a FeedForwardNeuralNetwork whose parameters ARE its layers, so

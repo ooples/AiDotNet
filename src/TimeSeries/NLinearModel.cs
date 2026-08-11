@@ -1,7 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
-using AiDotNet.Optimizers;
+using AiDotNet.Optimizers;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -230,7 +231,20 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         return new Vector<T>(flat);
     }
 
-    public override long ParameterCount => _l + 1;
+    /// <summary>The model's trainable weights: the weight vector then its bias -- L + 1. _xMean and _xStd are normalization statistics and are correctly absent.</summary>
+    /// <remarks>
+    /// Replaces a hand-written ParameterCount formula. The formula was CORRECT -- it was
+    /// checked against every allocation before this change -- but it was a second statement
+    /// of the same fact, kept in step by hand. Declaring the storage makes the count, the
+    /// vector and the restore read it instead.
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _w));
+            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _b, v => _b = v));
+    }
+
 
     protected override void SerializeCore(BinaryWriter writer)
     {

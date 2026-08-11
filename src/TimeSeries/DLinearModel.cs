@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -206,7 +207,22 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
         return new Vector<T>(flat);
     }
 
-    public override long ParameterCount => 2L * _l + 2;
+    /// <summary>The model's trainable weights: seasonal and trend weights then their biases -- 2*L + 2, the count the deleted formula stated.</summary>
+    /// <remarks>
+    /// Replaces a hand-written ParameterCount formula. The formula was CORRECT -- it was
+    /// checked against every allocation before this change -- but it was a second statement
+    /// of the same fact, kept in step by hand. Declaring the storage makes the count, the
+    /// vector and the restore read it instead.
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _wSeasonal));
+            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _wTrend));
+            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _bSeasonal, v => _bSeasonal = v));
+            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _bTrend, v => _bTrend = v));
+    }
+
 
     protected override void SerializeCore(BinaryWriter writer)
     {
