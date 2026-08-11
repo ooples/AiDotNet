@@ -80,7 +80,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     private readonly List<ILayer<T>> _classifierLayers = [];
 
     // Node embeddings
-    private Tensor<T>? _nodeEmbeddings;
 
     #endregion
 
@@ -245,8 +244,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     private void InitializeEmbeddings()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        _nodeEmbeddings = Tensor<T>.CreateDefault([_maxNodes, _nodeDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_nodeEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -596,6 +593,120 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         if (disposing)
             _onnxSession?.Dispose();
         base.Dispose(disposing);
+    }
+
+    #endregion
+
+    #region Graph convolution
+
+    /// <summary>
+    /// Learned per-node position over reading order, and the graph-convolution stack that consumes
+    /// it. Both are held OUTSIDE <c>Layers</c> and surfaced through
+    /// <see cref="GetExtraTrainableLayers"/>, the base's hook for trainable layers the sequential
+    /// chain does not walk -- putting them in the chain would hand an index lookup a hidden state,
+    /// which is exactly how the equivalent change broke LayoutGraph before it was moved off-chain.
+    /// </summary>
+    private EmbeddingLayer<T>? _nodeOrderEmbedding;
+
+    private readonly List<GraphConvolutionalLayer<T>> _graphConvolutions = [];
+
+    /// <inheritdoc/>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        EnsureGraphPathBuilt();
+        yield return _nodeOrderEmbedding;
+        foreach (var conv in _graphConvolutions) yield return conv;
+    }
+
+    /// <summary>Builds the graph path once. Cheap no-op afterwards.</summary>
+    private void EnsureGraphPathBuilt()
+    {
+        if (_nodeOrderEmbedding is not null) return;
+
+        _nodeOrderEmbedding = new EmbeddingLayer<T>(Math.Max(1, _maxNodes), _edgeDim);
+
+        // A * X * W per Kipf and Welling, which is what Doc-GCN's semantic and syntactic branches
+        // are built on. implicitIdentityWhenUnset stays false: a GCN with no adjacency is a Dense
+        // layer wearing a different name, and silently becoming one is the confusion this whole
+        // change exists to remove.
+        int inFeatures = _nodeDim;
+        for (int i = 0; i < Math.Max(1, _gcnLayers); i++)
+        {
+            _graphConvolutions.Add(new GraphConvolutionalLayer<T>(
+                inFeatures, _edgeDim, (IActivationFunction<T>?)null));
+            inFeatures = _edgeDim;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> Forward(Tensor<T> input) => RunGraphOrDefault(input, training: false);
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunGraphOrDefault(input, training: true);
+
+    /// <summary>
+    /// Runs real graph convolution when the caller supplies an adjacency matrix, and the documented
+    /// per-node path when they do not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default path is left BYTE-IDENTICAL on purpose. This model documents its no-GCN stack as
+    /// the paper's "others" branch and its 1e-3 Adam rate was chosen against that, with measurements
+    /// recorded in this file; diverting unconditionally would falsify both. It also matters
+    /// mechanically -- routing the default through a hand-written walk instead of the base one made
+    /// analytic and finite-difference gradients disagree on every sampled parameter in LayoutGraph,
+    /// because the base path owns dropout, seed wiring and checkpointing.
+    /// </para>
+    /// <para>
+    /// The adjacency arrives as <c>[numNodes, numNodes]</c> through the base auxiliary input, so it
+    /// reaches Train as well as Predict.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> RunGraphOrDefault(Tensor<T> input, bool training)
+    {
+        var adjacency = AuxiliaryInput;
+        bool usable = adjacency is not null
+            && adjacency.Rank == 2
+            && adjacency.Shape[0] == adjacency.Shape[1]
+            && input.Rank == 2
+            && input.Shape[0] == adjacency.Shape[0];
+
+        if (!usable)
+        {
+            return training ? base.ForwardForTraining(input) : base.Forward(input);
+        }
+
+        EnsureGraphPathBuilt();
+        if (training) EnsureLayerRandomSeedsWired();
+
+        var hidden = input;
+        foreach (var conv in _graphConvolutions)
+        {
+            conv.SetAdjacencyMatrix(adjacency!);
+            hidden = conv.Forward(hidden);
+        }
+
+        // Node order, added in the graph hidden space once the convolutions have produced it.
+        var positions = new Tensor<T>([hidden.Shape[0]]);
+        for (int i = 0; i < positions.Length; i++)
+        {
+            positions[i] = NumOps.FromDouble(Math.Min(i, Math.Max(1, _maxNodes) - 1));
+        }
+
+        var order = _nodeOrderEmbedding!.Forward(positions);
+        if (order.Rank == hidden.Rank && order.Length == hidden.Length)
+        {
+            hidden = Engine.TensorAdd(hidden, order);
+        }
+
+        // Classifier head: the tail of the declared stack, reused so the graph path and the default
+        // path end in the same trained classifier rather than two that drift apart.
+        for (int i = Layers.Count - 2; i < Layers.Count; i++)
+        {
+            if (i >= 0) hidden = Layers[i].Forward(hidden);
+        }
+
+        return hidden;
     }
 
     #endregion
