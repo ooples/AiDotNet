@@ -88,6 +88,15 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'epsilon' the layer was built with.</summary>
+    private readonly double _epsilon;
+
+    /// <summary>Construction state: the 'momentum' the layer was built with.</summary>
+    private readonly double _momentum;
+
+    /// <summary>Construction state: the 'virtualBatchSize' the layer was built with.</summary>
+    private readonly int _virtualBatchSize;
+
     /// <summary>
     /// Initializes a new instance of the AttentiveTransformer class.
     /// </summary>
@@ -121,6 +130,9 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
         double epsilon = 1e-5)
         : base([inputDim], [outputDim])
     {
+        _virtualBatchSize = virtualBatchSize;
+        _momentum = momentum;
+        _epsilon = epsilon;
         _inputDim = inputDim;
         _outputDim = outputDim;
         _relaxationFactor = relaxationFactor;

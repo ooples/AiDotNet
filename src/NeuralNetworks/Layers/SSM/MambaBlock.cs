@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -203,6 +203,9 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
     private readonly int _sequenceLength;
 
+    /// <summary>Construction state: the 'expandFactor' the layer was built with.</summary>
+    private readonly int _expandFactor;
+
     /// <summary>
     /// Creates a new Mamba block.
     /// </summary>
@@ -257,6 +260,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _expandFactor = expandFactor;
         _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
@@ -365,7 +369,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         // Register ALL trainable parameters for tape-based autodiff at construction time. The tape training
         // path (NeuralNetworkBase.Train -> TrainWithTape) collects registered parameters BEFORE the first
         // UpdateParameters call, so registering here (not only inside UpdateParameters) is what lets the
-        // optimizer actually see and update this block's weights — otherwise CollectParameters finds nothing
+        // optimizer actually see and update this block's weights â€” otherwise CollectParameters finds nothing
         // and every Train step is a silent no-op. _aLog and _dParam are learnable SSM parameters (Gu & Dao
         // 2023) and MUST be registered too, or they would be excluded from gradient updates and make the
         // registered-vs-flat parameter counts disagree.
@@ -461,15 +465,15 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
 
         // Step 6: Selective scan (core SSM computation).
         // Fast path (no carried initial state AND caller doesn't need state output):
-        // use the engine's fused MambaSelectiveScanForward — a single tape op with
+        // use the engine's fused MambaSelectiveScanForward â€” a single tape op with
         // an exact BPTT backward (AiDotNet.Tensors#523/#1464). It replaces S6Scan's
         // per-timestep micro-op loop, which records O(seqLen) tape nodes and is the
-        // dominant Mamba cost — catastrophically so in double precision and at the
+        // dominant Mamba cost â€” catastrophically so in double precision and at the
         // long sequences 3D/vision Mamba models produce (e.g. SegMamba's 8^3 = 512
         // tokens). The decomposed S6Scan path is retained for two cases:
         //   1) a non-zero initial hidden state must be threaded across calls
         //      (stateful inference from a previous chunk), OR
-        //   2) the caller will read GetHiddenState() after the forward — chunked
+        //   2) the caller will read GetHiddenState() after the forward â€” chunked
         //      autoregressive inference relies on this even when starting from
         //      zero state. Without it, _lastHiddenStates = null would leave the
         //      caller with no carry to feed into the next chunk.
@@ -509,7 +513,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         // per Gu & Dao 2023 (state-spaces/mamba reference impl wraps the inner
         // block in `residual + Block(LN(residual))`). Without it, repeated
         // block stacks attenuate ~3 orders of magnitude per layer (observed
-        // 0.036 → 1e-38 through 4 blocks in MultiLayerModel_ProducesNonTrivialOutput),
+        // 0.036 â†’ 1e-38 through 4 blocks in MultiLayerModel_ProducesNonTrivialOutput),
         // collapsing the LM head's logits to zero and producing a uniform
         // distribution. input3D and output3D both have shape
         // [batchSize, seqLen, _modelDimension] so the add is shape-aligned.
@@ -589,7 +593,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
         var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        // Zero-initialize rented buffer — it may contain stale data from previous use
+        // Zero-initialize rented buffer â€” it may contain stale data from previous use
         for (int i = 0; i < dInput.Length; i++) dInput[i] = NumOps.Zero;
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
         _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
@@ -642,7 +646,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
 
     /// <summary>
     /// Workaround for Engine.ReduceSum multi-axis [0,1] bug (AiDotNet.Tensors PR #62).
-    /// Sums a [batch, seq, features] tensor over batch and seq → [features].
+    /// Sums a [batch, seq, features] tensor over batch and seq â†’ [features].
     /// </summary>
     private Tensor<T> ReduceSumAxes01(Tensor<T> tensor, int batch, int seq, int features)
     {
@@ -731,7 +735,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
         // Re-register against the new tensor instances created by the updates above (TensorAdd returns new
-        // tensors), so the autodiff registry tracks the live weights — now including _aLog and _dParam.
+        // tensors), so the autodiff registry tracks the live weights â€” now including _aLog and _dParam.
         RegisterTrainableParameters();
     }
 

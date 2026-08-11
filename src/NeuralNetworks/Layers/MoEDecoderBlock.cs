@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -44,6 +44,9 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>The model (input/output) feature dimension.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Construction state: the 'rmsNormEpsilon' the layer was built with.</summary>
+    private readonly double _rmsNormEpsilon;
+
     /// <summary>Creates a MoE pre-LN decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="attention">Pre-constructed self-attention sublayer.</param>
@@ -52,6 +55,7 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
     public MoEDecoderBlock(int hiddenSize, LayerBase<T> attention, MoEFeedForwardLayer<T> moe, double rmsNormEpsilon = 1e-6)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _rmsNormEpsilon = rmsNormEpsilon;
         Guard.NotNull(attention);
         Guard.NotNull(moe);
         _hiddenSize = hiddenSize;

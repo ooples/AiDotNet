@@ -223,6 +223,12 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
 
     #region Constructors
 
+    /// <summary>Construction state: the 'growthChannels' the layer was built with.</summary>
+    private readonly int _growthChannels;
+
+    /// <summary>Construction state: the 'residualScale' the layer was built with.</summary>
+    private readonly double _residualScale;
+
     /// <summary>
     /// Initializes a new RRDBNet generator.
     /// </summary>
@@ -265,6 +271,8 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
             [inputChannels, -1, -1],
             [outputChannels, -1, -1])
     {
+        _residualScale = residualScale;
+        _growthChannels = growthChannels;
         // Real-ESRGAN paper (Wang et al. 2021) describes ×4 as the headline
         // configuration but the RRDB + pixel-shuffle backbone generalises to
         // any power of two by stacking 2× upsample stages. ×2 (one stage),

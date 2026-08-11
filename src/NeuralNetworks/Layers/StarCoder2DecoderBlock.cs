@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -60,6 +60,9 @@ public partial class StarCoder2DecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'ffnDim' the layer was built with.</summary>
     private readonly int _ffnDim;
 
+    /// <summary>Construction state: the 'layerNormEpsilon' the layer was built with.</summary>
+    private readonly double _layerNormEpsilon;
+
     /// <summary>Creates a StarCoder2 decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="ffnDim">FFN inner dimension.</param>
@@ -68,6 +71,7 @@ public partial class StarCoder2DecoderBlock<T> : LayerBase<T>, IShapeContract
     public StarCoder2DecoderBlock(int hiddenSize, int ffnDim, LayerBase<T> attention, double layerNormEpsilon = 1e-5)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _layerNormEpsilon = layerNormEpsilon;
         _ffnDim = ffnDim;
         Guard.NotNull(attention);
         _hiddenSize = hiddenSize;

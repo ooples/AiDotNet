@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -180,6 +180,9 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
     private readonly int _sequenceLength;
 
+    /// <summary>Construction state: the 'expansionFactor' the layer was built with.</summary>
+    private readonly int _expansionFactor;
+
     /// <summary>
     /// Creates a new minLSTM layer.
     /// </summary>
@@ -211,6 +214,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _expansionFactor = expansionFactor;
         _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 

@@ -218,6 +218,9 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
 
     #region Constructors
 
+    /// <summary>Construction state: the 'leakySlope' the layer was built with.</summary>
+    private readonly double _leakySlope;
+
     /// <summary>
     /// Creates a PatchGAN discriminator at one of the receptive-field sizes reported in the paper.
     /// </summary>
@@ -241,6 +244,7 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
             leakySlope: leakySlope,
             applySigmoid: applySigmoid)
     {
+        _leakySlope = leakySlope;
     }
 
     /// <summary>

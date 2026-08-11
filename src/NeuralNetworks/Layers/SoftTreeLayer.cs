@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -126,6 +126,9 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _cachedNodeProbs;
     private Tensor<T>? _cachedSplitLogits;
 
+    /// <summary>Construction state: the 'initScale' the layer was built with.</summary>
+    private readonly double _initScale;
+
     /// <summary>
     /// Initializes a new soft tree layer.
     /// </summary>
@@ -142,6 +145,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         double initScale = 0.01)
         : base(new[] { inputDim }, new[] { outputDim })
     {
+        _initScale = initScale;
         _inputDim = inputDim;
         _depth = depth;
         _outputDim = outputDim;
@@ -197,7 +201,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="input">
     /// Input tensor whose last dimension is the feature dimension. A rank-2
     /// <c>[batchSize, inputDim]</c> tensor is the canonical shape; a rank-1 <c>[inputDim]</c>
-    /// sample and higher-rank <c>[d0, ..., inputDim]</c> tensors are also accepted — the leading
+    /// sample and higher-rank <c>[d0, ..., inputDim]</c> tensors are also accepted â€” the leading
     /// dimensions are flattened into the batch for the internal matmuls and restored on the output.
     /// </param>
     /// <returns>

@@ -74,7 +74,13 @@ public class LayerStateGenerator : IIncrementalGenerator
         "'{0}' pins optional constructor parameter '{1}' to its declared default, so a rebuilt layer "
             + "will not preserve a non-default value. Store it in a field named '{1}', '_{1}' or its "
             + "PascalCase form and the generator will round-trip it",
-        "AiDotNet.Serialization", DiagnosticSeverity.Warning, true);
+        // INFO, and it has to be. This project builds with warnings-as-errors, so shipping this at
+        // Warning turned 80 pinned parameters into 84 build ERRORS and failed the build outright --
+        // a reporting diagnostic must not be able to do that. Info does not surface at normal
+        // verbosity, and detailed verbosity is not an option (it logs all 72k discovered cases and
+        // has filled the system drive), so the way to COUNT them is to flip this one word to
+        // Warning, build, and grep ADN0057. That is how 80 -> 38 was measured.
+        "AiDotNet.Serialization", DiagnosticSeverity.Info, true);
 
 
     private static readonly DiagnosticDescriptor Unsuppliable = new(

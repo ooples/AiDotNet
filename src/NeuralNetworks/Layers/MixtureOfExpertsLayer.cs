@@ -412,6 +412,9 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         return metadata;
     }
 
+    /// <summary>Construction state: the 'useLoadBalancing' the layer was built with.</summary>
+    private readonly bool _useLoadBalancing;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MixtureOfExpertsLayer{T}"/> class.
     /// </summary>
@@ -472,6 +475,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         T? loadBalancingWeight = default)
         : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
     {
+        _useLoadBalancing = useLoadBalancing;
         if (experts == null || experts.Count == 0)
         {
             throw new ArgumentException("Must have at least one expert.", nameof(experts));

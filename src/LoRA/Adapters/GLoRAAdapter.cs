@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -84,6 +84,12 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>Construction state: the 'weightRank' the layer was built with.</summary>
     private readonly int _weightRank;
 
+    /// <summary>Construction state: the 'activationAlpha' the layer was built with.</summary>
+    private readonly double _activationAlpha;
+
+    /// <summary>Construction state: the 'weightAlpha' the layer was built with.</summary>
+    private readonly double _weightAlpha;
+
     /// <summary>
     /// Initializes a new GLoRA adapter with the specified parameters.
     /// </summary>
@@ -124,6 +130,8 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         bool freezeBaseLayer = true)
         : base(baseLayer, weightRank, weightAlpha, freezeBaseLayer)
     {
+        _weightAlpha = weightAlpha;
+        _activationAlpha = activationAlpha;
         _weightRank = weightRank;
         // Default activation rank to weight rank if not specified
         int actualActivationRank = activationRank > 0 ? activationRank : weightRank;

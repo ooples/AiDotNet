@@ -118,6 +118,9 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public bool FlashAttentionEnabled => _flashConfig != null;
 
+    /// <summary>Construction state: the 'useCausalMask' the layer was built with.</summary>
+    private readonly bool _useCausalMask;
+
     /// <summary>
     /// Initializes a new diffusion attention layer.
     /// </summary>
@@ -146,6 +149,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
             CalculateInputShape(channels, spatialSize),
             CalculateOutputShape(channels, spatialSize))
     {
+        _useCausalMask = useCausalMask;
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
         if (numHeads <= 0)

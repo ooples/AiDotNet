@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -48,7 +48,7 @@ public delegate Vector<T> UpdateFunction<T>(Vector<T> nodeFeatures, Vector<T> ag
 /// </para>
 /// <para>
 /// The layer performs the following computation for each node v:
-/// - m_v = AGGREGATE({MESSAGE(h_u, h_v, e_uv) : u ∈ N(v)})
+/// - m_v = AGGREGATE({MESSAGE(h_u, h_v, e_uv) : u âˆˆ N(v)})
 /// - h_v' = UPDATE(h_v, m_v)
 ///
 /// where h_v are node features, e_uv are edge features, and N(v) is the neighborhood of v.
@@ -321,6 +321,9 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <inheritdoc/>
     public int OutputFeatures => _outputFeatures;
 
+    /// <summary>Construction state: the 'edgeFeatureDim' the layer was built with.</summary>
+    private readonly int _edgeFeatureDim;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MessagePassingLayer{T}"/> class.
     /// </summary>
@@ -359,6 +362,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         IActivationFunction<T>? activationFunction = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        _edgeFeatureDim = edgeFeatureDim;
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
         _messageFeatures = messageFeatures > 0 ? messageFeatures : outputFeatures;
@@ -639,20 +643,20 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Original implementation walked every (b, i, j) edge in scalar:
         // built a per-edge messageInput vector, ran a 2-layer MLP on it, then
         // gated by adjacency before summing. That was
-        //   O(B · N² · (2·F + edgeF) · M)   per MLP-layer-1 NumOps.Add chain
-        //   + O(B · N² · M²) for layer 2 + O(B · N² · M) for aggregation
-        // of virtual NumOps dispatches — JIT can't inline through INumericOps.
+        //   O(B Â· NÂ² Â· (2Â·F + edgeF) Â· M)   per MLP-layer-1 NumOps.Add chain
+        //   + O(B Â· NÂ² Â· MÂ²) for layer 2 + O(B Â· NÂ² Â· M) for aggregation
+        // of virtual NumOps dispatches â€” JIT can't inline through INumericOps.
         //
         // Pytorch / torch_geometric handles this as bulk tensor ops:
         //   1. broadcast src/tgt features into [B, N, N, F] tiles
         //   2. concat with edge features along the feature axis
-        //   3. flatten (B·N·N) edges into a 2D matrix and run the MLP
+        //   3. flatten (BÂ·NÂ·N) edges into a 2D matrix and run the MLP
         //      via two TensorMatMul + bias + ReLU steps
         //   4. mask non-adjacent edges by multiplying by adjacency
         //   5. sum-aggregate over the j axis with ReduceSum
         // This keeps the layer's externally visible behavior identical
         // (skipped-edge messages stay zero post-mask) while replacing
-        // ~10⁹ scalar dispatches with ~10 Engine ops on a typical graph.
+        // ~10â¹ scalar dispatches with ~10 Engine ops on a typical graph.
 
         // Tile node features for source (j) and target (i) sides:
         //   src[B, i, j, F] = processInput[B, j, F]   (rows of i broadcast)
@@ -668,7 +672,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         {
             int edgeFeatDim = _edgeFeatures.Shape[2];
             // _edgeFeatures is stored as [batch, numNodes*numNodes, edgeFeatDim]
-            // — reshape to [batch, numNodes, numNodes, edgeFeatDim] so it concats
+            // â€” reshape to [batch, numNodes, numNodes, edgeFeatDim] so it concats
             // cleanly with the [B, N, N, F] node tiles.
             var edgeTile = Engine.Reshape(_edgeFeatures, [batchSize, numNodes, numNodes, edgeFeatDim]);
             messageInput = Engine.TensorConcatenate(new[] { srcTile, tgtTile, edgeTile }, axis: 3);
@@ -711,23 +715,23 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Step 3: Update node features (GRU-style update), bulk-vectorized.
         // ----------------------------------------------------------------
         // Original implementation walked every (b, i, f) cell in scalar to compute
-        // reset = σ(b_r + input·W_r + agg·W_mr), update = σ(b_u + input·W_u + agg·W_mu),
+        // reset = Ïƒ(b_r + inputÂ·W_r + aggÂ·W_mr), update = Ïƒ(b_u + inputÂ·W_u + aggÂ·W_mu),
         // and out = (1-update) * pad(input) + update * pad(agg). Each cell did
-        // (inputFeatures + messageFeatures) NumOps.Multiply/Add dispatches —
-        // (B·N·outputFeatures) cells per gate.
+        // (inputFeatures + messageFeatures) NumOps.Multiply/Add dispatches â€”
+        // (BÂ·NÂ·outputFeatures) cells per gate.
         //
         // The matmul / sigmoid / add chain is expressible as bulk Engine ops on
         // the full [B, N, *] tensors; the only complication is the conditional
         // slice/pad in the final output combiner when outputFeatures doesn't
         // match inputFeatures or messageFeatures.
 
-        // Flatten [B, N, *] to [B·N, *] so the projection matmuls work on 2D
+        // Flatten [B, N, *] to [BÂ·N, *] so the projection matmuls work on 2D
         // operands and the broadcast-add on biases stays simple.
         int bn = batchSize * numNodes;
         var inputFlatBN = Engine.Reshape(processInput, [bn, _inputFeatures]);
         var aggFlatBN = Engine.Reshape(_lastAggregated, [bn, _messageFeatures]);
 
-        // Reset gate: σ(input @ W_r + agg @ W_mr + b_r)
+        // Reset gate: Ïƒ(input @ W_r + agg @ W_mr + b_r)
         var resetBiasBcast = Engine.Reshape(_resetBias, [1, _outputFeatures]);
         var resetLogitsFlat = Engine.TensorMatMul(inputFlatBN, _resetWeights);
         resetLogitsFlat = Engine.TensorAdd(resetLogitsFlat, Engine.TensorMatMul(aggFlatBN, _resetMessageWeights));
@@ -735,7 +739,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var resetFlat = Engine.Sigmoid(resetLogitsFlat);
         _lastResetGate = Engine.Reshape(resetFlat, [batchSize, numNodes, _outputFeatures]);
 
-        // Update gate: σ(input @ W_u + agg @ W_mu + b_u)
+        // Update gate: Ïƒ(input @ W_u + agg @ W_mu + b_u)
         var updateBiasBcast = Engine.Reshape(_updateBias, [1, _outputFeatures]);
         var updateLogitsFlat = Engine.TensorMatMul(inputFlatBN, _updateWeights);
         updateLogitsFlat = Engine.TensorAdd(updateLogitsFlat, Engine.TensorMatMul(aggFlatBN, _updateMessageWeights));
@@ -747,7 +751,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // The original conditional `f < inputFeatures ? processInput : 0` zeros
         // any feature-axis index that exceeds the input/message feature width.
         // Build padded versions explicitly so the elementwise multiply works on
-        // matching [B·N, outputFeatures] tensors.
+        // matching [BÂ·N, outputFeatures] tensors.
         var inputPaddedFlat = PadOrSliceLastAxis(inputFlatBN, _inputFeatures, _outputFeatures);
         var aggPaddedFlat = PadOrSliceLastAxis(aggFlatBN, _messageFeatures, _outputFeatures);
 
@@ -990,9 +994,9 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <remarks>
     /// <para>
     /// Implements the actual MPNN algorithm on GPU:
-    /// 1. For each edge (i→j), gather source and target features
+    /// 1. For each edge (iâ†’j), gather source and target features
     /// 2. Compute per-edge message: m_ij = MLP(concat(h_source, h_target))
-    /// 3. Scatter-add to aggregate messages per target node: m_i = Σ_{j∈N(i)} m_ji
+    /// 3. Scatter-add to aggregate messages per target node: m_i = Î£_{jâˆˆN(i)} m_ji
     /// 4. GRU-style update: h'_i = (1-z)*h_i + z*m_i
     /// </para>
     /// </remarks>
@@ -1053,7 +1057,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 if (!NumOps.Equals(adjVal, NumOps.Zero))
                 {
                     edgeSourceList.Add(j);  // Source node
-                    edgeTargetList.Add(i);  // Target node (edge j→i)
+                    edgeTargetList.Add(i);  // Target node (edge jâ†’i)
                 }
             }
         }
