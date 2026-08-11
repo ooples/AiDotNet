@@ -88,8 +88,12 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     /// Registration order is serialization order, so keep it stable. Null is tolerated and
     /// registration is idempotent by reference.
     /// </remarks>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
 
     protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
         AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)

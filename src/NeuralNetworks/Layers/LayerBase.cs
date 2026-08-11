@@ -4204,6 +4204,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public virtual void Serialize(BinaryWriter writer)
     {
         var parameters = GetParameters();
+
+        // A flat value vector cannot reconstruct lazy/composite tensor shapes. Persist the
+        // base-owned layout tree beside every layer payload so Deserialize can materialize the
+        // exact parameter slots before distributing values. This is intentionally a new pre-1.0
+        // format: one authoritative shape+value contract is safer than retaining an ambiguous
+        // count-only payload that forced hundreds of layer-specific restore overrides.
+        writer.Write(ParameterSerializationMagic);
+        WriteParameterLayout(writer);
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -4233,6 +4241,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual void Deserialize(BinaryReader reader)
     {
+        int magic = reader.ReadInt32();
+        if (magic != ParameterSerializationMagic)
+        {
+            throw new InvalidDataException(
+                "Unsupported layer parameter payload. AiDotNet pre-1.0 checkpoints must be " +
+                "regenerated with the shape-aware layer serialization format.");
+        }
+
+        var layout = ParameterLayoutNode.Read(reader);
+        ApplyParameterLayout(layout);
+
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
         for (int i = 0; i < count; i++)
@@ -4241,6 +4260,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
         SetParameters(parameters);
     }
+
+    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E01);
 
     /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.

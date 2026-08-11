@@ -55,6 +55,7 @@
          be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
          whose compiled assembly is not callable from tests. -->
     <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
     <!-- Linked so GeneratorAxisMirrorTests can compare ShapeContractGenerator.Axis to TensorAxis by
          REFLECTION rather than by regex-parsing the source. The generator mirrors TensorAxis because it
          targets netstandard2.0 and cannot reference the analysed assembly; if the two ever disagree it

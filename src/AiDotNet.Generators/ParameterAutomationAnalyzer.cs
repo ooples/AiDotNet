@@ -688,7 +688,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             foreach (var m in c.GetMembers())
             {
                 if (m is not IMethodSymbol ms) continue;
-                if (ms.Name == "RegisterParameterComponent" && ms.Parameters.Length == 1) call = true;
+                if (ms.Name == "RegisterParameterComponent" && ms.Parameters.Length >= 1 &&
+                    ms.Parameters.Skip(1).All(parameter => parameter.IsOptional)) call = true;
                 else if (ms.Name == "RegisterComponents" && ms.Parameters.Length == 0 &&
                          (ms.IsVirtual || ms.IsOverride || ms.IsAbstract)) hook = true;
             }

@@ -54,15 +54,16 @@ public partial class MambaBlock<T>
         var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, 1, _innerDimension * 2 });
 
-        var xBranch = SliceTensor(projected3D, 2, 0, _innerDimension);                 // [batch, 1, inner]
-        var zBranch = SliceTensor(projected3D, 2, _innerDimension, _innerDimension);   // [batch, 1, inner]
+        var xBranch = Engine.TensorNarrow(projected3D, 2, 0, _innerDimension);                 // [batch, 1, inner]
+        var zBranch = Engine.TensorNarrow(projected3D, 2, _innerDimension, _innerDimension);   // [batch, 1, inner]
 
         // Step 2: causal Conv1D using the carried window. Shift the window left and append the new x value,
         // then run the identical conv over the window; its last position equals Forward's conv at this step.
         var xCurrent = Engine.Reshape(xBranch, new[] { batchSize, _innerDimension });
         state.ConvWindow = AdvanceConvWindow(state.ConvWindow, xCurrent, batchSize);
         var convWindowOut = DepthwiseConv1DForward(state.ConvWindow, batchSize, _convKernelSize);
-        var convCurrent = convWindowOut.GetSliceAlongDimension(_convKernelSize - 1, 1).Clone(); // [batch, inner]
+        var convCurrent3D = Engine.TensorNarrow(convWindowOut, 1, _convKernelSize - 1, 1);
+        var convCurrent = Engine.Reshape(convCurrent3D, new[] { batchSize, _innerDimension });
         var convOutput = Engine.Reshape(convCurrent, new[] { batchSize, 1, _innerDimension });
 
         // Step 3: SiLU.
@@ -72,9 +73,9 @@ public partial class MambaBlock<T>
         var siluFlat = Engine.Reshape(siluOutput, new[] { batchSize, _innerDimension });
         var xProj = Engine.TensorMatMul(siluFlat, _xProjectionWeights);
         var xProj3D = Engine.Reshape(xProj, new[] { batchSize, 1, _dtRank + _stateDimension * 2 });
-        var deltaLowRank = SliceTensor(xProj3D, 2, 0, _dtRank);
-        var bParam = SliceTensor(xProj3D, 2, _dtRank, _stateDimension);
-        var cParam = SliceTensor(xProj3D, 2, _dtRank + _stateDimension, _stateDimension);
+        var deltaLowRank = Engine.TensorNarrow(xProj3D, 2, 0, _dtRank);
+        var bParam = Engine.TensorNarrow(xProj3D, 2, _dtRank, _stateDimension);
+        var cParam = Engine.TensorNarrow(xProj3D, 2, _dtRank + _stateDimension, _stateDimension);
 
         // Step 5: delta projection + bias + softplus.
         var deltaFlat = Engine.Reshape(deltaLowRank, new[] { batchSize, _dtRank });

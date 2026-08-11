@@ -465,7 +465,9 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             new[] { 0, 2, 1, 3 });
 
         Tensor<T> context;
-        if (!cacheBwd && _alibiLayer == null)
+        if (!cacheBwd
+            && _alibiLayer == null
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
         {
             // ── Inference fast path ──────────────────────────────────────────────
             // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
@@ -508,8 +510,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             _lastProjectedValues = cacheBwd ? values : null;
 
             // Expand K/V heads to match Q heads via repeat
-            var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
-            var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
+            var expandedKeys = ExpandKVHeads(keys);
+            var expandedValues = ExpandKVHeads(values);
 
             _lastExpandedKeys = cacheBwd ? expandedKeys : null;
             _lastExpandedValues = cacheBwd ? expandedValues : null;
@@ -572,32 +574,15 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     /// Expands K/V from [batch, numKVHeads, seq, headDim] to [batch, numHeads, seq, headDim]
     /// by repeating each KV head headsPerGroup times.
     /// </summary>
-    private Tensor<T> ExpandKVHeads(Tensor<T> kv, int batchSize, int seqLen)
+    private Tensor<T> ExpandKVHeads(Tensor<T> kv)
     {
         if (_numKVHeads == _numHeads)
             return kv; // No expansion needed (standard MHA)
 
-        var expanded = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, _headDimension });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int kvh = 0; kvh < _numKVHeads; kvh++)
-            {
-                for (int g = 0; g < _headsPerGroup; g++)
-                {
-                    int qh = kvh * _headsPerGroup + g;
-                    for (int s = 0; s < seqLen; s++)
-                    {
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            expanded[new[] { b, qh, s, d }] = kv[new[] { b, kvh, s, d }];
-                        }
-                    }
-                }
-            }
-        }
-
-        return expanded;
+        // Repeat through the engine so the operation is represented on the tape. The former
+        // scalar-copy loop produced the correct forward values but created a detached tensor,
+        // dropping every K/V contribution to the input and projection weights.
+        return Engine.TensorRepeatInterleave(kv, _headsPerGroup, dim: 1);
     }
 
     private (Tensor<T> Context, Tensor<T> AttentionWeights) ComputeALiBiAttention(
@@ -621,7 +606,9 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         // Causal decoder without a soft-cap: use FlashAttention's causal mask (softcap-free path), the same
         // mechanism the stateless paged fallback uses. Soft-capped causal attention (Gemma-2) falls through
         // to the Engine SDPA path below, which applies an additive causal mask so the cap and mask compose.
-        if (_useCausalMask && _attnLogitSoftcap <= 0.0)
+        if (_useCausalMask
+            && _attnLogitSoftcap <= 0.0
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
         {
             var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true, UseCausalMask = true };
             var (flashOutput, flashWeights) = FlashAttention<T>.Forward(

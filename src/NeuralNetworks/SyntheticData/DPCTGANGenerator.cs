@@ -246,7 +246,12 @@ public partial class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabul
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>());
+                // The residual generator knows each hidden width at construction time. Leaving
+                // BatchNorm deferred lets the model-wide shape walk resolve this auxiliary list
+                // against the raw architecture input instead (10 for the default fixture), after
+                // which the first 256-wide hidden activation cannot be normalized. Bind the
+                // explicit per-feature contract just as the dense layer contract is bound above.
+                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
             }
             _usingCustomLayers = false;
         }
@@ -263,7 +268,7 @@ public partial class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabul
             _genBNLayers.Clear();
             foreach (int dim in _options.GeneratorDimensions)
             {
-                _genBNLayers.Add(new BatchNormalizationLayer<T>());
+                _genBNLayers.Add(new BatchNormalizationLayer<T>(dim));
             }
         }
 

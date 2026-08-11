@@ -218,8 +218,14 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         int endPosition = startPosition + seqLen;
         EnsureCacheLength(endPosition);
 
-        var rotatedQ = RotateTensor(queries, startPosition);
-        var rotatedK = RotateTensor(keys, startPosition);
+        // Route the rotation through the engine primitive. Besides using the same optimized
+        // CPU/GPU implementation as decoder inference, ApplyRoPEInterleaved records its inverse
+        // rotation on an active gradient tape. The former scalar-copy implementation returned
+        // detached tensors and silently discarded every Q/K contribution during tape training.
+        var rotatedQ = Engine.ApplyRoPEInterleaved(
+            queries, _cosCache, _sinCache, startPosition);
+        var rotatedK = Engine.ApplyRoPEInterleaved(
+            keys, _cosCache, _sinCache, startPosition);
 
         return (rotatedQ, rotatedK);
     }
@@ -243,58 +249,6 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         var unrotatedGradK = InverseRotateTensor(gradKey, startPosition);
 
         return (unrotatedGradQ, unrotatedGradK);
-    }
-
-    /// <summary>
-    /// Applies RoPE rotation to a single tensor.
-    /// </summary>
-    private Tensor<T> RotateTensor(Tensor<T> input, int startPosition)
-    {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        int rank = input.Shape.Length;
-        int seqLen = input.Shape[rank - 2];
-        int headDim = input.Shape[rank - 1];
-        int halfDim = headDim / 2;
-
-        // Compute total number of elements in leading dimensions
-        int leadingSize = 1;
-        for (int d = 0; d < rank - 2; d++)
-        {
-            leadingSize *= input.Shape[d];
-        }
-
-        // Flatten to [leadingSize, seqLen, headDim] for processing
-        int seqStride = headDim;
-        int batchStride = seqLen * headDim;
-
-        for (int b = 0; b < leadingSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                int pos = startPosition + s;
-                int baseIdx = b * batchStride + s * seqStride;
-
-                for (int i = 0; i < halfDim; i++)
-                {
-                    T cos_val = _cosCache[pos, i];
-                    T sin_val = _sinCache[pos, i];
-
-                    T x_even = input[baseIdx + 2 * i];
-                    T x_odd = input[baseIdx + 2 * i + 1];
-
-                    // x'[2i]   = x[2i] * cos - x[2i+1] * sin
-                    // x'[2i+1] = x[2i] * sin + x[2i+1] * cos
-                    output[baseIdx + 2 * i] = NumOps.Subtract(
-                        NumOps.Multiply(x_even, cos_val),
-                        NumOps.Multiply(x_odd, sin_val));
-                    output[baseIdx + 2 * i + 1] = NumOps.Add(
-                        NumOps.Multiply(x_even, sin_val),
-                        NumOps.Multiply(x_odd, cos_val));
-                }
-            }
-        }
-
-        return output;
     }
 
     /// <summary>
@@ -360,7 +314,7 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : input.Shape[0];
         EnsureCacheLength(seqLen);
 
-        return RotateTensor(input, 0);
+        return Engine.ApplyRoPEInterleaved(input, _cosCache, _sinCache, startPosition: 0);
     }
 
     /// <inheritdoc />

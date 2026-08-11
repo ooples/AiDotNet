@@ -72,7 +72,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         if (_labelClassifiers is null) return;
         foreach (var classifier in _labelClassifiers)
         {
-            RegisterParameterComponent(classifier as IParameterSource<T>);
+            RegisterParameterComponent(classifier);
         }
     }
     #region Fields

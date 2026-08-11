@@ -190,6 +190,15 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "q-table",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable));
+    }
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {

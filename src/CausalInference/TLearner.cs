@@ -338,7 +338,58 @@ public class TLearner<T> : CausalModelBase<T>
         return result;
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "linear-models",
+            new AiDotNet.Models.Parameters.VariableLengthParameterSource<T>(
+                () => 2L + _weightsTreated.Length + _weightsControl.Length,
+                GetLinearModelParameters,
+                RestoreLinearModelParameters));
+    }
 
+    private Vector<T> GetLinearModelParameters()
+    {
+        if (_weightsTreated is null || _weightsControl is null)
+            return new Vector<T>(2) { [0] = _biasTreated, [1] = _biasControl };
+
+        int p = _weightsTreated.Length;
+        var parameters = new Vector<T>(2 + 2 * p);
+        parameters[0] = _biasTreated;
+        parameters[1] = _biasControl;
+        for (int i = 0; i < p; i++)
+        {
+            parameters[2 + i] = _weightsTreated[i];
+            parameters[2 + p + i] = _weightsControl[i];
+        }
+        return parameters;
+    }
+
+    private void RestoreLinearModelParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length < 2 || (parameters.Length - 2) % 2 != 0)
+        {
+            throw new ArgumentException(
+                "T-Learner parameters must contain two biases followed by equally sized " +
+                "treated and control weight vectors.", nameof(parameters));
+        }
+
+        _biasTreated = parameters[0];
+        _biasControl = parameters[1];
+
+        int remaining = parameters.Length - 2;
+        int p = remaining / 2;
+        _weightsTreated = new Vector<T>(p);
+        _weightsControl = new Vector<T>(p);
+        for (int i = 0; i < p; i++)
+        {
+            _weightsTreated[i] = parameters[2 + i];
+            _weightsControl[i] = parameters[2 + p + i];
+        }
+    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

@@ -569,7 +569,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
             foreach (var m in c.GetMembers())
             {
                 if (m is not IMethodSymbol ms) continue;
-                if (ms.Name == RegisterCall && ms.Parameters.Length == 1) call = true;
+                if (ms.Name == RegisterCall && ms.Parameters.Length >= 1 &&
+                    ms.Parameters.Skip(1).All(parameter => parameter.IsOptional)) call = true;
                 else if (ms.Name == RegisterHook && ms.Parameters.Length == 0 &&
                          (ms.IsVirtual || ms.IsOverride || ms.IsAbstract)) hook = true;
             }
@@ -588,6 +589,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
     /// </summary>
     private static string? ElementTypeParam(INamedTypeSymbol type)
     {
+        // Preserve the fallback before walking the containing-type chain. Keeping the
+        // dereference after that nullable traversal confuses null-flow analysis and is
+        // unnecessary: the fallback is always the first parameter declared by the
+        // original model type, never one declared by a containing type.
+        string? firstDeclaredTypeParameter = type.TypeParameters.Length > 0
+            ? type.TypeParameters[0].Name
+            : null;
+
         for (var c = type; c is not null; c = c.ContainingType)
         {
             foreach (var tp in c.TypeParameters)
@@ -595,7 +604,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 if (tp.Name == "T") return tp.Name;
             }
         }
-        if (type.TypeParameters.Length > 0) return type.TypeParameters[0].Name;
+        if (firstDeclaredTypeParameter is not null) return firstDeclaredTypeParameter;
 
         // A model that CLOSES over a concrete numeric type has no type parameter to find, and
         // returning null here skipped it from automation entirely and silently -- LinearVectorModel

@@ -76,8 +76,13 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// <para>Null is tolerated, so a model may register a component a configuration did not build,
     /// and registration is idempotent by reference.</para>
     /// </remarks>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))]
+        string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(
+            GetType().FullName ?? GetType().Name, memberName, componentExpression, component);
 
     /// <summary>Registers an exceptional component by stable identity.</summary>
     protected void RegisterParameterComponent(

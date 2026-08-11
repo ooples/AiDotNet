@@ -117,6 +117,29 @@ public class EnsembleAnomalyDetectionTests
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task Maximum_ScoreDoesNotDependOnQueryBatchComposition()
+    {
+        await Task.Yield();
+        var detector = new MaximumDetector<double>();
+        var data = CreateTestData();
+        detector.Fit(data);
+
+        var one = new Matrix<double>(1, data.Columns);
+        var mixed = new Matrix<double>(2, data.Columns);
+        for (int column = 0; column < data.Columns; column++)
+        {
+            one[0, column] = data[OutlierIndex, column];
+            mixed[0, column] = data[OutlierIndex, column];
+            mixed[1, column] = data[0, column];
+        }
+
+        double isolatedScore = detector.ScoreAnomalies(one)[0];
+        double mixedScore = detector.ScoreAnomalies(mixed)[0];
+
+        Assert.Equal(isolatedScore, mixedScore, precision: 12);
+    }
+
     #endregion
 
     #region FeatureBaggingDetector Tests

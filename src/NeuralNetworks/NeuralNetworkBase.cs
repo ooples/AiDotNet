@@ -627,12 +627,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool _componentsRegistered;
 
     /// <summary>
-    /// Declares a component whose parameters belong to this model's surface. Registration order is
-    /// serialization order, so keep it stable. Null is tolerated and registration is idempotent by
-    /// reference.
+    /// Declares a component whose parameters belong to this model's surface. Caller metadata gives
+    /// legacy declarations a deterministic compatibility identity. Null is tolerated and
+    /// registration is idempotent by reference.
     /// </summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))]
+        string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(
+            GetType().FullName ?? GetType().Name, memberName, componentExpression, component);
 
     /// <summary>Registers an exceptional component by stable identity and semantic role.</summary>
     protected void RegisterParameterComponent(
@@ -13813,6 +13818,54 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Builds the exact scalar objective differentiated by every tape-based training path.
+    /// </summary>
+    /// <param name="input">The model input.</param>
+    /// <param name="target">The caller-supplied target.</param>
+    /// <param name="lossFunction">Optional loss override; otherwise the configured model loss is used.</param>
+    /// <returns>The tape-compatible scalar objective.</returns>
+    /// <remarks>
+    /// This is the single semantic funnel for analytical gradients and numerical conformance checks.
+    /// In particular, callers must not substitute <see cref="Predict(Tensor{T})"/> here: inference may
+    /// intentionally post-process the training output (for example, logits to probabilities), and a
+    /// finite difference of that different function cannot validate the training gradient.
+    /// </remarks>
+    internal Tensor<T> BuildTrainingObjective(
+        Tensor<T> input,
+        Tensor<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        var prediction = ForwardForTraining(input);
+        target = AlignTargetToOutputShape(prediction, target);
+
+        var resolved = lossFunction ?? LossFunction;
+        if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
+        {
+            return ApplyCompositeObjective(tapeLoss.ComputeTapeLoss(prediction, target), input);
+        }
+
+        return resolved.ComputeTapeLoss(prediction, target);
+    }
+
+    /// <summary>
+    /// Evaluates the exact training objective without recording an autodiff graph.
+    /// </summary>
+    /// <remarks>
+    /// Exposed internally for the generated conformance suite through <c>InternalsVisibleTo</c>.
+    /// Keeping the numerical oracle here prevents the test assembly from reimplementing target
+    /// alignment, composite losses, or model-specific training-forward semantics.
+    /// </remarks>
+    internal T EvaluateTrainingObjective(
+        Tensor<T> input,
+        Tensor<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        using var _ = new NoGradScope<T>();
+        var objective = BuildTrainingObjective(input, target, lossFunction);
+        return objective.Length > 0 ? objective[0] : NumOps.Zero;
+    }
+
+    /// <summary>
     /// Computes a flattened gradient vector for all trainable parameters in the network.
     /// </summary>
     /// <param name="input">The input tensor.</param>
@@ -13844,12 +13897,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         using var tape = new GradientTape<T>();
 
-        // Forward pass under tape recording (NOT Predict which uses NoGradScope).
-        // Must happen BEFORE collecting trainable parameters — layers may
-        // initialize or resize weights on their first forward pass.
-        var prediction = ForwardForTraining(input);
+        // Build the SAME objective used by finite-difference conformance. This performs the
+        // training forward under tape recording (never public Predict, which may apply inference
+        // post-processing), aligns targets, and applies composite objectives in one base-owned funnel.
+        var lossTensor = BuildTrainingObjective(input, target, lossFunction);
 
-        // Collect parameters AFTER forward so lazy-initialized layers are included
+        // Collect parameters AFTER the objective's forward so lazy-initialized layers are included.
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
         if (trainableParams.Count == 0)
         {
@@ -13858,23 +13911,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 "layer implementing ITrainableLayer<T> with registered parameters.");
         }
 
-        // Align rank-off-by-one regression targets ([B] vs [B,1]) BEFORE the loss: classification
-        // index targets are handled inside the loss (EnsureTargetMatchesPredicted one-hots them),
-        // but regression losses subtract tensors directly and crash on the industry-standard
-        // rank-1 target shape. AlignTargetToOutputShape only fires on a trailing singleton, so
-        // class-index targets against [B, C>1] logits are untouched.
-        target = AlignTargetToOutputShape(prediction, target);
-
-        // Compute loss via the user's configured loss function.
-        // Integer-class → one-hot matching is handled inside each loss function's
-        // ComputeTapeLoss via EnsureTargetMatchesPredicted.
         var resolved = lossFunction ?? LossFunction;
-        Tensor<T> lossTensor;
-        if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
+        if (resolved is LossFunctions.LossFunctionBase<T>)
         {
-            // Same declared objective as every other tape-loss path; wiring only some of them left
-            // the composite silently inert for whichever path a model happened to take.
-            lossTensor = ApplyCompositeObjective(tapeLoss.ComputeTapeLoss(prediction, target), input);
             // Record the scalar loss so GetLastLoss() reflects this gradient step. The
             // IGradientComputable fast-path (used by every gradient-based optimizer's
             // CalculateGradient) previously left LastLoss stale/zero, so callers reading the
@@ -13883,16 +13922,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // paths (TrainWithTape / fused step) already set LastLoss the same way.
             LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         }
-        else
-        {
-            // Fallback for a custom ILossFunction: record the loss on the tape and let
-            // reverse-mode AD produce the gradient. This used to call CalculateDerivative and
-            // hand-build a gradient tensor, but #1994 removed that member from the interface --
-            // the tape is now the only source of gradients, which is also what stops a custom
-            // loss from silently disagreeing with the autodiff path it is scored against.
-            lossTensor = resolved.ComputeTapeLoss(prediction, target);
-        }
-
         // Reverse-mode AD: compute gradients across the FULL tape, then
         // filter to trainable parameters via reference-keyed lookup. The
         // earlier `tape.ComputeGradients(lossTensor, trainableParams)` form
@@ -13913,14 +13942,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // reason — surfaced by ResNet's
         // GradientFlow_ShouldBeNonZeroAndFinite, then locked in here
         // for the IGradientComputable contract.
-        // Pass the trainable-param set DIRECTLY to ComputeGradients as the
-        // `sources` arg so the tape only computes gradients for those
-        // tensors — avoids the previous compute-then-discard cost where
-        // gradients accumulated for non-trainable tensors got dropped at
-        // the post-hoc filter step (review #1364 C4nM4: filter at tape
-        // construction, not after the full backward pass). Frozen /
-        // detached tensors that the tape doesn't see still get zero-
-        // padded in the flatten loop below to preserve length-alignment.
+        // Ask the tape only for declared trainable leaves. The returned dictionary remains
+        // reference-keyed, and genuinely detached slots are zero-padded in manifest order below.
         var allGrads = tape.ComputeGradients(lossTensor, sources: trainableParams);
         var grads = allGrads;
 

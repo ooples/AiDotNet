@@ -71,8 +71,13 @@ public abstract class AnomalyDetectorTestBase<T>
             for (int j = 0; j < Features; j++)
                 outlierX[i, j] = ToT(50.0 + ModelTestHelpers.NextGaussian(rng) * 0.1);
 
-        var normalScores = model.Predict(normalX);
-        var outlierScores = model.Predict(outlierX);
+        // Predict is the detector's classification surface: +1 means inlier and -1 means
+        // anomaly. Comparing those labels as if they were scores reverses the documented
+        // ordering and makes a correct detector fail more strongly the better it classifies.
+        // ScoreAnomalies is the ranking surface whose contract is higher = more anomalous.
+        var detector = Assert.IsAssignableFrom<IAnomalyDetector<T>>(model);
+        var normalScores = detector.ScoreAnomalies(normalX);
+        var outlierScores = detector.ScoreAnomalies(outlierX);
 
         // NON-FINITE IS A FAILURE, NOT A REASON TO SKIP. Wrapping the invariant in a
         // finiteness check meant a detector returning NaN or Infinity satisfied this test

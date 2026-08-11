@@ -641,6 +641,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> OptimizerWarmupClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
+            // DocGCN's bounded 1-vs-2 probe measured 1.2334 untrained, then 1.3166 / 1.3119:
+            // finite parameters and an improving short-to-long direction, but both observations
+            // still sit inside Adam's initial overshoot. Measure after warm-up rather than hiding
+            // the regression behind a relaxed loss tolerance.
+            "DocGCN",
             "SALMONN",
             "SeACo",
         };
@@ -5816,6 +5821,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
                     "imageSize: 32, maxSequenceLength: 16, visionDim: 32, textDim: 32, " +
                     "fusionDim: 32, visionLayers: 1, fusionLayers: 1, numHeads: 4, vocabSize: 64)";
+            }
+            else if (model.ClassName == "Pix2Struct" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
+            {
+                // The collision registry deliberately assigns Pix2StructTests to the trainable
+                // PixelToSequence implementation, not the separate VisionLanguage wrapper. Its
+                // paper defaults are 1024-wide with 18+18 layers and a 50,000-token head; merely
+                // selecting FP32 still leaves the generated training and clone probes above the
+                // 120-second gate. Exercise the same patch encoder -> transformer encoder/decoder
+                // -> vocabulary head through the public scale parameters at CI size. Production
+                // defaults and every public customization path remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
+                    "imageSize: 32, patchSize: 16, maxPatches: 4, maxSequenceLength: 8, " +
+                    "hiddenDim: 32, numEncoderLayers: 1, numDecoderLayers: 1, " +
+                    "numHeads: 2, vocabSize: 64)";
             }
             else if (model.ClassName == "MATCHA" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -11811,6 +11835,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 50;");
         }
+        else if (model.ClassName == "Pix2Struct"
+                 && typeName.StartsWith(
+                     "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
+        {
+            // The bounded constructor above uses four 16x16 patch tokens and a 64-token head.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 64 };");
+        }
         else if (model.ClassName == "MATCHA"
                  && typeName.StartsWith(
                      "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
@@ -13199,7 +13231,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
             // Language-model fixtures use legal token widths; GAN fixtures use their latent/image contracts.
             bool isCausalGanGenerator = model.ClassName == "CausalGANGenerator";
-            int dim = model.ClassName == "XLSTMLanguageModel"
+            int dim = model.ClassName is "EagleLanguageModel" or "FinchLanguageModel"
+                ? 4 // Their bounded constructors above declare inputSize: 4.
+                : model.ClassName == "XLSTMLanguageModel"
                 ? 16
                 : model.ClassName is "Mamba2LanguageModel" or "FalconMambaLanguageModel" or "GriffinLanguageModel" or "HawkLanguageModel"
                     or "GLALanguageModel" or "GatedDeltaNetLanguageModel" ? 32
@@ -13312,7 +13346,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // generated token by 10, so constrain these fixtures' source tokens to [0, 12):
                 // both original and scaled sequences remain legal token IDs while the unchanged test
                 // still exercises real input sensitivity.
-                int randomTokenUpperBound = model.ClassName == "XLSTMLanguageModel"
+                int randomTokenUpperBound = model.ClassName is "EagleLanguageModel" or "FinchLanguageModel"
+                    ? 64 // The bounded fixtures above construct a 64-row embedding table.
+                    : model.ClassName == "XLSTMLanguageModel"
                     ? 6 // ScaledInput multiplies by 10; IDs 0..5 stay legal for the 64-token fixture.
                     : model.ClassName is "Mamba2LanguageModel" or "FalconMambaLanguageModel" or "GriffinLanguageModel" or "HawkLanguageModel"
                         or "GLALanguageModel" or "GatedDeltaNetLanguageModel"

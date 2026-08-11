@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "2, 4")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 64", TestConstructorArgs = "4, 16")]
 // Roles from this layer's own arithmetic, not from convention: ForwardInternal states "Last two
 // dimensions are [sequence, embedding_dim]; all preceding dimensions are treated as batch dimensions",
 // and OnFirstForward guards rank>=2 while checking input.Shape[^1] == headCount * headDimension.
@@ -1139,6 +1139,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         output = Tensor<T>.Empty();
 
         if (IsTrainingMode) return false;
+        // The fused kernel is inference-only. Do not rely on a backend throwing when a tape is
+        // active: the float CPU/OpenCL path can execute successfully but records no Q/K/V graph,
+        // silently publishing zero gradients. Every precision must select the decomposed,
+        // differentiable path explicitly while recording.
+        if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null) return false;
         if (_ropeLayer != null || _alibiLayer != null || UseCausalMask) return false;
         if (!ReferenceEquals(query, key) || !ReferenceEquals(key, value)) return false;
 
@@ -1407,7 +1412,9 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             context_4D = flashOutput;
             attentionWeights4D = flashWeights ?? new Tensor<T>(new[] { batchSize, _headCount, seqLengthQ, seqLengthKV });
         }
-        else if (!IsTrainingMode && typeof(T) != typeof(double))
+        else if (!IsTrainingMode
+                 && typeof(T) != typeof(double)
+                 && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
         {
             // FLOAT-ONLY inference fast path. FlashAttention's fused kernel converts its
             // inputs to float (FusedAttention.DoubleToFloat), so on a T=double model it

@@ -215,48 +215,6 @@ public partial class ConvNeXtV2Block<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Includes the sub-layers' tensors explicitly: <c>LayerBase</c> does not recurse into
-    /// registered children, and a composite that omits them reports an empty trainable set while
-    /// still advertising a parameter count — which desynchronizes the ParameterBuffer and
-    /// corrupts training rather than failing loudly.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-    {
-        var result = new List<Tensor<T>>();
-        result.AddRange(_depthwise.GetTrainableParameters());
-        result.AddRange(_norm.GetTrainableParameters());
-        result.AddRange(_pointwiseExpand.GetTrainableParameters());
-        result.AddRange(_pointwiseProject.GetTrainableParameters());
-        result.Add(_grnGamma);
-        result.Add(_grnBeta);
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        var counts = new[]
-        {
-            _depthwise.GetTrainableParameters().Count, _norm.GetTrainableParameters().Count,
-            _pointwiseExpand.GetTrainableParameters().Count, _pointwiseProject.GetTrainableParameters().Count
-        };
-
-        int expected = counts.Sum() + 2;
-        if (parameters.Count != expected)
-            throw new ArgumentException($"Expected {expected} trainable tensors, got {parameters.Count}.", nameof(parameters));
-
-        int at = 0;
-        _depthwise.SetTrainableParameters(parameters.Skip(at).Take(counts[0]).ToList()); at += counts[0];
-        _norm.SetTrainableParameters(parameters.Skip(at).Take(counts[1]).ToList()); at += counts[1];
-        _pointwiseExpand.SetTrainableParameters(parameters.Skip(at).Take(counts[2]).ToList()); at += counts[2];
-        _pointwiseProject.SetTrainableParameters(parameters.Skip(at).Take(counts[3]).ToList()); at += counts[3];
-
-        _grnGamma = parameters[at];
-        _grnBeta = parameters[at + 1];
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
     /// Publishes the block geometry. The expansion ratio is NOT always 3x — APNet2's bounded CI
     /// fixtures use other ratios — so deserialization must read the real value rather than infer
     /// it, or the rebuilt block has the wrong parameter count.

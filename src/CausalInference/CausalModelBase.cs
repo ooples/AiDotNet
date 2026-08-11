@@ -85,8 +85,12 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParame
     /// Registration
     /// order is serialization order, so keep it stable.
     /// </summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
 
     protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
         ParameterSlotRole role = ParameterSlotRole.Trainable)

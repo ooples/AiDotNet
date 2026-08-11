@@ -369,9 +369,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <para><b>For Beginners:</b> tell the base what your model is made of and you never write
     /// parameter counting, saving or loading code — it is derived from that one declaration.</para>
     /// </remarks>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
     {
-        _parameterRegistry.Register(component);
+        _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
         InvalidateTrainableParametersCache();
     }
 

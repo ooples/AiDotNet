@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 64", TestConstructorArgs = "4, 256")]
 // GENUINELY RANK-AGNOSTIC, which is why this gets the shorthand rather than a list of layouts.
 // ForwardTraced normalises whatever it is given to [batch, seq, embed] - rank 1 becomes [1, 1, F],
 // rank 2 becomes [1, S, F], rank > 3 folds its leading axes into batch - runs the encoder, and then

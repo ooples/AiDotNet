@@ -1,5 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AiDotNet.Models.Parameters;
 
@@ -24,8 +26,35 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         public ParameterSlotRole Role { get; }
     }
 
+    private sealed class CapturedEntry
+    {
+        public CapturedEntry(Entry entry, IReadOnlyList<ParameterSlotDescriptor> localSlots,
+                             long? parameterCount)
+        {
+            Entry = entry;
+            LocalSlots = localSlots;
+            ParameterCount = parameterCount;
+        }
+
+        public Entry Entry { get; }
+        public IReadOnlyList<ParameterSlotDescriptor> LocalSlots { get; }
+        public long? ParameterCount { get; }
+    }
+
+    private sealed class CapturedLayout
+    {
+        public CapturedLayout(ParameterLayoutSnapshot snapshot, IReadOnlyList<CapturedEntry> entries)
+        {
+            Snapshot = snapshot;
+            Entries = entries;
+        }
+
+        public ParameterLayoutSnapshot Snapshot { get; }
+        public IReadOnlyList<CapturedEntry> Entries { get; }
+    }
+
     private readonly List<Entry> _entries = new();
-    private int _legacyId;
+    private readonly Dictionary<string, int> _legacyOccurrences = new(StringComparer.Ordinal);
 
     /// <summary>The registered, currently present sources in stable-ID order.</summary>
     public IReadOnlyList<IParameterSource<T>> Components
@@ -46,18 +75,59 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     public bool HasComponents => _entries.Count > 0;
 
     /// <summary>
-    /// Registers a legacy component. Its generated numeric ID preserves historical registration
-    /// order; generated code should use the stable-ID overload.
+    /// Registers a legacy component using its source type as a deterministic identity seed.
+    /// Generated and model-owned code should use an explicit stable ID or
+    /// <see cref="RegisterLegacy(string, string?, string?, IParameterSource{T}?)"/> so unrelated
+    /// registrations cannot renumber it.
     /// </summary>
     public void Register(IParameterSource<T>? component)
-        => Register($"legacy/{_legacyId++:D8}", component, ParameterSlotRole.Trainable);
+    {
+        string sourceType = component?.GetType().FullName ?? "null";
+        RegisterLegacy(sourceType, nameof(Register), sourceType, component);
+    }
+
+    /// <summary>
+    /// Registers an un-migrated caller under a deterministic compatibility identity.
+    /// </summary>
+    /// <remarks>
+    /// The old compatibility path assigned one global sequence number, so inserting an unrelated
+    /// component changed every following checkpoint offset. This seed isolates identity by owning
+    /// model, registration member and caller expression. Repeated entries from the same expression
+    /// (for example a collection loop) receive a fixed-width local occurrence index; those callers
+    /// should still migrate to explicit semantic collection IDs when such IDs exist.
+    /// </remarks>
+    internal void RegisterLegacy(
+        string ownerIdentity,
+        string? memberName,
+        string? argumentExpression,
+        IParameterSource<T>? component)
+    {
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            if (component is not null && ReferenceEquals(_entries[i].Source, component)) return;
+        }
+
+        string seed = "legacy-v1\n" + ownerIdentity + "\n" +
+            (memberName ?? "unknown-member") + "\n" +
+            (argumentExpression ?? "unknown-expression");
+        string digest;
+        using (var sha256 = SHA256.Create())
+        {
+            byte[] bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(seed));
+            digest = BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
+        }
+
+        int occurrence = _legacyOccurrences.TryGetValue(digest, out int current) ? current : 0;
+        _legacyOccurrences[digest] = checked(occurrence + 1);
+        Register($"legacy-v1/{digest}/{ParameterStableId.IndexSegment(occurrence)}", component,
+            ParameterSlotRole.Trainable);
+    }
 
     /// <summary>Registers a component by durable identity and semantic role.</summary>
     public void Register(string stableId, IParameterSource<T>? component,
                          ParameterSlotRole role = ParameterSlotRole.Trainable)
     {
-        if (string.IsNullOrWhiteSpace(stableId))
-            throw new ArgumentException("A parameter component requires a stable ID.", nameof(stableId));
+        ParameterStableId.Validate(stableId, nameof(stableId));
 
         for (int i = 0; i < _entries.Count; i++)
         {
@@ -73,58 +143,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout
-    {
-        get
-        {
-            var ordered = OrderedEntries();
-            var slots = new List<ParameterSlotDescriptor>();
-            long offset = 0;
-            bool offsetKnown = true;
-
-            for (int i = 0; i < ordered.Count; i++)
-            {
-                var entry = ordered[i];
-                if (entry.Source is null)
-                {
-                    slots.Add(new ParameterSlotDescriptor(
-                        entry.StableId, entry.Role, ParameterReadiness.ShapeDeferred, null,
-                        offsetKnown ? offset : (long?)null));
-                    offsetKnown = false;
-                    continue;
-                }
-
-                var local = entry.Source is IParameterLayoutSource layoutSource
-                    ? layoutSource.GetParameterLayout()
-                    : new[]
-                    {
-                        new ParameterSlotDescriptor(
-                            "$", entry.Role,
-                            entry.Source.ParameterCount == 0
-                                ? ParameterReadiness.ParameterFree
-                                : ParameterReadiness.Materialized,
-                            entry.Source.ParameterCount)
-                    };
-
-                for (int j = 0; j < local.Count; j++)
-                {
-                    var item = local[j];
-                    string id = item.StableId == "$"
-                        ? entry.StableId
-                        : entry.StableId + "/" + item.StableId;
-                    var role = item.Role == ParameterSlotRole.Trainable ? entry.Role : item.Role;
-                    slots.Add(new ParameterSlotDescriptor(
-                        id, role, item.Readiness, item.ParameterCount,
-                        offsetKnown ? offset : (long?)null));
-                    if (item.ParameterCount.HasValue && offsetKnown)
-                        offset = checked(offset + item.ParameterCount.Value);
-                    else
-                        offsetKnown = false;
-                }
-            }
-
-            return new ParameterLayoutSnapshot(slots);
-        }
-    }
+        => CaptureLayout().Snapshot;
 
     /// <summary>
     /// The exact resolved count. An unresolved layout throws rather than masquerading as a partial
@@ -143,26 +162,27 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     /// <summary>Concatenates the same stable-ID ordered entries described by the manifest.</summary>
     public Vector<T> GetParameters()
     {
-        var layout = ParameterLayout;
+        var captured = CaptureLayout();
+        var layout = captured.Snapshot;
         if (!layout.ParameterCount.HasValue)
             throw new ParameterLayoutNotReadyException("read", layout);
 
-        var ordered = OrderedEntries();
-        var parts = new List<Vector<T>>(ordered.Count);
-        int total = 0;
-        for (int i = 0; i < ordered.Count; i++)
-        {
-            if (ordered[i].Source is null) continue;
-            var part = ordered[i].Source!.GetParameters();
-            parts.Add(part);
-            total = checked(total + part.Length);
-        }
-
+        int total = checked((int)layout.ParameterCount.Value);
         var result = new Vector<T>(total);
         int offset = 0;
-        for (int i = 0; i < parts.Count; i++)
+        for (int i = 0; i < captured.Entries.Count; i++)
         {
-            for (int j = 0; j < parts[i].Length; j++) result[offset++] = parts[i][j];
+            var item = captured.Entries[i];
+            var source = item.Entry.Source;
+            if (source is null) continue;
+            int expected = checked((int)item.ParameterCount!.Value);
+            var part = source.GetParameters();
+            if (part.Length != expected)
+                throw new ParameterContractViolationException(
+                    "read", item.Entry.StableId, expected, part.Length);
+
+            part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, expected));
+            offset += expected;
         }
         return result;
     }
@@ -173,18 +193,25 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     /// </summary>
     public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
     {
-        var ordered = OrderedEntries();
-        for (int i = 0; i < ordered.Count; i++)
+        var captured = CaptureLayout();
+        if (!captured.Snapshot.ParameterCount.HasValue)
+            throw new ParameterLayoutNotReadyException("enumerate chunks", captured.Snapshot);
+
+        for (int i = 0; i < captured.Entries.Count; i++)
         {
-            var entry = ordered[i];
+            var item = captured.Entries[i];
+            var entry = item.Entry;
             var source = entry.Source;
             if (source is null) continue;
+            int expected = checked((int)item.ParameterCount!.Value);
 
             if (source is IParameterChunkSource<T> chunkSource)
             {
+                int actual = 0;
                 foreach (var chunk in chunkSource.GetParameterStateChunks())
                 {
                     if (chunk is null || chunk.Tensor.Length == 0) continue;
+                    actual = checked(actual + chunk.Tensor.Length);
                     var role = entry.Role == ParameterSlotRole.Trainable
                         ? chunk.Role
                         : entry.Role;
@@ -193,22 +220,27 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                         : entry.StableId + "/" + chunk.StableId;
                     yield return new ParameterChunk<T>(localId, role, chunk.Tensor);
                 }
+                if (actual != expected)
+                    throw new ParameterContractViolationException(
+                        "enumerate chunks", entry.StableId, expected, actual);
                 continue;
             }
 
             var flat = source.GetParameters();
-            if (flat.Length == 0) continue;
+            if (flat.Length != expected)
+                throw new ParameterContractViolationException(
+                    "enumerate chunks", entry.StableId, expected, flat.Length);
+            if (expected == 0) continue;
 
-            if (source is IParameterLayoutSource layoutSource)
+            if (source is IParameterLayoutSource)
             {
-                var layout = layoutSource.GetParameterLayout();
                 int offset = 0;
-                for (int j = 0; j < layout.Count; j++)
+                for (int j = 0; j < item.LocalSlots.Count; j++)
                 {
-                    var slot = layout[j];
+                    var slot = item.LocalSlots[j];
                     if (!slot.ParameterCount.HasValue)
                         throw new ParameterLayoutNotReadyException(
-                            "enumerate chunks", new ParameterLayoutSnapshot(layout));
+                            "enumerate chunks", captured.Snapshot);
                     int count = checked((int)slot.ParameterCount.Value);
                     if (count == 0) continue;
                     if (offset + count > flat.Length)
@@ -246,7 +278,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
-        var layout = ParameterLayout;
+        var captured = CaptureLayout();
+        var layout = captured.Snapshot;
         if (!layout.ParameterCount.HasValue)
             throw new ParameterLayoutNotReadyException("restore", layout);
         if (parameters.Length != layout.ParameterCount.Value)
@@ -254,57 +287,103 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 $"Expected {layout.ParameterCount.Value} parameters, got {parameters.Length}.",
                 nameof(parameters));
 
-        // Slice by the LAYOUT, not by re-asking each source how long it is.
-        //
-        // The vector was validated against layout.ParameterCount immediately above, so the layout is
-        // the only description of it that is known to be consistent. Re-deriving each slice from
-        // source.ParameterCount asks a second, independent question -- and the two answers diverge
-        // in exactly the case this registry exists to handle: a source whose declared slots and
-        // whose live count disagree, i.e. anything lazily materialized. When they diverge every
-        // slice after the first mismatch is shifted, so weights land in the wrong component and the
-        // restore reports success. That is the clone/serialize round-trip losing weights.
-        //
-        // A source may contribute several slots (IParameterLayoutSource), and the layout emits them
-        // consecutively under "<entryId>/<slotId>", so its own span is the run of slots carrying its
-        // id. Summing the DECLARED counts over that run gives the length the vector was measured
-        // with, which is the only length that can be correct here.
-        var ordered = OrderedEntries();
-        var slots = layout.Slots;
-        int slotIndex = 0;
+        // Slice by the captured layout, never by re-querying live source counts. The same immutable
+        // snapshot validated the total above and records each source's declared span, so lazy
+        // materialization cannot shift every component that follows it during restore.
         int offset = 0;
-
-        for (int i = 0; i < ordered.Count; i++)
+        for (int i = 0; i < captured.Entries.Count; i++)
         {
-            var entry = ordered[i];
-
-            long declared = 0;
-            while (slotIndex < slots.Count && OwnsSlot(entry.StableId, slots[slotIndex].StableId))
-            {
-                // Non-null by construction: a slot with no count makes layout.ParameterCount null,
-                // and the guard above already rejected that.
-                declared += slots[slotIndex].ParameterCount ?? 0;
-                slotIndex++;
-            }
-
-            var source = entry.Source;
+            var item = captured.Entries[i];
+            var source = item.Entry.Source;
             if (source is null) continue;
-
-            int count = checked((int)declared);
+            int count = checked((int)item.ParameterCount!.Value);
             var slice = new Vector<T>(count);
-            for (int j = 0; j < count; j++) slice[j] = parameters[offset++];
+            parameters.AsSpan().Slice(offset, count).CopyTo(slice.AsWritableSpan());
+            offset += count;
             source.SetParameters(slice);
         }
     }
 
-    /// <summary>
-    /// True when <paramref name="slotId"/> is the entry's own slot or one it contributed, matching
-    /// the "&lt;entryId&gt;/&lt;slotId&gt;" composition the layout builder uses.
-    /// </summary>
-    private static bool OwnsSlot(string entryId, string slotId)
-        => string.Equals(slotId, entryId, StringComparison.Ordinal)
-           || (slotId.Length > entryId.Length
-               && slotId[entryId.Length] == '/'
-               && slotId.StartsWith(entryId, StringComparison.Ordinal));
+    private CapturedLayout CaptureLayout()
+    {
+        var ordered = OrderedEntries();
+        var slots = new List<ParameterSlotDescriptor>();
+        var captured = new List<CapturedEntry>(ordered.Count);
+        var identities = new HashSet<string>(StringComparer.Ordinal);
+        long offset = 0;
+        bool offsetKnown = true;
+
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            var entry = ordered[i];
+            IReadOnlyList<ParameterSlotDescriptor> local;
+            if (entry.Source is null)
+            {
+                local = new[]
+                {
+                    new ParameterSlotDescriptor(
+                        "$", entry.Role, ParameterReadiness.ShapeDeferred, null)
+                };
+            }
+            else if (entry.Source is IParameterLayoutSource layoutSource)
+            {
+                local = layoutSource.GetParameterLayout()
+                    ?? throw new InvalidOperationException(
+                        $"Parameter component '{entry.StableId}' returned a null layout.");
+            }
+            else
+            {
+                long count = entry.Source.ParameterCount;
+                if (count < 0)
+                    throw new ParameterContractViolationException(
+                        "capture layout", entry.StableId, 0, count);
+                local = new[]
+                {
+                    new ParameterSlotDescriptor(
+                        "$", entry.Role,
+                        count == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
+                        count)
+                };
+            }
+
+            long entryCount = 0;
+            bool entryCountKnown = true;
+            for (int j = 0; j < local.Count; j++)
+            {
+                var localSlot = local[j] ?? throw new InvalidOperationException(
+                    $"Parameter component '{entry.StableId}' returned a null layout slot.");
+                string id = localSlot.StableId == "$"
+                    ? entry.StableId
+                    : entry.StableId + "/" + localSlot.StableId;
+                ParameterStableId.Validate(id, nameof(localSlot.StableId));
+                if (!identities.Add(id))
+                    throw new InvalidOperationException(
+                        $"Parameter manifest contains duplicate stable slot ID '{id}'.");
+
+                var role = localSlot.Role == ParameterSlotRole.Trainable
+                    ? entry.Role
+                    : localSlot.Role;
+                slots.Add(new ParameterSlotDescriptor(
+                    id, role, localSlot.Readiness, localSlot.ParameterCount,
+                    offsetKnown ? offset : (long?)null));
+
+                if (localSlot.ParameterCount.HasValue)
+                {
+                    entryCount = checked(entryCount + localSlot.ParameterCount.Value);
+                    if (offsetKnown) offset = checked(offset + localSlot.ParameterCount.Value);
+                }
+                else
+                {
+                    entryCountKnown = false;
+                    offsetKnown = false;
+                }
+            }
+            captured.Add(new CapturedEntry(entry, local,
+                entryCountKnown ? entryCount : (long?)null));
+        }
+
+        return new CapturedLayout(new ParameterLayoutSnapshot(slots), captured.AsReadOnly());
+    }
 
     private List<Entry> OrderedEntries()
     {

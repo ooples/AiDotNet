@@ -262,6 +262,19 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradi
         };
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "q-table-1",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable1));
+        RegisterParameterComponent(
+            "q-table-2",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable2));
+    }
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()
@@ -346,10 +359,6 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradi
             }
         }
     }
-
-
-
-
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
         var clone = new DoubleQLearningAgent<T>(_options);

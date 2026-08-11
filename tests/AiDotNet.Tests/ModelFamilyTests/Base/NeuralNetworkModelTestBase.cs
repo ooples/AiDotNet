@@ -715,7 +715,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         return scaled;
     }
 
-    private LayerInputDomain InputDomainFor(int[] shape)
+    protected LayerInputDomain InputDomainFor(int[] shape)
     {
         if (shape is null || !ShapesEqual(shape, InputShape))
         {
@@ -793,30 +793,30 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <remarks>
     /// Distinctness is the whole requirement: truncating probe constants like 0.3 and 0.5 with
     /// <c>(int)</c> collapses both to index 0, which silently defeats the invariants that feed two
-    /// different constants and expect two different outputs. Scaling before the modulo keeps
-    /// sub-integer probes apart, and the result is deterministic so a failure reproduces.
+    /// different constants and expect two different outputs. Normalized probes are spread over the
+    /// complete legal vocabulary; values outside [0, 1] use a stable bit-mix before reduction.
     /// </remarks>
     private static int ConstantToIndex(double value, LayerInputDomain domain)
     {
         int span = domain.MaxExclusive - domain.MinInclusive;
         if (span <= 0) return domain.MinInclusive;
 
-        // Proportional, not modular. Scaling by 1000 and taking the remainder aliased any two probes
-        // whose scaled values were congruent modulo the vocabulary onto the SAME index -- and it did so
-        // for exactly the pair these invariants use: against the standard 100-token test vocabulary
-        // 0.1 -> 1000*0.1 = 100, 100 % 100 = 0, and 0.9 -> 900, 900 % 100 = 0. Both probes became token
-        // 0, so DifferentInputs_* fed two BYTE-IDENTICAL tensors, and its report that "the network has
-        // collapsed to a uniform-output state, L2 distance = 0.000E+000" was arithmetic rather than a
-        // finding. It failed that way on all five layout-aware document models.
-        //
-        // Spreading the fractional part across the range keeps sub-integer probes apart at every
-        // vocabulary size; the integer part still folds in modularly so probes above 1 stay distinct.
-        double fraction = value - Math.Floor(value);
-        int fromFraction = (int)(fraction * span);
-        if (fromFraction >= span) fromFraction = span - 1;
-
-        long combined = fromFraction + (long)Math.Floor(value);
-        int offset = (int)(((combined % span) + span) % span);
+        int offset;
+        if (double.IsFinite(value) && value >= 0.0 && value <= 1.0)
+        {
+            // Use span - 1 so both endpoints remain legal and common probes such as 0.1/0.9
+            // cannot alias merely because the vocabulary divides a fixed decimal scale (the old
+            // `value * 1000 % span` mapped both to zero when span was 100).
+            offset = (int)Math.Round(value * (span - 1), MidpointRounding.AwayFromZero);
+        }
+        else
+        {
+            ulong mixed = (ulong)BitConverter.DoubleToInt64Bits(value);
+            mixed ^= mixed >> 33;
+            mixed *= 0xff51afd7ed558ccdUL;
+            mixed ^= mixed >> 33;
+            offset = (int)(mixed % (ulong)span);
+        }
         return domain.MinInclusive + offset;
     }
 
@@ -1559,6 +1559,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // to catch.
         int length = network.GetParameters().Length;
 
+        string layerMismatches = string.Empty;
+        if (count != length && network is NeuralNetworkBase<T> concreteNetwork)
+        {
+            var mismatches = new List<string>();
+            long topLevelDeclared = 0;
+            long topLevelActual = 0;
+            for (int i = 0; i < concreteNetwork.Layers.Count; i++)
+            {
+                var layer = concreteNetwork.Layers[i];
+                long declared = layer.ParameterCount;
+                int actual = layer.GetParameters().Length;
+                topLevelDeclared += declared;
+                topLevelActual += actual;
+                if (declared != actual)
+                    mismatches.Add($"layers/{i:D8} {layer.GetType().Name}: declared {declared:N0}, actual {actual:N0}");
+            }
+
+            var layout = concreteNetwork.ParameterLayout;
+            layerMismatches =
+                $" Breakdown: top-level layers declared {topLevelDeclared:N0}, actual {topLevelActual:N0}; " +
+                $"manifest declares {layout.ParameterCount?.ToString("N0") ?? "unresolved"} across " +
+                $"{layout.Slots.Count:N0} slots.";
+            if (mismatches.Count > 0)
+                layerMismatches += " Per-layer mismatches: " + string.Join("; ", mismatches) + ".";
+        }
+
         Assert.True(
             count == length,
             $"After a forward pass, ParameterCount ({count:N0}) and GetParameters().Length " +
@@ -1566,7 +1592,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             $"difference is weights that cannot be saved, restored or optimized through the flat " +
             $"surface. A count that sums sub-components the vector never walks is the usual cause: " +
             $"declare them through GetExtraTrainableLayers / GetExtraTrainableTensors so both " +
-            $"surfaces fold one enumeration.");
+            $"surfaces fold one enumeration." + layerMismatches);
     }
 
 
@@ -2910,8 +2936,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // finite difference meaningless (each forward would sample a different mask).
         network.SetTrainingMode(false);
         var gradCheckClock = System.Diagnostics.Stopwatch.StartNew();
+        var loss = nn.DefaultLossFunction as AiDotNet.LossFunctions.LossFunctionBase<T>;
+        if (loss is null) return;   // need a tape-capable loss for a consistent scalar objective
+
         var forwardTimer = System.Diagnostics.Stopwatch.StartNew();
-        try { network.Predict(input); }
+        double objectiveBeforeAnalytical;
+        try { objectiveBeforeAnalytical = ConvertToDouble(nn.EvaluateTrainingObjective(input, target, loss)); }
         catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }   // materialize lazy params
         double forwardSeconds = System.Math.Max(1e-3, forwardTimer.Elapsed.TotalSeconds);
 
@@ -2921,23 +2951,75 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // cleanly rather than time out; such models need a smaller CI fixture to be gradcheckable.
         if (forwardSeconds > 10.0) return;
 
-        var loss = nn.DefaultLossFunction as AiDotNet.LossFunctions.LossFunctionBase<T>;
-        if (loss is null) return;   // need a tape-capable loss for a consistent scalar objective
-
         // Analytical gradients (reverse-mode). Custom-forward models whose gradient path is not yet
         // routed through ComputeGradients (Phase 1b, #1872) throw or return empty — skip. Cost is
         // already bounded by the forward-cost gate above (a model that reaches here has a forward
         // <= ~10 s, so its one backward — ~2-3x a forward — fits the budget without a background
         // timeout thread that would otherwise orphan CPU into the next serial test).
         Vector<T> analytical;
-        try { analytical = nn.ComputeGradients(input, target); }
+        // Resolve the loss exactly once and pass that same instance to BOTH sides of the
+        // conformance equation. ComputeGradients() without the override uses the model's configured
+        // LossFunction, while DefaultLossFunction may intentionally describe a different family
+        // default. Comparing that analytical objective with finite differences evaluated through
+        // `loss` would still be comparing two functions even though both now share the base-owned
+        // BuildTrainingObjective funnel.
+        try { analytical = nn.ComputeGradients(input, target, loss); }
         catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
         if (analytical.Length == 0) return;
+
+        // A finite difference is meaningful only for a pure function of theta. Some sequence/video
+        // models mutate recurrent caches or counters even in eval mode; ComputeGradients then measures
+        // the pre-mutation state while theta+eps/theta-eps measure later states, producing spectacular
+        // but meaningless derivatives (hundreds versus 1e-4). C1/C2 owns state snapshot/restore. Until
+        // that state contract is available, classify the case explicitly instead of calling it E1.
+        double objectiveAfterAnalytical;
+        try { objectiveAfterAnalytical = ConvertToDouble(nn.EvaluateTrainingObjective(input, target, loss)); }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
+        double objectiveScale = System.Math.Max(
+            1.0,
+            System.Math.Max(System.Math.Abs(objectiveBeforeAnalytical), System.Math.Abs(objectiveAfterAnalytical)));
+        double objectiveDrift = System.Math.Abs(objectiveAfterAnalytical - objectiveBeforeAnalytical) / objectiveScale;
+        double deterministicTolerance = typeof(T) == typeof(double) ? 1e-9 : 1e-5;
+        if (!double.IsFinite(objectiveDrift) || objectiveDrift > deterministicTolerance)
+        {
+            ReportGradientFinding(
+                GradientReportFile,
+                GetType().FullName ?? GetType().Name,
+                $"NOT RUN: the training objective changed at identical parameters across the analytical " +
+                $"forward ({objectiveBeforeAnalytical:E6} -> {objectiveAfterAnalytical:E6}, relative drift " +
+                $"{objectiveDrift:E3}). Finite differences require deterministic state; C1/C2 must " +
+                "snapshot/restore this model's recurrent/cache state before gradient correctness can be classified.");
+            return;
+        }
 
         var theta = network.GetParameters();
         // Order-alignment guard (Phase 1c, #1872): without equal lengths we cannot align
         // the analytical-grad index with the parameter index — skip conservatively.
         if (theta.Length != analytical.Length) return;
+
+        // B1's manifest is the source of truth for gradient eligibility and diagnostics. The flat
+        // vector contains complete persistent state, including learned/frozen buffers; sampling it
+        // indiscriminately forced the old test to guess that an analytical zero meant "frozen" and
+        // silently skip it. Stable, role-aware slots let us test every genuinely trainable scalar and
+        // name its owner when it fails.
+        var trainableSlots = new List<(string StableId, string Owner, int Offset, int Length)>();
+        int manifestLength = 0;
+        foreach (var chunk in nn.GetParameterStateChunks())
+        {
+            int chunkLength = chunk.Tensor.Length;
+            if (chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && chunkLength > 0)
+                trainableSlots.Add((
+                    chunk.StableId,
+                    DescribeGradientSlotOwner(nn, chunk.StableId),
+                    manifestLength,
+                    chunkLength));
+            manifestLength = checked(manifestLength + chunkLength);
+        }
+        Assert.True(manifestLength == theta.Length,
+            $"The stable parameter manifest describes {manifestLength} scalars but GetParameters " +
+            $"returned {theta.Length}; gradients cannot be aligned until the B1 contract is repaired.");
+        int trainableScalarCount = trainableSlots.Sum(slot => slot.Length);
+        if (trainableScalarCount == 0) return;
 
         // Round-trip guard: the finite difference perturbs parameters via
         // GetParameters/UpdateParameters. Models that do not support that round-trip cannot be
@@ -2950,6 +3032,30 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         try { network.UpdateParameters(theta); }
         catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
 
+        // A no-op parameter round-trip is another mathematical precondition, not part of E1.
+        // If SetParameters(GetParameters()) changes the objective, finite differences would probe a
+        // different model than the analytical pass even before epsilon is applied. Classify that as
+        // a manifest/setter lifecycle defect for the parameter-contract lane instead of blaming a
+        // correct derivative or weakening gradient tolerances.
+        double objectiveAfterParameterRoundTrip;
+        try { objectiveAfterParameterRoundTrip = ConvertToDouble(nn.EvaluateTrainingObjective(input, target, loss)); }
+        catch (Exception ex) when (IsExpectedGradcheckSkip(ex)) { return; }
+        double roundTripDrift = System.Math.Abs(objectiveAfterParameterRoundTrip - objectiveAfterAnalytical) /
+            System.Math.Max(1.0, System.Math.Max(
+                System.Math.Abs(objectiveAfterParameterRoundTrip),
+                System.Math.Abs(objectiveAfterAnalytical)));
+        if (!double.IsFinite(roundTripDrift) || roundTripDrift > deterministicTolerance)
+        {
+            ReportGradientFinding(
+                GradientReportFile,
+                GetType().FullName ?? GetType().Name,
+                $"NOT RUN: SetParameters(GetParameters()) changed the training objective " +
+                $"({objectiveAfterAnalytical:E6} -> {objectiveAfterParameterRoundTrip:E6}, relative drift " +
+                $"{roundTripDrift:E3}). The parameter manifest/setter lifecycle must be repaired before " +
+                "finite differences can validate this model's gradients.");
+            return;
+        }
+
         // Type-adaptive step + tolerance: float central differences are limited by ~1e-7
         // relative rounding, so they need a larger step and a looser bound than double. The
         // check still catches gross backward bugs (sign, scale, missing term) that the
@@ -2959,7 +3065,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double relTol = isDouble ? 1e-3 : 5e-2;
         double absFloor = isDouble ? 1e-7 : 1e-3;
 
-        int n = theta.Length;
         // Cost cap: each sampled parameter costs two forward passes. Large vision / segmentation /
         // VLM models have multi-second forwards, so a fixed sweep blows the 120 s xUnit budget
         // (InternImage, GrokVision timed out — not a correctness failure). Scale the sample count
@@ -2967,8 +3072,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // hard elapsed break below is the backstop when even the reduced sweep runs long.
         const double GradCheckBudgetSeconds = 60.0;
         int budgetSamples = (int)(GradCheckBudgetSeconds / (2.0 * forwardSeconds));
-        int samples = System.Math.Max(2, System.Math.Min(System.Math.Min(GradientCheckSampleCount, n), budgetSamples));
-        int stride = System.Math.Max(1, n / samples);
+        int samples = System.Math.Max(1, System.Math.Min(
+            System.Math.Min(GradientCheckSampleCount, trainableScalarCount), budgetSamples));
+        int stride = System.Math.Max(1, trainableScalarCount / samples);
 
         int checkedCount = 0, mismatches = 0;
         string firstFail = string.Empty;
@@ -2979,7 +3085,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // than timing out. If nothing got checked in time the post-loop guard skips cleanly.
             if (gradCheckClock.Elapsed.TotalSeconds > GradCheckBudgetSeconds) break;
 
-            int i = (s * stride) % n;
+            int trainableOrdinal = (s * stride) % trainableScalarCount;
+            int ordinalBase = 0;
+            var slot = trainableSlots[0];
+            foreach (var candidate in trainableSlots)
+            {
+                if (trainableOrdinal < ordinalBase + candidate.Length)
+                {
+                    slot = candidate;
+                    break;
+                }
+                ordinalBase += candidate.Length;
+            }
+            int localIndex = trainableOrdinal - ordinalBase;
+            int i = slot.Offset + localIndex;
             T orig = theta[i];
 
             double lp, lm;
@@ -2990,13 +3109,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // gradient-correctness one, so restore and skip the model rather than crash-fail.
             try
             {
-                var pPlus = theta.Clone(); pPlus[i] = NumOps.Add(orig, NumOps.FromDouble(eps));
-                lp = GradientCheckLossAt(network, loss, input, target, pPlus);
-
-                var pMinus = theta.Clone(); pMinus[i] = NumOps.Subtract(orig, NumOps.FromDouble(eps));
-                lm = GradientCheckLossAt(network, loss, input, target, pMinus);
-
-                network.UpdateParameters(theta);   // restore original parameters
+                (lp, lm) = GradientCheckLossPairAt(nn, loss, input, target, theta, i, orig, eps);
             }
             catch (Exception ex) when (IsExpectedGradcheckSkip(ex))
             {
@@ -3007,29 +3120,164 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
             double numeric = (lp - lm) / (2.0 * eps);
             double analytic = ConvertToDouble(analytical[i]);
-
-            // Skip parameters that receive no analytical gradient — the framework analog of
-            // PyTorch gradcheck only checking requires_grad=True leaves. Reservoir / closed-form
-            // / energy-based models (EchoStateNetwork, ExtremeLearningMachine, RBM/DBM) carry
-            // FROZEN weights in the parameter vector that are trained by a non-backprop rule, so
-            // their analytical gradient is legitimately 0 while the finite difference is not. This
-            // gradcheck validates that the parameters which DO receive gradients receive the
-            // CORRECT value (sign / scale / missing-term bugs still fail); whether every trainable
-            // weight participates at all is the job of GradientFlow + the convergence invariants.
-            if (System.Math.Abs(analytic) < absFloor) continue;
-
             double denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
             double relErr = System.Math.Abs(numeric - analytic) / denom;
+
+            // Only pay for the epsilon ladder when the primary estimate disagrees. Two wider
+            // central differences identify the numerically stable adjacent pair; Richardson
+            // extrapolation then removes its leading O(h^2) truncation term. This distinguishes
+            // float cancellation from a real derivative defect without globally loosening the bound.
+            double usedStep = eps;
+            if (relErr > relTol && gradCheckClock.Elapsed.TotalSeconds < GradCheckBudgetSeconds)
+            {
+                var (lp2, lm2) = GradientCheckLossPairAt(nn, loss, input, target, theta, i, orig, eps * 2.0);
+                var (lp4, lm4) = GradientCheckLossPairAt(nn, loss, input, target, theta, i, orig, eps * 4.0);
+                double d2 = (lp2 - lm2) / (4.0 * eps);
+                double d4 = (lp4 - lm4) / (8.0 * eps);
+                if (double.IsFinite(d2) && double.IsFinite(d4))
+                {
+                    if (System.Math.Abs(numeric - d2) <= System.Math.Abs(d2 - d4))
+                    {
+                        numeric = ((4.0 * numeric) - d2) / 3.0;
+                    }
+                    else
+                    {
+                        numeric = ((4.0 * d2) - d4) / 3.0;
+                        usedStep = eps * 2.0;
+                    }
+                    denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
+                    relErr = System.Math.Abs(numeric - analytic) / denom;
+                }
+            }
+
             checkedCount++;
             if (relErr > relTol)
             {
                 mismatches++;
                 if (firstFail.Length == 0)
-                    firstFail = $"param[{i}]: analytic={analytic:E4}, numeric={numeric:E4}, relErr={relErr:F4}";
+                    firstFail = $"{slot.StableId}[{localIndex}] ({slot.Owner}, flat {i}): analytic={analytic:E4}, " +
+                        $"numeric={numeric:E4}, step={usedStep:E2}, relErr={relErr:F4}";
             }
         }
 
         if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
+
+        // One deterministic coordinate from EVERY trainable slot forms a normalized direction.
+        // This covers the whole manifest with two loss evaluations per step, so a dropped slot cannot
+        // hide between the twelve coordinate samples. A two-step Richardson estimate supplies the same
+        // numerical-stability protection as the coordinate ladder without an O(parameter-count) sweep.
+        bool directionAgrees = true;
+        string directionFailure = string.Empty;
+        if (trainableSlots.Count > 0 &&
+            gradCheckClock.Elapsed.TotalSeconds + (8.0 * forwardSeconds) < 105.0)
+        {
+            var direction = new List<(int FlatIndex, double Sign)>(trainableSlots.Count);
+            foreach (var directionSlot in trainableSlots)
+            {
+                uint hash = 2166136261;
+                foreach (char ch in directionSlot.StableId)
+                    hash = (hash ^ ch) * 16777619;
+                int local = (int)(hash % (uint)directionSlot.Length);
+                direction.Add((directionSlot.Offset + local, (hash & 1) == 0 ? 1.0 : -1.0));
+            }
+
+            double scale = 1.0 / System.Math.Sqrt(direction.Count);
+            // Keep the perturbation of each selected scalar at the already validated coordinate
+            // step. Applying `eps` to a unit-normalized direction would instead perturb every
+            // scalar by eps/sqrt(slotCount), which falls into cancellation noise for large double
+            // models. The derivative remains with respect to the normalized direction; only the
+            // finite-difference distance along that direction grows by sqrt(slotCount).
+            double directionalStep = eps / scale;
+            double analyticDirection = 0.0;
+            foreach (var coordinate in direction)
+                analyticDirection += ConvertToDouble(analytical[coordinate.FlatIndex]) * coordinate.Sign * scale;
+
+            // FP32 coordinate checks need a comparatively wide step because a tiny derivative can
+            // move a large scalar loss by less than one ULP. A normalized all-slot direction has a
+            // much larger signal, so reusing that same per-coordinate displacement needlessly walks
+            // across abs/phase-wrap kinks. Probe a geometric ladder and select the first adjacent
+            // pair whose loss span clears an explicit ULP floor. This is the standard adaptive-
+            // gradcheck idea, extended here to a
+            // manifest-wide direction so one global step cannot create a false failure for every
+            // generated float scaffold.
+            double objectiveForUlp = objectiveAfterParameterRoundTrip;
+            double lossUlp = isDouble
+                ? System.Math.Abs(System.Math.BitIncrement(objectiveForUlp) - objectiveForUlp)
+                : System.Math.Abs((double)System.MathF.BitIncrement((float)objectiveForUlp) - (float)objectiveForUlp);
+            if (!double.IsFinite(lossUlp) || lossUlp <= 0.0) lossUlp = double.Epsilon;
+
+            // Start as close to zero as the scalar loss precision permits. For FP32, a direction
+            // normally has enough aggregate signal to use a step 64x smaller than an individual
+            // coordinate. If its analytical magnitude is unusually small, raise the first step
+            // only far enough that the expected symmetric loss span covers roughly 16 ULPs.
+            double precisionStep = System.Math.Abs(analyticDirection) > absFloor
+                ? (8.0 * lossUlp) / System.Math.Abs(analyticDirection)
+                : directionalStep;
+            double minimumDirectionalStep = isDouble
+                ? directionalStep
+                : directionalStep / 64.0;
+            double finestDirectionalStep = System.Math.Min(
+                directionalStep,
+                System.Math.Max(minimumDirectionalStep, precisionStep));
+            var directionDerivatives = new double[4];
+            var directionSpans = new double[4];
+            for (int stepIndex = 0; stepIndex < directionDerivatives.Length; stepIndex++)
+            {
+                double step = finestDirectionalStep * (1 << stepIndex);
+                var (plus, minus) = GradientCheckDirectionalLossPairAt(
+                    nn, loss, input, target, theta, direction, scale, step);
+                directionSpans[stepIndex] = System.Math.Abs(plus - minus);
+                directionDerivatives[stepIndex] = (plus - minus) / (2.0 * step);
+            }
+
+            int bestPair = -1;
+            for (int stepIndex = 0; stepIndex < directionDerivatives.Length - 1; stepIndex++)
+            {
+                double narrow = directionDerivatives[stepIndex];
+                double wide = directionDerivatives[stepIndex + 1];
+                if (!double.IsFinite(narrow) || !double.IsFinite(wide)) continue;
+                if (directionSpans[stepIndex] >= 16.0 * lossUlp &&
+                    directionSpans[stepIndex + 1] >= 16.0 * lossUlp)
+                {
+                    bestPair = stepIndex;
+                    break;
+                }
+            }
+
+            // If even the widest pair cannot move the scalar objective by 16 representable values,
+            // FP32 cannot supply a meaningful numerical oracle for this direction. The coordinate
+            // checks above still run; treating quantization as a backward failure would be false
+            // precision, so leave the direction inconclusive rather than weakening its tolerance.
+            if (bestPair < 0)
+            {
+                ReportGradientFinding(
+                    GradientReportFile,
+                    GetType().FullName ?? GetType().Name,
+                    $"NOT RUN: the manifest-wide directional derivative was below the finite-difference " +
+                    $"resolution of the {typeof(T).Name} scalar objective (loss ULP {lossUlp:E3}, " +
+                    $"spans [{string.Join(", ", directionSpans.Select(span => span.ToString("E3")))}]).");
+            }
+            else
+            {
+                double directionAtH = directionDerivatives[bestPair];
+                double directionAt2H = directionDerivatives[bestPair + 1];
+                double numericDirection = ((4.0 * directionAtH) - directionAt2H) / 3.0;
+                double directionDenom = System.Math.Max(
+                    absFloor,
+                    System.Math.Abs(analyticDirection) + System.Math.Abs(numericDirection));
+                double directionRelError = System.Math.Abs(analyticDirection - numericDirection) / directionDenom;
+                double directionTolerance = relTol * 2.0;
+                directionAgrees = double.IsFinite(numericDirection) && directionRelError <= directionTolerance;
+                if (!directionAgrees)
+                {
+                    directionFailure = $" Directional derivative across {direction.Count} stable trainable slots " +
+                        $"disagreed: analytic={analyticDirection:E4}, numeric={numericDirection:E4}, " +
+                        $"relErr={directionRelError:F4}, tol={directionTolerance:P1}, selected ladder pair " +
+                        $"{bestPair}/{bestPair + 1} from [{string.Join(", ", directionDerivatives.Select(d => d.ToString("E4")))}].";
+                }
+            }
+        }
+
         // A GENUINE backward bug (sign flip, wrong scale, missing term) is systematic — it
         // mismatches MOST sampled parameters, not a few. Isolated outliers instead come from a
         // parameter sitting on a loss kink / clamp boundary (where the central difference is
@@ -3040,32 +3288,107 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int allowedMismatches = isDouble
             ? System.Math.Max(1, checkedCount / 6)
             : System.Math.Max(2, checkedCount / 3);
-        Assert.True(mismatches <= allowedMismatches,
+        Assert.True(mismatches <= allowedMismatches && directionAgrees,
             $"Analytical gradients disagree with the finite difference on {mismatches}/{checkedCount} " +
             $"sampled parameters (tol {relTol:P0}, allowed {allowedMismatches}). First: {firstFail}. The " +
-            "backward pass is likely incorrect (sign, scale, missing term, or a dropped gradient).");
+            "backward pass is likely incorrect (sign, scale, missing term, or a dropped gradient)." +
+            directionFailure);
     }
 
     private double GradientCheckLossAt(
-        INeuralNetworkModel<T> network,
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network,
         AiDotNet.LossFunctions.LossFunctionBase<T> loss,
         Tensor<T> input, Tensor<T> target, Vector<T> parameters)
     {
         network.UpdateParameters(parameters);
-        var pred = network.Predict(input);
-        var tgt = target;
-        var predShape = pred.Shape.ToArray();
-        if (pred.Length == target.Length && !GradientCheckShapeEquals(predShape, target.Shape.ToArray()))
-            tgt = target.Reshape(predShape);
-        var lossTensor = loss.ComputeTapeLoss(pred, tgt);
-        return lossTensor.Length > 0 ? ConvertToDouble(lossTensor[0]) : double.NaN;
+        return ConvertToDouble(network.EvaluateTrainingObjective(input, target, loss));
     }
 
-    private static bool GradientCheckShapeEquals(int[] a, int[] b)
+    private (double Plus, double Minus) GradientCheckLossPairAt(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network,
+        AiDotNet.LossFunctions.LossFunctionBase<T> loss,
+        Tensor<T> input,
+        Tensor<T> target,
+        Vector<T> originalParameters,
+        int flatIndex,
+        T originalValue,
+        double step)
     {
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
-        return true;
+        try
+        {
+            var plus = originalParameters.Clone();
+            plus[flatIndex] = NumOps.Add(originalValue, NumOps.FromDouble(step));
+            double lossPlus = GradientCheckLossAt(network, loss, input, target, plus);
+
+            var minus = originalParameters.Clone();
+            minus[flatIndex] = NumOps.Subtract(originalValue, NumOps.FromDouble(step));
+            double lossMinus = GradientCheckLossAt(network, loss, input, target, minus);
+            return (lossPlus, lossMinus);
+        }
+        finally
+        {
+            network.UpdateParameters(originalParameters);
+        }
+    }
+
+    private (double Plus, double Minus) GradientCheckDirectionalLossPairAt(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network,
+        AiDotNet.LossFunctions.LossFunctionBase<T> loss,
+        Tensor<T> input,
+        Tensor<T> target,
+        Vector<T> originalParameters,
+        IReadOnlyList<(int FlatIndex, double Sign)> direction,
+        double directionScale,
+        double step)
+    {
+        try
+        {
+            var plus = originalParameters.Clone();
+            var minus = originalParameters.Clone();
+            foreach (var coordinate in direction)
+            {
+                T delta = NumOps.FromDouble(step * directionScale * coordinate.Sign);
+                plus[coordinate.FlatIndex] = NumOps.Add(originalParameters[coordinate.FlatIndex], delta);
+                minus[coordinate.FlatIndex] = NumOps.Subtract(originalParameters[coordinate.FlatIndex], delta);
+            }
+
+            double lossPlus = GradientCheckLossAt(network, loss, input, target, plus);
+            double lossMinus = GradientCheckLossAt(network, loss, input, target, minus);
+            return (lossPlus, lossMinus);
+        }
+        finally
+        {
+            network.UpdateParameters(originalParameters);
+        }
+    }
+
+    private static string DescribeGradientSlotOwner(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network,
+        string stableId)
+    {
+        var parts = stableId.Split('/');
+        if (parts.Length < 2 || parts[0] != "layers" ||
+            !int.TryParse(parts[1], out int layerIndex) ||
+            layerIndex < 0 || layerIndex >= network.Layers.Count)
+        {
+            return "model-owned slot";
+        }
+
+        AiDotNet.Interfaces.ILayer<T> owner = network.Layers[layerIndex];
+        var ownerPath = new List<string> { owner.GetType().Name };
+        for (int i = 2; i + 1 < parts.Length; i++)
+        {
+            if (parts[i] != "children" || !int.TryParse(parts[i + 1], out int childIndex))
+                continue;
+            var children = owner.GetSubLayers();
+            if (childIndex < 0 || childIndex >= children.Count)
+                break;
+            owner = children[childIndex];
+            ownerPath.Add(owner.GetType().Name);
+            i++;
+        }
+
+        return string.Join(" -> ", ownerPath);
     }
 
     // ========================================================================

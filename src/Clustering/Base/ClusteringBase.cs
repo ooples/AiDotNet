@@ -503,8 +503,12 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <summary>
     /// Declares a component whose parameters belong to this model's surface.
     /// </summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
 
     protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
         ParameterSlotRole role = ParameterSlotRole.Trainable)

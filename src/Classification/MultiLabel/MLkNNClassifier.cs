@@ -259,7 +259,97 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         return Math.Sqrt(dist);
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "bayesian-probabilities",
+            new AiDotNet.Models.Parameters.VariableLengthParameterSource<T>(
+                GetProbabilityParameterCount,
+                GetProbabilityParameters,
+                RestoreProbabilityParameters),
+            AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState);
+    }
 
+    private long GetProbabilityParameterCount()
+    {
+        if (_priorProbs is null) return 0;
+        return checked((long)_priorProbs.Length + _condProbsPos.Length + _condProbsNeg.Length);
+    }
+
+    private Vector<T> GetProbabilityParameters()
+    {
+        if (_priorProbs is null) return new Vector<T>(0);
+
+        int labels = _priorProbs.Length;
+        int conditionalWidth = _options.KNeighbors + 1;
+        if (_condProbsPos.GetLength(0) != labels ||
+            _condProbsNeg.GetLength(0) != labels ||
+            _condProbsPos.GetLength(1) != conditionalWidth ||
+            _condProbsNeg.GetLength(1) != conditionalWidth)
+        {
+            throw new InvalidOperationException(
+                "ML-kNN probability arrays do not share the fitted label and neighbor dimensions.");
+        }
+
+        int size = checked((int)GetProbabilityParameterCount());
+        var parameters = new Vector<T>(size);
+
+        int idx = 0;
+        for (int l = 0; l < labels; l++)
+        {
+            parameters[idx++] = NumOps.FromDouble(_priorProbs[l]);
+        }
+
+        for (int l = 0; l < labels; l++)
+        {
+            for (int j = 0; j < conditionalWidth; j++)
+            {
+                parameters[idx++] = NumOps.FromDouble(_condProbsPos[l, j]);
+            }
+        }
+
+        for (int l = 0; l < labels; l++)
+        {
+            for (int j = 0; j < conditionalWidth; j++)
+            {
+                parameters[idx++] = NumOps.FromDouble(_condProbsNeg[l, j]);
+            }
+        }
+
+        return parameters;
+    }
+
+    private void RestoreProbabilityParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        int conditionalWidth = _options.KNeighbors + 1;
+        int valuesPerLabel = checked(1 + 2 * conditionalWidth);
+        if (parameters.Length % valuesPerLabel != 0)
+        {
+            throw new ArgumentException(
+                $"ML-kNN parameters must contain {valuesPerLabel} values per label; got " +
+                $"{parameters.Length} values.", nameof(parameters));
+        }
+
+        int labels = parameters.Length / valuesPerLabel;
+        NumLabels = labels;
+        _priorProbs = new double[labels];
+        _condProbsPos = new double[labels, conditionalWidth];
+        _condProbsNeg = new double[labels, conditionalWidth];
+
+        int idx = 0;
+        for (int l = 0; l < labels; l++)
+            _priorProbs[l] = NumOps.ToDouble(parameters[idx++]);
+        for (int l = 0; l < labels; l++)
+            for (int j = 0; j < conditionalWidth; j++)
+                _condProbsPos[l, j] = NumOps.ToDouble(parameters[idx++]);
+        for (int l = 0; l < labels; l++)
+            for (int j = 0; j < conditionalWidth; j++)
+                _condProbsNeg[l, j] = NumOps.ToDouble(parameters[idx++]);
+    }
 
     /// <inheritdoc/>
     public override byte[] Serialize()

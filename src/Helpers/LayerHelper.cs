@@ -32701,36 +32701,46 @@ public static class LayerHelper<T>
         int featHeight = height / 8;
         int featWidth = width / 8;
 
+        // RAFT's encoders are nonlinear feature extractors. ConvolutionalLayer is deliberately
+        // linear by default (matching nn.Conv2d), so architecture factories must state every
+        // nonlinearity explicitly rather than inheriting behavior from a global layer default.
+        // Besides preserving the paper's forward semantics, this selects ReLU-aware Kaiming gain
+        // for initialization and keeps the recurrent correlation graph well-conditioned at step 0.
         // Feature encoder (5 layers)
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(96, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
 
         // Context encoder (5 layers)
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(96, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
 
         // Correlation conv
         int corrDim = correlationLevels * (2 * correlationRadius + 1) * (2 * correlationRadius + 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, (IActivationFunction<T>)new ReLUActivation<T>());
 
-        // GRU update block
+        // GRU update block. These convolutions produce PRE-ACTIVATIONS: RAFT applies sigmoid to
+        // z/r and tanh to the candidate in GRUUpdate. They therefore remain explicitly linear;
+        // applying ReLU here would restrict gates to [0.5, 1] and change the GRU equations.
         int gruInputDim = numFeatures + numFeatures + 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Flow heads
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        // Flow heads. The hidden projection is nonlinear; the terminal residual is signed and must
+        // stay linear so RAFT can refine motion in both coordinate directions.
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Upsample conv
-        yield return new ConvolutionalLayer<T>(64 * 9, 3, 1, 1);
+        // Convex-upsample mask LOGITS. Softmax is applied in RAFT.UpsampleFlow; a ReLU here pins a
+        // large fraction of logits exactly at zero, changes the learned distribution, and makes the
+        // backward mathematically ambiguous at those points.
+        yield return new ConvolutionalLayer<T>(64 * 9, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>

@@ -89,10 +89,10 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
 {
 
     /// <inheritdoc />
-    /// <remarks>The single multi-class classifier this transformation trains over the powerset of label combinations. Null-tolerant registration keeps the old behaviour for a classifier that does not expose parameters: it contributes nothing rather than throwing.</remarks>
+    /// <remarks>The single multi-class classifier this transformation trains over the powerset of label combinations. Registration remains null-tolerant before training creates the classifier.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(_classifier as IParameterSource<T>);
+        RegisterParameterComponent(_classifier);
     }
     #region Fields
 

@@ -278,6 +278,15 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "value-table",
+            new AiDotNet.Models.Parameters.KeyedScalarCollectionParameterSource<T, string>(
+                () => _valueTable));
+    }
 
     public override int FeatureCount => _options.StateSize;
 
@@ -310,8 +319,6 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _valueTable = JsonConvert.DeserializeObject<Dictionary<string, T>>(state.ValueTable.ToString()) ?? new Dictionary<string, T>();
         _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<(string, T, T)>>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
     }
-
-
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

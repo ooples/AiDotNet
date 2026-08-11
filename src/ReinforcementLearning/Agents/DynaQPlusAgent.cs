@@ -216,6 +216,15 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "q-table",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable));
+    }
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -249,7 +258,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         _epsilon = state.Epsilon;
         _totalSteps = state.TotalSteps;
     }
-
     /// <summary>
     /// The Q-table's <c>(state, action)</c> entries in a fixed order.
     /// </summary>

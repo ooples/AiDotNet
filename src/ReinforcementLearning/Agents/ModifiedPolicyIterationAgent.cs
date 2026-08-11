@@ -301,6 +301,15 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "value-table",
+            new AiDotNet.Models.Parameters.KeyedScalarCollectionParameterSource<T, string>(
+                () => _valueTable));
+    }
 
     public override int FeatureCount => _options.StateSize;
 
@@ -374,8 +383,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             _model[stateEntry.Key] = actionDict;
         }
     }
-
-
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

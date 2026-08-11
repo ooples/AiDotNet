@@ -28,6 +28,68 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task Registry_RequiresCanonicalNumericPathSegments()
+    {
+        await Task.Yield();
+        var registry = new ParameterComponentRegistry<double>();
+
+        Assert.Throws<ArgumentException>(() =>
+            registry.Register("layers/2", new ContractProbeSource(1, new[] { 1d })));
+
+        registry.Register("layers/00000010", new ContractProbeSource(1, new[] { 10d }));
+        registry.Register("layers/00000002", new ContractProbeSource(1, new[] { 2d }));
+        Assert.Equal(new[] { 2d, 10d }, registry.GetParameters().ToArray());
+    }
+
+    [Fact]
+    public async Task LegacyIdentity_DoesNotDependOnGlobalRegistrationOrder()
+    {
+        await Task.Yield();
+        var forward = new ParameterComponentRegistry<double>();
+        forward.RegisterLegacy("Example.Model", "RegisterComponents", "_encoder",
+            new ContractProbeSource(1, new[] { 1d }));
+        forward.RegisterLegacy("Example.Model", "RegisterComponents", "_decoder",
+            new ContractProbeSource(1, new[] { 2d }));
+
+        var reverse = new ParameterComponentRegistry<double>();
+        reverse.RegisterLegacy("Example.Model", "RegisterComponents", "_decoder",
+            new ContractProbeSource(1, new[] { 2d }));
+        reverse.RegisterLegacy("Example.Model", "RegisterComponents", "_encoder",
+            new ContractProbeSource(1, new[] { 1d }));
+
+        Assert.Equal(
+            forward.ParameterLayout.Slots.Select(slot => slot.StableId),
+            reverse.ParameterLayout.Slots.Select(slot => slot.StableId));
+        Assert.Equal(forward.ParameterLayout.Fingerprint, reverse.ParameterLayout.Fingerprint);
+        Assert.Equal(forward.GetParameters().ToArray(), reverse.GetParameters().ToArray());
+    }
+
+    [Fact]
+    public async Task LegacyIdentity_UsesOnlyALocalPaddedIndexForRepeatedExpressions()
+    {
+        await Task.Yield();
+        var registry = new ParameterComponentRegistry<double>();
+        var first = new ContractProbeSource(1, new[] { 1d });
+        registry.RegisterLegacy("Example.Model", "RegisterComponents", "layer", first);
+        registry.RegisterLegacy("Example.Model", "RegisterComponents", "layer",
+            new ContractProbeSource(1, new[] { 2d }));
+        registry.RegisterLegacy("Example.Model", "RegisterComponents", "other",
+            new ContractProbeSource(1, new[] { 3d }));
+        registry.RegisterLegacy("Example.Model", "AnotherMember", "layer", first);
+
+        var identityGroups = registry.ParameterLayout.Slots
+            .Select(slot => slot.StableId)
+            .GroupBy(id => id.Substring(0, id.LastIndexOf('/')))
+            .OrderByDescending(group => group.Count())
+            .ToArray();
+
+        Assert.Equal(3, registry.ParameterLayout.Slots.Count);
+        Assert.Equal(2, identityGroups[0].Count());
+        Assert.Contains(identityGroups[0], id => id.EndsWith("/00000000", StringComparison.Ordinal));
+        Assert.Contains(identityGroups[0], id => id.EndsWith("/00000001", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Registry_RejectsDuplicateStableIdentity()
     {
         await Task.Yield();
@@ -54,6 +116,81 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task Restore_UsesTheCapturedManifestCountRatherThanASecondSourceCount()
+    {
+        await Task.Yield();
+        var first = new ContractProbeSource(2, new[] { 1d, 2d }, reportedParameterCount: 1);
+        var second = new ContractProbeSource(1, new[] { 3d }, reportedParameterCount: 99);
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("first", first);
+        registry.Register("second", second);
+
+        registry.SetParameters(new Vector<double>(new[] { 10d, 20d, 30d }));
+
+        Assert.Equal(new[] { 10d, 20d }, first.LastRestored);
+        Assert.Equal(new[] { 30d }, second.LastRestored);
+        Assert.Equal(0, first.ParameterCountReads);
+        Assert.Equal(0, second.ParameterCountReads);
+    }
+
+    [Fact]
+    public async Task Read_FailsBeforeReturningAFlatVectorWhoseLengthDisagreesWithTheManifest()
+    {
+        await Task.Yield();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("drifted", new ContractProbeSource(2, new[] { 1d }));
+
+        var error = Assert.Throws<global::AiDotNet.Models.Parameters.ParameterContractViolationException>(
+            () => registry.GetParameters());
+
+        Assert.Equal("drifted", error.StableId);
+        Assert.Equal(2, error.ExpectedCount);
+        Assert.Equal(1, error.ActualCount);
+    }
+
+    [Fact]
+    public async Task LayoutSnapshot_CannotBeMutatedThroughItsPublicSlotCollection()
+    {
+        await Task.Yield();
+        var source = new List<ParameterSlotDescriptor>
+        {
+            new("weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 1)
+        };
+        var snapshot = new ParameterLayoutSnapshot(source);
+
+        source[0] = new ParameterSlotDescriptor(
+            "replacement", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 1);
+
+        Assert.Equal("weight", snapshot.Slots[0].StableId);
+    }
+
+    [Fact]
+    public async Task LayoutFingerprint_ChangesWhenCheckpointOwnershipOrCountChanges()
+    {
+        await Task.Yield();
+        var original = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 2)
+        });
+        var renamed = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "renamed", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 2)
+        });
+        var resized = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 3)
+        });
+
+        Assert.Equal(ParameterLayoutSnapshot.CurrentSchemaVersion, original.SchemaVersion);
+        Assert.Matches("^[a-f0-9]{64}$", original.Fingerprint);
+        Assert.NotEqual(original.Fingerprint, renamed.Fingerprint);
+        Assert.NotEqual(original.Fingerprint, resized.Fingerprint);
+    }
+
+    [Fact]
     public async Task KeyedCollections_UseCanonicalKeyOrder()
     {
         await Task.Yield();
@@ -67,6 +204,57 @@ public class ParameterManifestTests
         Assert.Equal(new[] { 1d, 2d }, source.GetParameters().ToArray());
         Assert.Equal(new[] { "key=a%2Fkey", "key=z%20key" },
             source.GetParameterLayout().Select(slot => slot.StableId));
+    }
+
+    [Fact]
+    public async Task KeyedScalarCollections_RoundTripIndependentlyOfInsertionOrder()
+    {
+        await Task.Yield();
+        var forward = new Dictionary<string, double>
+        {
+            ["state-z"] = 2d,
+            ["state-a"] = 1d
+        };
+        var reverse = new Dictionary<string, double>
+        {
+            ["state-a"] = 10d,
+            ["state-z"] = 20d
+        };
+        var first = new KeyedScalarCollectionParameterSource<double, string>(() => forward);
+        var second = new KeyedScalarCollectionParameterSource<double, string>(() => reverse);
+
+        Assert.Equal(new[] { 1d, 2d }, first.GetParameters().ToArray());
+        Assert.Equal(
+            first.GetParameterLayout().Select(slot => slot.StableId),
+            second.GetParameterLayout().Select(slot => slot.StableId));
+
+        second.SetParameters(first.GetParameters());
+        Assert.Equal(1d, reverse["state-a"]);
+        Assert.Equal(2d, reverse["state-z"]);
+    }
+
+    [Fact]
+    public async Task NestedKeyedScalarCollections_PreserveSparseStateActionOwnership()
+    {
+        await Task.Yield();
+        var table = new Dictionary<string, Dictionary<int, double>>
+        {
+            ["state-z"] = new() { [2] = 22d },
+            ["state-a"] = new() { [10] = 110d, [1] = 11d }
+        };
+        var source = new NestedKeyedScalarCollectionParameterSource<double, string, int>(() => table);
+
+        Assert.Equal(new[] { 11d, 110d, 22d }, source.GetParameters().ToArray());
+        Assert.Equal(
+            new[] { "key=state-a/key=1", "key=state-a/key=10", "key=state-z/key=2" },
+            source.GetParameterLayout().Select(slot => slot.StableId));
+
+        source.SetParameters(new Vector<double>(new[] { 1d, 10d, 2d }));
+        Assert.Equal(1d, table["state-a"][1]);
+        Assert.Equal(10d, table["state-a"][10]);
+        Assert.Equal(2d, table["state-z"][2]);
+        Assert.Throws<ArgumentException>(() =>
+            source.SetParameters(new Vector<double>(new[] { 1d, 2d })));
     }
 
     [Fact]
@@ -124,6 +312,46 @@ public class ParameterManifestTests
         Assert.Equal(1, measurement.Declared);
         Assert.Equal(1, measurement.Flat);
 #endif
+    }
+}
+
+internal sealed class ContractProbeSource : IParameterSource<double>, IParameterLayoutSource
+{
+    private readonly long _declaredCount;
+    private readonly long _reportedParameterCount;
+    private readonly double[] _values;
+
+    public ContractProbeSource(long declaredCount, double[] values, long? reportedParameterCount = null)
+    {
+        _declaredCount = declaredCount;
+        _reportedParameterCount = reportedParameterCount ?? declaredCount;
+        _values = values;
+    }
+
+    public int ParameterCountReads { get; private set; }
+    public double[]? LastRestored { get; private set; }
+
+    public long ParameterCount
+    {
+        get
+        {
+            ParameterCountReads++;
+            return _reportedParameterCount;
+        }
+    }
+
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() =>
+        new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, _declaredCount)
+        };
+
+    public Vector<double> GetParameters() => new(_values);
+
+    public void SetParameters(Vector<double> parameters)
+    {
+        LastRestored = parameters.ToArray();
     }
 }
 

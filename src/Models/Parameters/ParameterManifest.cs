@@ -1,7 +1,63 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AiDotNet.Models.Parameters;
+
+/// <summary>Defines the canonical grammar used by durable parameter-manifest identities.</summary>
+/// <remarks>
+/// Stable IDs are opaque, ordinally sorted paths. A path segment that represents a numeric index
+/// must contain exactly eight decimal digits (for example <c>layers/00000002</c>). Requiring one
+/// width prevents adding index 10 from moving ahead of index 2 and changing every later checkpoint
+/// offset. Semantic numbers must be named instead (for example <c>year=2024</c>) so they cannot be
+/// mistaken for positional identity.
+/// </remarks>
+public static class ParameterStableId
+{
+    /// <summary>The fixed decimal width of an indexed path segment.</summary>
+    public const int IndexWidth = 8;
+
+    /// <summary>Formats a non-negative positional index as a canonical path segment.</summary>
+    public static string IndexSegment(int index)
+    {
+        if (index < 0 || index > 99_999_999)
+            throw new ArgumentOutOfRangeException(nameof(index),
+                $"A parameter index must be between 0 and 99,999,999 for the {IndexWidth}-digit stable-ID grammar.");
+        return index.ToString("D8", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    internal static void Validate(string stableId, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(stableId))
+            throw new ArgumentException("A parameter component requires a stable ID.", parameterName);
+
+        string[] segments = stableId.Split('/');
+        for (int i = 0; i < segments.Length; i++)
+        {
+            string segment = segments[i];
+            if (segment.Length == 0)
+                throw new ArgumentException("A parameter stable ID cannot contain an empty path segment.", parameterName);
+            if (segment == "." || segment == "..")
+                throw new ArgumentException("A parameter stable ID cannot contain relative path segments.", parameterName);
+
+            bool numeric = true;
+            for (int j = 0; j < segment.Length; j++)
+            {
+                if (segment[j] < '0' || segment[j] > '9')
+                {
+                    numeric = false;
+                    break;
+                }
+            }
+            if (numeric && segment.Length != IndexWidth)
+                throw new ArgumentException(
+                    $"Numeric parameter path segment '{segment}' must contain exactly {IndexWidth} digits. " +
+                    $"Use {nameof(ParameterStableId)}.{nameof(IndexSegment)} to create indexed identities.",
+                    parameterName);
+        }
+    }
+}
 
 /// <summary>Describes how a numeric slot participates in model state and optimization.</summary>
 public enum ParameterSlotRole
@@ -137,10 +193,16 @@ public sealed class ParameterSlotDescriptor
 /// <summary>A single deterministic snapshot consumed by count, vector, restore and checkpoint code.</summary>
 public sealed class ParameterLayoutSnapshot
 {
+    /// <summary>The canonical manifest schema used to compute <see cref="Fingerprint"/>.</summary>
+    public const int CurrentSchemaVersion = 1;
+
     /// <summary>Creates a layout snapshot from already ordered slots.</summary>
     public ParameterLayoutSnapshot(IReadOnlyList<ParameterSlotDescriptor> slots)
     {
-        Slots = slots ?? throw new ArgumentNullException(nameof(slots));
+        if (slots is null) throw new ArgumentNullException(nameof(slots));
+        var immutableSlots = new List<ParameterSlotDescriptor>(slots.Count);
+        for (int i = 0; i < slots.Count; i++) immutableSlots.Add(slots[i]);
+        Slots = immutableSlots.AsReadOnly();
 
         bool deferred = false;
         bool unmaterialized = false;
@@ -161,8 +223,9 @@ public sealed class ParameterLayoutSnapshot
                 ? ParameterReadiness.ShapeDeferred
                 : unmaterialized
                     ? ParameterReadiness.ShapeResolvedUnmaterialized
-                    : ParameterReadiness.Materialized;
+                     : ParameterReadiness.Materialized;
         ParameterCount = deferred ? null : total;
+        Fingerprint = ComputeFingerprint(immutableSlots);
     }
 
     /// <summary>Slots in stable-ID order.</summary>
@@ -173,6 +236,74 @@ public sealed class ParameterLayoutSnapshot
 
     /// <summary>The exact total, or <c>null</c> rather than a false zero when a shape is deferred.</summary>
     public long? ParameterCount { get; }
+
+    /// <summary>The version of the canonical manifest representation.</summary>
+    public int SchemaVersion => CurrentSchemaVersion;
+
+    /// <summary>
+    /// A SHA-256 digest of stable IDs, semantic roles and resolved counts in canonical order.
+    /// Checkpoints can persist this value and reject a layout mismatch before applying any values.
+    /// </summary>
+    public string Fingerprint { get; }
+
+    private static string ComputeFingerprint(IReadOnlyList<ParameterSlotDescriptor> slots)
+    {
+        var canonical = new StringBuilder();
+        canonical.Append("parameter-manifest-v").Append(CurrentSchemaVersion).Append('\n');
+        for (int i = 0; i < slots.Count; i++)
+        {
+            var slot = slots[i];
+            canonical.Append(slot.StableId.Length).Append(':').Append(slot.StableId).Append('|')
+                .Append((int)slot.Role).Append('|')
+                .Append(slot.ParameterCount.HasValue ? slot.ParameterCount.Value.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture) : "?")
+                .Append('\n');
+        }
+
+        using var sha256 = SHA256.Create();
+        byte[] digest = sha256.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString()));
+        return BitConverter.ToString(digest).Replace("-", string.Empty).ToLowerInvariant();
+    }
+}
+
+/// <summary>
+/// Thrown when a parameter source's concrete vector disagrees with the manifest snapshot that
+/// describes it.
+/// </summary>
+/// <remarks>
+/// Continuing after this condition would shift every following component and silently restore
+/// values into the wrong owner. The registry therefore fails before returning or applying a
+/// partial vector.
+/// </remarks>
+public sealed class ParameterContractViolationException : InvalidOperationException
+{
+    /// <summary>Creates a count-drift failure for one stable component identity.</summary>
+    public ParameterContractViolationException(
+        string operation,
+        string stableId,
+        long expectedCount,
+        long actualCount)
+        : base($"Cannot {operation} parameter component '{stableId}': its captured manifest " +
+               $"declares {expectedCount} values but the source supplied {actualCount}. " +
+               "The operation was stopped to prevent checkpoint offset corruption.")
+    {
+        Operation = operation;
+        StableId = stableId;
+        ExpectedCount = expectedCount;
+        ActualCount = actualCount;
+    }
+
+    /// <summary>The operation that detected the disagreement.</summary>
+    public string Operation { get; }
+
+    /// <summary>The durable component identity whose source violated the contract.</summary>
+    public string StableId { get; }
+
+    /// <summary>The count captured from the manifest.</summary>
+    public long ExpectedCount { get; }
+
+    /// <summary>The concrete count returned by the source.</summary>
+    public long ActualCount { get; }
 }
 
 /// <summary>Implemented by sources that can describe their local slots without allocating storage.</summary>
@@ -187,7 +318,7 @@ public interface IParameterLayoutSource
 /// <summary>Implemented by models and layers that expose the generated parameter manifest.</summary>
 public interface IParameterManifestProvider
 {
-    /// <summary>Gets a fresh, non-allocating snapshot of the current parameter layout.</summary>
+    /// <summary>Gets a fresh immutable snapshot of the current parameter layout.</summary>
     ParameterLayoutSnapshot ParameterLayout { get; }
 }
 

@@ -256,7 +256,17 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         return PredictMedianSurvivalTime(input);
     }
 
-
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "cumulative-hazard",
+            new AiDotNet.Models.Parameters.VectorFieldParameterSource<T>(
+                () => _cumulativeHazard,
+                parameters => _cumulativeHazard = new Vector<T>(parameters.ToArray())),
+            AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState);
+    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

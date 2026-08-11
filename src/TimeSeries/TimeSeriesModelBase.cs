@@ -1460,13 +1460,17 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     private bool _componentsRegistered;
 
     /// <summary>
-    /// Declares a component whose parameters belong to this model's surface. Registration order is
-    /// serialization order, so keep it stable. Null is tolerated and registration is idempotent by
-    /// reference.
+    /// Declares a component whose parameters belong to this model's surface. Caller metadata gives
+    /// legacy declarations a deterministic compatibility identity. Null is tolerated and
+    /// registration is idempotent by reference.
     /// </summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
     {
-        _parameterRegistry.Register(component);
+        _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
     }
 
     /// <summary>

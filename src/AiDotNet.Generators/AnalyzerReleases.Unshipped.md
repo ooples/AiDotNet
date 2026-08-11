@@ -1,30 +1,7 @@
-<!--
-DIAGNOSTIC ID PREFIX -- SETTLED, and deliberately NOT by renaming.
-
-This table carries five prefixes: AIDN (shipped), and ADN / ADNTEST / ADNSHAPE /
-ADNGEN (unshipped). Unshipped IDs are the cheap moment to unify, and that was
-weighed rather than skipped.
-
-DECISION: the unshipped prefixes STAY, and no new prefix is introduced.
-
-Why not fold them into AIDN. The shipped range is three-digit (AIDN001..AIDN062)
-and already occupies 050-052 for ComponentMetadata. Renaming ADN0050..ADN0054
-into that range gives AIDN0050 sitting beside AIDN050 -- two distinct rules one
-character apart, which is worse for grep, .editorconfig and suppression comments
-than the split it was meant to cure. A fresh non-colliding range would avoid that
-but renumbers rules referenced by sibling PRs in this 18-part split, and a rename
-landing in one part while another still emits the old ID is a build break nobody
-owns.
-
-What the prefixes now mean, so the split is a scheme rather than an accident:
-  AIDN      shipped rules, frozen
-  ADN00xx   LayerStateGenerator (serialization round-trip)
-  ADNSHAPE  ShapeDeclarationValidationGenerator
-  ADNTEST   TestScaffoldGenerator, scaffold correctness
-  ADNGEN    TestScaffoldGenerator, coverage gaps
-
-Revisit in the PR that lands last in the split, where a rename can be atomic.
--->
+; Unshipped analyzer release
+; Diagnostic prefixes remain split by generator until the final generator-refactor PR can
+; renumber them atomically: AIDN (shipped rules), ADN00xx (layer state), ADNSHAPE
+; (shape contracts), ADNTEST (scaffold correctness), and ADNGEN (coverage gaps).
 
 ### New Rules
 
@@ -64,4 +41,5 @@ ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, T
 ADNSHAPE004 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing (Warning until the #1789 conversion completes; the final slice raises it to Error)
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
+AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract
 AIDN087 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, ParameterCount compared against zero as a readiness test (Warning while the backlog is non-zero; promote to Error at zero per the ADNSHAPE006/007 ladder)
