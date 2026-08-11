@@ -11687,6 +11687,13 @@ public static class LayerHelper<T>
 
         _ = textDim;
         yield return new DenseLayer<T>(vocabSize, identityActivation);
+
+        // Token embedding for the question text, appended last so no existing index moves. It is not
+        // a step in the chain -- the forward addresses it directly -- because the fusion blocks
+        // consume the CONCATENATION of projected visual tokens and embedded text, which a linear
+        // walk cannot express. Sized fusionDim, the width the visual tokens were projected to, NOT
+        // textDim: they share a default of 768 and that coincidence would hide a mismatch.
+        yield return new EmbeddingLayer<T>(vocabSize, fusionDim);
     }
 
     /// <summary>
