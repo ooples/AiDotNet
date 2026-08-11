@@ -644,6 +644,24 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             }
         }
         if (elem is null && type.TypeParameters.Length > 0) elem = type.TypeParameters[0].Name;
+        if (elem is null)
+        {
+            // A model that CLOSES over its scalar has no type parameter to find; the element
+            // type is the base's first type ARGUMENT. The generator learned this and this did
+            // not, so LinearVectorModel was registered by the generator AND reported here --
+            // the two must ask the same question or the build contradicts itself.
+            for (var b = type.BaseType; b is not null && elem is null; b = b.BaseType)
+            {
+                var baseOpen = b.OriginalDefinition.ToDisplayString();
+                if ((baseOpen.StartsWith("AiDotNet.Models.ModelBase<", System.StringComparison.Ordinal)
+                     || baseOpen.StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                    && b.TypeArguments.Length > 0
+                    && b.TypeArguments[0].TypeKind != TypeKind.TypeParameter)
+                {
+                    elem = b.TypeArguments[0].ToDisplayString();
+                }
+            }
+        }
         if (elem is null) return false;
 
         if (f.Type is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return false;
