@@ -13179,16 +13179,88 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     public virtual Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
+        // FOLD FIRST, OBSERVE ONLY IF THE FOLD IS NOT VALID FOR THIS MODEL.
+        //
+        // Folding Layers[0..n] in order assumes the model IS that chain, and for a plain chain it is
+        // both correct and the cheapest thing available. A dual-tower model is not a chain: VideoCLIP
+        // holds a video stack and a text stack in one Layers list, so the fold pushes image
+        // activations into the text tower's EmbeddingLayer, which refuses them -- "element 0 is
+        // 0.5967621803283691, which is not a token index in [0, 49408)". 902 of the library's models
+        // override PredictCore, so the chain assumption is not safe in general.
+        //
+        // Measured before choosing this shape: replacing the fold outright with an observed Predict
+        // produced EXACTLY the same 7 failures out of 99 on the hand-written neural-network families
+        // and was slower (5 m 29 s against 4 m 36 s), because Predict on a generative model is a whole
+        // generation loop where the fold is one pass. So the fold stays the fast path and the observer
+        // is the fallback: models the fold already serves pay nothing, and a model the fold cannot
+        // serve gets an answer instead of an exception.
         var activations = new Dictionary<string, Tensor<T>>();
-        var current = input;
-
-        for (int i = 0; i < Layers.Count; i++)
+        try
         {
-            current = Layers[i].Forward(current);
-            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            var current = input;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+            return activations;
+        }
+        catch (Exception) when (Layers is { Count: > 0 })
+        {
+            // The fold is invalid for this topology. Fall through and record what the model itself does.
+            activations.Clear();
+        }
+
+        // The observer is already wired into LayerBase.Forward and composes with an enclosing trace,
+        // so this asks the model to run itself and writes down what actually happened. Correct for a
+        // branched model, a custom PredictCore, and a plain chain alike.
+        using (var trace = new Graph.LayerForwardObserver<T>())
+        {
+            Predict(input);
+
+            var calls = trace.Calls;
+            var seen = new Dictionary<string, int>();
+            for (int i = 0; i < calls.Count; i++)
+            {
+                var (layer, _, output) = calls[i];
+                if (output is null) continue;
+
+                // Position in Layers when the layer is one of them, so keys stay comparable with the
+                // old behaviour for ordinary chains; call order otherwise, which is the only index a
+                // sub-layer or a second tower has. A layer invoked more than once (weight sharing,
+                // a recurrent step) gets a suffix rather than overwriting its earlier activation.
+                int declared = IndexInLayers(layer);
+                string key = $"Layer_{(declared >= 0 ? declared : i)}_{layer.GetType().Name}";
+                if (seen.TryGetValue(key, out int n))
+                {
+                    seen[key] = n + 1;
+                    key = $"{key}#{n + 1}";
+                }
+                else
+                {
+                    seen[key] = 0;
+                }
+
+                activations[key] = output.Clone();
+            }
         }
 
         return activations;
+    }
+
+    /// <summary>
+    /// Position of <paramref name="layer"/> in <see cref="Layers"/>, or -1 when it is not a top-level
+    /// layer (a sub-layer, or a second tower the model runs outside the declared chain).
+    /// </summary>
+    private int IndexInLayers(ILayer<T> layer)
+    {
+        var layers = Layers;
+        if (layers is null) return -1;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (ReferenceEquals(layers[i], layer)) return i;
+        }
+        return -1;
     }
 
     /// <summary>
