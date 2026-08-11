@@ -1257,10 +1257,21 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         base.ApplyParameters(parameters);
     }
 
-    public override void SetParameters(Vector<T> parameters)
+    /// <summary>
+    /// Re-derives Prophet's internal state after a restore has written the parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// This was a SetParameters override that called ApplyParameters and nothing else, which meant
+    /// it replaced the base's distribution rather than following it. OnParametersRestored is the
+    /// hook the base calls AFTER the vector has been distributed, so the redistribution still
+    /// happens and the fold above it is no longer bypassed.
+    /// </remarks>
+    protected override void OnParametersRestored()
     {
-        ApplyParameters(parameters);
+        base.OnParametersRestored();
+        ApplyParameters(ModelParameters);
     }
+
 
     /// <summary>
     /// Predicts a single value based on the input vector.

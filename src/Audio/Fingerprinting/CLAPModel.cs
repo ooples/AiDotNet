@@ -730,34 +730,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
 
  // _logTemperature (learnable τ scalar)
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-
-        int idx = 0;
-        // Audio encoder layers (the inherited Layers list — the primary stream).
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Text encoder layers (the secondary stream on the audio base class).
-        foreach (var layer in TextEncoderLayers)
-        {
-            int count = (int)layer.ParameterCount;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        // Learnable temperature τ (last scalar parameter).
-        if (idx < parameters.Length)
-        {
-            _logTemperature[0] = parameters[idx];
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {

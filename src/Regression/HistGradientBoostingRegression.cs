@@ -8,7 +8,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.Regression;
 
@@ -363,27 +364,26 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     }
 
     /// <summary>
-    /// Gets model parameters.
+    /// The model's one continuous parameter: the initial prediction the boosted trees correct.
     /// </summary>
-    public override Vector<T> GetParameters()
+    /// <remarks>
+    /// The surface this replaces returned TWO values -- the initial prediction and the tree COUNT.
+    /// A count is structure, not a parameter: SetParameters read only the first slot and ignored
+    /// the second, so the vector advertised a value it could never restore, and any caller pairing
+    /// the two by length was silently working with one dead slot. The trees themselves are not a
+    /// flat vector at all; they round-trip through serialization.
+    /// </remarks>
+    protected override void RegisterComponents()
     {
-        // Return initial prediction and tree count as parameters
-        var parameters = new Vector<T>(2);
-        parameters[0] = _initialPrediction;
-        parameters[1] = NumOps.FromDouble(_trees?.Count ?? 0);
-        return parameters;
+        base.RegisterComponents();
+        RegisterParameterComponent(new ScalarParameterSource<T>(
+            () => _initialPrediction,
+            value => _initialPrediction = value));
     }
 
-    /// <summary>
-    /// Sets model parameters.
-    /// </summary>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length >= 1)
-        {
-            _initialPrediction = parameters[0];
-        }
-    }
+    // Replaced by the declared parameter source below. Removed under AIDN082.
+
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
     /// <summary>
     /// Creates a new instance with the given parameters.
