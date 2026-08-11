@@ -77,7 +77,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
 
     // Embeddings
     private Tensor<T>? _nodeTypeEmbeddings;
-    private Tensor<T>? _positionEmbeddings;
 
     #endregion
 
@@ -220,17 +219,16 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
             inputDim: _nodeDim,
             hiddenDim: _edgeDim,
             numGraphLayers: _graphLayers,
-            numClasses: _numClasses));
+            numClasses: _numClasses,
+            maxNodes: _maxNodes));
     }
 
     private void InitializeEmbeddings()
     {
         var random = RandomHelper.CreateSeededRandom(42);
         _nodeTypeEmbeddings = Tensor<T>.CreateDefault([_numClasses, _nodeDim], NumOps.Zero);
-        _positionEmbeddings = Tensor<T>.CreateDefault([_maxNodes, _nodeDim], NumOps.Zero);
 
         InitializeWithSmallRandomValues(_nodeTypeEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)

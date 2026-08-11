@@ -11725,7 +11725,8 @@ public static class LayerHelper<T>
         int inputDim = 768,
         int hiddenDim = 256,
         int numGraphLayers = 4,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxNodes = 512)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -11733,6 +11734,10 @@ public static class LayerHelper<T>
         // Node feature encoder
         yield return new DenseLayer<T>(hiddenDim, reluActivation);
         yield return new LayerNormalizationLayer<T>();
+        // Node-order position. LayoutGraph._positionEmbeddings carried a [maxNodes, dim] table as a model field that nothing
+        // read; it indexes a node by its place in the document's reading order, which is precisely
+        // what a position embedding is, so it belongs in the stack rather than in the bin.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxNodes, hiddenDim);
 
         // Graph layers with hierarchical structure
         for (int i = 0; i < numGraphLayers; i++)
