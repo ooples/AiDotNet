@@ -563,9 +563,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </para>
     /// </remarks>
     private void EnsureMaterializedForParameterSurface()
-    {
-        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitialized();
-    }
+        // Delegates rather than repeating the gate, so the write path and the explicit
+        // MaterializeParameters() entry point cannot drift apart again -- and so this one
+        // inherits the sub-layer recursion. Calling EnsureInitialized() directly here brought up
+        // the composite and left its children as placeholders, which is how a restore into a
+        // fresh composite still saw a short count after the parent had been materialized.
+        => EnsureParametersMaterialized();
 
     /// <summary>
     /// Declares that this layer's weights are sized entirely by its constructor arguments, so they
@@ -606,6 +609,33 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal void MaterializeParameters() => EnsureParametersMaterialized();
 
     /// <summary>
+    /// Brings a sub-layer all the way up -- shape first, then weights -- so a composite's parameter
+    /// surface does not depend on whether that sub-layer happened to see a forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The two steps cover the two states a sub-layer can be in, and each is a no-op in the other's
+    /// case: <see cref="ResolveFromShape"/> returns immediately when the shape is already resolved,
+    /// and <see cref="MaterializeParameters"/> declines when it is not. Calling only one of them
+    /// leaves half the sub-layers behind, and which half depends on execution history -- in VideoCLIP,
+    /// the video tower resolved because training ran data through it and the text tower did not, so
+    /// the same layer type serialized 197,888 values in one tower and 16,452 in the other.
+    /// </para>
+    /// <para>
+    /// A composite calls this from its own initializer, where the child input shapes are known; only
+    /// the composite knows that its second feed-forward takes the feed-forward width rather than the
+    /// embedding width. Everything after that -- when to materialize, and the recursion into
+    /// grandchildren -- is the base's job, via <see cref="EnsureParametersMaterialized"/>.
+    /// </para>
+    /// </remarks>
+    protected static void ResolveAndMaterialize(LayerBase<T>? child, int[] inputShape)
+    {
+        if (child is null) return;
+        child.ResolveFromShape(inputShape);
+        child.MaterializeParameters();
+    }
+
+    /// <summary>
     /// Forces lazy parameter allocation now (the hook <see cref="MaterializeParameters"/> drives).
     /// </summary>
     /// <remarks>
@@ -616,7 +646,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected virtual void EnsureParametersMaterialized()
     {
-        if (!IsInitialized && IsShapeResolved)
+        // NOT gated on IsInitialized. The base declares `public virtual bool IsInitialized => true;`
+        // and only 6 of ~201 layers override it, so `!IsInitialized` was false for almost every
+        // layer in the library and this hook did nothing: measured 0 of VideoCLIP's 80 layers
+        // materialized. That silence is what made the save side write a manifest describing fewer
+        // tensors than a trained instance holds. EnsureInitialized is idempotent by contract --
+        // every implementation latches on its own flag -- so calling it unconditionally is free
+        // for a layer that is already up, and is the only thing that works for the 195 layers
+        // that never told the base they were down.
+        if (IsShapeResolved || ParametersAreConstructionSized)
         {
             EnsureInitialized();
             // #1715: register the just-materialized streaming weights with the pool so transparent
@@ -628,6 +666,23 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // accumulates on the GC heap → OOM. No-op when streaming is inactive
             // (UseStreamingAllocator false) or the weights aren't streaming-backed (idempotent).
             RegisterStreamingWeightsWithPool();
+        }
+
+        // Then the children, because a composite's parameter surface IS its children's:
+        // ParameterCount, GetParameters and SetParameters all fold GetSubLayers(). Materializing
+        // only the parent leaves that surface partial in exactly the way a checkpoint cannot
+        // tolerate -- a fresh TransformerEncoderLayer answered 36 where a trained one holds 576,
+        // and the 540 restored values had nowhere to go. Recursing here is what lets a composite
+        // stay correct with NO override of its own: the base already knows the children, so
+        // asking each of them the same question is the whole implementation. EnsureInitialized
+        // is idempotent, so re-entry through a diamond costs a branch.
+        var subs = GetSubLayers();
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                if (subs[i] is LayerBase<T> child) child.EnsureParametersMaterialized();
+            }
         }
     }
 
