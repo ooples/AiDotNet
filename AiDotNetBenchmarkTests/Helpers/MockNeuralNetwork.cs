@@ -124,7 +124,9 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
     public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
     {
         // Return non-zero gradients for benchmarking
-        var gradients = new Vector<T>(ParameterCount);
+        // ParameterCount is long to match IParameterSource; Vector<T> is int-indexed, and a
+        // mock this size can never exceed int range.
+        var gradients = new Vector<T>((int)ParameterCount);
         for (int i = 0; i < ParameterCount; i++)
         {
             gradients[i] = NumOps.FromDouble(0.1 * (i + 1));
