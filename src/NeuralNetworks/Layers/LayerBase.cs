@@ -730,7 +730,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < declared.Count; i++)
         {
             var (tensor, expected, _) = declared[i];
-            if (tensor is null || tensor.Length == 0) continue;
+
+            // RANK ZERO IS ALSO "not supplied". Length alone does not say it: a rank-0 placeholder
+            // has Length 1, because the product of no dimensions is 1, so testing Length > 0 counted
+            // an unallocated FeedForwardLayer placeholder as a delivered tensor and the partial-set
+            // throw fired during ordinary construction ("received weights [] and biases []").
+            // DenseLayer never showed this because its placeholders are [0, 0].
+            if (tensor is null || tensor.Length == 0 || tensor.Shape.Length == 0) continue;
             supplied++;
             if (ShapeMatchesDeclared(tensor, expected)) conforming++;
         }
