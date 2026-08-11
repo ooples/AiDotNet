@@ -55,6 +55,14 @@ public class AllModelsCloneTests
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
 
+        // APPENDED AS IT GOES. The first run timed out at 15 minutes with nothing written, which
+        // told us only that the sweep is slow -- not which model it was on. A progress file costs
+        // nothing and turns a timeout into a result plus a culprit.
+        var reportPath = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "aidotnet-model-clone-sweep.txt");
+        System.IO.File.WriteAllText(reportPath, string.Empty);
+        void Note(string line) => System.IO.File.AppendAllLines(reportPath, new[] { line });
+
         var cloned = new List<string>();
         var failed = new List<string>();
         var notConstructed = new List<string>();
@@ -68,14 +76,16 @@ public class AllModelsCloneTests
             }
             catch (Exception)
             {
-                notConstructed.Add($"{open.Name}: constraints reject double");
+                notConstructed.Add($"{open.Name}: constraints reject double"); Note($"skip  {open.Name}: constraints reject double");
                 continue;
             }
 
+            // BEFORE the attempt, so a hang names the model it hung on.
+            Note($"try   {open.Name}");
             var model = TryConstruct(closed);
             if (model is null)
             {
-                notConstructed.Add($"{open.Name}: no constructor takes a standard architecture");
+                notConstructed.Add($"{open.Name}: no constructor takes a standard architecture"); Note($"skip  {open.Name}: not constructible");
                 continue;
             }
 
@@ -86,13 +96,13 @@ public class AllModelsCloneTests
 
                 if (copy is null)
                 {
-                    failed.Add($"{open.Name}: DeepCopy returned null");
+                    failed.Add($"{open.Name}: DeepCopy returned null"); Note("FAIL  " + $"{open.Name}: DeepCopy returned null");
                     continue;
                 }
 
                 if (copy.GetType() != closed)
                 {
-                    failed.Add($"{open.Name}: copy is {copy.GetType().Name}");
+                    failed.Add($"{open.Name}: copy is {copy.GetType().Name}"); Note("FAIL  " + $"{open.Name}: copy is {copy.GetType().Name}");
                     continue;
                 }
 
@@ -100,17 +110,17 @@ public class AllModelsCloneTests
                 // means CreateNewInstance did not carry every argument that determines size.
                 if (copy.ParameterCount != before)
                 {
-                    failed.Add($"{open.Name}: {copy.ParameterCount} parameters against {before}");
+                    failed.Add($"{open.Name}: {copy.ParameterCount} parameters against {before}"); Note("FAIL  " + $"{open.Name}: {copy.ParameterCount} parameters against {before}");
                     continue;
                 }
 
                 if (!ReferenceEquals(copy, model) && IsIndependent(model, copy))
                 {
-                    cloned.Add(open.Name);
+                    cloned.Add(open.Name); Note($"ok    {open.Name}");
                 }
                 else
                 {
-                    failed.Add($"{open.Name}: copy is not independent of the original");
+                    failed.Add($"{open.Name}: copy is not independent of the original"); Note("FAIL  " + $"{open.Name}: copy is not independent of the original");
                 }
             }
             catch (Exception ex)
@@ -118,6 +128,7 @@ public class AllModelsCloneTests
                 var inner = ex.InnerException ?? ex;
                 var message = inner.Message;
                 failed.Add($"{open.Name}: {inner.GetType().Name}: "
+                    + message.Substring(0, Math.Min(90, message.Length))); Note("FAIL  " + $"{open.Name}: {inner.GetType().Name}: "
                     + message.Substring(0, Math.Min(90, message.Length)));
             }
             finally
@@ -134,6 +145,24 @@ public class AllModelsCloneTests
 
         foreach (var line in failed) _output.WriteLine($"FAIL  {line}");
         foreach (var line in notConstructed) _output.WriteLine($"skip  {line}");
+
+        // ALSO to a file. xunit only surfaces ITestOutputHelper on a failing test or under
+        // `verbosity=detailed`, and detailed logs every one of 72,000 discovered cases -- 17MB of
+        // noise to read four numbers out of. A report worth running is worth being able to read.
+        var report = new List<string>
+        {
+            $"model types        : {candidates.Count}",
+            $"cloned OK          : {cloned.Count}",
+            $"clone FAILED       : {failed.Count}",
+            $"not constructed    : {notConstructed.Count} (harness limit, not a clone result)",
+            string.Empty,
+        };
+        report.AddRange(failed.Select(f => $"FAIL  {f}"));
+        report.AddRange(notConstructed.Select(n => $"skip  {n}"));
+
+        System.IO.File.WriteAllLines(
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet-model-clone-sweep.txt"),
+            report);
     }
 
     /// <summary>Whether writing through one model leaves the other alone.</summary>

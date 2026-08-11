@@ -87,6 +87,7 @@
 		</None>
 	</ItemGroup>
 
+
 	<ItemGroup>
 	  <PackageReference Include="Azure.Search.Documents" />
 	  <!-- audit-2026-05 phase 2b: Elasticsearch backend extracted to
@@ -324,6 +325,30 @@
 	<ItemGroup>
 	  <Using Include="AiDotNet.Helpers" />
 	  <Using Include="AiDotNet.Initialization" />
+	</ItemGroup>
+
+	<!--
+	  LAST, deliberately. An earlier ItemGroup does <None Remove="AiDotNet.Generators\**\*" />,
+	  which strips this item if it is declared above that line. The package then builds clean and
+	  ships without the analyzer, which is the failure this whole entry exists to prevent.
+	-->
+	<!--
+	  SHIP THE GENERATOR. The ProjectReference above is OutputItemType="Analyzer" with
+	  ReferenceOutputAssembly="false", which runs it against THIS compilation only. Analyzers do flow
+	  across a ProjectReference, so a consumer who references this project by path already gets
+	  generated layer and model factories, but a consumer who installs the NuGet package gets
+	  neither those nor the diagnostics that report an unclonable type. Their own layers and models
+	  then fall back to reflection, and a build error we rely on to enforce the contract never fires
+	  for them.
+
+	  Packing the generator under analyzers/dotnet/cs is what makes the guarantee the same for every
+	  consumer however they reference us.
+	-->
+	<ItemGroup>
+		<None Include="AiDotNet.Generators\bin\$(Configuration)\netstandard2.0\AiDotNet.Generators.dll"
+		      Pack="true"
+		      PackagePath="analyzers/dotnet/cs"
+		      Visible="false" />
 	</ItemGroup>
 
 </Project>
