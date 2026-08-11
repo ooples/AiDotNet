@@ -524,6 +524,55 @@ public class LayoutAwareDocumentTests
 
     #endregion
 
+    #region LiLT layout-stream reachability
+
+    /// <summary>
+    /// LiLT's layout stream used to be unreachable from Predict and from Train alike: both Forward
+    /// and ForwardForTraining passed null for boxes, and the one entry point that accepted them
+    /// (EncodeDualStream) opens a NoGradScope, so the layout half could never be trained at all.
+    /// A packed row must now reach the stream through the ordinary Predict path.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task LiLT_PackedInput_ReachesTheLayoutStream()
+    {
+        await Task.Yield();
+        var model = new LiLT<float>(CreateArchitecture());
+        model.SetTrainingMode(false);
+
+        var left = model.Predict(CreatePackedTokens(8, x0: 0, y0: 0));
+        var right = model.Predict(CreatePackedTokens(8, x0: 300, y0: 400));
+
+        AssertAllFinite(left, "LiLT packed left");
+        AssertAllFinite(right, "LiLT packed right");
+
+        bool differs = false;
+        for (int i = 0; i < left.Length && i < right.Length && !differs; i++)
+        {
+            if (System.Math.Abs(left.Data.Span[i] - right.Data.Span[i]) > 1e-9f)
+                differs = true;
+        }
+
+        Assert.True(differs,
+            "Identical tokens with different boxes gave identical output, so the packed row is not " +
+            "reaching LiLT's layout stream.");
+    }
+
+    /// <summary>
+    /// Text-only input keeps working unchanged — a caller with no OCR boxes still gets the
+    /// text-only BiACM path rather than an error.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task LiLT_TokensOnly_StillRunsTextOnly()
+    {
+        await Task.Yield();
+        var model = new LiLT<float>(CreateArchitecture());
+        model.SetTrainingMode(false);
+
+        AssertAllFinite(model.Predict(CreateTokenIds(16)), "LiLT text-only");
+    }
+
+    #endregion
+
     #region DocFormer Tests
 
     private static DocFormer<float> CreateSmallDocFormer()

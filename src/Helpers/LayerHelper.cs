@@ -11319,19 +11319,31 @@ public static class LayerHelper<T>
         int numHeads = 12,
         int layoutDim = 768,
         int vocabSize = 30522,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int maxSequenceLength = 512;
 
-        // Text embeddings stream
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // Text embeddings stream. One block: word + LEARNED 1D position, no layout terms. Keeping
+        // text and layout strictly apart is LiLT's contribution (Wang et al., ACL 2022) -- it is what
+        // lets one pre-trained layout encoder pair with any language's text encoder -- so this stream
+        // is fed a bare token sequence and never sees a box. The sinusoidal PositionalEncodingLayer
+        // that used to sit here is SupportsTraining => false, where LiLT's RoBERTa-derived text side
+        // uses learned positions; the dead _textPositionEmbeddings field was the leftover of that.
+        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
 
-        // Layout embeddings stream (2D position encoding)
-        yield return new DenseLayer<T>(layoutDim, identityActivation); // x, y, w, h
+        // Layout embeddings stream: the paper embeds each coordinate through a LOOKUP TABLE, the same
+        // 2D scheme LayoutLM uses, not a Dense projection of the raw numbers. A Dense over raw box
+        // values makes the model read coordinates as magnitudes, so x=101 and x=100 are near-identical
+        // by construction and a page-relative position has to be re-learned as arithmetic; a table
+        // lets each bucket mean whatever the data says it means. The dead _spatialEmbeddings and
+        // _layoutPositionEmbeddings fields were exactly these tables, allocated and never read.
+        yield return new LayoutEmbeddingLayer<T>(
+            vocabSize: 1, hiddenDim: layoutDim, maxSequenceLength: maxSequenceLength,
+            maxPosition2D: maxPosition2D, includeTokens: false);
         yield return new LayerNormalizationLayer<T>();
 
         // Dual-stream transformer with BiACM

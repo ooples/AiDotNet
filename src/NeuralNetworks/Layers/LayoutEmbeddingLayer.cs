@@ -87,7 +87,30 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public const int PackedRowWidth = 5;
 
-    private readonly EmbeddingLayer<T> _wordEmbeddings;
+    /// <summary>
+    /// Width of a boxes-only row when width and height are derived: <c>(x0, y0, x1, y1)</c>.
+    /// </summary>
+    public const int BoxOnlyRowWidth = 4;
+
+    /// <summary>
+    /// Width of a boxes-only row that carries width and height explicitly:
+    /// <c>(x0, y0, x1, y1, w, h)</c>. This is the six-feature layout vector LiLT and LayoutLM both
+    /// describe; supplying it directly lets a caller whose OCR already reports box extents skip the
+    /// subtraction, and lets a caller with a non-axis-aligned box give a real extent rather than one
+    /// implied by two corners.
+    /// </summary>
+    public const int BoxWithExtentRowWidth = 6;
+
+    private readonly bool _includeTokens;
+
+    /// <summary>
+    /// Row width this instance consumes: five with a token column, four in boxes-only mode. A
+    /// boxes-only layer also accepts <see cref="BoxWithExtentRowWidth"/> rows, which carry width and
+    /// height instead of leaving them to be derived.
+    /// </summary>
+    public int RowWidth => _includeTokens ? PackedRowWidth : BoxOnlyRowWidth;
+
+    private readonly EmbeddingLayer<T>? _wordEmbeddings;
     private readonly EmbeddingLayer<T> _positionEmbeddings;
     private readonly EmbeddingLayer<T> _xEmbeddings;
     private readonly EmbeddingLayer<T> _yEmbeddings;
@@ -161,7 +184,10 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     {
         bool packed = inputShape is not null
             && inputShape.Length >= 2
-            && inputShape[inputShape.Length - 1] == PackedRowWidth;
+            && inputShape[inputShape.Length - 1] == RowWidth;
+
+        // Boxes-only rows carry no token column, so the coordinate grid is the whole domain.
+        if (!_includeTokens) return LayerInputDomain.Indices(_maxPosition2D);
 
         return LayerInputDomain.Indices(packed ? Math.Min(_vocabSize, _maxPosition2D) : _vocabSize);
     }
@@ -176,11 +202,23 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// Number of distinct coordinate buckets. The paper normalizes every box onto a 0-1000 grid so
     /// that page size drops out; 1024 is the usual table size, leaving headroom above 1000.
     /// </param>
+    /// <param name="includeTokens">
+    /// <c>true</c> (the default) for the LayoutLM-style block: a packed <c>[seq, 5]</c> row whose
+    /// first column is a token ID, summing text and layout together.
+    /// <para>
+    /// <c>false</c> for a boxes-only block consuming <c>[seq, 4]</c>, which is what LiLT needs: its
+    /// layout stream carries NO text, and keeping the two apart is the paper's contribution -- it is
+    /// what lets one pre-trained layout encoder pair with any language's text encoder. Feeding
+    /// tokens into that stream would destroy the language-independence the model exists for.
+    /// No word table is allocated in this mode, so it is not a dead parameter either.
+    /// </para>
+    /// </param>
     public LayoutEmbeddingLayer(
         [LayerState] int vocabSize = 30522,
         [LayerState] int hiddenDim = 768,
         [LayerState] int maxSequenceLength = 512,
-        [LayerState] int maxPosition2D = 1024)
+        [LayerState] int maxPosition2D = 1024,
+        [LayerState] bool includeTokens = true)
         // Declared shapes mirror EmbeddingLayer's [1] -> [embeddingDim]: what this layer fixes is the
         // WIDTH of each token's vector, not how many tokens arrive. Declaring the sequence axis as
         // maxSequenceLength instead claimed a [32, 16] output for an 8-token input and the
@@ -196,8 +234,9 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         _hiddenDim = hiddenDim;
         _maxSequenceLength = maxSequenceLength;
         _maxPosition2D = maxPosition2D;
+        _includeTokens = includeTokens;
 
-        _wordEmbeddings = new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        _wordEmbeddings = includeTokens ? new EmbeddingLayer<T>(vocabSize, hiddenDim) : null;
         _positionEmbeddings = new EmbeddingLayer<T>(maxSequenceLength, hiddenDim);
         _xEmbeddings = new EmbeddingLayer<T>(maxPosition2D, hiddenDim);
         _yEmbeddings = new EmbeddingLayer<T>(maxPosition2D, hiddenDim);
@@ -206,7 +245,7 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 
         // Register the children so TapeTrainingStep.CollectParameters walks into them: an
         // unregistered sub-layer is invisible to the optimizer and trains silently never.
-        RegisterSubLayer(_wordEmbeddings);
+        if (_wordEmbeddings is not null) RegisterSubLayer(_wordEmbeddings);
         RegisterSubLayer(_positionEmbeddings);
         RegisterSubLayer(_xEmbeddings);
         RegisterSubLayer(_yEmbeddings);
@@ -214,8 +253,11 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         RegisterSubLayer(_heightEmbeddings);
     }
 
-    /// <summary>Gets the token embedding table, exposed so a model can load pretrained vectors.</summary>
-    public EmbeddingLayer<T> WordEmbeddings => _wordEmbeddings;
+    /// <summary>
+    /// Gets the token embedding table, exposed so a model can load pretrained vectors.
+    /// Null in boxes-only mode, where no word table exists.
+    /// </summary>
+    public EmbeddingLayer<T>? WordEmbeddings => _wordEmbeddings;
 
     /// <summary>
     /// Embeds a token sequence, adding the 2D layout terms when bounding boxes are supplied.
@@ -249,7 +291,22 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException("LayoutEmbeddingLayer expects at least a rank-1 token sequence.", nameof(input));
 
         int lastAxis = input.Shape[rank - 1];
-        bool packed = rank >= 2 && lastAxis == PackedRowWidth;
+
+        // In boxes-only mode a row is the four coordinates and there is no token column at all, so
+        // the "packed" row is one slot narrower and the word lookup below is skipped entirely.
+        // A boxes-only row is four coordinates, or six when the caller supplies the extents too.
+        bool extentsGiven = !_includeTokens && rank >= 2 && lastAxis == BoxWithExtentRowWidth;
+        bool packed = (rank >= 2 && lastAxis == RowWidth) || extentsGiven;
+
+        if (!_includeTokens && !packed)
+            throw new ArgumentException(
+                $"A boxes-only LayoutEmbeddingLayer expects rows of {BoxOnlyRowWidth} coordinates " +
+                $"(x0, y0, x1, y1) or {BoxWithExtentRowWidth} (x0, y0, x1, y1, w, h); got a trailing " +
+                $"axis of {lastAxis}. There is no token column in this mode, so a bare index sequence " +
+                "has nothing to look up.",
+                nameof(input));
+
+        int rowWidth = extentsGiven ? BoxWithExtentRowWidth : RowWidth;
 
         // Leading shape = the index grid, i.e. everything except a packed row / trailing singleton.
         int[] leading;
@@ -270,25 +327,30 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // The sequence axis is the last leading axis: [seq] -> seq, [batch, seq] -> seq.
         int seqLen = leading.Length == 0 ? 1 : leading[leading.Length - 1];
 
-        // A packed row advances five slots per token; every other form is one index per token.
-        int stride = packed ? PackedRowWidth : 1;
+        // A packed row advances rowWidth slots per token; every other form is one index per token.
+        int stride = packed ? rowWidth : 1;
+
+        // Offset of the first coordinate within a row: past the token column when there is one.
+        int boxBase = _includeTokens ? 1 : 0;
         var flat = input.Data.Span;
 
-        var tokenIds = new Tensor<T>(leading);
         var positions = new Tensor<T>(leading);
-        var tokenSpan = tokenIds.Data.Span;
         var positionSpan = positions.Data.Span;
+
+        Tensor<T>? tokenIds = _includeTokens ? new Tensor<T>(leading) : null;
 
         for (int i = 0; i < gridSize; i++)
         {
-            tokenSpan[i] = flat[i * stride];
+            if (tokenIds is not null) tokenIds.Data.Span[i] = flat[i * stride];
             // Reading order within each sequence; wraps per batch row.
             positionSpan[i] = NumOps.FromDouble(Math.Min(i % seqLen, _maxSequenceLength - 1));
         }
 
-        // Word identity + reading-order position: the BERT half of the block.
-        var embedded = _wordEmbeddings.Forward(tokenIds);
-        embedded = Engine.TensorAdd(embedded, _positionEmbeddings.Forward(positions));
+        // Reading-order position always applies. Word identity only when there is a token column --
+        // in boxes-only mode the block is pure layout by design.
+        var embedded = _positionEmbeddings.Forward(positions);
+        if (_wordEmbeddings is not null && tokenIds is not null)
+            embedded = Engine.TensorAdd(embedded, _wordEmbeddings.Forward(tokenIds));
 
         if (!packed)
         {
@@ -314,21 +376,25 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 
         for (int i = 0; i < gridSize; i++)
         {
-            int b = i * PackedRowWidth;
-            int left = ClampCoordinate(flat[b + 1]);
-            int top = ClampCoordinate(flat[b + 2]);
-            int right = ClampCoordinate(flat[b + 3]);
-            int bottom = ClampCoordinate(flat[b + 4]);
+            int b = i * rowWidth + boxBase;
+            int left = ClampCoordinate(flat[b]);
+            int top = ClampCoordinate(flat[b + 1]);
+            int right = ClampCoordinate(flat[b + 2]);
+            int bottom = ClampCoordinate(flat[b + 3]);
 
             x0Span[i] = NumOps.FromDouble(left);
             y0Span[i] = NumOps.FromDouble(top);
             x1Span[i] = NumOps.FromDouble(right);
             y1Span[i] = NumOps.FromDouble(bottom);
 
-            // Size, not position. A box given corner-swapped (right < left) still has a real
-            // extent, so take the magnitude rather than clamping the difference to zero.
-            widthSpan[i] = NumOps.FromDouble(Math.Min(Math.Abs(right - left), _maxPosition2D - 1));
-            heightSpan[i] = NumOps.FromDouble(Math.Min(Math.Abs(bottom - top), _maxPosition2D - 1));
+            // Size, not position. Taken from the row when the caller supplied it, otherwise derived
+            // from the corners -- and by magnitude, because a corner-swapped box (right < left) still
+            // has a real extent and clamping that difference to zero would erase it.
+            int w = extentsGiven ? ClampCoordinate(flat[b + 4]) : Math.Abs(right - left);
+            int h = extentsGiven ? ClampCoordinate(flat[b + 5]) : Math.Abs(bottom - top);
+
+            widthSpan[i] = NumOps.FromDouble(Math.Min(w, _maxPosition2D - 1));
+            heightSpan[i] = NumOps.FromDouble(Math.Min(h, _maxPosition2D - 1));
         }
 
         // Both corners go through the SAME axis table, per the paper.
@@ -361,7 +427,7 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        _wordEmbeddings.UpdateParameters(learningRate);
+        _wordEmbeddings?.UpdateParameters(learningRate);
         _positionEmbeddings.UpdateParameters(learningRate);
         _xEmbeddings.UpdateParameters(learningRate);
         _yEmbeddings.UpdateParameters(learningRate);
@@ -372,7 +438,7 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _wordEmbeddings.ResetState();
+        _wordEmbeddings?.ResetState();
         _positionEmbeddings.ResetState();
         _xEmbeddings.ResetState();
         _yEmbeddings.ResetState();
