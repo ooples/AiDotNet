@@ -223,16 +223,10 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
             "Use Vector<T>, Matrix<T> or Tensor<T> as the meta-learning output type.");
     }
 
-    /// <inheritdoc/>
-    /// <remarks>Returns theta, the trained head — not any theta_x, which never outlives a call.</remarks>
-    public override Vector<T> GetParameters() => _trainedOutputParams;
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _trainedOutputParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
+    // GetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
+    // SetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         => new MbPAAdaptedModel<T, TInput, TOutput>(BaseModel, _memory, parameters, _options);
