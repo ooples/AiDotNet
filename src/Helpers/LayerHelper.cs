@@ -11283,8 +11283,16 @@ public static class LayerHelper<T>
         // Patch embedding: [B, 3, imageSize, imageSize] -> [B, numPatches, hiddenDim]
         yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
 
-        // Position embeddings
-        yield return new PositionalEncodingLayer<T>(numPatches + 1, hiddenDim);
+        // CLS token, then LEARNED positions. Both were model fields on DiT that nothing read while
+        // the stack did something else, and both are load-bearing for a BEiT-derived model:
+        //
+        //   - The position table sized itself numPatches + 1, i.e. it already assumed a CLS token,
+        //     but no layer ever prepended one. The classification head therefore pooled patches
+        //     instead of reading the class token DiT (Li et al. 2022) is trained to classify from.
+        //   - PositionalEncodingLayer is SupportsTraining => false -- fixed sinusoids -- where ViT
+        //     and BEiT, which DiT inherits from, LEARN their position embeddings.
+        yield return new PrependCLSTokenLayer<T>(hiddenDim);
+        yield return new LearnedPositionalEmbeddingLayer<T>(numPatches + 1, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 

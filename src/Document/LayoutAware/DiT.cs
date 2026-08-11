@@ -78,9 +78,9 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     private readonly List<ILayer<T>> _transformerLayers = [];
     private readonly List<ILayer<T>> _classificationHead = [];
 
-    // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _clsToken;
+    // The CLS token and the learned position table used to be model fields here. They are now the
+    // PrependCLSTokenLayer and LearnedPositionalEmbeddingLayer in the stack, where the forward pass
+    // reads them -- see LayerHelper.CreateDefaultDiTLayers.
 
     #endregion
 
@@ -216,7 +216,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         ImageSize = imageSize;
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -245,29 +244,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             patchSize: _patchSize,
             imageSize: ImageSize,
             numClasses: _numClasses));
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-        int numPatches = (ImageSize / _patchSize) * (ImageSize / _patchSize);
-
-        _positionEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _hiddenDim], NumOps.Zero);
-        _clsToken = Tensor<T>.CreateDefault([1, _hiddenDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_clsToken, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
     }
 
     #endregion
