@@ -109,6 +109,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private bool _embeddingInitialized = true;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Large embedding tables deliberately start as a zero-sized placeholder. Reporting the base
+    /// class's unconditional <c>true</c> made the model manifest call that placeholder materialized;
+    /// chunk enumeration then allocated the real table and appeared to change the parameter count.
+    /// Readiness now describes the actual storage lifecycle without allocating it.
+    /// </remarks>
+    public override bool IsInitialized => _embeddingInitialized;
+
+    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
         var table = _embeddingTensor;

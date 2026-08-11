@@ -969,17 +969,14 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     }
 
     /// <inheritdoc/>
-    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
-
-    /// <summary>
-    /// Whether parameters can be initialized on this model.
-    /// </summary>
     /// <remarks>
-    /// Stated explicitly because net471 has no default interface implementations: IParameterizable
-    /// declares this abstract on that target while the other frameworks get `=> ParameterCount > 0`
-    /// for free, so a type that relies on the default compiles everywhere except net471.
+    /// Decision trees learn their split structure during training; an arbitrary flat vector
+    /// cannot initialize that structure safely.
     /// </remarks>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization => false;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
     /// <inheritdoc/>
     /// <remarks>

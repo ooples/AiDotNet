@@ -12,10 +12,11 @@ internal static class ParameterSweepWorker
         SweepMeasurement result;
         try
         {
-            if (args.Length != 3 || !long.TryParse(args[2], out long maximum))
-                throw new ArgumentException("Usage: <type> <includeChunks> <maximum>.");
+            if ((args.Length is not 3 and not 4) || !long.TryParse(args[2], out long maximum))
+                throw new ArgumentException("Usage: <type> <includeChunks> <maximum> [includeLayerBreakdown].");
 
-            result = Measure(args[0], bool.Parse(args[1]), maximum);
+            bool includeLayerBreakdown = args.Length == 4 && bool.Parse(args[3]);
+            result = Measure(args[0], bool.Parse(args[1]), maximum, includeLayerBreakdown);
         }
         catch (Exception ex)
         {
@@ -28,7 +29,11 @@ internal static class ParameterSweepWorker
         return result.Status == "error" ? 2 : 0;
     }
 
-    private static SweepMeasurement Measure(string assemblyQualifiedType, bool includeChunks, long maximum)
+    private static SweepMeasurement Measure(
+        string assemblyQualifiedType,
+        bool includeChunks,
+        long maximum,
+        bool includeLayerBreakdown)
     {
         var type = Type.GetType(assemblyQualifiedType, throwOnError: true)!;
         var ctor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
@@ -72,6 +77,18 @@ internal static class ParameterSweepWorker
 
             var chunksMethod = type.GetMethod("GetParameterChunks",
                 BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+            // Default interface methods are real public API but Type.GetMethod on the concrete
+            // class does not return them. Most non-neural hierarchies intentionally inherit the
+            // universal IParameterizable flat fallback, so inspect the closed interface before
+            // classifying a model as having no chunk API.
+            if (chunksMethod is null)
+            {
+                var parameterizable = type.GetInterfaces().FirstOrDefault(i =>
+                    i.IsGenericType &&
+                    i.GetGenericTypeDefinition() == typeof(AiDotNet.Interfaces.IParameterizable<,,>));
+                chunksMethod = parameterizable?.GetMethod("GetParameterChunks",
+                    BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+            }
             if (chunksMethod is null)
                 return new SweepMeasurement("no-chunks", declared, flat, -1, 0, readiness, null);
 
@@ -90,7 +107,8 @@ internal static class ParameterSweepWorker
                 }
             }
 
-            return new SweepMeasurement("ok", declared, flat, chunkSum, chunkCount, readiness, null);
+            var layers = includeLayerBreakdown ? ReadLayerBreakdown(instance) : null;
+            return new SweepMeasurement("ok", declared, flat, chunkSum, chunkCount, readiness, null, layers);
         }
         finally
         {
@@ -129,6 +147,48 @@ internal static class ParameterSweepWorker
         var length = vector.GetType().GetProperty("Length");
         return length is null ? -1 : Convert.ToInt64(length.GetValue(vector));
     }
+
+    private static IReadOnlyList<LayerMeasurement>? ReadLayerBreakdown(object instance)
+    {
+        PropertyInfo? layersProperty = null;
+        for (var current = instance.GetType(); current is not null && layersProperty is null; current = current.BaseType)
+        {
+            layersProperty = current.GetProperty("Layers",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+        }
+
+        if (layersProperty?.GetValue(instance) is not IEnumerable layers) return null;
+
+        var result = new List<LayerMeasurement>();
+        int index = 0;
+        foreach (var layer in layers)
+        {
+            if (layer is null) continue;
+            long declared = ReadLong(layer, "ParameterCount");
+            long flat = ReadVectorLength(layer);
+            bool supportsTraining = ReadBool(layer, "SupportsTraining");
+            long trainable = 0;
+            int trainableCount = 0;
+            var trainableMethod = layer.GetType().GetMethod("GetTrainableParameters",
+                BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+            if (trainableMethod?.Invoke(layer, null) is IEnumerable tensors)
+            {
+                foreach (var tensor in tensors)
+                {
+                    if (tensor is null) continue;
+                    var length = tensor.GetType().GetProperty("Length");
+                    if (length is not null)
+                        trainable = checked(trainable + Convert.ToInt64(length.GetValue(tensor)));
+                    trainableCount++;
+                }
+            }
+
+            result.Add(new LayerMeasurement(index++, layer.GetType().FullName ?? layer.GetType().Name,
+                declared, flat, supportsTraining, trainable, trainableCount));
+        }
+
+        return result;
+    }
 }
 
 internal sealed record SweepMeasurement(
@@ -138,4 +198,14 @@ internal sealed record SweepMeasurement(
     long ChunkSum,
     int ChunkCount,
     string Readiness,
-    string? Error);
+    string? Error,
+    IReadOnlyList<LayerMeasurement>? Layers = null);
+
+internal sealed record LayerMeasurement(
+    int Index,
+    string Type,
+    long Declared,
+    long Flat,
+    bool SupportsTraining,
+    long Trainable,
+    int TrainableTensorCount);

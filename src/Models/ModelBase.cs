@@ -30,7 +30,7 @@ namespace AiDotNet.Models;
 /// </remarks>
 public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
     IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
-    IParameterManifestProvider
+    IParameterManifestProvider, IParameterChunkSource<T>
 {
     /// <summary>
     /// Gets the hardware-accelerated computation engine for vectorized operations.
@@ -236,16 +236,20 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Default implementation yields nothing. Concrete model bases that
-    /// represent a real layer stack (NeuralNetworkBase) override to walk
-    /// trainable parameters per-tensor; classical / sklearn-style models
-    /// (linear regressors, trees, clustering) keep the empty default
-    /// because their flat <see cref="GetParameters"/> path is sufficient
-    /// (parameter counts are well below int.MaxValue). Foundation-scale
-    /// diffusion models override at <c>DiffusionModelBase</c> / per-model
-    /// level — tracked by issue #1237.
+    /// The registry is the single owner of ordering for count, flat values, restore, and chunks.
+    /// Classical sources that do not natively store tensors are represented by one exact payload
+    /// tensor per registered component, so every generated model receives a correct chunk surface
+    /// without another per-model override.
     /// </remarks>
-    public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+    public virtual IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
+        => _parameterRegistry.GetParameterStateChunks();
+
+    /// <inheritdoc/>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in GetParameterStateChunks())
+            yield return chunk.Tensor;
+    }
 
     /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);

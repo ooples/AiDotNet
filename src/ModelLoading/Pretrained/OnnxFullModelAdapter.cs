@@ -168,22 +168,15 @@ public sealed class OnnxFullModelAdapter<T> : IFullModel<T, Tensor<T>, Tensor<T>
     /// <summary>Always zero: the graph owns its weights, this adapter does not.</summary>
     public long ParameterCount => 0;
 
-    /// <summary>
-    /// Whether parameters can be initialized on this model.
-    /// </summary>
-    /// <remarks>
-    /// Stated explicitly because net471 has no default interface implementations: IParameterizable
-    /// declares this abstract on that target while the other frameworks get `=> ParameterCount > 0`
-    /// for free, so a type that relies on the default compiles everywhere except net471.
-    /// </remarks>
-    /// <remarks>False: an ONNX graph is loaded already-trained and exposes no settable parameters here.</remarks>
+    /// <summary>Always false: a frozen ONNX graph cannot be initialized from a flat vector.</summary>
     public bool SupportsParameterInitialization => false;
-
-    /// <summary>Returns the parameters unchanged; this adapter owns none to sanitize.</summary>
-    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
     /// <summary>An empty vector, matching <see cref="ParameterCount"/>.</summary>
     public Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public Vector<T> SanitizeParameters(Vector<T> parameters) =>
+        parameters ?? throw new ArgumentNullException(nameof(parameters));
 
     /// <summary>
     /// Writes a parameter vector into this adapter. Only an EMPTY vector is accepted.

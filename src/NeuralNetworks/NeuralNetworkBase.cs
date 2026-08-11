@@ -40,7 +40,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
-    ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
+    ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -694,32 +695,53 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 offsetKnown = false;
         }
 
-        for (int i = 0; i < Layers.Count; i++)
+        void AddLayerSlots(ILayer<T> layer, string stableId)
         {
-            var readiness = GetLayerParameterReadiness(Layers[i]);
+            var readiness = GetLayerParameterReadiness(layer);
+            if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.Materialized &&
+                layer is Layers.LayerBase<T> layerBase)
+            {
+                bool found = false;
+                foreach (var chunk in layerBase.GetParameterStateChunks(stableId))
+                {
+                    found = true;
+                    AddSlot(
+                        chunk.StableId,
+                        chunk.Role,
+                        AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                        chunk.Tensor.Length);
+                }
+                if (!found)
+                {
+                    AddSlot(
+                        stableId,
+                        AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                        AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree,
+                        0);
+                }
+                return;
+            }
+
             long? count = readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
                 ? null
-                : Layers[i].ParameterCount;
+                : layer.ParameterCount;
             AddSlot(
-                $"layers/{i:D8}",
+                stableId,
                 AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
                 readiness,
                 count);
+        }
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            AddLayerSlots(Layers[i], $"layers/{i:D8}");
         }
 
         int extraLayerIndex = 0;
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            var readiness = GetLayerParameterReadiness(layer);
-            long? count = readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
-                ? null
-                : layer.ParameterCount;
-            AddSlot(
-                $"extra-layers/{extraLayerIndex++:D8}",
-                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
-                readiness,
-                count);
+            AddLayerSlots(layer, $"extra-layers/{extraLayerIndex++:D8}");
         }
 
         int tensorIndex = 0;
@@ -896,7 +918,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// either <see cref="Vector{T}"/>.Length or
     /// <see cref="ParameterCount"/>.
     /// </remarks>
-    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
         ResolveLazyLayerShapes();
 
@@ -915,31 +937,60 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // those are still part of `Layers` from the flat APIs' point of
         // view because GetParameters walks each top-level layer's
         // ParameterCount which already aggregates sublayer params.
-        var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
-        foreach (var trainable in trainableLayers)
+        for (int i = 0; i < Layers.Count; i++)
         {
-            foreach (var t in trainable.GetTrainableParameters())
+            var layer = Layers[i];
+            if (layer is LayerBase<T> layerBase)
             {
-                if (t is null || t.Length == 0) continue;
-                yield return t;
+                foreach (var chunk in layerBase.GetParameterStateChunks($"layers/{i:D8}"))
+                    yield return chunk;
+            }
+            else
+            {
+                var flat = layer.GetParameters();
+                if (flat.Length == 0) continue;
+                yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
+                    $"layers/{i:D8}",
+                    layer.SupportsTraining
+                        ? AiDotNet.Models.Parameters.ParameterSlotRole.Trainable
+                        : AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState,
+                    new Tensor<T>(new[] { flat.Length }, flat));
             }
         }
 
-        // Same order the flat APIs use: layers, then extra layers, then extra tensors.
+        // Same order the flat APIs use: layers, extra layers, extra tensors, components.
+        int extraLayerIndex = 0;
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
-            foreach (var t in extra.GetTrainableParameters())
-            {
-                if (t is null || t.Length == 0) continue;
-                yield return t;
-            }
+            foreach (var chunk in extra.GetParameterStateChunks($"extra-layers/{extraLayerIndex++:D8}"))
+                yield return chunk;
         }
+        int extraTensorIndex = 0;
         foreach (var tensor in GetExtraTrainableTensors())
         {
             if (tensor is null || tensor.Length == 0) continue;
-            yield return tensor;
+            yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
+                $"extra-tensors/{extraTensorIndex++:D8}",
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                tensor);
         }
+
+        _ = ParameterComponents;
+        foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+        {
+            yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
+                "components/" + chunk.StableId,
+                chunk.Role,
+                chunk.Tensor);
+        }
+    }
+
+    /// <inheritdoc />
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in GetParameterStateChunks())
+            yield return chunk.Tensor;
     }
 
     #region GPU Training Methods
