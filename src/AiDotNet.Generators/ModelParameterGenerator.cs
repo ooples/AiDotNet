@@ -448,6 +448,20 @@ public class ModelParameterGenerator : IIncrementalGenerator
             }
         }
         if (element is null) return null;
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        // A collection of SUB-NETWORKS, not of layers: a multi-scale model holding one network
+        // per scale, a mixture of experts, an ensemble of networks. Each contributes its own
+        // Layers, so the accessor flattens them in list order.
+        for (var c = element as INamedTypeSymbol; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+            {
+                return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{element.ToDisplayString()}>)global::System.Array.Empty<{element.ToDisplayString()}>()).SelectMany(__n => (global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)__n.Layers)";
+            }
+        }
+
         if (!IsLayerOf(element, elem)) return null;
         var et = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
         return $"{name} ?? (global::System.Collections.Generic.IEnumerable<{et}>)global::System.Array.Empty<{et}>()";

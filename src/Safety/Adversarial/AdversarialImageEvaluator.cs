@@ -290,11 +290,8 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
         return EvaluateImage(tensor);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (Layers.Count == 0) return;
-        Layers[0].UpdateParameters(parameters);
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// AIE's <see cref="Predict"/> doesn't feed the input image directly into
     /// <c>Layers[0]</c> — it first extracts a 3-element feature vector
