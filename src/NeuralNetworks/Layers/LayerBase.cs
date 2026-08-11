@@ -4636,7 +4636,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // ("Expected 0 parameters, but got 3072" across the Finance suite) -- refusing exactly the
         // case the wholesale path below exists to serve. A count of zero here is not a claim that
         // the layer has no parameters; it is the layer saying it does not know yet.
-        if (hasRegistry && parameters.Length != ParameterCount)
+        // READINESS, not count. The comment above says a zero count means "I do not know yet" -- and
+        // then this guard treated it as "I have none" and threw, which is the contradiction behind
+        // the ParameterCount == 0 failures. Materialization was already attempted just above; if the
+        // layer STILL cannot size itself, it is genuinely shape-deferred and the incoming vector is
+        // the thing that would have told it. Rejecting it refuses the only information available.
+        //
+        // Expressed against the two facts a layer has locally: a shape-resolved layer, or one whose
+        // weights come entirely from constructor arguments, KNOWS its count and a mismatch is a real
+        // error worth naming. Anything else is still waiting, and falls through to the wholesale
+        // path below, which parks the payload until the shape arrives.
+        bool shapeKnown = IsShapeResolved || ParametersAreConstructionSized;
+
+        if (hasRegistry && shapeKnown && parameters.Length != ParameterCount)
         {
             // Name the layer. A bare count pair says a restore failed somewhere in a hundred-layer
             // model without saying where, and the whole point of deriving these surfaces is that
