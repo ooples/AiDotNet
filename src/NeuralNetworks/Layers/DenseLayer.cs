@@ -621,6 +621,39 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             if (inputSize < 0)
                 return;
 
+            // A fresh layer can receive materialized parameters before its first
+            // Forward (deserialization and graph-safe cloning both do this). The
+            // parameter tensors are the source of truth in that state: do not
+            // replace trained/restored values merely because the lazy-init latch
+            // has not run yet.
+            bool hasExpectedWeights =
+                _weights.Shape.Length == 2 &&
+                _weights.Shape[0] == inputSize &&
+                _weights.Shape[1] == outputSize;
+            bool hasExpectedBiases =
+                _biases.Shape.Length == 1 &&
+                _biases.Shape[0] == outputSize;
+
+            if (hasExpectedWeights && hasExpectedBiases)
+            {
+                RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+                _isInitialized = true;
+                return;
+            }
+
+            // Never silently discard a partially restored or incompatible
+            // parameter set. Surface the broken lifecycle/shape contract at the
+            // layer boundary with both expected and actual shapes.
+            if (_weights.Length > 0 || _biases.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"DenseLayer parameters do not conform to the resolved shape. " +
+                    $"Expected weights [{inputSize}, {outputSize}] and biases [{outputSize}], " +
+                    $"but received weights [{string.Join(", ", _weights.Shape.ToArray())}] and " +
+                    $"biases [{string.Join(", ", _biases.Shape.ToArray())}].");
+            }
+
             // Streaming-aware allocation: when the parent network has
             // engaged streaming, route through WeightRegistry.AllocateStreaming
             // so the pool can pre-evict competing weights to disk before this

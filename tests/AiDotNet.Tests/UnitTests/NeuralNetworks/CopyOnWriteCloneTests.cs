@@ -139,16 +139,54 @@ public class CopyOnWriteCloneTests
     }
 
     [Fact]
+    public async Task FreshDense_PreservesReboundWeightsOnFirstForward()
+    {
+        await Task.Yield();
+
+        using var source = new DenseLayer<float>(outputSize: 3);
+        using var destination = new DenseLayer<float>(outputSize: 3);
+        var input = new Tensor<float>(
+            new Vector<float>(new[] { 0.25f, -0.5f, 0.75f, 1.25f }),
+            new[] { 1, 4 });
+
+        var expected = source.Forward(input);
+        var sourceParameters = source.GetTrainableParameters();
+        var shared = new Tensor<float>[sourceParameters.Count];
+        for (int i = 0; i < sourceParameters.Count; i++)
+            shared[i] = (Tensor<float>)sourceParameters[i].CloneShared();
+
+        // The destination has resolved no input shape yet. Rebinding trained
+        // tensors must materialize it without reinitializing those tensors.
+        destination.SetTrainableParameters(shared);
+        var actual = destination.Forward(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 6);
+    }
+
+    [Fact]
+    public async Task FreshDense_RejectsIncompatibleReboundWeightsOnFirstForward()
+    {
+        await Task.Yield();
+
+        using var destination = new DenseLayer<float>(outputSize: 3);
+        using var weights = new Tensor<float>(new[] { 5, 3 });
+        using var biases = new Tensor<float>(new[] { 3 });
+        using var input = new Tensor<float>(new[] { 1, 4 });
+
+        destination.SetTrainableParameters(new[] { weights, biases });
+        var ex = Assert.Throws<InvalidOperationException>(() => destination.Forward(input));
+
+        Assert.Contains("Expected weights [4, 3]", ex.Message);
+        Assert.Contains("received weights [5, 3]", ex.Message);
+    }
+
+    [Fact]
     public void FreshEmbedding_PreservesReboundWeightsOnFirstForward()
     {
-        using var source = new EmbeddingLayer<float>(32, 8)
-        {
-            InputMode = EmbeddingInputMode.Indices
-        };
-        using var destination = new EmbeddingLayer<float>(32, 8)
-        {
-            InputMode = EmbeddingInputMode.Indices
-        };
+        using var source = new EmbeddingLayer<float>(32, 8);
+        using var destination = new EmbeddingLayer<float>(32, 8);
         var input = new Tensor<float>(
             new Vector<float>(new[] { 1f, 7f, 11f, 19f }),
             new[] { 4 });

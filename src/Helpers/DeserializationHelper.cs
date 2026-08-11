@@ -3981,25 +3981,6 @@ public static class DeserializationHelper
         EmbeddingLayer<T> embedding,
         Dictionary<string, object>? additionalParams)
     {
-        // These settings are applied through object initializers, not constructor arguments, so
-        // [LayerState] cannot restore them. A missing key preserves the constructor default for
-        // legacy payloads; a malformed present value is rejected rather than silently changing
-        // the layer's input interpretation or transformer embedding scale.
-        if (additionalParams != null && additionalParams.TryGetValue("InputMode", out var modeObj))
-        {
-            var modeStr = modeObj?.ToString();
-            // ignoreCase to match RestoreMultiHeadAttentionConfiguration below, and IsDefined because
-            // Enum.TryParse succeeds for ANY numeric string: "999" parsed into an EmbeddingInputMode
-            // with no matching member and sailed through the very check meant to reject malformed
-            // values, leaving the layer interpreting its input in a mode that does not exist.
-            if (!Enum.TryParse<EmbeddingInputMode>(modeStr, ignoreCase: true, out var mode)
-                || !Enum.IsDefined(typeof(EmbeddingInputMode), mode))
-                throw new InvalidOperationException(
-                    $"EmbeddingLayer metadata 'InputMode' has an unparseable value '{modeStr}'. " +
-                    $"Expected one of: {string.Join(", ", Enum.GetNames(typeof(EmbeddingInputMode)))}.");
-            embedding.InputMode = mode;
-        }
-
         if (additionalParams != null && additionalParams.TryGetValue("ScaleBySqrtDimension", out var scaleObj))
         {
             var scaleStr = scaleObj?.ToString();

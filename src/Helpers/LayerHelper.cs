@@ -382,32 +382,19 @@ public static class LayerHelper<T>
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
     {
-        // Word embeddings
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenSize);
-        // Positional embeddings
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenSize);
-        // Type embeddings
-        yield return new EmbeddingLayer<T>(2, hiddenSize);
-        
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(dropoutProbability);
-
-        // Residual transformer blocks (Vaswani et al. 2017 §3.1; Devlin et al. 2019). The residual
-        // skip connections are essential for gradient flow through a deep encoder; a residual-free
-        // MHA -> LN -> FFN -> LN stack collapses to a uniform, input-insensitive output after a few
-        // training steps. TransformerEncoderBlock provides the residual adds + linear FFN output.
-        for (int i = 0; i < numHiddenLayers; i++)
-        {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize, numAttentionHeads, hiddenSize * 4, dropoutProbability,
-                new GELUActivation<T>());
-        }
-
-        // Pooler
-        yield return new DenseLayer<T>(hiddenSize, new TanhActivation<T>() as IActivationFunction<T>);
-
-        // Classification Head for Tone/Sentiment
-        yield return new DenseLayer<T>(numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Keep the legacy overload as an argument adapter only. The canonical implementation
+        // below owns the topology so BERT embedding and residual-block fixes cannot drift between
+        // two independently maintained builders.
+        return CreateDefaultFinBERTToneLayers(
+            architecture,
+            vocabularySize: vocabularySize,
+            maxSequenceLength: maxSequenceLength,
+            hiddenDimension: hiddenSize,
+            numAttentionHeads: numAttentionHeads,
+            intermediateDimension: hiddenSize * 4,
+            numLayers: numHiddenLayers,
+            numToneClasses: numClasses,
+            dropoutRate: dropoutProbability);
     }
 
     /// <summary>
@@ -436,9 +423,17 @@ public static class LayerHelper<T>
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
     {
-        // Re-use standard BERT pattern
-        return CreateDefaultSECBERTLayers(architecture, maxSequenceLength, vocabularySize, 
-            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
+        return CreateDefaultFinancialBERTLayers(
+            architecture,
+            vocabularySize: vocabularySize,
+            maxSequenceLength: maxSequenceLength,
+            hiddenDimension: hiddenSize,
+            numAttentionHeads: numAttentionHeads,
+            intermediateDimension: hiddenSize * 4,
+            numLayers: numHiddenLayers,
+            numClasses: Math.Max(1, architecture.OutputSize),
+            dropoutRate: dropoutProbability,
+            taskType: "sentiment");
     }
 
     /// <summary>
@@ -477,44 +472,17 @@ public static class LayerHelper<T>
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
     {
-        // 1. Embedding Layers
-        // Word embeddings
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenSize);
-        // Positional embeddings
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenSize);
-        // Type embeddings
-        yield return new EmbeddingLayer<T>(2, hiddenSize);
-        
-        // Add & Norm for embeddings
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(dropoutProbability);
-
-        // 2. Transformer Blocks. Each block is a RESIDUAL self-attention sublayer + RESIDUAL
-        // position-wise FFN sublayer, each with its own LayerNorm (Vaswani et al. 2017 §3.1;
-        // Devlin et al. 2019). The residual (skip) connections are ESSENTIAL: a plain
-        // sequential MHA -> LN -> FFN -> LN stack with NO residual gives a 12-layer encoder no
-        // gradient highway, so the embedding barely trains and the model collapses to a
-        // uniform, input-insensitive output after only a few optimizer steps (the
-        // DifferentInputs_AfterTraining degenerate-solution failure). TransformerEncoderBlock
-        // wraps both sublayers in residual adds + LayerNorm and uses a GELU-then-linear FFN,
-        // matching BERT exactly.
-        for (int i = 0; i < numHiddenLayers; i++)
-        {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize, numAttentionHeads, hiddenSize * 4, dropoutProbability,
-                new GELUActivation<T>());
-        }
-
-        // 3. Pooler
-        yield return new DenseLayer<T>(hiddenSize, new TanhActivation<T>() as IActivationFunction<T>);
-
-        // 4. Task Head. BERT's classification/regression head is a LINEAR projection over
-        // the pooled [CLS] representation (Devlin et al. 2019 §4) — it emits raw logits /
-        // scores, NOT ReLU activations. Without an explicit Identity, DenseLayer's ReLU
-        // default clamps every negative score to 0, so any input whose pooled projection
-        // is negative collapses the whole output to zeros (dead-ReLU: identical outputs +
-        // zero gradient), which is exactly the failure the model-family invariants catch.
-        yield return new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>);
+        return CreateDefaultSECBERTLayers(
+            architecture,
+            vocabularySize: vocabularySize,
+            maxSequenceLength: maxSequenceLength,
+            hiddenDimension: hiddenSize,
+            numAttentionHeads: numAttentionHeads,
+            intermediateDimension: hiddenSize * 4,
+            numLayers: numHiddenLayers,
+            numClasses: Math.Max(1, architecture.OutputSize),
+            dropoutRate: dropoutProbability,
+            taskType: "classification");
     }
 
     /// <summary>
@@ -2066,16 +2034,9 @@ public static class LayerHelper<T>
         // Add embedding layer for text input
         if (vocabularySize > 0)
         {
-            // This embedding is created only for token-ID (text) input (vocabularySize > 0),
-            // so its input is always discrete indices. Force Indices mode rather than relying
-            // on the Auto heuristic, which can mis-classify a small-integer token tensor
-            // (e.g. [batch, seq] where seq coincides with a small vocab) as continuous
-            // features and project it down to rank-2 [batch, dim] — collapsing the sequence
-            // axis and breaking the downstream SequenceTokenSliceLayer / pooling that expects
-            // rank-3 [batch, seq, dim].
+            // EmbeddingLayer is an index-only lookup; continuous feature inputs use DenseLayer below.
             yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension)
             {
-                InputMode = EmbeddingInputMode.Indices,
                 // Vaswani §3.4: scale embeddings by sqrt(d_model) when positional encoding
                 // is added next, so the (small) token embeddings aren't drowned out by the
                 // fixed-magnitude sinusoidal positional signal.
@@ -12249,17 +12210,11 @@ public static class LayerHelper<T>
         if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
         if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
 
-        // Paper uses integer token indices; force the four embedding layers
-        // into Indices mode so the model never silently switches to continuous
-        // linear projection (the paper does not define that path).
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension)   // W       (paper w_i)
-            { InputMode = EmbeddingInputMode.Indices };
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension)   // W̃       (paper w̃_j)
-            { InputMode = EmbeddingInputMode.Indices };
-        yield return new EmbeddingLayer<T>(vocabSize, 1)                    // b       (paper b_i)
-            { InputMode = EmbeddingInputMode.Indices };
-        yield return new EmbeddingLayer<T>(vocabSize, 1)                    // b̃       (paper b̃_j)
-            { InputMode = EmbeddingInputMode.Indices };
+        // The paper uses integer token indices for all four lookup tables.
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);  // W       (paper w_i)
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);  // W̃       (paper w̃_j)
+        yield return new EmbeddingLayer<T>(vocabSize, 1);                   // b       (paper b_i)
+        yield return new EmbeddingLayer<T>(vocabSize, 1);                   // b̃       (paper b̃_j)
     }
 
     /// <summary>
@@ -17047,56 +17002,15 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         string taskType = "classification")
     {
-        // === Token Embedding Layer ===
-        // Maps token IDs to dense vectors - trained on SEC filing vocabulary
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: vocabularySize,
-            embeddingDimension: hiddenDimension);
+        yield return new BertEmbeddingLayer<T>(
+            vocabularySize, hiddenDimension, maxSequenceLength,
+            tokenTypeVocabularySize: 2, dropoutProbability: dropoutRate);
 
-        // === Position Embedding Layer ===
-        // Adds position information to understand document structure
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: maxSequenceLength,
-            embeddingDimension: hiddenDimension);
-
-        // === Layer Normalization ===
-        // Normalizes embeddings before transformer layers
-        yield return new LayerNormalizationLayer<T>(
-            );
-
-        // === Dropout ===
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // === Transformer Layers ===
-        // Stack of transformer encoder blocks for understanding SEC filing language
         for (int i = 0; i < numLayers; i++)
         {
-            // Multi-head self-attention - captures relationships across filing sections
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-
-            // Add & Norm after attention
-            yield return new LayerNormalizationLayer<T>(
-                );
-
-            // Feed-forward network for regulatory language understanding
-            yield return new DenseLayer<T>(
-                outputSize: intermediateDimension,
-                activationFunction: new GELUActivation<T>());
-
-            // BERT FFN output projection is LINEAR (Vaswani et al. 2017 §3.3; Devlin et al.
-            // 2019 §3.1). NOTE: passing activationFunction: null does NOT give a linear layer
-            // — DenseLayer substitutes its ReLU default for null, which would clip the
-            // residual stream. An explicit IdentityActivation is required.
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: new IdentityActivation<T>());
-
-            // Dropout in feed-forward
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            // Add & Norm after feed-forward
-            yield return new LayerNormalizationLayer<T>(
-                );
+            yield return new TransformerEncoderBlock<T>(
+                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
+                new GELUActivation<T>());
         }
 
         // === Task-Specific Output Head ===
@@ -17112,7 +17026,7 @@ public static class LayerHelper<T>
 
             yield return new DenseLayer<T>(
                 outputSize: numClasses,
-                activationFunction: null);
+                activationFunction: new IdentityActivation<T>());
         }
         else if (taskType == "ner")
         {
@@ -17122,7 +17036,7 @@ public static class LayerHelper<T>
             // Output for each token position
             yield return new DenseLayer<T>(
                 outputSize: numClasses,  // Entity types (B-ORG, I-ORG, B-MONEY, etc.)
-                activationFunction: null);
+                activationFunction: new IdentityActivation<T>());
         }
         else if (taskType == "qa")
         {
@@ -17132,7 +17046,7 @@ public static class LayerHelper<T>
             // Combined start/end position prediction
             yield return new DenseLayer<T>(
                 outputSize: 2,  // Start and end logits
-                activationFunction: null);
+                activationFunction: new IdentityActivation<T>());
         }
         else
         {
@@ -17145,7 +17059,7 @@ public static class LayerHelper<T>
 
             yield return new DenseLayer<T>(
                 outputSize: numClasses,
-                activationFunction: null);
+                activationFunction: new IdentityActivation<T>());
         }
     }
 
@@ -17189,43 +17103,15 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         string taskType = "sentiment")
     {
-        // === Token Embedding Layer ===
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: vocabularySize,
-            embeddingDimension: hiddenDimension);
+        yield return new BertEmbeddingLayer<T>(
+            vocabularySize, hiddenDimension, maxSequenceLength,
+            tokenTypeVocabularySize: 2, dropoutProbability: dropoutRate);
 
-        // === Position Embedding Layer ===
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: maxSequenceLength,
-            embeddingDimension: hiddenDimension);
-
-        // === Layer Normalization ===
-        yield return new LayerNormalizationLayer<T>(
-            );
-
-        // === Dropout ===
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // === Transformer Layers ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-
-            yield return new LayerNormalizationLayer<T>(
-                );
-
-            yield return new DenseLayer<T>(
-                outputSize: intermediateDimension,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: null);
-
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            yield return new LayerNormalizationLayer<T>(
-                );
+            yield return new TransformerEncoderBlock<T>(
+                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
+                new GELUActivation<T>());
         }
 
         // === Task-Specific Output Head ===
@@ -17239,7 +17125,7 @@ public static class LayerHelper<T>
         // Classification head
         yield return new DenseLayer<T>(
             outputSize: numClasses,
-            activationFunction: null);
+            activationFunction: new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -17280,43 +17166,20 @@ public static class LayerHelper<T>
         int numToneClasses = 5,
         double dropoutRate = 0.1)
     {
-        // === Token Embedding Layer ===
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: vocabularySize,
-            embeddingDimension: hiddenDimension);
+        // Word, learned-position, and token-type embeddings are parallel lookup branches.
+        // The generated composite owns their addition, normalization, dropout, parameters,
+        // serialization, and shape/domain contracts.
+        yield return new BertEmbeddingLayer<T>(
+            vocabularySize, hiddenDimension, maxSequenceLength,
+            tokenTypeVocabularySize: 2, dropoutProbability: dropoutRate);
 
-        // === Position Embedding Layer ===
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: maxSequenceLength,
-            embeddingDimension: hiddenDimension);
-
-        // === Layer Normalization ===
-        yield return new LayerNormalizationLayer<T>(
-            );
-
-        // === Dropout ===
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // === Transformer Layers ===
+        // Canonical residual BERT encoder blocks. Keeping attention/FFN internals inside the
+        // block prevents a residual-free sequential layer list from masquerading as BERT.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-
-            yield return new LayerNormalizationLayer<T>(
-                );
-
-            yield return new DenseLayer<T>(
-                outputSize: intermediateDimension,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: null);
-
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            yield return new LayerNormalizationLayer<T>(
-                );
+            yield return new TransformerEncoderBlock<T>(
+                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
+                new GELUActivation<T>());
         }
 
         // === Tone Classification Head ===
@@ -37804,15 +37667,8 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultCLIPTextLayers(
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads)
     {
-        // Force EmbeddingInputMode.Indices so the auto-detect doesn't misfire
-        // when a tokenizer (with its own vocab size) produces token IDs that
-        // exceed the EmbeddingLayer's vocabSize — in that case the auto-detect
-        // wrongly switches into Continuous mode and projects [B, S] → [B, D]
-        // (collapsing the sequence axis). Conditioner inputs are ALWAYS
-        // discrete token IDs.
-        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
-        embedding.InputMode = EmbeddingInputMode.Indices;
-        yield return embedding;
+        // Conditioner inputs are discrete token IDs; EmbeddingLayer enforces that contract.
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
         yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSeqLen, embeddingSize: hiddenSize);
         for (int i = 0; i < numLayers; i++)
         {
@@ -37851,9 +37707,7 @@ public static class LayerHelper<T>
         int vocabSize, int hiddenSize, int numLayers, int numHeads,
         int numRelativePositionBuckets = 32, int relativePositionMaxDistance = 128)
     {
-        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
-        embedding.InputMode = EmbeddingInputMode.Indices;
-        yield return embedding;
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
         // Vaswani 2017 §3.4 token-embedding scaling, preserved by Raffel 2020.
         yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
 
@@ -37900,9 +37754,7 @@ public static class LayerHelper<T>
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
         double ropeTheta = 10000.0)
     {
-        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
-        embedding.InputMode = EmbeddingInputMode.Indices;
-        yield return embedding;
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
         // Gemma normalizes embeddings by √hiddenSize (Gemma Team 2024 §2.3).
         yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
         int headDim = hiddenSize / numHeads;
@@ -37929,9 +37781,7 @@ public static class LayerHelper<T>
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
         int numKvHeads, double ropeTheta = 1000000.0)
     {
-        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
-        embedding.InputMode = EmbeddingInputMode.Indices;
-        yield return embedding;
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
         // Qwen2 token-embedding scaling (Vaswani 2017 §3.4 convention).
         yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
         for (int i = 0; i < numLayers; i++)

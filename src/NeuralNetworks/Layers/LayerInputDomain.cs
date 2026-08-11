@@ -9,8 +9,7 @@ public enum LayerInputDomainKind
     Continuous,
 
     /// <summary>
-    /// Integer token indices in a half-open range. An embedding table in lookup mode
-    /// is the canonical case.
+    /// Integer token indices in a half-open range. An embedding table is the canonical case.
     /// </summary>
     IntegerIndices
 }
@@ -21,17 +20,15 @@ public enum LayerInputDomainKind
 /// </summary>
 /// <remarks>
 /// <para>
-/// THE COMPLEMENT TO SHAPE-ONLY MODE RESOLUTION, and the reason this type exists rather
-/// than the alternative. <see cref="EmbeddingLayer{T}"/> deliberately resolves
-/// Indices-vs-Continuous from the input SHAPE alone: inferring it from the VALUES made the
-/// layer's output RANK a function of the data, which left the shape contract, chain
-/// validation and graph resolution unable to reason about it at all.
+/// This contract complements a layer's shape contract. <see cref="EmbeddingLayer{T}"/>
+/// is an index lookup by construction, while continuous feature projection is represented
+/// explicitly by a projection layer. Callers therefore do not need to inspect values or
+/// guess a mode from tensor shape.
 /// </para>
 /// <para>
-/// That rule is correct and this type does not weaken it. It runs the other direction:
-/// mode is never inferred from data, so instead the DATA is derived from the declared mode.
-/// A caller asks the layer what it accepts and produces values that conform. No value
-/// inspection happens anywhere, and the output rank stays a function of shape.
+/// Data flows from the declared contract: a caller asks the layer what it accepts and
+/// produces values that conform. No value inspection changes layer behavior, and output
+/// rank remains a function of the declared layer and input shape.
 /// </para>
 /// <para>
 /// Without this, the only way to feed a token model was to hand-write a per-model override

@@ -11534,6 +11534,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // Read network-specific data
         DeserializeNetworkSpecificData(reader);
+
+        // SetParameters/ApplyParameterLayout may mutate tensors whose identities were already
+        // observed while the destination graph was materialized. Derived CPU weight packs and
+        // resident GPU buffers must never survive a bulk restore.
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     /// <summary>
@@ -12004,6 +12009,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // (DropoutLayer carries no parameters), so their RandomSeed must be transferred
                 // explicitly — see CopyLayerRandomSeedsTo.
                 CopyLayerRandomSeedsTo(largeBase);
+                largeBase.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
                 return largeCopy;
             }
         }
@@ -12343,6 +12349,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // stream, flaking clone-then-train trajectory invariants (the SpiralNet flake). No-op when
         // the source layers are unseeded (production default).
         CopyLayerRandomSeedsTo(copyBase);
+        copyBase.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         return true;
     }
 
