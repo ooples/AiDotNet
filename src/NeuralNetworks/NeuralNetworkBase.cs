@@ -11558,6 +11558,65 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// remains fully faithful and is appropriate for bounded-size models.
     /// </remarks>
     protected virtual bool SupportsCopyOnWriteDeepCopy => true;
+    /// <summary>Renders a layer shape for a diagnostic, including the <c>-1</c> free-axis sentinel.</summary>
+    private static string Describe(int[]? shape) =>
+        shape is null ? "(none)" : "[" + string.Join(",", shape) + "]";
+
+    /// <summary>
+    /// Drives a freshly-constructed destination layer until it exposes the same parameter surface the
+    /// source does, so the layer-by-layer clone below has somewhere to put the weights.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Resolving from the declared shape alone is not enough, and the reason is the <c>-1</c> free-axis
+    /// sentinel. A layer that declares an always-free axis — <c>TransformerEncoderBlock</c>'s sequence
+    /// length, say — never reports <see cref="LayerBase{T}.IsShapeResolved"/> true and never returns an
+    /// all-positive <c>GetInputShape</c>, however thoroughly it has run. The previous guard tested both
+    /// of those and so skipped exactly the layers that needed it: the destination reached SetParameters
+    /// with its seven children registered but unmaterialized, reported 2,048 parameters against the
+    /// source's 3,150,848, and fourteen speech models (F5TTS, Dia, OWSM, ParlerTTS, FishSpeech, …) all
+    /// failed to clone with that one message.
+    /// </para>
+    /// <para>
+    /// A forward pass is what materializes nested children — the generated
+    /// <c>EnsureSubLayersRegistered</c> runs during lazy shape RESOLUTION, not during parameter
+    /// materialization, so a layer that has never been forwarded has no children to size — hence the
+    /// fallback fills the free axes with a concrete length and pushes a tensor through. Filling them
+    /// arbitrarily is sound precisely because a free axis is one whose length sizes no weight; if it
+    /// did, it would not be free.
+    /// </para>
+    /// <para>
+    /// Best-effort by design. A layer that refuses every probe keeps whatever it managed to resolve and
+    /// the count check after SetParameters still reports the shortfall — by layer name and now by shape.
+    /// </para>
+    /// </remarks>
+    private static void MaterializeDestinationLayer(LayerBase<T> destination, int[]? declared)
+    {
+        if (declared is null || declared.Length == 0) return;
+
+        if (!destination.IsShapeResolved && Array.TrueForAll(declared, d => d > 0))
+        {
+            try { destination.ResolveFromShape(declared); }
+            catch (ArgumentException) { /* layer rejects this shape; the probe below still runs */ }
+            catch (InvalidOperationException) { }
+        }
+
+        foreach (var candidate in AiDotNet.NeuralNetworks.Layers.LayerCloning.ProbeShapes(declared))
+        {
+            try
+            {
+                destination.Forward(new Tensor<T>(candidate));
+                destination.ResetState();
+                break;
+            }
+            catch (Exception)
+            {
+                // Wrong rank, wrong width, a layer that needs real content — all of them mean this
+                // candidate was not the layer's input convention, not that cloning has failed.
+            }
+        }
+    }
+
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
@@ -11657,19 +11716,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // The freshly-constructed destination may carry lazy layers whose
                     // weight tensors aren't materialized yet (ParameterCount == 0 until
                     // a forward pass resolves their shape). The source layer has already
-                    // run a forward (its ParameterCount is concrete), so resolve the
-                    // destination from the source's input shape before copying — otherwise
-                    // the ParameterCount guard below skips the copy and the clone keeps the
+                    // run a forward (its ParameterCount is concrete), so drive the
+                    // destination to the same surface before copying — otherwise the
+                    // ParameterCount guard below skips the copy and the clone keeps the
                     // destination's random-initialized weights, diverging from the original.
-                    if (dstLayer is LayerBase<T> dstLazy && !dstLazy.IsShapeResolved
-                        && srcLayer.ParameterCount > 0)
+                    if (dstLayer is LayerBase<T> dstLazy && srcLayer.ParameterCount > 0
+                        && dstLazy.ParameterCount != srcLayer.ParameterCount)
                     {
-                        int[] srcInputShape = srcLayer.GetInputShape();
-                        if (srcInputShape is { Length: > 0 } && Array.TrueForAll(srcInputShape, d => d > 0))
-                        {
-                            try { dstLazy.ResolveFromShape(srcInputShape); }
-                            catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
-                        }
+                        MaterializeDestinationLayer(dstLazy, srcLayer.GetInputShape());
                     }
 
                     // Do not require a freshly constructed destination to report the source's full
@@ -11691,7 +11745,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                             (largeCopy as IDisposable)?.Dispose();
                             throw new InvalidOperationException(
                                 $"Cannot clone large model layer {i} ({srcLayer.GetType().Name}): " +
-                                $"the destination could not materialize {srcLayer.ParameterCount} parameters.",
+                                $"the destination could not materialize {srcLayer.ParameterCount} parameters " +
+                                $"(source input shape {Describe(srcLayer.GetInputShape())}, destination " +
+                                $"{Describe(dstLayer.GetInputShape())}).",
                                 ex);
                         }
 
@@ -11701,7 +11757,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                             throw new InvalidOperationException(
                                 $"Cannot clone large model layer {i} ({srcLayer.GetType().Name}): " +
                                 $"expected {srcLayer.ParameterCount} parameters after loading, but the " +
-                                $"destination exposes {dstLayer.ParameterCount}.");
+                                $"destination exposes {dstLayer.ParameterCount} " +
+                                $"(source input shape {Describe(srcLayer.GetInputShape())}, destination " +
+                                $"{Describe(dstLayer.GetInputShape())}).");
                         }
                     }
                     if (srcLayer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> srcExtras

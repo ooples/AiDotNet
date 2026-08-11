@@ -183,7 +183,7 @@ public static class LayerCloning
     }
 
     /// <summary>Prepends a size-1 batch axis to a shape.</summary>
-    private static int[] WithBatchAxis(int[] shape)
+    internal static int[] WithBatchAxis(int[] shape)
     {
         var batched = new int[shape.Length + 1];
         batched[0] = 1;
@@ -202,7 +202,7 @@ public static class LayerCloning
     /// block consumes length, so <c>CitrinetBlockLayer</c> (kernel 3, stride 2) has nothing left to
     /// convolve at length 4 and only the longer probe survives.
     /// </remarks>
-    private static IEnumerable<int[]> ProbeShapes(int[] declared)
+    internal static IEnumerable<int[]> ProbeShapes(int[] declared)
     {
         foreach (var fill in new[] { 16, 4 })
         {
