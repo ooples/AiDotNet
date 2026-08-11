@@ -65,7 +65,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DART: Dropouts meet Multiple Additive Regression Trees", "https://arxiv.org/abs/1505.01866", Year = 2015, Authors = "K. V. Rashmi, Ran Gilad-Bachrach")]
-public class DARTClassifier<T> : EnsembleClassifierBase<T>
+public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>
     /// Individual regression trees (trained on pseudo-residuals).

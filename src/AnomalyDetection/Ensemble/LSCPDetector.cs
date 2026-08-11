@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("LSCP: Locally Selective Combination in Parallel Outlier Ensembles", "https://doi.org/10.1137/1.9781611975673.17", Year = 2019, Authors = "Yue Zhao, Zain Nasrullah, Maciej K. Hryniewicki, Zheng Li")]
-public class LSCPDetector<T> : AnomalyDetectorBase<T>
+public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;
     private readonly int _localRegionSize;

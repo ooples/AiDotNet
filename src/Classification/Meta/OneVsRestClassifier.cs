@@ -64,7 +64,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("In Defense of One-Vs-All Classification", "https://jmlr.org/papers/v5/rifkin04a.html")]
-public class OneVsRestClassifier<T> : MetaClassifierBase<T>
+public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.

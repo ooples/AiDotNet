@@ -62,7 +62,7 @@ namespace AiDotNet.Models;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
-public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
+public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
 {
 
     /// <inheritdoc />
