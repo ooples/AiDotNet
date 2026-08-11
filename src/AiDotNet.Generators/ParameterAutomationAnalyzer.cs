@@ -237,7 +237,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                    && ((!coversFields && m is IFieldSymbol f
                                         && f.AssociatedSymbol is null
                                         && IsWeightCapableType(f.Type))
-                                       || (!coversLayers && LayerBearingType(m) is not null)))
+                                       || (!coversLayers && LayerBearingType(m) is not null)
+                                       || IsComponentBearing(m)))
                             && modelLoc is not null)
                         {
                             spc.ReportDiagnostic(Diagnostic.Create(
@@ -514,6 +515,62 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// A member that IS a parameterized component, or a collection of them.
+    /// </summary>
+    /// <remarks>
+    /// The ensemble shape: the parameters live in sub-models rather than in fields or layers.
+    /// Mirrors ModelParameterGenerator.ComponentKindFor so the build demands `partial` for exactly
+    /// the shapes the generator can then handle -- if the two disagree, a model either gets nagged
+    /// with no fix available or is quietly left unautomated. The element type is deliberately NOT
+    /// matched here: over-demanding `partial` costs a keyword, while under-demanding it costs a
+    /// silently unregistered sub-model.
+    /// </remarks>
+    private static bool IsComponentBearing(ISymbol member)
+    {
+        ITypeSymbol? t = member switch
+        {
+            IFieldSymbol f when f.AssociatedSymbol is null => f.Type,
+            IPropertySymbol p when p.GetMethod is not null => p.Type,
+            _ => null,
+        };
+        if (t is null) return false;
+        var bare = t.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (IsParameterSourceLike(bare)) return true;
+
+        ITypeSymbol? element = null;
+        if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
+        else if (bare is INamedTypeSymbol named && named.TypeArguments.Length == 1)
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (open.StartsWith("System.Collections.Generic.", System.StringComparison.Ordinal))
+                element = named.TypeArguments[0];
+        }
+        return element is not null
+               && IsParameterSourceLike(element.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+    }
+
+    private static bool IsParameterSourceLike(ITypeSymbol type)
+    {
+        // A sub-network is surfaced as LAYERS instead; counting it here as well would demand the
+        // keyword for a shape that is already handled by the other route.
+        for (var c = type as INamedTypeSymbol; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                return false;
+        }
+        foreach (var i in type.AllInterfaces)
+        {
+            if (i.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.Interfaces.IParameterSource<", System.StringComparison.Ordinal))
+                return true;
+        }
+        return type is INamedTypeSymbol n
+               && n.OriginalDefinition.ToDisplayString()
+                   .StartsWith("AiDotNet.Interfaces.IParameterSource<", System.StringComparison.Ordinal);
     }
 
     private static bool DeclaresAnyOf(INamedTypeSymbol type, params string[] names)
