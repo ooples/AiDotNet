@@ -1,7 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
-using AiDotNet.Models;
+using AiDotNet.Models;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.LinearAlgebra;
 
@@ -881,19 +882,59 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
     }
 
     /// <summary>
-    /// Gets the parameters of this expression tree.
+    /// The tree's parameters are the values of its Constant nodes, in traversal order.
     /// </summary>
-    /// <returns>A vector containing all coefficient values in this expression tree.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> This returns all the constant numbers from your formula.
-    /// For example, if your formula is "2x + 3y + 5", this would give you [2, 3, 5].
-    /// These numbers are the adjustable parameters that can be tuned to improve predictions.
+    /// <para>
+    /// This replaces three overrides that did not agree. ParameterCount counted Constant nodes and
+    /// SetParameters wrote Constant nodes, but GetParameters returned <c>Coefficients</c> -- a
+    /// different vector of unrelated length. So the count described the tree, the vector described
+    /// something else, and a restore round-trip could not be correct for both.
+    /// </para>
+    /// <para>
+    /// One declared source removes the possibility: the count, the vector and the restore all walk
+    /// the same nodes in the same order. Coefficients remains available in its own right; it simply
+    /// is not the parameter surface.
+    /// </para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    protected override void RegisterComponents()
     {
-        // Return the coefficients which are the model's parameters
-        return Coefficients;
+        base.RegisterComponents();
+        RegisterParameterComponent(new DelegatingParameterSource<T>(
+            () => CollectConstantNodes().Count,
+            () =>
+            {
+                var nodes = CollectConstantNodes();
+                var values = new Vector<T>(nodes.Count);
+                for (int i = 0; i < nodes.Count; i++) values[i] = nodes[i].Value;
+                return values;
+            },
+            values =>
+            {
+                var nodes = CollectConstantNodes();
+                for (int i = 0; i < nodes.Count && i < values.Length; i++)
+                {
+                    nodes[i].SetValue(values[i]);
+                }
+            }));
     }
+
+    /// <summary>Constant nodes in the same traversal order the count and the restore use.</summary>
+    private List<ExpressionTree<T, TInput, TOutput>> CollectConstantNodes()
+    {
+        var found = new List<ExpressionTree<T, TInput, TOutput>>();
+        void Walk(ExpressionTree<T, TInput, TOutput>? node)
+        {
+            if (node is null) return;
+            if (node.Type == ExpressionNodeType.Constant) found.Add(node);
+            Walk(node.Left);
+            Walk(node.Right);
+        }
+        Walk(this);
+        return found;
+    }
+
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
     /// <summary>
     /// Creates a new expression tree with updated parameters.
@@ -1383,106 +1424,9 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
         }
     }
 
-    /// <summary>
-    /// Sets the parameters (constant values) of this expression tree, modifying it in place.
-    /// </summary>
-    /// <param name="parameters">The new parameter values to assign to constant nodes.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameter count doesn't match the number of constant nodes.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method replaces all the constant numbers in your formula with new values,
-    /// modifying the current tree directly. Unlike UpdateCoefficients and WithParameters which create new
-    /// trees with the updated values, this method mutates the tree in place. Use this when you want to
-    /// modify the tree directly, such as during optimization iterations.
-    /// <para>
-    /// <b>Note:</b> This implementation uses two tree traversals (counting and assignment)
-    /// to validate parameter count BEFORE modifying the tree. This ensures atomicity:
-    /// if the parameter count is wrong, the tree remains unchanged.
-    /// </para>
-    /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Count the number of constant nodes in the tree
-        int constantNodeCount = 0;
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
-        // Local function to count constant nodes in the tree via recursive traversal
-        void CountConstants(ExpressionTree<T, TInput, TOutput>? node)
-        {
-            if (node == null)
-                return;
-            if (node.Type == ExpressionNodeType.Constant)
-            {
-                constantNodeCount++;
-            }
-            if (node.Left != null) CountConstants(node.Left);
-            if (node.Right != null) CountConstants(node.Right);
-        }
-
-        CountConstants(this);
-
-        if (parameters.Length != constantNodeCount)
-        {
-            throw new ArgumentException(
-                $"Parameter count mismatch: expected {constantNodeCount} parameters (one for each constant node), but got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        // Assign parameter values to constant nodes in a deterministic traversal order
-        // Local function returns next index to use - includes null check for safety
-        int AssignAndReturnNextIndex(ExpressionTree<T, TInput, TOutput>? node, int currentIndex)
-        {
-            if (node == null)
-                return currentIndex;
-
-            int nextIndex = currentIndex;
-            if (node.Type == ExpressionNodeType.Constant)
-            {
-                node.SetValue(parameters[nextIndex]);
-                nextIndex++;
-            }
-
-            if (node.Left != null)
-                nextIndex = AssignAndReturnNextIndex(node.Left, nextIndex);
-            if (node.Right != null)
-                nextIndex = AssignAndReturnNextIndex(node.Right, nextIndex);
-
-            return nextIndex;
-        }
-
-        int finalIndex = AssignAndReturnNextIndex(this, 0);
-
-        // Validate that all parameters were consumed during assignment
-        // This catches any discrepancy between counting and assignment traversals
-        if (finalIndex != parameters.Length)
-        {
-            throw new InvalidOperationException(
-                $"Internal error: expected to consume {parameters.Length} parameters, but only consumed {finalIndex}. " +
-                "This indicates a mismatch between counting and assignment traversals.");
-        }
-    }
-
-    /// <summary>
-    /// Gets the number of parameters (constant nodes) in this expression tree.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This tells you how many constant values are in your formula.
-    /// For example, if your formula is "2x + 3y + 5", there are 3 parameters: 2, 3, and 5.
-    /// This value is obtained from the Coefficients property, which returns a vector of all constant values.
-    /// </remarks>
-    public override long ParameterCount
-    {
-        get
-        {
-            int CountConstants(ExpressionTree<T, TInput, TOutput>? node)
-            {
-                if (node == null) return 0;
-                int count = node.Type == ExpressionNodeType.Constant ? 1 : 0;
-                count += CountConstants(node.Left);
-                count += CountConstants(node.Right);
-                return count;
-            }
-            return CountConstants(this);
-        }
-    }
+    // Replaced by the declared parameter source below. Removed under AIDN082.
 
     /// <summary>
     /// Saves the expression tree model to a file.
