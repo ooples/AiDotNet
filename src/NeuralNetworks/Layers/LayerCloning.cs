@@ -72,43 +72,40 @@ public static class LayerCloning
 
         if (settings.IncludeParameters)
         {
-            var parameters = source.GetParameters();
-            if (parameters.Length > 0)
+            // INSTALL TENSORS, NOT A FLAT VECTOR. A tensor carries its own shape, so installing one
+            // resolves a clone whose input width is lazy; a flat Vector<T> carries no shape, and
+            // pushing 16 values into a DenseLayer rebuilt from `outputSize` alone threw "Expected 0
+            // parameters, but got 16". That is why cloning a layer which had been USED failed while
+            // cloning a fresh one appeared to work: both sides were unresolved and agreed at zero.
+            var tensors = source.GetTrainableParameters();
+            if (tensors.Count > 0)
             {
-                // Rebuilding from the same construction state must produce the same parameter
-                // shape. A mismatch means a value the constructor needs is not recorded, and the
-                // copy would silently differ from the original -- so it is reported rather than
-                // written through. This is the backstop for what the build cannot prove: a
-                // constructor that reads state from somewhere other than its arguments.
+                var installed = new Tensor<T>[tensors.Count];
+                for (var i = 0; i < tensors.Count; i++)
+                {
+                    // Shared hands over the ORIGINAL tensors, so both handles are one set of
+                    // weights and training either trains both.
+                    //
+                    // Deep and CopyOnWrite both take CloneShared views. They are observationally
+                    // identical by construction -- the first write on either side splits them -- so
+                    // a copy-on-write view IS a deep copy, reached without materialising a second
+                    // set of weights. This is what NeuralNetworkBase.DeepCopy already relies on.
+                    installed[i] = settings.Mode == CloneMode.Shared
+                        ? tensors[i]
+                        : (Tensor<T>)tensors[i].CloneShared();
+                }
+
+                clone.SetTrainableParameters(installed);
+
+                // AFTER the install, not before. Checking first measured an empty clone against a
+                // resolved original and reported every lazy layer as broken.
                 if (clone.ParameterCount != source.ParameterCount)
                 {
                     throw new InvalidOperationException(
                         $"{source.GetType().Name} rebuilt with {clone.ParameterCount} parameters but "
                         + $"the original has {source.ParameterCount}. A constructor argument that "
-                        + "determines size is not marked [LayerState], so the copy is a different "
-                        + "shape from the original.");
-                }
-
-                switch (settings.Mode)
-                {
-                    // ONE set of weights behind two handles. Training either trains both; that is
-                    // what the caller asked for by naming it.
-                    case CloneMode.Shared:
-                        clone.SetTrainableParameters(source.GetTrainableParameters());
-                        break;
-
-                    // Storage shared until either side writes, then split. Observationally the same
-                    // as Deep, O(1) until the first write. This is what AIDOTNET_COW_DEEPCOPY chose
-                    // globally; naming it per call is the only change.
-                    case CloneMode.CopyOnWrite:
-                        clone.SetTrainableParameters(source.GetTrainableParameters()
-                            .Select(t => (Tensor<T>)t.CloneShared())
-                            .ToList());
-                        break;
-
-                    default:
-                        clone.UpdateParameters(parameters);
-                        break;
+                        + "determines size is not recorded, so the copy is a different shape from "
+                        + "the original.");
                 }
             }
         }

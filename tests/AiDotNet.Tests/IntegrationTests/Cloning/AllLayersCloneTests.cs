@@ -79,7 +79,23 @@ public class AllLayersCloneTests
 
             try
             {
-                var clone = LayerCloning.Clone((LayerBase<double>)instance);
+                // FORWARD FIRST. Cloning an unforwarded layer compares two unresolved layers that
+                // trivially agree at zero parameters, which is why this sweep read 119/0 while the
+                // trained-layer proof was failing. A layer that has been USED is the case worth
+                // measuring.
+                var typed = (LayerBase<double>)instance;
+                try
+                {
+                    var shape = typed.GetInputShape();
+                    if (shape.Length > 0 && shape[0] > 0) typed.Forward(new Tensor<double>(shape));
+                }
+                catch (Exception)
+                {
+                    // A layer that will not take a probe of its own declared shape is measured
+                    // unforwarded, the same as before.
+                }
+
+                var clone = LayerCloning.Clone(typed);
                 if (clone is null)
                 {
                     failed.Add($"{open.Name}: clone returned null");
