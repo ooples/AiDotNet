@@ -5155,6 +5155,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (t is not null && t.Length > 0) extraTrainableTensors.Add(t);
         }
 
+        // Same gap as the tape path: layers declared through GetExtraTrainableLayers were counted
+        // and serialized but never received gradients, because collection read Layers alone.
+        foreach (var extraLayer in GetExtraTrainableLayers())
+        {
+            if (extraLayer is null) continue;
+            foreach (var p in extraLayer.GetTrainableParameters())
+            {
+                if (p is not null && p.Length > 0) extraTrainableTensors.Add(p);
+            }
+        }
+
         bool wasTraining = IsTrainingMode;
         if (!wasTraining) SetTrainingMode(true);
         try
@@ -8894,6 +8905,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 extraTrainableTensors.Add(t);
             }
 
+            // ...and the parameters of any layer declared through GetExtraTrainableLayers. Those
+            // layers were already counted by ParameterCount and written to checkpoints, but the tape
+            // collected from Layers alone -- so a layer surfaced only this way was counted, saved,
+            // and never trained. That is the same dead-but-counted defect this branch has been
+            // removing at the model level, one level up.
+            //
+            // Off-chain is the CORRECT home for a layer the sequential walk must not enter -- an
+            // index lookup handed a hidden state throws -- so the fix belongs here rather than
+            // forcing such layers back into Layers.
+            foreach (var extraLayer in GetExtraTrainableLayers())
+            {
+                if (extraLayer is null) continue;
+                foreach (var p in extraLayer.GetTrainableParameters())
+                {
+                    if (p is not null && p.Length > 0) extraTrainableTensors.Add(p);
+                }
+            }
+
             var loss = LossFunction as LossFunctions.LossFunctionBase<T>
                 ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
 
@@ -10632,6 +10661,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var t in GetExtraTrainableTensors())
         {
             if (t is not null && t.Length > 0) extraTrainableTensors.Add(t);
+        }
+
+        // Same gap as the tape path: layers declared through GetExtraTrainableLayers were counted
+        // and serialized but never received gradients, because collection read Layers alone.
+        foreach (var extraLayer in GetExtraTrainableLayers())
+        {
+            if (extraLayer is null) continue;
+            foreach (var p in extraLayer.GetTrainableParameters())
+            {
+                if (p is not null && p.Length > 0) extraTrainableTensors.Add(p);
+            }
         }
         var trainableParams = extraTrainableTensors.Count == 0
             ? layerParams
