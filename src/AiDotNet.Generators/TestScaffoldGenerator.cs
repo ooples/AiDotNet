@@ -17811,7 +17811,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) => this;");
         sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => this;");
         sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => this;");
-        sb.AppendLine("        public int ParameterCount => 10;");
+        sb.AppendLine("        public long ParameterCount => 10;");
         sb.AppendLine("        public bool SupportsParameterInitialization => false;");
         sb.AppendLine("        public Vector<double> SanitizeParameters(Vector<double> p) => p;");
         sb.AppendLine("        public Vector<double> ComputeGradients(Tensor<double> i, Tensor<double> t, ILossFunction<double>? l = null) => new Vector<double>(10);");

@@ -304,6 +304,13 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
 
     private sealed class RecordingSelfSupervisedTensorModel : IFullModel<float, Tensor<float>, Tensor<float>>, ISelfSupervisedModel
     {
+        // A pass-through test double owns no weights. Empty is the honest surface, and the
+        // same answer nn.Module.parameters() gives for a module holding none.
+        public long ParameterCount => 0;
+        public Vector<float> GetParameters() => new Vector<float>(0);
+        public void SetParameters(Vector<float> parameters) { }
+        public IFullModel<float, Tensor<float>, Tensor<float>> WithParameters(Vector<float> parameters) => this;
+
         public int TrainCalls { get; private set; }
 
         public ILossFunction<float> DefaultLossFunction => new MeanSquaredErrorLoss<float>();
