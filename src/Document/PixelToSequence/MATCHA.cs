@@ -82,7 +82,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     private bool _nativeLayersInitialized;
 
     // Learnable embeddings
-    private Tensor<T>? _patchEmbeddings;
 
     #endregion
 
@@ -261,9 +260,7 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
-        _patchEmbeddings = Tensor<T>.CreateDefault([_maxPatchesPerImage, _encoderDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_patchEmbeddings, random, 0.02);
     }
 
     private void EnsureNativeInitialized()

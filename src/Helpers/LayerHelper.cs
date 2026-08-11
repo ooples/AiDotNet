@@ -11482,7 +11482,10 @@ public static class LayerHelper<T>
         // both the paper's learned patch projection and the required tokenization.
         yield return new PatchEmbeddingLayer<T>(16, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
-        yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
+        // LEARNED, not sinusoidal. MATCHA's Pix2Struct-derived encoder learns a per-patch
+        // position, and the dead _patchEmbeddings field -- [maxPatchesPerImage, encoderDim] --
+        // was exactly that table, allocated and never read while these sinusoids stood in for it.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxPatches, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
