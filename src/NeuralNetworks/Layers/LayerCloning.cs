@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AiDotNet.Models;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Serialization;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -75,7 +76,28 @@ public static class LayerCloning
                 // copy would silently differ from the original -- so it is reported rather than
                 // written through. This is the backstop for what the build cannot prove: a
                 // constructor that reads state from somewhere other than its arguments.
-                if (clone.ParameterCount != source.ParameterCount)
+                // Compare LAYOUTS where both sides publish one, and only fall back to scalar
+                // counts where they do not. A rebuilt layer has not run a forward pass, so a
+                // deferred slot makes ParameterCount throw ParameterLayoutNotReadyException rather
+                // than return a different number -- the scalar comparison cannot even be evaluated
+                // there, let alone trusted. Slot-wise comparison also catches a same-total
+                // reordering, which the scalar test passes and which would restore each
+                // component's values into its neighbour.
+                if (clone is IParameterManifestProvider cloneLayout
+                    && source is IParameterManifestProvider sourceLayout)
+                {
+                    var expected = sourceLayout.ParameterLayout;
+                    var actual = cloneLayout.ParameterLayout;
+                    if (!actual.DescribesSameLayoutAs(expected))
+                    {
+                        throw new InvalidOperationException(
+                            $"{source.GetType().Name} rebuilt with a different parameter layout: "
+                            + $"{actual.DescribeDifferenceFrom(expected)}. A constructor argument "
+                            + "that determines size is not marked [LayerState], so the copy is a "
+                            + "different shape from the original.");
+                    }
+                }
+                else if (clone.ParameterCount != source.ParameterCount)
                 {
                     throw new InvalidOperationException(
                         $"{source.GetType().Name} rebuilt with {clone.ParameterCount} parameters but "
