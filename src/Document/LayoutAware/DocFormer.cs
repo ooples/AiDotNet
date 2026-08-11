@@ -582,6 +582,32 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     // feeding the shared stack. Without it the base linear walk sends the rank-1 token vector into the
     // rank-4-only Conv backbone and throws ("ConvolutionalLayer expects rank-3/rank-4 input; got rank 1").
     private const int VisualEncoderLayerCount = 8;
+
+    /// <summary>
+    /// Reports the value domain for a given input rank, which for this model depends on which stream
+    /// the input reaches.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DocFormer routes by rank: a rank-1/2 tensor is a sequence of TOKEN IDs for the text stream, and a
+    /// higher-rank tensor is a page image for the conv visual backbone. The base implementation walks
+    /// from <c>Layers[0]</c>, finds the backbone, and therefore answers "continuous" for BOTH -- so a
+    /// caller (and the conformance fixture) filled a token sequence with continuous noise and the
+    /// embedding refused it. Routing is declared by RunModalityForward, which only this class knows, so this
+    /// is the only place the question can be answered correctly.
+    /// </para>
+    /// </remarks>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape)
+    {
+        if (inputShape is not null && inputShape.Length <= 2
+            && VisualEncoderLayerCount < Layers.Count
+            && Layers[VisualEncoderLayerCount] is LayerBase<T> textStreamFront)
+        {
+            return textStreamFront.GetInputDomain(inputShape);
+        }
+
+        return base.GetInputDomain(inputShape);
+    }
     // One, not two: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that used to
     // sit here are now a single LayoutEmbeddingLayer, which also carries the 2D layout terms and uses
     // LEARNED positions (BERT's, which DocFormer inherits) rather than fixed sinusoids.

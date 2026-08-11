@@ -670,6 +670,51 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// The shape comparison against <see cref="InputShape"/> is what separates the two.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Scales an input tensor for the magnitude invariants, keeping the result inside the model's
+    /// declared value domain.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Multiplying every element is the right probe for a continuous model and nonsense for an index
+    /// one: doubling token 66 produces 132, and a vocabulary of 100 rejects it outright, so the test
+    /// failed on an illegal input rather than on the instability it was written to detect.
+    /// </para>
+    /// <para>
+    /// For an index domain the scale is applied and then folded back into the legal range, which
+    /// keeps what the test actually needs -- a DIFFERENT, larger-valued input -- without inventing a
+    /// token the model was never built to hold. Wrapping rather than clamping so distinct source IDs
+    /// stay distinct instead of all saturating onto the last row.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> ScaleInputWithinDomain(Tensor<T> input, int[] shape, double factor)
+    {
+        var scaled = new Tensor<T>(shape);
+        var domain = InputDomainFor(shape);
+
+        if (!domain.IsIndices)
+        {
+            var f = NumOps.FromDouble(factor);
+            for (int i = 0; i < input.Length && i < scaled.Length; i++)
+                scaled[i] = NumOps.Multiply(input[i], f);
+            return scaled;
+        }
+
+        int span = domain.MaxExclusive - domain.MinInclusive;
+        if (span <= 0) return input;
+
+        for (int i = 0; i < input.Length && i < scaled.Length; i++)
+        {
+            double raw = Convert.ToDouble(NumOps.ToDouble(input[i])) * factor;
+            int offset = (int)Math.Round(raw) - domain.MinInclusive;
+            offset %= span;
+            if (offset < 0) offset += span;
+            scaled[i] = NumOps.FromDouble(domain.MinInclusive + offset);
+        }
+
+        return scaled;
+    }
+
     private LayerInputDomain InputDomainFor(int[] shape)
     {
         if (shape is null || !ShapesEqual(shape, InputShape))
@@ -756,9 +801,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int span = domain.MaxExclusive - domain.MinInclusive;
         if (span <= 0) return domain.MinInclusive;
 
-        int scaled = (int)Math.Round(value * 1000.0, MidpointRounding.AwayFromZero);
-        int offset = scaled % span;
-        if (offset < 0) offset += span;
+        // Proportional, not modular. Scaling by 1000 and taking the remainder aliased any two probes
+        // whose scaled values were congruent modulo the vocabulary onto the SAME index -- and it did so
+        // for exactly the pair these invariants use: against the standard 100-token test vocabulary
+        // 0.1 -> 1000*0.1 = 100, 100 % 100 = 0, and 0.9 -> 900, 900 % 100 = 0. Both probes became token
+        // 0, so DifferentInputs_* fed two BYTE-IDENTICAL tensors, and its report that "the network has
+        // collapsed to a uniform-output state, L2 distance = 0.000E+000" was arithmetic rather than a
+        // finding. It failed that way on all five layout-aware document models.
+        //
+        // Spreading the fractional part across the range keeps sub-integer probes apart at every
+        // vocabulary size; the integer part still folds in modularly so probes above 1 stay distinct.
+        double fraction = value - Math.Floor(value);
+        int fromFraction = (int)(fraction * span);
+        if (fromFraction >= span) fromFraction = span - 1;
+
+        long combined = fromFraction + (long)Math.Floor(value);
+        int offset = (int)(((combined % span) + span) % span);
         return domain.MinInclusive + offset;
     }
 

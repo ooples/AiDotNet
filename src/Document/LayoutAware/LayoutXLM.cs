@@ -239,6 +239,32 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// </summary>
     private const int VisualBackbonePrefixLength = 5;
 
+    /// <summary>
+    /// Reports the value domain for a given input rank, which for this model depends on which stream
+    /// the input reaches.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// LayoutXLM routes by rank: a rank-1/2 tensor is a sequence of TOKEN IDs for the text stream, and a
+    /// higher-rank tensor is a page image for the conv visual backbone. The base implementation walks
+    /// from <c>Layers[0]</c>, finds the backbone, and therefore answers "continuous" for BOTH -- so a
+    /// caller (and the conformance fixture) filled a token sequence with continuous noise and the
+    /// embedding refused it. Routing is declared by ForwardFromLayer, which only this class knows, so this
+    /// is the only place the question can be answered correctly.
+    /// </para>
+    /// </remarks>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape)
+    {
+        if (inputShape is not null && inputShape.Length <= 2
+            && VisualBackbonePrefixLength < Layers.Count
+            && Layers[VisualBackbonePrefixLength] is LayerBase<T> textStreamFront)
+        {
+            return textStreamFront.GetInputDomain(inputShape);
+        }
+
+        return base.GetInputDomain(inputShape);
+    }
+
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {

@@ -113,10 +113,11 @@ public abstract class DocumentNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var network = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng);
-        var largeInput = new Tensor<T>(InputShape);
-        var two = NumOps.FromDouble(2.0);
-        for (int i = 0; i < input.Length; i++)
-            largeInput[i] = NumOps.Multiply(input[i], two);
+
+        // Scale through the domain-aware helper, not a raw multiply. Half this family consumes token
+        // IDs, and doubling token 66 gives 132, which a 100-word vocabulary rejects outright — so the
+        // test failed on an illegal input instead of on the numerical instability it exists to catch.
+        var largeInput = ScaleInputWithinDomain(input, InputShape, 2.0);
 
         var output = network.Predict(largeInput);
         for (int i = 0; i < output.Length; i++)
