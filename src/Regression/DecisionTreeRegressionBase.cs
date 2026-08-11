@@ -978,6 +978,16 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
+    /// <summary>
+    /// Whether parameters can be initialized on this model.
+    /// </summary>
+    /// <remarks>
+    /// Stated explicitly because net471 has no default interface implementations: IParameterizable
+    /// declares this abstract on that target while the other frameworks get `=> ParameterCount > 0`
+    /// for free, so a type that relies on the default compiles everywhere except net471.
+    /// </remarks>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
