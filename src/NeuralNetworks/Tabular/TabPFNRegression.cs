@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using System.Collections.Generic;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
@@ -66,7 +67,10 @@ public class TabPFNRegression<T> : TabPFNBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
+    /// <inheritdoc />
+    /// <remarks>The head, folded after the shared backbone by the base's single traversal.</remarks>
+    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => new ILayer<T>[] { _regressionHead };
 
     /// <summary>
     /// Initializes a new instance of the TabPFNRegression class.

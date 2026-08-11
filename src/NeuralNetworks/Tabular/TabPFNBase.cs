@@ -1,4 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.LinearAlgebra;
+using System.Collections.Generic;
+using System;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -78,27 +81,122 @@ public abstract class TabPFNBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
+    /// <summary>
+    /// Extra trainable layers a subclass contributes, folded after the shared backbone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The regression and classification variants share this whole backbone and differ only by a
+    /// final projection. Each used to override <see cref="ParameterCount"/> purely to append that one
+    /// layer -- and because this base had no GetParameters or SetParameters at all, the head was
+    /// COUNTED and never read, never restored and never checkpointed. The count grew; the model that
+    /// could be saved did not.
+    /// </para>
+    /// <para>
+    /// Declaring the head here means the subclass states WHAT it adds and the traversal below decides
+    /// where it goes, so count, vector and restore cannot disagree about it. Mirrors
+    /// <c>FTTransformerBase.GetExtraTrainableLayers</c> and <c>NeuralNetworkBase</c>'s hook of the
+    /// same name.
+    /// </para>
+    /// </remarks>
+    protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<ILayer<T>>();
+
+    /// <summary>
+    /// The single ordered traversal of this model's parameter-bearing components.
+    /// </summary>
+    /// <remarks>
+    /// Count, read and restore all derive from THIS, rather than each restating the component list.
+    /// Three parallel walks are how a count and a vector come to describe different models: they
+    /// agree until someone adds a component to two of them, and nothing reports the disagreement
+    /// because the lengths still look plausible. One enumeration makes that failure unrepresentable.
+    /// The positional encoding is handled separately below because it is a raw vector, not a layer.
+    /// </remarks>
+    private IEnumerable<IParameterSource<T>> EnumerateParameterComponents()
+    {
+        yield return _featureEncoder;
+
+        foreach (var enc in _categoricalEncoders) yield return enc;
+        foreach (var block in _transformerBlocks) yield return block;
+        foreach (var layer in _outputMLP) yield return layer;
+
+        yield return _finalNorm;
+
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is not null) yield return extra;
+        }
+    }
+
+    /// <inheritdoc cref="GetParameters"/>
     public virtual long ParameterCount
     {
         get
         {
-            int count = checked((int)_featureEncoder.ParameterCount);
-
-            foreach (var enc in _categoricalEncoders)
-                count += (int)enc.ParameterCount;
-
-            foreach (var block in _transformerBlocks)
-                count += (int)block.ParameterCount;
-
-            foreach (var layer in _outputMLP)
-                count += (int)layer.ParameterCount;
-
-            count += (int)_finalNorm.ParameterCount;
+            long count = 0;
+            foreach (var component in EnumerateParameterComponents())
+                count += component.ParameterCount;
 
             if (_positionalEncoding != null)
                 count += _positionalEncoding.Length;
 
             return count;
+        }
+    }
+
+    /// <summary>
+    /// Reads every parameter in traversal order. <see cref="SetParameters"/> reads it back in the
+    /// same order, and <see cref="ParameterCount"/> is the length of what this returns.
+    /// </summary>
+    public virtual Vector<T> GetParameters()
+    {
+        var result = new Vector<T>(checked((int)ParameterCount));
+        int offset = 0;
+
+        foreach (var component in EnumerateParameterComponents())
+        {
+            var part = component.GetParameters();
+            for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+        }
+
+        if (_positionalEncoding != null)
+        {
+            for (int i = 0; i < _positionalEncoding.Length; i++)
+                result[offset++] = _positionalEncoding[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Restores every parameter, in the order <see cref="GetParameters"/> emitted them.
+    /// </summary>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        long expected = ParameterCount;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        }
+
+        int offset = 0;
+        foreach (var component in EnumerateParameterComponents())
+        {
+            int count = checked((int)component.ParameterCount);
+            if (count == 0) continue;
+
+            var slice = new Vector<T>(count);
+            for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+            component.SetParameters(slice);
+        }
+
+        if (_positionalEncoding != null)
+        {
+            for (int i = 0; i < _positionalEncoding.Length; i++)
+                _positionalEncoding[i] = parameters[offset++];
         }
     }
 
@@ -401,7 +499,7 @@ public abstract class TabPFNBase<T>
     /// <summary>
     /// TabPFN-specific transformer block with causal masking for in-context learning.
     /// </summary>
-    private sealed class TabPFNTransformerBlock<TBlock>
+    private sealed class TabPFNTransformerBlock<TBlock> : IParameterSource<TBlock>
     {
         private static readonly INumericOperations<TBlock> NumOps = MathHelper.GetNumericOperations<TBlock>();
 
@@ -435,13 +533,100 @@ public abstract class TabPFNBase<T>
         private Tensor<TBlock>? _inputCache;
         private Tensor<TBlock>? _attentionOutputCache;
 
+        /// <summary>
+        /// Summed from the SAME traversal the vector uses, so the two cannot disagree.
+        /// </summary>
+        /// <remarks>
+        /// This was the formula <c>_embeddingDim * _embeddingDim * 4</c> plus the sub-layers. Adding
+        /// a real read path proved the formula wrong: it reported 925,377 for a model whose weights
+        /// are 933,250 values, understating the attention projections by 7,873. A formula restates
+        /// what the tensors already know and drifts from them silently -- there was no vector to
+        /// contradict it, so the error was unobservable rather than absent.
+        /// </remarks>
         public long ParameterCount
         {
             get
             {
-                int attentionParams = _embeddingDim * _embeddingDim * 4;
-                return attentionParams + _ff1.ParameterCount + _ff2.ParameterCount +
-                       _norm1.ParameterCount + _norm2.ParameterCount;
+                long count = 0;
+                foreach (var tensor in AttentionTensors()) count += tensor.Length;
+                foreach (var layer in SubLayers()) count += layer.ParameterCount;
+                return count;
+            }
+        }
+
+        /// <summary>
+        /// The block's attention projections in the order the count above sums them, so the
+        /// enclosing model's read and restore agree with its count by construction.
+        /// </summary>
+        /// <remarks>
+        /// This block reported a ParameterCount and had NO way to read or write those values. Every
+        /// TabPFN model therefore advertised weights that no checkpoint could contain: the count grew
+        /// with each block, and saving the model saved none of them.
+        /// </remarks>
+        private IEnumerable<Tensor<TBlock>> AttentionTensors()
+        {
+            yield return _queryWeights;
+            yield return _keyWeights;
+            yield return _valueWeights;
+            yield return _outputWeights;
+        }
+
+        private IEnumerable<IParameterSource<TBlock>> SubLayers()
+        {
+            yield return _ff1;
+            yield return _ff2;
+            yield return _norm1;
+            yield return _norm2;
+        }
+
+        public Vector<TBlock> GetParameters()
+        {
+            var result = new Vector<TBlock>(checked((int)ParameterCount));
+            int offset = 0;
+
+            foreach (var tensor in AttentionTensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+            }
+
+            foreach (var layer in SubLayers())
+            {
+                var part = layer.GetParameters();
+                for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+            }
+
+            return result;
+        }
+
+        public void SetParameters(Vector<TBlock> parameters)
+        {
+            if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+            long expected = ParameterCount;
+            if (parameters.Length != expected)
+            {
+                throw new ArgumentException(
+                    $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+            }
+
+            int offset = 0;
+
+            // Write THROUGH the tensors rather than replacing them: the forward pass and any engine
+            // cache key on the tensor identity, so rebinding here would restore values into objects
+            // nothing else is looking at.
+            foreach (var tensor in AttentionTensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+            }
+
+            foreach (var layer in SubLayers())
+            {
+                int count = checked((int)layer.ParameterCount);
+                if (count == 0) continue;
+
+                var slice = new Vector<TBlock>(count);
+                for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+                layer.SetParameters(slice);
             }
         }
 
