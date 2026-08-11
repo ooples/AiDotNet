@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -297,7 +298,24 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         return GuardPrediction(ToFiniteT(pred));
     }
 
-    public override long ParameterCount => (long)_h * _l + _h + _h + 1 + _l + 1;
+    /// <summary>The model's trainable weights: H*L + H + H + 1 + L + 1, in the order the deleted formula summed. _inputMeans and _inputStds are normalization statistics and are correctly absent.</summary>
+    /// <remarks>
+    /// Replaces a hand-written ParameterCount formula. The formula was CORRECT -- it was
+    /// checked against every allocation before this change -- but it was a second statement
+    /// of the same fact, kept in step by hand. Declaring the storage makes the count, the
+    /// vector and the restore read it instead.
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+            RegisterParameterComponent(new DoubleJaggedParameterSource<T>(() => _w1));
+            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _b1));
+            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _w2));
+            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _b2, v => _b2 = v));
+            RegisterParameterComponent(new DoubleArrayParameterSource<T>(() => _wr));
+            RegisterParameterComponent(new DoubleScalarParameterSource<T>(() => _br, v => _br = v));
+    }
+
 
     protected override void SerializeCore(BinaryWriter writer)
     {

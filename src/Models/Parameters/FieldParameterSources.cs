@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Models.Parameters;
@@ -238,5 +239,141 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>
             for (int j = 0; j < n; j++) slice[j] = parameters[at++];
             m.SetParameters(slice);
         }
+    }
+}
+
+// Sources over RAW double storage in a generic model. Several time-series models keep their
+// weights as double[] or double[][] even though the model is generic over T -- the values are
+// converted at the boundary. That is a precision decision those models already made; these let
+// such storage take part in the parameter surface without first rewriting it, so the surface is
+// not held hostage to a separate refactor.
+
+/// <summary>A <c>double[]</c> field exposed as a parameter surface, written through.</summary>
+/// <typeparam name="T">The numeric type of the surface.</typeparam>
+public sealed class DoubleArrayParameterSource<T> : IParameterSource<T>
+{
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+    private readonly Func<double[]?> _get;
+
+    /// <summary>Creates a source over whatever array <paramref name="accessor"/> returns.</summary>
+    public DoubleArrayParameterSource(Func<double[]?> accessor)
+    {
+        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => _get()?.Length ?? 0;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var a = _get();
+        if (a is null) return new Vector<T>(0);
+        var result = new Vector<T>(a.Length);
+        for (int i = 0; i < a.Length; i++) result[i] = Ops.FromDouble(a[i]);
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        var a = _get();
+        if (a is null) return;
+        int n = Math.Min(a.Length, parameters.Length);
+        for (int i = 0; i < n; i++) a[i] = Ops.ToDouble(parameters[i]);
+    }
+}
+
+/// <summary>A jagged <c>double[][]</c> field exposed as a parameter surface, row-major.</summary>
+/// <typeparam name="T">The numeric type of the surface.</typeparam>
+public sealed class DoubleJaggedParameterSource<T> : IParameterSource<T>
+{
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+    private readonly Func<double[][]?> _get;
+
+    /// <summary>Creates a source over whatever jagged array <paramref name="accessor"/> returns.</summary>
+    public DoubleJaggedParameterSource(Func<double[][]?> accessor)
+    {
+        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount
+    {
+        get
+        {
+            var rows = _get();
+            if (rows is null) return 0;
+            long total = 0;
+            for (int i = 0; i < rows.Length; i++) total += rows[i]?.Length ?? 0;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var rows = _get();
+        if (rows is null) return new Vector<T>(0);
+        var result = new Vector<T>((int)ParameterCount);
+        int at = 0;
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var row = rows[i];
+            if (row is null) continue;
+            for (int j = 0; j < row.Length; j++) result[at++] = Ops.FromDouble(row[j]);
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        var rows = _get();
+        if (rows is null) return;
+        int at = 0;
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var row = rows[i];
+            if (row is null) continue;
+            for (int j = 0; j < row.Length && at < parameters.Length; j++)
+                row[j] = Ops.ToDouble(parameters[at++]);
+        }
+    }
+}
+
+/// <summary>A single <c>double</c> field exposed as a one-element parameter surface.</summary>
+/// <typeparam name="T">The numeric type of the surface.</typeparam>
+public sealed class DoubleScalarParameterSource<T> : IParameterSource<T>
+{
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+    private readonly Func<double> _get;
+    private readonly Action<double> _set;
+
+    /// <summary>Creates a source over a scalar double field.</summary>
+    public DoubleScalarParameterSource(Func<double> get, Action<double> set)
+    {
+        _get = get ?? throw new ArgumentNullException(nameof(get));
+        _set = set ?? throw new ArgumentNullException(nameof(set));
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => 1;
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var v = new Vector<T>(1);
+        v[0] = Ops.FromDouble(_get());
+        return v;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length > 0) _set(Ops.ToDouble(parameters[0]));
     }
 }
