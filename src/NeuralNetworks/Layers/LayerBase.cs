@@ -3948,8 +3948,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// having to retrain it from scratch.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Marks a stream that carries a parameter layout before its values. Negative, so it can never
+    /// be mistaken for the value count that legacy streams begin with.
+    /// </summary>
+    private const int SerializedLayoutMarker = int.MinValue + 1;
+
     public virtual void Serialize(BinaryWriter writer)
     {
+        // SHAPES FIRST, VALUES SECOND. A bare count cannot restore into a layer that has not been
+        // sized yet: the reader has 784 values and a target that currently declares 16, and no way
+        // to tell "wrong data" from "not allocated yet". NeuralNetworkBase already writes a layout
+        // for exactly this reason; the standalone layer round trip did not, so a layer saved while
+        // materialized could not be loaded into a fresh one.
+        writer.Write(SerializedLayoutMarker);
+        WriteParameterLayout(writer);
+
         var parameters = GetParameters();
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
@@ -3981,6 +3995,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public virtual void Deserialize(BinaryReader reader)
     {
         int count = reader.ReadInt32();
+
+        // A stream written before layouts were carried begins with its value count, which is never
+        // negative -- so the marker distinguishes the two formats without a version field, and an
+        // older stream still loads.
+        if (count == SerializedLayoutMarker)
+        {
+            // Size the layer to exactly what was saved BEFORE pouring values in, the same order
+            // NeuralNetworkBase already uses. Without it a lazy layer comes back short and the
+            // restore is rejected against a count it was never going to match.
+            ApplyParameterLayout(ParameterLayoutNode.Read(reader));
+            count = reader.ReadInt32();
+        }
+
         var parameters = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
