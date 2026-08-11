@@ -77,6 +77,31 @@ public static class LayerCloning
             // pushing 16 values into a DenseLayer rebuilt from `outputSize` alone threw "Expected 0
             // parameters, but got 16". That is why cloning a layer which had been USED failed while
             // cloning a fresh one appeared to work: both sides were unresolved and agreed at zero.
+            // RESOLVE THE CLONE BEFORE INSTALLING. A lazy layer materializes its weights on its
+            // first forward, and that initialization overwrites anything installed beforehand: the
+            // clone came back structurally right but carrying fresh random weights, and the
+            // DenseLayer round trip read "original 0, clone 0.36892061820885858". Resolving here
+            // means the install writes into tensors that already exist, so the first forward has
+            // nothing left to initialize. Only meaningful when the SOURCE is resolved -- cloning an
+            // untouched layer should stay untouched.
+            if (source.IsShapeResolved && !clone.IsShapeResolved)
+            {
+                var resolved = source.GetInputShape();
+                var batched = new int[resolved.Length + 1];
+                batched[0] = 1;
+                Array.Copy(resolved, 0, batched, 1, resolved.Length);
+
+                // Two shape conventions, same reason the sweep probes both: GetInputShape describes
+                // one sample for most layers and the full input for others.
+                foreach (var candidate in new[] { resolved, batched })
+                {
+                    try { clone.ResolveFromShape(candidate); break; }
+                    catch (ArgumentException) { /* try the other; install as-is if neither fits */ }
+                    catch (InvalidOperationException) { }
+                }
+            }
+
+
             var tensors = source.GetTrainableParameters();
             if (tensors.Count > 0)
             {

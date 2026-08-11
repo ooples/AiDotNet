@@ -57,6 +57,11 @@ public class AllLayersCloneTests
         var failed = new List<string>();
         var notConstructed = new List<string>();
 
+        // COUNTED AND REPORTED, because the first attempt at forwarding silently did nothing and
+        // produced a number identical to the unforwarded run. If this reads 0, the probe never
+        // fired and the coverage figure below is measuring unresolved layers again.
+        var forwarded = new List<string>();
+
         foreach (var open in candidates)
         {
             Type closed;
@@ -84,16 +89,7 @@ public class AllLayersCloneTests
                 // trained-layer proof was failing. A layer that has been USED is the case worth
                 // measuring.
                 var typed = (LayerBase<double>)instance;
-                try
-                {
-                    var shape = typed.GetInputShape();
-                    if (shape.Length > 0 && shape[0] > 0) typed.Forward(new Tensor<double>(shape));
-                }
-                catch (Exception)
-                {
-                    // A layer that will not take a probe of its own declared shape is measured
-                    // unforwarded, the same as before.
-                }
+                if (Forward(typed)) forwarded.Add(open.Name);
 
                 var clone = LayerCloning.Clone(typed);
                 if (clone is null)
@@ -122,6 +118,7 @@ public class AllLayersCloneTests
         _output.WriteLine($"cloned OK          : {cloned.Count}");
         _output.WriteLine($"clone FAILED       : {failed.Count}");
         _output.WriteLine($"not constructed    : {notConstructed.Count} (harness limit, not a clone result)");
+        _output.WriteLine($"forwarded first    : {forwarded.Count} of {cloned.Count + failed.Count} attempted");
         _output.WriteLine(string.Empty);
 
         foreach (var f in failed.Take(40)) _output.WriteLine("  FAIL  " + f);
@@ -155,6 +152,59 @@ public class AllLayersCloneTests
     /// unconstructible layer out of the failure count, since being unable to build a layer here
     /// says nothing about whether it clones.
     /// </remarks>
+    /// <summary>Pushes one probe through the layer so a lazy width resolves. True if it ran.</summary>
+    /// <remarks>
+    /// <para>
+    /// The declared shape CANNOT be used as the probe. A lazy layer declares <c>[-1]</c> for the
+    /// axis it has not resolved yet, so a guard of <c>shape[0] > 0</c> skips precisely the layers
+    /// that needed forwarding, and the sweep reports on unresolved layers while appearing to have
+    /// forwarded them. That mistake cost two runs -- the same wrong assumption that made
+    /// <c>ResolveShapesOnly</c> a no-op.
+    /// </para>
+    /// <para>
+    /// So every non-positive axis becomes a small concrete size, and both shape conventions are
+    /// tried: layers whose declared shape excludes the batch axis, and layers whose shape includes
+    /// it. The first probe that does not throw wins.
+    /// </para>
+    /// </remarks>
+    private static bool Forward(LayerBase<double> layer)
+    {
+        int[] declared;
+        try
+        {
+            declared = layer.GetInputShape();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        if (declared is null || declared.Length == 0) return false;
+
+        var concrete = new int[declared.Length];
+        for (var i = 0; i < declared.Length; i++) concrete[i] = declared[i] > 0 ? declared[i] : 4;
+
+        // Batch-prefixed first: GetInputShape describes ONE sample for most layers here.
+        var batched = new int[concrete.Length + 1];
+        batched[0] = 1;
+        Array.Copy(concrete, 0, batched, 1, concrete.Length);
+
+        foreach (var probe in new[] { batched, concrete })
+        {
+            try
+            {
+                layer.Forward(new Tensor<double>(probe));
+                return true;
+            }
+            catch (Exception)
+            {
+                // Try the other convention; a layer that refuses both is measured unforwarded.
+            }
+        }
+
+        return false;
+    }
+
     private static object? TryConstruct(Type closed)
     {
         var attribute = closed.GetCustomAttributes(inherit: false)

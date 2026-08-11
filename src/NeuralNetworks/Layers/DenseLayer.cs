@@ -1758,22 +1758,12 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// Think of it like making a perfect clone that starts exactly where the original is.
     /// </para>
     /// </remarks>
-    public override LayerBase<T> Clone()
-    {
-        DenseLayer<T> copy;
-
-        if (UsingVectorActivation && VectorActivation is not null)
-        {
-            copy = new DenseLayer<T>(OutputShape[0], VectorActivation);
-        }
-        else
-        {
-            copy = new DenseLayer<T>(OutputShape[0], ScalarActivation);
-        }
-
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
+    // ROUTED THROUGH THE GENERATED PATH, not hand-written. The previous body rebuilt the copy from
+    // OutputShape[0] -- reverse-engineering the shape, which is exactly what [LayerState] replaced --
+    // and so dropped the lazily-resolved INPUT width entirely. It then called SetParameters on that
+    // unresolved copy, whose ParameterCount is still 0, giving "Expected 0 parameters, but got 16".
+    // Broken independently of the clone port: a lazy DenseLayer could never be cloned this way.
+    public override LayerBase<T> Clone() => (LayerBase<T>)LayerCloning.Clone(this);
 
     /// <summary>
     /// Releases resources used by this layer, including GPU tensor handles.
