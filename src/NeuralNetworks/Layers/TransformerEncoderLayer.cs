@@ -434,7 +434,13 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // until the first forward.
         if (_embeddingSize > 0)
         {
-            EnsureInitialized();
+            // SHAPES ONLY HERE. A constructor must not allocate a decoder's worth of weights:
+            // measured, one LLaVA-NeXT-Video decoder layer (heads 32, ff 16384, embed 4096) cost
+            // 3,457 MB and 1,974 ms allocating, against 0.5 MB and 16 ms resolving shapes, and
+            // 32 of them is the difference between constructing the model and OutOfMemoryException.
+            _constructingShapesOnly = true;
+            try { EnsureInitialized(); }
+            finally { _constructingShapesOnly = false; }
         }
     }
 
@@ -443,6 +449,17 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Eager ctor sets this <c>true</c> at construction.
     /// </summary>
     private bool _isInitialized;
+
+    /// <summary>True once the sublayers' WEIGHTS are allocated, not merely their shapes resolved.</summary>
+    /// <remarks>
+    /// Separate from <c>_isInitialized</c> so <see cref="EnsureInitialized"/> is RE-ENTERABLE:
+    /// construction resolves shapes and leaves this false, and the first caller that genuinely needs
+    /// weights - a real forward, a restore, ApplyParameterLayout - performs the allocation.
+    /// </remarks>
+    private bool _sublayerWeightsMaterialized;
+
+    /// <summary>Set only while the eager constructor runs, so it resolves shapes without allocating.</summary>
+    private bool _constructingShapesOnly;
 
     /// <summary>
     /// AiDotNet#1370 shape oracle override: when the eager-dimension ctor
@@ -518,35 +535,38 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         ResolveShapes(resolved, declaredOutput);
     }
 
-    /// <summary>
-    /// Constructs the sublayers (attention, norms, FFN) using the resolved
-    /// <see cref="_embeddingSize"/>.
-    /// </summary>
     protected override void EnsureInitialized()
     {
-        if (_isInitialized) return;
+        // TWO CONDITIONS, NOT ONE. _isInitialized means the sublayers EXIST with resolved shapes;
+        // _sublayerWeightsMaterialized means their weights are ALLOCATED. Construction satisfies only
+        // the first, so this must stay re-enterable - the write path calls it again and that call is
+        // what allocates.
+        if (_isInitialized && _sublayerWeightsMaterialized) return;
 
         lock (InitializationLock)
         {
-            if (_isInitialized) return;
+            if (_isInitialized && _sublayerWeightsMaterialized) return;
             if (_embeddingSize <= 0)
                 throw new InvalidOperationException(
                     "TransformerEncoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
 
-            _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads,
-                new GELUActivation<T>() as IActivationFunction<T>);
-            _norm1 = new LayerNormalizationLayer<T>();
-            _feedForward1 = new FeedForwardLayer<T>(_feedForwardDim,
-                new GELUActivation<T>() as IActivationFunction<T>);
-            _feedForward2 = new FeedForwardLayer<T>(_embeddingSize,
-                (IActivationFunction<T>?)null);
-            _norm2 = new LayerNormalizationLayer<T>();
+            // Sublayers are built once; a re-entry only upgrades shapes to weights.
+            if (!_isInitialized)
+            {
+                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads,
+                    new GELUActivation<T>() as IActivationFunction<T>);
+                _norm1 = new LayerNormalizationLayer<T>();
+                _feedForward1 = new FeedForwardLayer<T>(_feedForwardDim,
+                    new GELUActivation<T>() as IActivationFunction<T>);
+                _feedForward2 = new FeedForwardLayer<T>(_embeddingSize,
+                    (IActivationFunction<T>?)null);
+                _norm2 = new LayerNormalizationLayer<T>();
 
-            RegisterSubLayer(_selfAttention);
-            RegisterSubLayer(_norm1);
-            RegisterSubLayer(_feedForward1);
-            RegisterSubLayer(_feedForward2);
-            RegisterSubLayer(_norm2);
+                RegisterSubLayer(_selfAttention);
+                RegisterSubLayer(_norm1);
+                RegisterSubLayer(_feedForward1);
+                RegisterSubLayer(_feedForward2);
+                RegisterSubLayer(_norm2);
 
             // Propagate a deterministic per-sublayer init seed derived from THIS layer's
             // wired RandomSeed. The sublayers are constructed HERE, at first-forward — long
@@ -567,28 +587,64 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             // When RandomSeed is null (production default — no seed requested) the sublayers
             // stay unseeded, preserving the existing "reproducible iff a seed was requested"
             // contract.
-            if (RandomSeed.HasValue)
-            {
-                var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
-                _selfAttention.RandomSeed = subSeedRng.Next();
-                _norm1.RandomSeed = subSeedRng.Next();
-                _feedForward1.RandomSeed = subSeedRng.Next();
-                _feedForward2.RandomSeed = subSeedRng.Next();
-                _norm2.RandomSeed = subSeedRng.Next();
+                if (RandomSeed.HasValue)
+                {
+                    var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
+                    _selfAttention.RandomSeed = subSeedRng.Next();
+                    _norm1.RandomSeed = subSeedRng.Next();
+                    _feedForward1.RandomSeed = subSeedRng.Next();
+                    _feedForward2.RandomSeed = subSeedRng.Next();
+                    _norm2.RandomSeed = subSeedRng.Next();
+                }
             }
 
-            // Eagerly resolve sub-layers using the known embedding size so their
-            // ParameterCount reflects real weights immediately. Without this,
-            // SetParameters dispatch (which slices by ParameterCount) sees 0 for
-            // lazy FeedForwardLayer (-1 input × outDim + outDim = 0) and silently
-            // skips its serialized weights — fixes the post-deserialize Predict
-            // mismatch in VideoCLIP / VLM Clone tests.
+            // Sub-layers are sized from the known embedding size rather than left lazy, so that
+            // SetParameters dispatch -- which slices by ParameterCount -- does not see 0 for a lazy
+            // FeedForwardLayer (-1 input × outDim + outDim = 0) and silently skip its serialized
+            // weights.
             int[] subInputShape = new[] { _embeddingSize };
-            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
-            _norm1.ResolveFromShape(subInputShape);
-            _feedForward1.ResolveFromShape(subInputShape);
-            _feedForward2.ResolveFromShape(new[] { _feedForwardDim });
-            _norm2.ResolveFromShape(subInputShape);
+
+            // WHO IS ASKING DECIDES. A shape-walker (LayerBase.ResolveShapesOnly sets
+            // IsResolvingShapesOnly) and the constructor both want dimensions without allocation.
+            // Anything else - a real forward, SetParameters, ApplyParameterLayout - is about to use
+            // the weights, so it gets them. LayerBase.EnsureParametersMaterialized is what routes
+            // the write path back here a second time, and _sublayerWeightsMaterialized is what makes
+            // that second entry do something.
+            if (IsResolvingShapesOnly || _constructingShapesOnly)
+            {
+                _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
+                _norm1.ResolveShapesOnly(subInputShape);
+                _feedForward1.ResolveShapesOnly(subInputShape);
+                _feedForward2.ResolveShapesOnly(new[] { _feedForwardDim });
+                _norm2.ResolveShapesOnly(subInputShape);
+            }
+            else
+            {
+                // BOTH CALLS, and neither is redundant - they cover the two states a sublayer can be in
+                // and each is a no-op in the other's case.
+                //
+                //   ResolveFromShape gives a sublayer its shape, and opens with
+                //   `if (IsShapeResolved) return;` - so it is the one that matters for a sublayer the
+                //   shape-only pass left unresolved, and free for one it did not.
+                //
+                //   MaterializeParameters allocates, and declines on a layer whose shape is unresolved
+                //   (LayerBase gates it on IsShapeResolved) - so it is the one that matters for a
+                //   sublayer that already has its shape but no weights.
+                //
+                // Calling only MaterializeParameters was measured wrong: VideoCLIP's TEXT tower never
+                // runs a forward, so its sublayers were still unresolved here, every one of them
+                // declined, and the layer serialized 16,452 values - the MultiHeadAttentionLayer alone,
+                // which allocates without a shape because it is construction-sized - against the 49,792
+                // a restored copy expects. The VIDEO tower passed only because training had run real
+                // data through it and resolved its sublayers as a side effect. A save must not depend
+                // on which branch of a dual-tower model happened to execute.
+                ResolveAndMaterialize(_selfAttention, new[] { 1, _embeddingSize });
+                ResolveAndMaterialize(_norm1, subInputShape);
+                ResolveAndMaterialize(_feedForward1, subInputShape);
+                ResolveAndMaterialize(_feedForward2, new[] { _feedForwardDim });
+                ResolveAndMaterialize(_norm2, subInputShape);
+                _sublayerWeightsMaterialized = true;
+            }
 
             _isInitialized = true;
         }
