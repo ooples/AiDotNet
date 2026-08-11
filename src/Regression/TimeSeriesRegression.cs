@@ -54,7 +54,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193")]
-public class TimeSeriesRegression<T> : RegressionBase<T>
+public partial class TimeSeriesRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// The options that configure this time series regression model.
