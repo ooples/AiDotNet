@@ -65,7 +65,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MagicBrush: A Manually Annotated Dataset for Instruction-Guided Image Editing", "https://arxiv.org/abs/2306.10012", Year = 2024, Authors = "Zhang et al.")]
-public class MagicBrushModel<T> : LatentDiffusionModelBase<T>
+public partial class MagicBrushModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

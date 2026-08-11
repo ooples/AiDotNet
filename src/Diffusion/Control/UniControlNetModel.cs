@@ -90,7 +90,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Uni-ControlNet: All-in-One Control to Text-to-Image Diffusion Models", "https://arxiv.org/abs/2305.16322", Year = 2023, Authors = "Zhao et al.")]
-public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
+public partial class UniControlNetModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

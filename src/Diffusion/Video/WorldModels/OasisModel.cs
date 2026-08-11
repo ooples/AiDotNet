@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Oasis: A Universe in a Transformer", "https://oasis-model.github.io")]
-public class OasisModel<T> : VideoDiffusionModelBase<T>
+public partial class OasisModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("SkyReels V1", "https://github.com/SkyworkAI/SkyReels-V1")]
-public class SkyReelsV1Model<T> : VideoDiffusionModelBase<T>
+public partial class SkyReelsV1Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

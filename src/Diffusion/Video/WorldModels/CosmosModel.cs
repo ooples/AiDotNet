@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Cosmos World Foundation Model Platform for Physical AI", "https://arxiv.org/abs/2501.03575")]
-public class CosmosModel<T> : VideoDiffusionModelBase<T>
+public partial class CosmosModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

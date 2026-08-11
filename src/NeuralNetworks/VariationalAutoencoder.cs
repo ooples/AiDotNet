@@ -519,35 +519,8 @@ public partial class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliar
         return current;
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
-                layer.UpdateParameters(layerParameters);
-                startIndex += layerParameterCount;
-            }
-        }
-
-        // Update mean and log variance layers
-        if (_meanLayer != null && _logVarianceLayer != null)
-        {
-            int meanParameterCount = checked((int)_meanLayer.ParameterCount);
-            _meanLayer.UpdateParameters(parameters.SubVector(startIndex, meanParameterCount));
-            startIndex += meanParameterCount;
-
-            int logVarianceParameterCount = checked((int)_logVarianceLayer.ParameterCount);
-            _logVarianceLayer.UpdateParameters(parameters.SubVector(startIndex, logVarianceParameterCount));
-        }
-        else
-        {
-            throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
-        }
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Makes a prediction using the Variational Autoencoder by encoding the input, sampling from the latent space, and decoding.
     /// </summary>

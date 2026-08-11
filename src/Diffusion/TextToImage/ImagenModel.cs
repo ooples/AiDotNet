@@ -90,7 +90,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding", "https://arxiv.org/abs/2205.11487", Year = 2022, Authors = "Saharia et al.")]
-public class ImagenModel<T> : LatentDiffusionModelBase<T>
+public partial class ImagenModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

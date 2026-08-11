@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UltraEdit: Instruction-based Fine-Grained Image Editing at Scale", "https://arxiv.org/abs/2407.05282", Year = 2024, Authors = "Zhao et al.")]
-public class UltraEditModel<T> : LatentDiffusionModelBase<T>
+public partial class UltraEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

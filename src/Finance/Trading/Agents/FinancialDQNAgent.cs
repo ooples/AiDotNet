@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playing Atari with Deep Reinforcement Learning", "https://arxiv.org/abs/1312.5602", Year = 2013, Authors = "Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Alex Graves, Ioannis Antonoglou, Daan Wierstra, Martin Riedmiller")]
-public class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -60,6 +60,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComputable<T, 
 
     private readonly FinancialDQNAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _qNetwork;
+    [Buffer]
     private readonly INeuralNetwork<T> _targetNetwork;
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _architecture;

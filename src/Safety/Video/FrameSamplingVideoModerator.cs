@@ -63,7 +63,7 @@ namespace AiDotNet.Safety.Video;
     "https://arxiv.org/abs/1608.00859",
     Year = 2016,
     Authors = "Limin Wang, Yuanjun Xiong, Zhe Wang, Yu Qiao, Dahua Lin, Xiaoou Tang, Luc Van Gool")]
-public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
+public partial class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
 {
     /// <summary>
     /// Number of segments K used when the caller does not specify one. The paper: "the number of

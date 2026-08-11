@@ -55,7 +55,7 @@ namespace AiDotNet.Safety.Adversarial;
     "https://arxiv.org/abs/1704.01155",
     Year = 2018,
     Authors = "Weilin Xu, David Evans, Yanjun Qi")]
-public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyModule<T>
+public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyModule<T>
 {
     private const int FeatureCount = 3;  // HF energy, histogram, feature-squeezing
     private static readonly INumericOperations<T> StaticNumOps = MathHelper.GetNumericOperations<T>();

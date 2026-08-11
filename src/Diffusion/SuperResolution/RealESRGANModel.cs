@@ -104,7 +104,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data", "https://arxiv.org/abs/2107.10833", Year = 2021, Authors = "Wang et al.")]
-public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
+public partial class RealESRGANModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

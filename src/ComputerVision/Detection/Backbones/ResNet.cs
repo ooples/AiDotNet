@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/1512.03385",
     Year = 2016,
     Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
-public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
+public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 
     /// <inheritdoc />

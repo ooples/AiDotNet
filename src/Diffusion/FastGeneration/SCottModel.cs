@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SCott: Accelerating Diffusion Models with Stochastic Consistency Distillation", "https://arxiv.org/abs/2403.01505", Year = 2024, Authors = "Luo et al.")]
-public class SCottModel<T> : LatentDiffusionModelBase<T>
+public partial class SCottModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

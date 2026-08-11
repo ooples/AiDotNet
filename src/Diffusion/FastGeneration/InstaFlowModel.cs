@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InstaFlow: One Step is Enough for High-Quality Diffusion-Based Text-to-Image Generation", "https://arxiv.org/abs/2309.06380", Year = 2024, Authors = "Liu et al.")]
-public class InstaFlowModel<T> : LatentDiffusionModelBase<T>
+public partial class InstaFlowModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

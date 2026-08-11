@@ -64,7 +64,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Null-text Inversion for Editing Real Images using Guided Diffusion Models", "https://arxiv.org/abs/2211.09794", Year = 2023, Authors = "Mokady et al.")]
-public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
+public partial class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

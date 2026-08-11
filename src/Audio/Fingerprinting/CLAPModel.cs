@@ -55,7 +55,7 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://doi.org/10.1109/ICASSP49357.2023.10095969",
     Year = 2023,
     Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
-public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
 
     // TextEncoderLayers is yielded by AudioNeuralNetworkBase.GetExtraTrainableLayers for every audio

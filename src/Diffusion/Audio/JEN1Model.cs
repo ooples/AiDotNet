@@ -81,7 +81,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("JEN-1: Text-Guided Universal Music Generation with Omnidirectional Diffusion Models", "https://arxiv.org/abs/2308.04729", Year = 2023, Authors = "Li et al.")]
-public class JEN1Model<T> : AudioDiffusionModelBase<T>
+public partial class JEN1Model<T> : AudioDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

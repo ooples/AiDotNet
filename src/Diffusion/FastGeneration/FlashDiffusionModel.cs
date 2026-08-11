@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Flash Diffusion: Accelerating Any Conditional Diffusion Model for Few Steps Image Generation", "https://arxiv.org/abs/2406.02347", Year = 2024, Authors = "Chadebec et al.")]
-public class FlashDiffusionModel<T> : LatentDiffusionModelBase<T>
+public partial class FlashDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

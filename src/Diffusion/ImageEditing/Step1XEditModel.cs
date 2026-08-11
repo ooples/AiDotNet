@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Step1X-Edit", "https://arxiv.org/abs/2504.17761", Year = 2025, Authors = "StepFun")]
-public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
+public partial class Step1XEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

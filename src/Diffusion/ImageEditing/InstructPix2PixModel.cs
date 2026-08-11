@@ -95,7 +95,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InstructPix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800", Year = 2023, Authors = "Brooks et al.")]
-public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
+public partial class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

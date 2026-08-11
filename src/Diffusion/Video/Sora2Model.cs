@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Sora 2", "https://openai.com/sora")]
-public class Sora2Model<T> : VideoDiffusionModelBase<T>
+public partial class Sora2Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

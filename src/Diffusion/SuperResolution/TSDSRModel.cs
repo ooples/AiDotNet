@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TSD-SR: One-Step Diffusion with Target Score Distillation for Real-World Image Super-Resolution", "https://arxiv.org/abs/2411.18263", Year = 2025, Authors = "Dong et al.")]
-public class TSDSRModel<T> : LatentDiffusionModelBase<T>
+public partial class TSDSRModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

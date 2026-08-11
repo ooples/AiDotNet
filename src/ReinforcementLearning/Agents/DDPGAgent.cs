@@ -63,7 +63,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
     "https://arxiv.org/abs/1509.02971",
     Year = 2016,
     Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]
-public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />

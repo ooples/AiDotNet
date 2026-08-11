@@ -67,7 +67,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lumina-Image 2.0: A Unified and Efficient Image Generative Framework", "https://arxiv.org/abs/2503.21758", Year = 2025, Authors = "Gao et al.")]
-public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
+public partial class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

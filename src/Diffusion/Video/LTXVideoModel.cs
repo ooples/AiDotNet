@@ -110,7 +110,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LTX-Video: Realtime Video Latent Diffusion", "https://arxiv.org/abs/2501.00103", Year = 2024, Authors = "Lightricks")]
-public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class LTXVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

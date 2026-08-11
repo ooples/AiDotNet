@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SyncDiffusion: Coherent Montage via Synchronized Joint Diffusions", "https://arxiv.org/abs/2306.05178", Year = 2023, Authors = "Lee et al.")]
-public class SyncDiffusionModel<T> : LatentDiffusionModelBase<T>
+public partial class SyncDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

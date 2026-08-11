@@ -58,7 +58,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
     "https://arxiv.org/abs/2410.20084",
     Year = 2024,
     Authors = "Quanjian Song, Mingbao Lin, Wengyi Zhan, Shuicheng Yan, Liujuan Cao, Rongrong Ji")]
-public class UniVSTModel<T> : LatentDiffusionModelBase<T>
+public partial class UniVSTModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

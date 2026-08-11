@@ -104,7 +104,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Latte: Latent Diffusion Transformer for Video Generation", "https://arxiv.org/abs/2401.03048", Year = 2024, Authors = "Ma et al.")]
-public class LatteModel<T> : VideoDiffusionModelBase<T>
+public partial class LatteModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

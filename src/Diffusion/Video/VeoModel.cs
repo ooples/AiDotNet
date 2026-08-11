@@ -115,7 +115,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Veo: High-Fidelity Video Generation", "https://deepmind.google/technologies/veo/")]
-public class VeoModel<T> : VideoDiffusionModelBase<T>
+public partial class VeoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

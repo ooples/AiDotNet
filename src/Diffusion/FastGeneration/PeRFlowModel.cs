@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator", "https://arxiv.org/abs/2405.07510", Year = 2024, Authors = "Yan et al.")]
-public class PeRFlowModel<T> : LatentDiffusionModelBase<T>
+public partial class PeRFlowModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

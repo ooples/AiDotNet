@@ -64,7 +64,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AuraFlow v0.3", "https://blog.fal.ai/auraflow/", Year = 2024, Authors = "Fal.ai")]
-public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
+public partial class AuraFlowModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

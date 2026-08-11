@@ -100,7 +100,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("HiDream-I1: A High-Efficient Image Generative Foundation Model with Sparse Diffusion Transformer", "https://arxiv.org/abs/2505.22705")]
-public class HiDreamModel<T> : LatentDiffusionModelBase<T>
+public partial class HiDreamModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

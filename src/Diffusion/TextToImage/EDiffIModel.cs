@@ -71,7 +71,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", "https://arxiv.org/abs/2211.01324", Year = 2022, Authors = "Balaji et al.")]
-public class EDiffIModel<T> : LatentDiffusionModelBase<T>
+public partial class EDiffIModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

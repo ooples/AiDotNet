@@ -132,20 +132,8 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
         return _textProjection.Forward(eosTensor);
     }
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int idx = 0;
-        foreach (var layer in Layers)
-        {
-            int count = (int)layer.ParameterCount;
-            if (count == 0) continue;
-            layer.UpdateParameters(parameters.Slice(idx, count));
-            idx += count;
-        }
-        int projCount = (int)_textProjection.ParameterCount;
-        if (projCount > 0)
-            _textProjection.UpdateParameters(parameters.Slice(idx, projCount));
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// PyTorch-style lazy architecture: token-ID inputs are rank-2
     /// <c>[batch, seqLen]</c>. We use <see cref="InputType.TwoDimensional"/>

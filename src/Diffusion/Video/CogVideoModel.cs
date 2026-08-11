@@ -83,7 +83,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers", "https://arxiv.org/abs/2205.15868", Year = 2023, Authors = "Hong et al.")]
-public class CogVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class CogVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

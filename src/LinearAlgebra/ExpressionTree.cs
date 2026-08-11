@@ -34,7 +34,7 @@ namespace AiDotNet.LinearAlgebra;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Genetic Programming: On the Programming of Computers by Natural Selection", "https://doi.org/10.7551/mitpress/3108.001.0001")]
-public class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
+public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the type of this node (constant, variable, or operation).

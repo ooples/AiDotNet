@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AnyEdit: Mastering Unified High-Quality Image Editing for Any Idea", "https://arxiv.org/abs/2411.15738", Year = 2024, Authors = "Yu et al.")]
-public class AnyEditModel<T> : LatentDiffusionModelBase<T>
+public partial class AnyEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TokenFlow: Consistent Diffusion Features for Consistent Video Editing", "https://arxiv.org/abs/2307.10373", Year = 2023, Authors = "Geyer et al.")]
-public class TokenFlowModel<T> : VideoDiffusionModelBase<T>
+public partial class TokenFlowModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

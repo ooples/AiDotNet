@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Autoregressive Image Generation without Vector Quantization", "https://arxiv.org/abs/2406.11838")]
-public class ARDiffusionModel<T> : LatentDiffusionModelBase<T>
+public partial class ARDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

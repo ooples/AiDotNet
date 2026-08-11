@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RB-Modulation: Training-Free Personalization of Diffusion Models using Stochastic Optimal Control", "https://arxiv.org/abs/2405.17401", Year = 2024, Authors = "Rout et al.")]
-public class RBModulationModel<T> : LatentDiffusionModelBase<T>
+public partial class RBModulationModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Improving Diffusion Models for Authentic Virtual Try-on in the Wild", "https://arxiv.org/abs/2403.05139", Year = 2024, Authors = "Choi et al.")]
-public class IDMVTONModel<T> : LatentDiffusionModelBase<T>
+public partial class IDMVTONModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

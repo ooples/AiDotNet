@@ -89,7 +89,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Midjourney V7", "https://www.midjourney.com")]
-public class MidJourneyV7Model<T> : LatentDiffusionModelBase<T>
+public partial class MidJourneyV7Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

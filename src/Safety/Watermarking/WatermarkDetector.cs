@@ -30,7 +30,7 @@ namespace AiDotNet.Safety.Watermarking;
     "https://arxiv.org/abs/2411.18479",
     Year = 2024,
     Authors = "Various")]
-public class WatermarkDetector<T> : TextWatermarkerBase<T>
+public partial class WatermarkDetector<T> : TextWatermarkerBase<T>
 {
     private readonly SamplingWatermarker<T> _sampling;
     private readonly LexicalWatermarker<T> _lexical;

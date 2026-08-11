@@ -89,7 +89,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playground v2.5: Three Insights towards Enhancing Aesthetic Quality in Text-to-Image Generation", "https://arxiv.org/abs/2402.17245", Year = 2024, Authors = "Li et al.")]
-public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
+public partial class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

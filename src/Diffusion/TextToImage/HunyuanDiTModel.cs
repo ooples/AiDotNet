@@ -74,7 +74,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hunyuan-DiT: A Powerful Multi-Resolution Diffusion Transformer with Fine-Grained Chinese Understanding", "https://arxiv.org/abs/2405.08748", Year = 2024, Authors = "Li et al.")]
-public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
+public partial class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

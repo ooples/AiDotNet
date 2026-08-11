@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Score Identity Distillation: Exponentially Fast Distillation of Pretrained Diffusion Models for One-Step Generation", "https://arxiv.org/abs/2404.04057", Year = 2024, Authors = "Zhou et al.")]
-public class SiDDiTModel<T> : LatentDiffusionModelBase<T>
+public partial class SiDDiTModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

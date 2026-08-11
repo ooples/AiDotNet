@@ -46,7 +46,7 @@ namespace AiDotNet.AutoML;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Ensemble Methods in Machine Learning", "https://doi.org/10.1007/3-540-45014-9_1")]
-public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
+public sealed partial class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 {
 
     [JsonProperty("Members")]

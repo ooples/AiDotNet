@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Sora: Democratizing Efficient Video Production for All", "https://arxiv.org/abs/2412.20404", Year = 2024, Authors = "Zheng et al.")]
-public class OpenSora13Model<T> : VideoDiffusionModelBase<T>
+public partial class OpenSora13Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

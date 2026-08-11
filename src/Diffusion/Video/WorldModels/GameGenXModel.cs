@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("GameGen-X: Interactive Open-world Game Video Generation", "https://arxiv.org/abs/2411.00769", Year = 2024, Authors = "Che et al.")]
-public class GameGenXModel<T> : VideoDiffusionModelBase<T>
+public partial class GameGenXModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

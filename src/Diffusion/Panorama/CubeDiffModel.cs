@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("CubeDiff: Repurposing Diffusion-Based Image Models for Panorama Generation", "https://arxiv.org/abs/2501.17162")]
-public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
+public partial class CubeDiffModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

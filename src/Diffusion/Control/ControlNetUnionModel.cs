@@ -91,7 +91,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", "https://arxiv.org/abs/2404.07987")]
-public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

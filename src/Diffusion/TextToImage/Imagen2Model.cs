@@ -69,7 +69,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Imagen 2", "https://deepmind.google/technologies/imagen-2/")]
-public class Imagen2Model<T> : LatentDiffusionModelBase<T>
+public partial class Imagen2Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

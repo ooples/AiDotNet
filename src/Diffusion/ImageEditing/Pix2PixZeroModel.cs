@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Zero-shot Image-to-Image Translation", "https://arxiv.org/abs/2302.03027", Year = 2023, Authors = "Parmar et al.")]
-public class Pix2PixZeroModel<T> : LatentDiffusionModelBase<T>
+public partial class Pix2PixZeroModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

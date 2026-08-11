@@ -68,7 +68,7 @@ namespace AiDotNet.Diffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239", Year = 2020, Authors = "Ho et al.")]
-public class DDPMModel<T> : DiffusionModelBase<T>
+public partial class DDPMModel<T> : DiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

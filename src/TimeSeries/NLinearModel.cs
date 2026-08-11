@@ -18,7 +18,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Are Transformers Effective for Time Series Forecasting?", "https://arxiv.org/abs/2205.13504", Year = 2023, Authors = "Ailing Zeng, Muxi Chen, Lei Zhang, Qiang Xu")]
-public class NLinearModel<T> : TimeSeriesModelBase<T>
+public partial class NLinearModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NLinearOptions<T> _options;
     private readonly Random _random;

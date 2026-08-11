@@ -81,7 +81,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MVDream: Multi-view Diffusion for 3D Generation", "https://arxiv.org/abs/2308.16512", Year = 2024, Authors = "Shi et al.")]
-public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
+public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

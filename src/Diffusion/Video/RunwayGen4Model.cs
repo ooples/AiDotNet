@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Runway Gen-4", "https://runwayml.com/research/gen-4")]
-public class RunwayGen4Model<T> : VideoDiffusionModelBase<T>
+public partial class RunwayGen4Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

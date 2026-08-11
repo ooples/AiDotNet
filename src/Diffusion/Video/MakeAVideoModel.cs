@@ -93,7 +93,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Make-A-Video: Text-to-Video Generation without Text-Video Data", "https://arxiv.org/abs/2209.14792", Year = 2022, Authors = "Singer et al.")]
-public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

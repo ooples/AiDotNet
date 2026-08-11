@@ -92,7 +92,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Playground v3: Improving Text-to-Image Alignment with Human Feedback", "https://arxiv.org/abs/2409.10695", Year = 2024, Authors = "Li et al.")]
-public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
+public partial class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

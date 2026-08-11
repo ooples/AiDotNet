@@ -1059,19 +1059,8 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return new ChronosFoundationModel<T>(new ChronosOptions<T>(_options));
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = _tokenEmbeddings.Length;
-            count += _outputProjection.Length + _outputBias.Length;
-            count += _finalLayerNormGamma.Length + _finalLayerNormBeta.Length;
-            foreach (var layer in _transformerLayers)
-                count += (int)layer.ParameterCount;
-            return count;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     private class LayerNormCache
     {
         public Tensor<T> Input { get; set; } = new Tensor<T>(new[] { 1 });

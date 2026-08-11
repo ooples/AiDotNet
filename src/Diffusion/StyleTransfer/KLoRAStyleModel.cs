@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("K-LoRA: Unlocking Training-Free Fusion of Any Subject and Style LoRAs", "https://arxiv.org/abs/2502.18461", Year = 2025, Authors = "Ouyang et al.")]
-public class KLoRAStyleModel<T> : LatentDiffusionModelBase<T>
+public partial class KLoRAStyleModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

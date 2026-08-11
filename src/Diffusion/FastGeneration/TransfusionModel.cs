@@ -50,7 +50,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", "https://arxiv.org/abs/2408.11039", Year = 2024, Authors = "Zhou et al.")]
-public class TransfusionModel<T> : LatentDiffusionModelBase<T>
+public partial class TransfusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -541,17 +541,8 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         return new DeepANT<T>(new DeepANTOptions<T>(_options), initializeModel: false);
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var conv in _convLayers)
-                count += (int)conv.ParameterCount;
-            count += _fcWeights.Length + _fcBias.Length;
-            return count;
-        }
-    }
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
 }
 
 /// <summary>

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Seedance 1.0: Exploring the Boundaries of Video Generation Models", "https://arxiv.org/abs/2506.09113")]
-public class Seedance1Model<T> : VideoDiffusionModelBase<T>
+public partial class Seedance1Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

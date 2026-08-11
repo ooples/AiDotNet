@@ -70,7 +70,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PhotoMaker: Customizing Realistic Human Photos via Stacked ID Embedding", "https://arxiv.org/abs/2312.04461", Year = 2024, Authors = "Li et al.")]
-public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
+public partial class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -106,7 +106,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Exploiting Diffusion Prior for Real-World Image Super-Resolution", "https://arxiv.org/abs/2305.07015", Year = 2024, Authors = "Wang et al.")]
-public class StableSRModel<T> : LatentDiffusionModelBase<T>
+public partial class StableSRModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

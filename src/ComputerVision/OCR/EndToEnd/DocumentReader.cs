@@ -36,7 +36,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("LayoutLMv3: Pre-training for Document AI", "https://arxiv.org/abs/2204.08387")]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly TextDetectorBase<T> _detector;
     private readonly OCRBase<T> _recognizer;

@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SwiftBrush: One-Step Text-to-Image Diffusion Model with Variational Score Distillation", "https://arxiv.org/abs/2312.05239", Year = 2024, Authors = "Nguyen et al.")]
-public class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
+public partial class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

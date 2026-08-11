@@ -65,7 +65,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Imagic: Text-Based Real Image Editing with Diffusion Models", "https://arxiv.org/abs/2210.09276", Year = 2023, Authors = "Kawar et al.")]
-public class ImagicModel<T> : LatentDiffusionModelBase<T>
+public partial class ImagicModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

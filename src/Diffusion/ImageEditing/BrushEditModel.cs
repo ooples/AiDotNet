@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BrushEdit: All-In-One Image Inpainting and Editing", "https://arxiv.org/abs/2412.10316", Year = 2024, Authors = "Li et al.")]
-public class BrushEditModel<T> : LatentDiffusionModelBase<T>
+public partial class BrushEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

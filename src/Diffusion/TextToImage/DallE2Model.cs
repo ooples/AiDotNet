@@ -87,7 +87,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hierarchical Text-Conditional Image Generation with CLIP Latents", "https://arxiv.org/abs/2204.06125", Year = 2022, Authors = "Ramesh et al.")]
-public class DallE2Model<T> : LatentDiffusionModelBase<T>
+public partial class DallE2Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -755,27 +755,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return summed;
         }
 
-        /// <summary>
-        /// Updates the branch and trunk network parameters from a flattened vector.
-        /// </summary>
-        /// <param name="parameters">Parameter vector.</param>
-        public override void UpdateParameters(Vector<T> parameters)
-        {
-            int branchParameterCount = (int)_branchNet.GetParameterCount();
-            int trunkParameterCount = (int)_trunkNet.GetParameterCount();
-
-            if (parameters.Length != branchParameterCount + trunkParameterCount)
-            {
-                throw new ArgumentException($"Expected {branchParameterCount + trunkParameterCount} parameters, got {parameters.Length}.");
-            }
-
-            Vector<T> branchParameters = parameters.GetSubVector(0, branchParameterCount);
-            Vector<T> trunkParameters = parameters.GetSubVector(branchParameterCount, trunkParameterCount);
-
-            _branchNet.UpdateParameters(branchParameters);
-            _trunkNet.UpdateParameters(trunkParameters);
-        }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
         public override Vector<T> GetGradients()
         {
             return Vector<T>.Concatenate(_branchNet.GetGradients(), _trunkNet.GetGradients());

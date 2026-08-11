@@ -83,7 +83,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Zero-1-to-3: Zero-shot One Image to 3D Object", "https://arxiv.org/abs/2303.11328", Year = 2023, Authors = "Liu et al.")]
-public class Zero123Model<T> : LatentDiffusionModelBase<T>
+public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

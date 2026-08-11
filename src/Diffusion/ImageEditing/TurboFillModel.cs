@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("SDXL-Turbo: Adversarial Diffusion Distillation", "https://arxiv.org/abs/2311.17042")]
-public class TurboFillModel<T> : LatentDiffusionModelBase<T>
+public partial class TurboFillModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

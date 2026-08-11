@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MotionDiffuse: Text-Driven Human Motion Generation with Diffusion Model", "https://arxiv.org/abs/2208.15001", Year = 2024, Authors = "Zhang et al.")]
-public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
+public partial class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

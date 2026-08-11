@@ -53,7 +53,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Instruct-Pix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800")]
-public class ReplaceAnythingModel<T> : LatentDiffusionModelBase<T>
+public partial class ReplaceAnythingModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

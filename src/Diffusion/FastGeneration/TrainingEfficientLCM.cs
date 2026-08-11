@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Latent Consistency Models: Synthesizing High-Resolution Images with Few-Step Inference", "https://arxiv.org/abs/2310.04378", Year = 2023, Authors = "Luo et al.")]
-public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
+public partial class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

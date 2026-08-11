@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
     "https://arxiv.org/abs/2404.02733",
     Year = 2024,
     Authors = "Haofan Wang, Matteo Spinelli, Qixun Wang, Xu Bai, Zekui Qin, Anthony Chen")]
-public class InstantStyleModel<T> : LatentDiffusionModelBase<T>
+public partial class InstantStyleModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

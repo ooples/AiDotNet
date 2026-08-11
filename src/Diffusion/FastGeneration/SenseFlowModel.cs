@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SenseFlow: Accelerated Flow-Matching Generation", "https://arxiv.org/abs/2501.04601", Year = 2024, Authors = "SenseTime")]
-public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
+public partial class SenseFlowModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

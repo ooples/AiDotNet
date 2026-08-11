@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lumina-T2X: Transforming Text into Any Modality, Resolution, and Duration via Flow-based Large Diffusion Transformers", "https://arxiv.org/abs/2405.05945", Year = 2024, Authors = "Gao et al.")]
-public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
+public partial class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the
