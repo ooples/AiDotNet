@@ -83,7 +83,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     private readonly List<ILayer<T>> _languageModelLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _languageEmbeddings;
 
     #endregion
 
@@ -277,9 +276,7 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         var random = RandomHelper.CreateSeededRandom(42);
         int numPatches = (ImageSize / 14) * (ImageSize / 14);
 
-        _languageEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _languageDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_languageEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -652,5 +649,141 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         base.Dispose(disposing);
     }
 
+    #endregion
+
+    #region Multimodal forward
+
+    /// <summary>Index of the appended token-embedding layer: always the last one.</summary>
+    private int TokenEmbeddingIndex => Layers.Count - 1;
+
+    /// <summary>One past the projector, i.e. the first layer of the text decoder.</summary>
+    /// <remarks>
+    /// Stack order from CreateDefaultDocOwlLayers: [0] patch embed, [1] learned positions,
+    /// [2 .. 2+visionLayers) vision blocks, [2+visionLayers] the Dense(textDim) projector, then the
+    /// text decoder, and finally the appended token embedding.
+    /// </remarks>
+    private int TextDecoderStart => 2 + _visionLayers + 1;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> Forward(Tensor<T> input) => RunMultimodal(input);
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunMultimodal(input);
+
+    /// <summary>
+    /// Runs the vision tower, then the text decoder over the visual tokens and -- when the caller
+    /// supplied token IDs as the auxiliary input -- the embedded text tokens concatenated after them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both forwards route here, so the text tokens are visible to the gradient tape. That is the
+    /// difference between this and the EncodeMultimodal-style entry points elsewhere in this family,
+    /// which open a NoGradScope and therefore can never train the second modality.
+    /// </para>
+    /// <para>
+    /// With no auxiliary input the model behaves exactly as before -- image in, decoder over visual
+    /// tokens -- so existing callers are unaffected.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> RunMultimodal(Tensor<T> input)
+    {
+        if (!_useNativeMode || Layers.Count <= TextDecoderStart)
+        {
+            return base.Forward(input);
+        }
+
+        // Vision tower through the projector: image -> [.., numPatches, textDim].
+        var hidden = input;
+        for (int i = 0; i <= 2 + _visionLayers && i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+        }
+
+        var tokens = AuxiliaryInput;
+        if (tokens is not null && tokens.Length > 0)
+        {
+            var embedded = Layers[TokenEmbeddingIndex].Forward(tokens);
+            hidden = ConcatenateSequences(hidden, embedded);
+        }
+
+        for (int i = TextDecoderStart; i < TokenEmbeddingIndex; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+        }
+
+        return hidden;
+    }
+
+    /// <summary>
+    /// Joins visual and text tokens along the sequence axis, matching ranks first.
+    /// </summary>
+    /// <remarks>
+    /// The two arrive with different ranks -- the vision tower emits a batched
+    /// <c>[B, numPatches, textDim]</c> while a token sequence embeds to <c>[numTokens, textDim]</c> --
+    /// so the text side is promoted to a unit batch before the concatenation rather than relying on a
+    /// broadcast rule that would silently pick an axis.
+    /// </remarks>
+    private Tensor<T> ConcatenateSequences(Tensor<T> visual, Tensor<T> text)
+    {
+        if (visual.Rank == text.Rank)
+        {
+            return Engine.TensorConcatenate([visual, text], axis: visual.Rank - 2);
+        }
+
+        if (visual.Rank == 3 && text.Rank == 2)
+        {
+            var batched = Engine.Reshape(text, new[] { 1, text.Shape[0], text.Shape[1] });
+            return Engine.TensorConcatenate([visual, batched], axis: 1);
+        }
+
+        // An unexpected pairing is a caller error worth naming, not something to reshape past.
+        throw new ArgumentException(
+            $"Cannot fuse a rank-{visual.Rank} visual stream with rank-{text.Rank} text tokens; " +
+            "expected matching ranks or [B, patches, dim] with [tokens, dim].", nameof(text));
+    }
+
+
+    /// <summary>
+    /// Reports activations through the multimodal walk rather than the linear chain.
+    /// </summary>
+    /// <remarks>
+    /// The base feeds each layer the previous one's output. DocOwl's stack is not a chain: the token
+    /// embedding is appended past the head and is addressed directly, so a linear walk would hand it
+    /// a decoder hidden state instead of token ids. Reusing the real forward keeps what is reported
+    /// equal to what the model computes.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode || Layers.Count <= TextDecoderStart)
+        {
+            return base.GetNamedLayerActivations(input);
+        }
+
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var hidden = input;
+        for (int i = 0; i <= 2 + _visionLayers && i < Layers.Count; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+            activations[$"vision_{i}_{Layers[i].GetType().Name}"] = hidden;
+        }
+
+        var tokens = AuxiliaryInput;
+        if (tokens is not null && tokens.Length > 0)
+        {
+            var embedded = Layers[TokenEmbeddingIndex].Forward(tokens);
+            activations["token_embedding"] = embedded;
+            hidden = ConcatenateSequences(hidden, embedded);
+        }
+
+        for (int i = TextDecoderStart; i < TokenEmbeddingIndex; i++)
+        {
+            hidden = Layers[i].Forward(hidden);
+            activations[$"text_{i}_{Layers[i].GetType().Name}"] = hidden;
+        }
+
+        return activations;
+    }
     #endregion
 }

@@ -4734,6 +4734,98 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// GC-owned copy in the outer scope.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The second input for the forward currently running, or <c>null</c> when the caller supplied
+    /// only one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Multi-modal models take two inputs that cannot be packed into one tensor: a page image and a
+    /// token sequence differ in rank AND in value domain, unlike tokens and bounding boxes, which
+    /// pack fine. Models that needed a second input grew their own entry points instead
+    /// (<c>LiLT.EncodeDualStream</c>, <c>LayoutXLM.EncodeMultimodal</c>), and every one of those
+    /// opens a <c>NoGradScope</c> -- so the second modality was reachable for INFERENCE and
+    /// invisible to training. LiLT's layout stream could not be trained at all, and that is not a
+    /// quirk of LiLT; it is what an inference-only side door does every time one is built.
+    /// </para>
+    /// <para>
+    /// One slot, read by the ordinary forward, removes the reason to build side doors:
+    /// <see cref="Predict(Tensor{T}, Tensor{T})"/> and
+    /// <see cref="Train(Tensor{T}, Tensor{T}, Tensor{T})"/> reach the model through the SAME forward,
+    /// so whatever the second input changes about the output is also what gradients flow through.
+    /// </para>
+    /// <para>
+    /// Scoped, not stored: the value lives only for the call that set it and is restored on the way
+    /// out even if the forward throws. That is instance state for the length of one forward, the
+    /// same threading contract training already has -- see <c>AcquireTrainSentinel</c>, which makes
+    /// one instance single-thread-per-step.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T>? AuxiliaryInput { get; private set; }
+
+    /// <summary>
+    /// Installs an auxiliary input for the duration of a <c>using</c> block, restoring whatever was
+    /// there before on exit. Nesting is safe; an exception inside still restores.
+    /// </summary>
+    protected IDisposable UseAuxiliaryInput(Tensor<T>? auxiliary) => new AuxiliaryInputScope(this, auxiliary);
+
+    private sealed class AuxiliaryInputScope : IDisposable
+    {
+        private readonly NeuralNetworkBase<T> _owner;
+        private readonly Tensor<T>? _previous;
+        private bool _disposed;
+
+        internal AuxiliaryInputScope(NeuralNetworkBase<T> owner, Tensor<T>? auxiliary)
+        {
+            _owner = owner;
+            _previous = owner.AuxiliaryInput;
+            owner.AuxiliaryInput = auxiliary;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _owner.AuxiliaryInput = _previous;
+        }
+    }
+
+    /// <summary>
+    /// Runs inference with a second input, for models that consume two modalities.
+    /// </summary>
+    /// <param name="input">The primary input, whatever the model's single-input Predict takes.</param>
+    /// <param name="auxiliary">
+    /// The second input, exposed to the model's forward as <see cref="AuxiliaryInput"/>. Null is the
+    /// same as calling the single-input overload.
+    /// </param>
+    /// <remarks>
+    /// This does NOT bypass the normal path: it sets the slot and calls the ordinary
+    /// <see cref="Predict(Tensor{T})"/>, so a model that reads the slot behaves identically here and
+    /// under training. A model that ignores the slot is unaffected.
+    /// </remarks>
+    public Tensor<T> Predict(Tensor<T> input, Tensor<T>? auxiliary)
+    {
+        using var _ = UseAuxiliaryInput(auxiliary);
+        return Predict(input);
+    }
+
+    /// <summary>
+    /// Trains on a sample whose input has two modalities.
+    /// </summary>
+    /// <param name="input">The primary input.</param>
+    /// <param name="auxiliary">
+    /// The second input, exposed to the model's forward as <see cref="AuxiliaryInput"/>. Because
+    /// this routes through the ordinary <see cref="Train(Tensor{T}, Tensor{T})"/>, the tape records
+    /// the auxiliary's contribution and the weights behind it actually learn -- which is the whole
+    /// point, and what the per-model NoGradScope entry points could never do.
+    /// </param>
+    /// <param name="expectedOutput">The target.</param>
+    public void Train(Tensor<T> input, Tensor<T>? auxiliary, Tensor<T> expectedOutput)
+    {
+        using var _ = UseAuxiliaryInput(auxiliary);
+        Train(input, expectedOutput);
+    }
+
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
         // ONE-SHOT chain validation, on the first real forward rather than at construction.

@@ -11615,6 +11615,13 @@ public static class LayerHelper<T>
 
         yield return new RMSNormalizationLayer<T>(textDim);
         yield return new DenseLayer<T>(vocabSize, identityActivation);
+
+        // Token embedding for the TEXT side, appended last so no existing index moves. It is not a
+        // step in the sequential chain -- DocOwl's forward addresses it directly -- because the text
+        // blocks above consume the CONCATENATION of projected visual tokens and embedded text
+        // tokens, which a linear walk cannot express. Without it the decoder only ever saw the image
+        // and _languageEmbeddings sat dead: a vision-language model with no way in for language.
+        yield return new EmbeddingLayer<T>(vocabSize, textDim);
     }
 
     /// <summary>
