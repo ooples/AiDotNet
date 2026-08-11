@@ -74,9 +74,16 @@ public abstract class TabPFNBase<T>
     public int NumNumericalFeatures { get; }
 
     /// <summary>
-    /// Gets the MLP output dimension.
+    /// Gets the width of what <see cref="ForwardBackbone"/> returns -- the input size of any head.
     /// </summary>
-    protected int MLPOutputDimension => Options.OutputHeadDimensions[^1];
+    /// <remarks>
+    /// An empty output-MLP is a legal configuration: the backbone loop simply does not run and the
+    /// final norm sees the embedding directly. Indexing <c>[^1]</c> unguarded threw on exactly that
+    /// case, so the one place naming this width could not be used by the heads that need it.
+    /// </remarks>
+    protected int MLPOutputDimension => Options.OutputHeadDimensions.Length > 0
+        ? Options.OutputHeadDimensions[^1]
+        : Options.EmbeddingDimension;
 
     /// <summary>
     /// Gets the total number of trainable parameters.
@@ -113,6 +120,27 @@ public abstract class TabPFNBase<T>
     /// The positional encoding is handled separately below because it is a raw vector, not a layer.
     /// </remarks>
     private IEnumerable<IParameterSource<T>> EnumerateParameterComponents()
+    {
+        // Materialize FIRST, so every surface measures the same model.
+        //
+        // A lazily sized component contributes nothing until its shape is known, and SetParameters is
+        // itself an event that can resolve it, so measuring before materializing lets the count move
+        // under a caller. Mirrors NeuralNetworkBase's restore walk; idempotent, so the common path
+        // where everything is already up costs a branch per component.
+        //
+        // This is hygiene, NOT the fix for the growth this model actually had. That was deferred
+        // input sizes on the sub-layers, corrected at their construction sites -- attempting to fix
+        // it here first did not move the numbers at all, which is what identified the real cause.
+        foreach (var component in RawComponents())
+        {
+            if (component is Layers.LayerBase<T> layer) layer.MaterializeParameters();
+        }
+
+        foreach (var component in RawComponents()) yield return component;
+    }
+
+    /// <summary>The component order itself, before materialization is applied.</summary>
+    private IEnumerable<IParameterSource<T>> RawComponents()
     {
         yield return _featureEncoder;
 
@@ -217,9 +245,16 @@ public abstract class TabPFNBase<T>
         int embDim = Options.EmbeddingDimension;
 
         // Feature encoder
-        _featureEncoder = new FullyConnectedLayer<T>(
-            embDim,
-            Options.HiddenActivation ?? new GELUActivation<T>());
+        // ForwardBackbone feeds this [samples, NumNumericalFeatures], so the input width is known
+        // here. Zero features is the one genuinely deferred case, and only then is it deferred.
+        _featureEncoder = NumNumericalFeatures > 0
+            ? new FullyConnectedLayer<T>(
+                NumNumericalFeatures,
+                embDim,
+                Options.HiddenActivation ?? new GELUActivation<T>())
+            : new FullyConnectedLayer<T>(
+                embDim,
+                Options.HiddenActivation ?? new GELUActivation<T>());
 
         // Categorical encoders
         var cardinalities = Options.CategoricalCardinalities ?? [];
@@ -227,9 +262,15 @@ public abstract class TabPFNBase<T>
 
         for (int i = 0; i < cardinalities.Length; i++)
         {
-            _categoricalEncoders[i] = new FullyConnectedLayer<T>(
-                embDim,
-                (IActivationFunction<T>?)null);
+            // Fed a one-hot of width cardinalities[i], so that IS the input size.
+            _categoricalEncoders[i] = cardinalities[i] > 0
+                ? new FullyConnectedLayer<T>(
+                    cardinalities[i],
+                    embDim,
+                    (IActivationFunction<T>?)null)
+                : new FullyConnectedLayer<T>(
+                    embDim,
+                    (IActivationFunction<T>?)null);
         }
 
         // Initialize positional encoding if enabled
@@ -261,12 +302,15 @@ public abstract class TabPFNBase<T>
         {
             bool isLast = i == mlpDims.Length - 1;
             _outputMLP[i] = new FullyConnectedLayer<T>(
+                inputDim,
                 mlpDims[i],
                 isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
             inputDim = mlpDims[i];
         }
 
-        _finalNorm = new LayerNormalizationLayer<T>();
+        // Applied AFTER the output MLP, so it normalizes the last MLP width -- which is embDim
+        // only when the MLP is empty. inputDim already holds that value.
+        _finalNorm = new LayerNormalizationLayer<T>(inputDim);
     }
 
     /// <summary>
@@ -658,17 +702,21 @@ public abstract class TabPFNBase<T>
             _outputGrad = new Tensor<TBlock>([embeddingDim, embeddingDim]);
 
             // Feed-forward network
+            // Both projections and both norms are fixed by the block's own dimensions, so none of
+            // them needs the deferred constructor.
             _ff1 = new FullyConnectedLayer<TBlock>(
+                embeddingDim,
                 ffDim,
                 new GELUActivation<TBlock>() as IActivationFunction<TBlock>);
 
             _ff2 = new FullyConnectedLayer<TBlock>(
+                ffDim,
                 embeddingDim,
                 (IActivationFunction<TBlock>?)null);
 
             // Layer normalizations
-            _norm1 = new LayerNormalizationLayer<TBlock>();
-            _norm2 = new LayerNormalizationLayer<TBlock>();
+            _norm1 = new LayerNormalizationLayer<TBlock>(embeddingDim);
+            _norm2 = new LayerNormalizationLayer<TBlock>(embeddingDim);
         }
 
         private static Tensor<TBlock> InitializeWeights(int[] shape, double scale, Random random)

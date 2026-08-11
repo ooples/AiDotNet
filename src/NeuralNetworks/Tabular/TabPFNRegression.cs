@@ -88,7 +88,9 @@ public class TabPFNRegression<T> : TabPFNBase<T>
 
         _outputDimension = outputDimension;
 
+        // Consumes the backbone output, whose width the base already names.
         _regressionHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

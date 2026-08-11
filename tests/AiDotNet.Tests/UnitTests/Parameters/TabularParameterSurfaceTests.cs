@@ -80,14 +80,7 @@ public class TabularParameterSurfaceTests
     /// block previously reported a ParameterCount with no way to read or write those values, so a
     /// round trip would have silently dropped every block's attention projections.
     /// </remarks>
-    [Fact(Timeout = 60000, Skip =
-        "RECORDED DEFECT, not a flake. TabPFN's parameter count SHRINKS across a restore: " +
-        "GetParameters returns 933,250 values, and after SetParameters(those values) it returns " +
-        "925,377 — a loss of 7,873, exactly the amount by which the block's old formula " +
-        "(_embeddingDim^2 * 4) understated its attention tensors. So SetParameters is resizing " +
-        "something back to the formula's shape instead of writing through the real tensors. " +
-        "Un-skip once that is found; the other three tests in this class pass and pin the " +
-        "count-equals-vector contract that did not exist for this family at all before.")]
+    [Fact(Timeout = 60000)]
     public async Task Restore_RoundTripsEveryValue_IncludingTransformerBlocks()
     {
         await Task.Yield();

@@ -96,7 +96,9 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
 
         _numClasses = numClasses;
 
+        // Consumes the backbone output, whose width the base already names.
         _classificationHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }
