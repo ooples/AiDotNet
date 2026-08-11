@@ -129,7 +129,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         // THE HOST TYPE MUST BE ABLE TO CARRY THE GENERATED MEMBER. Analyze accepted any
         // constructor whose parameters carried [LayerState] and then emitted
         // `partial class {TypeName}` with `internal override void WriteConstructionState`.
-        // A struct, a record, or a class not derived from LayerBase produced a raw C#
+        // A struct, a record, or a class deriving from neither LayerBase nor
+        // NeuralNetworkBase produced a raw C#
         // compiler error pointing INTO generated source -- an error about code the author
         // never wrote and cannot open. Refused here with a diagnostic on the declaration
         // instead.
@@ -326,7 +327,13 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         if (!model.IsPartial)
         {
+            // REPORT, THEN STOP. Emitting `partial class X` against a non-partial declaration is
+            // CS0260 -- a raw compiler error pointing INTO generated source, about code the author
+            // never wrote. This is the same principle the host-type check above already applies;
+            // it only began to matter when models joined, because every layer was already partial
+            // and so the emit-anyway path was never exercised.
             model.Diagnostics.Add(new PendingDiagnostic(NotPartial, model.Location, type.Name));
+            return model;
         }
 
         if (model.HasHandWrittenMetadata)
@@ -1189,10 +1196,46 @@ public class LayerStateGenerator : IIncrementalGenerator
 
     /// <summary>True when the type derives from AiDotNet's LayerBase.</summary>
     private static bool DerivesFromLayerBase(INamedTypeSymbol type)
+        => DerivesFrom(type, "AiDotNet.NeuralNetworks.Layers.LayerBase");
+
+    /// <summary>True when the type derives from AiDotNet's NeuralNetworkBase.</summary>
+    private static bool DerivesFromNeuralNetworkBase(INamedTypeSymbol type)
+        => DerivesFrom(type, "AiDotNet.NeuralNetworks.NeuralNetworkBase");
+
+    /// <summary>
+    /// True when the type has a base that declares the virtual this generator overrides.
+    /// </summary>
+    /// <remarks>
+    /// NOT CURRENTLY USED AS A GATE, and the reason is worth recording. Widening the gate to
+    /// NeuralNetworkBase compiles, but every model then fails ADN0053 on its `architecture`
+    /// parameter: this generator rebuilds from a Dictionary&lt;string, string&gt;, so a constructor
+    /// argument has to survive a round trip through text. Layers take scalars, enums and child
+    /// layers, all of which do. A model takes a NeuralNetworkArchitecture&lt;T&gt; -- a graph, which
+    /// does not.
+    ///
+    /// Cloning does not actually need it to. A clone has the LIVE source object in hand, so rich
+    /// arguments can be passed straight across (or cloned in their own right) rather than
+    /// serialized and rebuilt. Deserialization is the case that needs text, and it already has
+    /// SerializeNetworkSpecificData. So the model factory wants a different signature from the
+    /// layer one -- source-aware, not metadata-only -- which is why models do not simply join this
+    /// gate.
+    /// </remarks>
+    /// <remarks>
+    /// Both LayerBase and NeuralNetworkBase declare
+    /// <c>internal virtual void WriteConstructionState(Dictionary&lt;string, string&gt;)</c>, so the
+    /// generated override compiles against either. Gating on LayerBase alone was why models had no
+    /// generated factory and therefore could not be rebuilt — the same shape of omission this
+    /// generator's own history records, where gating on an already-present attribute meant the
+    /// types that most needed a diagnostic were the ones excluded from receiving one.
+    /// </remarks>
+    private static bool DerivesFromStatefulBase(INamedTypeSymbol type)
+        => DerivesFromLayerBase(type) || DerivesFromNeuralNetworkBase(type);
+
+    private static bool DerivesFrom(INamedTypeSymbol type, string baseDisplayName)
     {
         for (var b = type.BaseType; b is not null; b = b.BaseType)
         {
-            if (b.ConstructedFrom.ToDisplayString(UnqualifiedGenerics) == "AiDotNet.NeuralNetworks.Layers.LayerBase")
+            if (b.ConstructedFrom.ToDisplayString(UnqualifiedGenerics) == baseDisplayName)
             {
                 return true;
             }
