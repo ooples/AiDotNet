@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LEDITS++: Limitless Image Editing using Text-to-Image Models", "https://arxiv.org/abs/2311.16711", Year = 2024, Authors = "Brack et al.")]
-public class LEDITSPPModel<T> : LatentDiffusionModelBase<T>
+public partial class LEDITSPPModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

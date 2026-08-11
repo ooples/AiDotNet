@@ -42,7 +42,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         "https://proceedings.mlr.press/v70/chou17a.html",
         Year = 2017,
         Authors = "Pei-Wen Chou, Daniel Maturana, Sebastian Scherer")]
-    public class BetaPolicy<T> : PolicyBase<T>
+    public partial class BetaPolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;

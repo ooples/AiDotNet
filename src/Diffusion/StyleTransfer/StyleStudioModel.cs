@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("StyleStudio: Text-Driven Style Transfer with Selective Control of Style Elements", "https://arxiv.org/abs/2412.08503", Year = 2024, Authors = "Jiang et al.")]
-public class StyleStudioModel<T> : LatentDiffusionModelBase<T>
+public partial class StyleStudioModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

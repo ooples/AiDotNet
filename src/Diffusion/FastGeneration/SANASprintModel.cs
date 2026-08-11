@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SANA Sprint: One-Step Diffusion with Continuous-Time Consistency Distillation", "https://arxiv.org/abs/2503.09641", Year = 2025, Authors = "NVIDIA")]
-public class SANASprintModel<T> : LatentDiffusionModelBase<T>
+public partial class SANASprintModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

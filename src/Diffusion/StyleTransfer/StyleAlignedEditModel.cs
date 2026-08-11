@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Style Aligned Image Generation via Shared Attention", "https://arxiv.org/abs/2312.02133", Year = 2024, Authors = "Hertz et al.")]
-public class StyleAlignedEditModel<T> : LatentDiffusionModelBase<T>
+public partial class StyleAlignedEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

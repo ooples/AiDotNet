@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("One Step Diffusion via Shortcut Models", "https://arxiv.org/abs/2410.12557", Year = 2024, Authors = "Frans et al.")]
-public class OSDSModel<T> : LatentDiffusionModelBase<T>
+public partial class OSDSModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

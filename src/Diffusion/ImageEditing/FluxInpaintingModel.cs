@@ -57,7 +57,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FLUX.1 Fill", "https://blackforestlabs.ai/flux-1-tools/", Year = 2024, Authors = "Black Forest Labs")]
-public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
+public partial class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

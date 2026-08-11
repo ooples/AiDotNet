@@ -58,7 +58,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Task is Worth One Word: Learning with Task Prompts for High-Quality Versatile Image Inpainting", "https://arxiv.org/abs/2312.03594", Year = 2024, Authors = "Zhuang et al.")]
-public class PowerPaintModel<T> : LatentDiffusionModelBase<T>
+public partial class PowerPaintModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

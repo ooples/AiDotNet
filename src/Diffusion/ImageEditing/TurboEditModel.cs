@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TurboEdit: Text-Based Image Editing Using Few-Step Diffusion Models", "https://arxiv.org/abs/2408.00735", Year = 2024, Authors = "Deutch et al.")]
-public class TurboEditModel<T> : LatentDiffusionModelBase<T>
+public partial class TurboEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

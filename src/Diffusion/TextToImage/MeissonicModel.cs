@@ -92,7 +92,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Meissonic: Revitalizing Masked Generative Transformers for Efficient High-Resolution Text-to-Image Synthesis", "https://arxiv.org/abs/2410.08261", Year = 2024, Authors = "Bai et al.")]
-public class MeissonicModel<T> : LatentDiffusionModelBase<T>
+public partial class MeissonicModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

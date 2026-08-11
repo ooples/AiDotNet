@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Masked Diffusion Transformer is a Strong Image Synthesizer", "https://arxiv.org/abs/2303.14389")]
-public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
+public partial class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

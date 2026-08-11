@@ -63,7 +63,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
     "https://arxiv.org/abs/2110.06169",
     Year = 2022,
     Authors = "Kostrikov, I., Nair, A., & Levine, S.")]
-public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -85,6 +85,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientCompu
     private INeuralNetwork<T> _valueNetwork;
     private INeuralNetwork<T> _q1Network;
     private INeuralNetwork<T> _q2Network;
+    [Buffer]
     private INeuralNetwork<T> _targetValueNetwork;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _offlineBuffer;

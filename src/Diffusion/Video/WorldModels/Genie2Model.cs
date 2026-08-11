@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Genie 2: A Large-Scale Foundation World Model", "https://deepmind.google/discover/blog/genie-2-a-large-scale-foundation-world-model/")]
-public class Genie2Model<T> : VideoDiffusionModelBase<T>
+public partial class Genie2Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

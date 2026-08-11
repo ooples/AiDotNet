@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniSim: Learning Interactive Real-World Simulators", "https://arxiv.org/abs/2310.06114", Year = 2023, Authors = "Yang et al.")]
-public class UniSimModel<T> : VideoDiffusionModelBase<T>
+public partial class UniSimModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
     "https://arxiv.org/abs/1710.02298",
     Year = 2018,
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
-public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -78,6 +78,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _onlineNetwork;
+    [Buffer]
     private INeuralNetwork<T> _targetNetwork;
     private PrioritizedReplayBuffer<T> _replayBuffer;
 

@@ -84,7 +84,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Riffusion: Stable Diffusion for Real-Time Music Generation", "https://riffusion.com/about")]
-public class RiffusionModel<T> : LatentDiffusionModelBase<T>
+public partial class RiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

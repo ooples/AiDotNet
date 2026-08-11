@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VideoCrafter2: Overcoming Data Limitations for High-Quality Video Diffusion Models", "https://arxiv.org/abs/2401.09047", Year = 2024, Authors = "Chen et al.")]
-public class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
+public partial class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

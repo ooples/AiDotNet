@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Emu Video: Factorizing Text-to-Video Generation by Explicit Image Conditioning", "https://arxiv.org/abs/2311.10709", Year = 2023, Authors = "Girdhar et al.")]
-public class EmuVideoModel<T> : VideoDiffusionModelBase<T>
+public partial class EmuVideoModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
     "https://arxiv.org/abs/1911.08265",
     Year = 2020,
     Authors = "Schrittwieser, J., Antonoglou, I., Hubert, T., Simonyan, K., Sifre, L., Schmitt, S., et al.")]
-public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
+public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models", "https://arxiv.org/abs/2407.15886", Year = 2024, Authors = "Chong et al.")]
-public class CatVTONModel<T> : LatentDiffusionModelBase<T>
+public partial class CatVTONModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

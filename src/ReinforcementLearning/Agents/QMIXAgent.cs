@@ -61,7 +61,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
     "https://arxiv.org/abs/1803.11485",
     Year = 2018,
     Authors = "Rashid, T., Samvelyan, M., de Witt, C. S., Farquhar, G., Foerster, J., & Whiteson, S.")]
-public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -80,10 +80,12 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComp
 
     // Per-agent Q-networks
     private List<INeuralNetwork<T>> _agentNetworks;
+    [Buffer]
     private List<INeuralNetwork<T>> _targetAgentNetworks;
 
     // Mixing network (combines agent Q-values)
     private INeuralNetwork<T> _mixingNetwork;
+    [Buffer]
     private INeuralNetwork<T> _targetMixingNetwork;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;

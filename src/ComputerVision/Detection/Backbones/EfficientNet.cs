@@ -31,7 +31,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/1905.11946",
     Year = 2019,
     Authors = "Mingxing Tan, Quoc V. Le")]
-public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
+public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
 
 

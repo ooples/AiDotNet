@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("SPOTDiffusion: Spherical Panorama Outpainting", "https://doi.org/10.1007/978-3-031-72989-8_14")]
-public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
+public partial class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

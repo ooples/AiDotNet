@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Free-Form Image Inpainting with Gated Convolution", "https://arxiv.org/abs/1806.03589")]
-public class FreeInpaintModel<T> : LatentDiffusionModelBase<T>
+public partial class FreeInpaintModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

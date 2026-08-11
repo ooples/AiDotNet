@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DIAMOND: Diffusion for World Modeling", "https://arxiv.org/abs/2405.12399", Year = 2024, Authors = "Alonso et al.")]
-public class DIAMONDModel<T> : VideoDiffusionModelBase<T>
+public partial class DIAMONDModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

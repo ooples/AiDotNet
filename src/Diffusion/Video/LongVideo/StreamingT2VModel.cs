@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("StreamingT2V: Consistent, Dynamic, and Extendable Long Video Generation from Text", "https://arxiv.org/abs/2403.14773", Year = 2024, Authors = "Henschel et al.")]
-public class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
+public partial class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

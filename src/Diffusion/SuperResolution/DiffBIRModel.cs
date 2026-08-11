@@ -104,7 +104,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiffBIR: Towards Blind Image Restoration with Generative Diffusion Prior", "https://arxiv.org/abs/2308.15070", Year = 2024, Authors = "Lin et al.")]
-public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
+public partial class DiffBIRModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

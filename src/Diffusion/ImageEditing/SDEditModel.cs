@@ -67,7 +67,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations", "https://arxiv.org/abs/2108.01073", Year = 2022, Authors = "Meng et al.")]
-public class SDEditModel<T> : LatentDiffusionModelBase<T>
+public partial class SDEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

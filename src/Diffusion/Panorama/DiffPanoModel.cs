@@ -49,7 +49,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiffPano: Scalable and Consistent Text to Panorama Generation with Spherical Epipolar-Aware Diffusion", "https://arxiv.org/abs/2410.24203", Year = 2024, Authors = "Wang et al.")]
-public class DiffPanoModel<T> : LatentDiffusionModelBase<T>
+public partial class DiffPanoModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

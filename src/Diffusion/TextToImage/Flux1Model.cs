@@ -103,7 +103,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("FLUX.1 Technical Report", "https://blackforestlabs.ai/announcing-black-forest-labs/")]
-public class Flux1Model<T> : LatentDiffusionModelBase<T>
+public partial class Flux1Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -38,7 +38,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         "https://proceedings.mlr.press/v32/silver14.pdf",
         Year = 2014,
         Authors = "Silver, D., Lever, G., Heess, N., Degris, T., Wierstra, D., & Riedmiller, M.")]
-    public class DeterministicPolicy<T> : PolicyBase<T>
+    public partial class DeterministicPolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;

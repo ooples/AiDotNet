@@ -407,37 +407,8 @@ public partial class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         return diagnostics;
     }
 
-    /// <summary>
-    /// Updates the network parameters with new values.
-    /// </summary>
-    /// <param name="parameters">The vector containing all parameters for the network.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method updates the internal values (weights and biases) of the neural network
-    /// during training.
-    /// 
-    /// The parameters vector contains all the numbers that define how the network processes inputs.
-    /// These parameters are split into two parts:
-    /// 1. Parameters for the shared subnetwork (which processes each input)
-    /// 2. Parameters for the output layer (which compares the embeddings)
-    /// 
-    /// During training, these parameters are gradually adjusted to make the network better at
-    /// determining whether two inputs are similar or different.
-    /// 
-    /// You typically won't call this method directly - it's used by the training algorithms
-    /// that optimize the network.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int subnetworkParameterCount = checked((int)_subnetwork.ParameterCount);
-        Vector<T> subnetworkParameters = parameters.SubVector(0, subnetworkParameterCount);
-        _subnetwork.UpdateParameters(subnetworkParameters);
-
-        Vector<T> outputLayerParameters = parameters.SubVector(subnetworkParameterCount, (int)_outputLayer.ParameterCount);
-        _outputLayer.UpdateParameters(outputLayerParameters);
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Gets the total number of trainable parameters in the Siamese network.
     /// </summary>

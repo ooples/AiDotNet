@@ -105,7 +105,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LGM: Large Multi-View Gaussian Model for High-Resolution 3D Content Creation", "https://arxiv.org/abs/2402.05054", Year = 2024, Authors = "Tang et al.")]
-public class LGMModel<T> : ThreeDDiffusionModelBase<T>
+public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

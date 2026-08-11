@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 // arXiv 2308.07863 is "StyleDiffusion"; "StyDiff" is this type's short name, not the paper's title.
 [ResearchPaper("StyleDiffusion: Controllable Disentangled Style Transfer via Diffusion Models", "https://arxiv.org/abs/2308.07863", Year = 2023, Authors = "Wang et al.")]
-public class StyDiffModel<T> : LatentDiffusionModelBase<T>
+public partial class StyDiffModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

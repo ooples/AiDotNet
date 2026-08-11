@@ -61,7 +61,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
     "https://arxiv.org/abs/2106.01345",
     Year = 2021,
     Authors = "Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A., Laskin, M., Abbeel, P., Srinivas, A., & Mordatch, I.")]
-public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />

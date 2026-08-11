@@ -633,13 +633,6 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         return new TemporalFusionTransformer<T>(new TemporalFusionTransformerOptions<T>(_options));
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            long count = 0;
-            foreach (var p in CollectAllTrainableParameters()) count += p.Length;
-            return count;
-        }
-    }
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
 }

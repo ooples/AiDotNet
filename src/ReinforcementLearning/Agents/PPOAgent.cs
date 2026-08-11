@@ -64,7 +64,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.PPO;
     "https://arxiv.org/abs/1707.06347",
     Year = 2017,
     Authors = "Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O.")]
-public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />

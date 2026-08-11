@@ -856,17 +856,8 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         return new NHiTSModel<T>(new NHiTSOptions<T>(_options));
     }
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int total = 0;
-            foreach (var stack in _stacks)
-                total += (int)stack.ParameterCount;
-            return total;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new NHiTSModel<T>(_options);

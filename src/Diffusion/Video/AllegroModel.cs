@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Allegro: Open the Black Box of Commercial-Level Video Generation Model", "https://arxiv.org/abs/2410.15458", Year = 2024, Authors = "Zhou et al.")]
-public class AllegroModel<T> : VideoDiffusionModelBase<T>
+public partial class AllegroModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -98,7 +98,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wonder3D: Single Image to 3D using Cross-Domain Diffusion", "https://arxiv.org/abs/2310.15008", Year = 2024, Authors = "Long et al.")]
-public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
+public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

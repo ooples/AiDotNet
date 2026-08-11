@@ -70,7 +70,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ControlNet-XS: Rethinking the Control of Text-to-Image Diffusion Models as Feedback-Control Systems", "https://arxiv.org/abs/2312.06573", Year = 2024, Authors = "Zavadski et al.")]
-public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

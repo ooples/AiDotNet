@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Style Aligned Image Generation via Shared Attention", "https://arxiv.org/abs/2312.02133")]
-public class SASTDModel<T> : LatentDiffusionModelBase<T>
+public partial class SASTDModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

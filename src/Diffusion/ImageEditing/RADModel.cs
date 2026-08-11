@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Region-Aware Diffusion for Zero-shot Text-driven Image Editing", "https://arxiv.org/abs/2302.11797")]
-public class RADModel<T> : LatentDiffusionModelBase<T>
+public partial class RADModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

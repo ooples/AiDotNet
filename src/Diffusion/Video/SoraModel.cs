@@ -113,7 +113,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Video Generation Models as World Simulators", "https://openai.com/index/video-generation-models-as-world-simulators/")]
-public class SoraModel<T> : VideoDiffusionModelBase<T>
+public partial class SoraModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

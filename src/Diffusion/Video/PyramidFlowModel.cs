@@ -52,7 +52,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Pyramidal Flow Matching for Efficient Video Generative Modeling", "https://arxiv.org/abs/2410.05954", Year = 2024, Authors = "Jin et al.")]
-public class PyramidFlowModel<T> : VideoDiffusionModelBase<T>
+public partial class PyramidFlowModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

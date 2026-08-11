@@ -19,7 +19,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Long-term Forecasting with TiDE: Time-series Dense Encoder", "https://arxiv.org/abs/2304.08424", Year = 2023, Authors = "Abhimanyu Das, Weihao Kong, Andrew Leach, Shaan Mathur, Rajat Sen, Rose Yu")]
-public class TiDEModel<T> : TimeSeriesModelBase<T>
+public partial class TiDEModel<T> : TimeSeriesModelBase<T>
 {
     private readonly TiDEOptions<T> _options;
     private readonly Random _random;

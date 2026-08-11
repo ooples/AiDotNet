@@ -61,7 +61,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
     "https://arxiv.org/abs/1509.06461",
     Year = 2016,
     Authors = "van Hasselt, H., Guez, A., & Silver, D.")]
-public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -87,6 +87,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionV
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private INeuralNetwork<T> _qNetwork;
+    [Buffer]
     private INeuralNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;

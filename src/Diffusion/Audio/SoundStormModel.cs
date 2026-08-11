@@ -97,7 +97,7 @@ namespace AiDotNet.Diffusion.Audio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SoundStorm: Efficient Parallel Audio Generation", "https://arxiv.org/abs/2305.09636", Year = 2023, Authors = "Borsos et al.")]
-public class SoundStormModel<T> : AudioDiffusionModelBase<T>
+public partial class SoundStormModel<T> : AudioDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

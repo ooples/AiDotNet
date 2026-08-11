@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Improving Image Generation with Better Captions", "https://cdn.openai.com/papers/dall-e-3.pdf", Year = 2023, Authors = "Betker et al.")]
-public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
+public partial class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

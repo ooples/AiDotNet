@@ -56,7 +56,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ICEdit: In-Context Image Editing", "https://arxiv.org/abs/2501.00031", Year = 2025, Authors = "Zhang et al.")]
-public class ICEditModel<T> : LatentDiffusionModelBase<T>
+public partial class ICEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

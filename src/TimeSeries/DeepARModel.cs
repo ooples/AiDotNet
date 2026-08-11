@@ -880,18 +880,8 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
-    public override long ParameterCount
-    {
-        get
-        {
-            int count = 0;
-            foreach (var lstm in _lstmLayers)
-                count += (int)lstm.ParameterCount;
-            count += (int)_head.ParameterCount;
-            return count;
-        }
-    }
-
+    // ParameterCount restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Mean training loss recorded at the end of each epoch of the most recent
     /// <see cref="TrainCore"/> call (the objective being minimized by Adam). Exposed so callers

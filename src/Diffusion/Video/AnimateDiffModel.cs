@@ -87,7 +87,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning", "https://arxiv.org/abs/2307.04725", Year = 2023, Authors = "Guo et al.")]
-public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
+public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

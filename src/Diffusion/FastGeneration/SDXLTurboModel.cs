@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Adversarial Diffusion Distillation", "https://arxiv.org/abs/2311.17042", Year = 2023, Authors = "Sauer et al.")]
-public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
+public partial class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -51,7 +51,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Show-1: Marrying Pixel and Latent Diffusion Models for Text-to-Video Generation", "https://arxiv.org/abs/2309.15818", Year = 2023, Authors = "Zhang et al.")]
-public class Show1Model<T> : VideoDiffusionModelBase<T>
+public partial class Show1Model<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

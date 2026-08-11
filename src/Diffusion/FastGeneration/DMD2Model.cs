@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Improved Distribution Matching Distillation for Fast Image Synthesis", "https://arxiv.org/abs/2405.14867", Year = 2024, Authors = "Yin et al.")]
-public class DMD2Model<T> : LatentDiffusionModelBase<T>
+public partial class DMD2Model<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

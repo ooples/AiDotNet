@@ -45,7 +45,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked Autoencoders Are Scalable Vision Learners", "https://arxiv.org/abs/2111.06377", Year = 2022, Authors = "Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick")]
-public class MAE<T> : SelfSupervisedLearningMethodBase<T>
+public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly INeuralNetwork<T>? _decoder;
     private readonly MAEReconstructionLoss<T> _loss;

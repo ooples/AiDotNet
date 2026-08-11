@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
     "https://arxiv.org/abs/1803.10122",
     Year = 2018,
     Authors = "Ha, D. & Schmidhuber, J.")]
-public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
+public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

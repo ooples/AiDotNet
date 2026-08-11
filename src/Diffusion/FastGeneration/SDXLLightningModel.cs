@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SDXL-Lightning: Progressive Adversarial Diffusion Distillation", "https://arxiv.org/abs/2402.13929", Year = 2024, Authors = "Lin et al.")]
-public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
+public partial class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

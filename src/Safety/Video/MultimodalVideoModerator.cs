@@ -44,7 +44,7 @@ namespace AiDotNet.Safety.Video;
     "https://arxiv.org/abs/2411.05854",
     Year = 2024,
     Authors = "Claire Wonjeong Jo, Miki Wesolowska, Magdalena Wojcieszak")]
-public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
+public partial class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
 {
 
     private readonly CLIPImageSafetyClassifier<T> _imageClassifier;

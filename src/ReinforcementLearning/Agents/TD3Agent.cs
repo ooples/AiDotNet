@@ -59,7 +59,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
     "https://arxiv.org/abs/1802.09477",
     Year = 2018,
     Authors = "Fujimoto, S., van Hoof, H., & Meger, D.")]
-public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -88,6 +88,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradientCompu
     private readonly INumericOperations<T> _numOps;
 
     private INeuralNetwork<T> _actorNetwork;
+    [Buffer]
     private INeuralNetwork<T> _targetActorNetwork;
     private INeuralNetwork<T> _critic1Network;
     private INeuralNetwork<T> _critic2Network;

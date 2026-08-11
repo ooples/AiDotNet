@@ -748,23 +748,8 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
 
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        // Apply gradient descent updates to all layers
-        var learningRate = NumOps.FromDouble(0.001);
-
-        foreach (var layer in _convLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-
-        foreach (var layer in _lstmLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-
-        _outputLayer?.UpdateParameters(learningRate);
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

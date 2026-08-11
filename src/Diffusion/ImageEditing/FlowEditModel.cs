@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.ImageEditing;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FlowEdit: Inversion-Free Text-Based Editing Using Pre-Trained Flow Models", "https://arxiv.org/abs/2412.08629", Year = 2024, Authors = "Kulikov et al.")]
-public class FlowEditModel<T> : LatentDiffusionModelBase<T>
+public partial class FlowEditModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

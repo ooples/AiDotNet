@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Phased Consistency Model", "https://arxiv.org/abs/2405.18407", Year = 2024, Authors = "Wang et al.")]
-public class PCMModel<T> : LatentDiffusionModelBase<T>
+public partial class PCMModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

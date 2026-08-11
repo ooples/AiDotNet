@@ -875,11 +875,8 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         base.ApplyParameters(parameters);
     }
 
-    public override void SetParameters(Vector<T> parameters)
-    {
-        ApplyParameters(parameters);
-    }
-
+    // SetParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <summary>
     /// Predicts a single value for the given input vector.
     /// </summary>

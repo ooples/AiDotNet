@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MoMask: Generative Masked Modeling of 3D Human Motions", "https://arxiv.org/abs/2312.00063", Year = 2024, Authors = "Guo et al.")]
-public class MoMaskModel<T> : LatentDiffusionModelBase<T>
+public partial class MoMaskModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

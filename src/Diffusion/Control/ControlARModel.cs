@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.Control;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ControlAR: Controllable Image Generation with Autoregressive Models", "https://arxiv.org/abs/2410.02705", Year = 2024, Authors = "Li et al.")]
-public class ControlARModel<T> : LatentDiffusionModelBase<T>
+public partial class ControlARModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

@@ -1235,31 +1235,8 @@ public partial class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoM
 
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int offset = 0;
-
-        foreach (var layer in _visionEncoderLayers
-            .Concat(_perceiverLayers)
-            .Concat(_gatedCrossAttentionLayers)
-            .Concat(_languageModelLayers)
-            .Concat(new[] { _patchEmbedding, _textTokenEmbedding, _outputProjection }
-                .Where(layer => layer is not null)
-                .Cast<ILayer<T>>()))
-        {
-            int layerParamCount = checked((int)layer.ParameterCount);
-            if (layerParamCount > 0)
-            {
-                var layerParams = new Vector<T>(layerParamCount);
-                for (int i = 0; i < layerParamCount && offset + i < parameters.Length; i++)
-                {
-                    layerParams[i] = parameters[offset + i];
-                }
-                layer.UpdateParameters(layerParams);
-                offset += layerParamCount;
-            }
-        }
-    }
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

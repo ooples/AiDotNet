@@ -83,7 +83,7 @@ namespace AiDotNet.Diffusion.Video;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets", "https://arxiv.org/abs/2311.15127", Year = 2023, Authors = "Blattmann et al.")]
-public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
+public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the

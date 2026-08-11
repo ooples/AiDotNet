@@ -807,32 +807,8 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-
-        // Contract (NeuralNetworkBase): the vector holds the NEW parameter VALUES, not gradients.
-        // This previously read the argument as gradients and applied `params -= grads * 1e-4`,
-        // which corrupts every caller that honours the real contract -- WithParameters, clone and
-        // serialize round-trips, and meta-optimizers -- because they hand it values and it
-        // subtracts them from the model. Distributed across the trainable layers exactly as the
-        // corrected sibling DBNet does.
-        int startIndex = 0;
-        foreach (var layer in Layers)
-        {
-            int layerParameterCount = checked((int)layer.ParameterCount);
-            if (layerParameterCount > 0)
-            {
-                layer.UpdateParameters(parameters.SubVector(startIndex, layerParameterCount));
-                startIndex += layerParameterCount;
-            }
-        }
-    }
-
+    // UpdateParameters restated a fold the base now derives from generated component registration.
+    // Removed under AIDN082.
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();

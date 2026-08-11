@@ -48,7 +48,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Consistency Models Made Easy", "https://arxiv.org/abs/2406.14548", Year = 2024, Authors = "Geng et al.")]
-public class EasyConsistencyModel<T> : LatentDiffusionModelBase<T>
+public partial class EasyConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Registration order is serialization order, and matches the
