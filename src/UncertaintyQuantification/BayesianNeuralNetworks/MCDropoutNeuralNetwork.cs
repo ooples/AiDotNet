@@ -239,4 +239,14 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
             ["mutual_information"] = zeros
         };
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Same defect as <see cref="BayesianNeuralNetwork{T}"/>: the inherited
+    /// <see cref="NeuralNetwork{T}"/> implementation hardcodes its own type, so a copy of this model
+    /// was a plain <c>NeuralNetwork&lt;T&gt;</c> with <c>_numSamples</c> defaulted — MC-dropout
+    /// sampling silently absent from the clone.
+    /// </remarks>
+    protected override AiDotNet.Interfaces.IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new MCDropoutNeuralNetwork<T>(Architecture, _numSamples);
 }

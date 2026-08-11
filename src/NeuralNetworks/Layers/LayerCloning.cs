@@ -99,6 +99,36 @@ public static class LayerCloning
                     catch (ArgumentException) { /* try the other; install as-is if neither fits */ }
                     catch (InvalidOperationException) { }
                 }
+
+                // RESOLVING THE OUTER LAYER IS NOT ENOUGH FOR A COMPOSITE. ResolveFromShape settles
+                // this layer's own shape but does not cascade into registered sub-layers, and those
+                // are lazy in their own right: SwinTransformerBlockLayer registers six children --
+                // two LayerNormalizationLayer<T>() and four DenseLayer<T>(...) -- none of which
+                // carries an input width. The forwarded source had materialized all six (130
+                // parameters) while the fresh rebuild had not (98), and the sweep reported
+                // "rebuilt with 98 parameters but the original has 130".
+                //
+                // A forward is what materializes a child, so when the counts still disagree, push
+                // one through. Guarded by the count check because a forward has side effects and is
+                // not worth paying for on the layers that already agree; state is reset afterwards
+                // so the probe leaves nothing behind for the parameters about to be installed.
+                if (clone.ParameterCount != source.ParameterCount)
+                {
+                    foreach (var candidate in new[] { batched, resolved })
+                    {
+                        try
+                        {
+                            clone.Forward(new Tensor<T>(candidate));
+                            clone.ResetState();
+                            break;
+                        }
+                        catch (Exception)
+                        {
+                            // A layer that refuses this probe keeps whatever it managed to resolve;
+                            // the count assertion after the install still reports the shortfall.
+                        }
+                    }
+                }
             }
 
 

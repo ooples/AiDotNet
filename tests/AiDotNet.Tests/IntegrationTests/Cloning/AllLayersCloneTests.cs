@@ -124,6 +124,28 @@ public class AllLayersCloneTests
         foreach (var f in failed.Take(40)) _output.WriteLine("  FAIL  " + f);
         foreach (var n in notConstructed.Take(15)) _output.WriteLine("  skip  " + n);
 
+        // A REPORT FILE, not just ITestOutputHelper. xunit surfaces the helper only on a failing
+        // test or under `verbosity=detailed`, and detailed logs all 72,235 discovered cases -- 18MB
+        // per run to read five lines out of. Nine parallel runs of that filled the system drive to
+        // zero bytes free. Writing the summary here means the run needs no console logger at all.
+        // AIDOTNET_SWEEP_DIR redirects it off the system drive when that drive is short.
+        var dir = Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_DIR");
+        if (string.IsNullOrEmpty(dir)) dir = System.IO.Path.GetTempPath();
+
+        var report = new List<string>
+        {
+            $"layer types        : {candidates.Count}",
+            $"cloned OK          : {cloned.Count}",
+            $"clone FAILED       : {failed.Count}",
+            $"not constructed    : {notConstructed.Count} (harness limit, not a clone result)",
+            $"forwarded first    : {forwarded.Count} of {cloned.Count + failed.Count} attempted",
+            string.Empty,
+        };
+        report.AddRange(failed.Select(f => $"FAIL  {f}"));
+        report.AddRange(notConstructed.Select(n => $"skip  {n}"));
+        System.IO.File.WriteAllLines(
+            System.IO.Path.Combine(dir, "aidotnet-layer-clone-sweep.txt"), report);
+
         // The sweep is a measurement first. Asserting only that SOMETHING was exercised keeps a
         // harness that constructs nothing from reporting success, without pinning a number that
         // will move as layers gain [LayerState] coverage.
