@@ -377,3 +377,174 @@ public sealed class DoubleScalarParameterSource<T> : IParameterSource<T>
         if (parameters.Length > 0) _set(Ops.ToDouble(parameters[0]));
     }
 }
+
+// Sequences of weight-bearing values. A model whose parameters live in a LIST or ARRAY of vectors
+// or matrices -- a mixture model's per-component means, a boosted model's per-feature shape
+// functions, a meta-learner's per-block parameters -- had no way to reach the surface, because a
+// single field source describes one value and the layer path describes layers.
+//
+// Concatenated in enumeration order. For a Dictionary the caller must impose an order (see the
+// generated registration, which sorts by key): dictionary enumeration order is an implementation
+// detail, and serialization layout cannot rest on one.
+
+/// <summary>A sequence of <see cref="Vector{T}"/> exposed as one parameter surface.</summary>
+/// <typeparam name="T">The numeric type of the values.</typeparam>
+public sealed class VectorSequenceParameterSource<T> : IParameterSource<T>
+{
+    private readonly Func<IEnumerable<Vector<T>>?> _get;
+
+    /// <summary>Creates a source over whatever sequence <paramref name="accessor"/> returns.</summary>
+    public VectorSequenceParameterSource(Func<IEnumerable<Vector<T>>?> accessor)
+    {
+        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
+    }
+
+    private IEnumerable<Vector<T>> Items()
+    {
+        var items = _get();
+        if (items is null) yield break;
+        foreach (var v in items)
+        {
+            if (v is not null) yield return v;
+        }
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount
+    {
+        get { long n = 0; foreach (var v in Items()) n += v.Length; return n; }
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var result = new Vector<T>((int)ParameterCount);
+        int at = 0;
+        foreach (var v in Items())
+        {
+            for (int i = 0; i < v.Length; i++) result[at++] = v[i];
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int at = 0;
+        foreach (var v in Items())
+        {
+            for (int i = 0; i < v.Length && at < parameters.Length; i++) v[i] = parameters[at++];
+        }
+    }
+}
+
+/// <summary>A sequence of <see cref="Matrix{T}"/> exposed as one parameter surface, row-major.</summary>
+/// <typeparam name="T">The numeric type of the values.</typeparam>
+public sealed class MatrixSequenceParameterSource<T> : IParameterSource<T>
+{
+    private readonly Func<IEnumerable<Matrix<T>>?> _get;
+
+    /// <summary>Creates a source over whatever sequence <paramref name="accessor"/> returns.</summary>
+    public MatrixSequenceParameterSource(Func<IEnumerable<Matrix<T>>?> accessor)
+    {
+        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
+    }
+
+    private IEnumerable<Matrix<T>> Items()
+    {
+        var items = _get();
+        if (items is null) yield break;
+        foreach (var m in items)
+        {
+            if (m is not null) yield return m;
+        }
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount
+    {
+        get { long n = 0; foreach (var m in Items()) n += (long)m.Rows * m.Columns; return n; }
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var result = new Vector<T>((int)ParameterCount);
+        int at = 0;
+        foreach (var m in Items())
+        {
+            for (int r = 0; r < m.Rows; r++)
+            for (int c = 0; c < m.Columns; c++) result[at++] = m[r, c];
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int at = 0;
+        foreach (var m in Items())
+        {
+            for (int r = 0; r < m.Rows; r++)
+            for (int c = 0; c < m.Columns && at < parameters.Length; c++) m[r, c] = parameters[at++];
+        }
+    }
+}
+
+/// <summary>A sequence of <see cref="Tensor{T}"/> exposed as one parameter surface.</summary>
+/// <typeparam name="T">The numeric type of the values.</typeparam>
+/// <remarks>
+/// Written THROUGH, so a tensor's aliased storage stays valid for whatever else holds it -- the
+/// same reason the single-field tensor source does not rebind.
+/// </remarks>
+public sealed class TensorSequenceParameterSource<T> : IParameterSource<T>
+{
+    private readonly Func<IEnumerable<Tensor<T>>?> _get;
+
+    /// <summary>Creates a source over whatever sequence <paramref name="accessor"/> returns.</summary>
+    public TensorSequenceParameterSource(Func<IEnumerable<Tensor<T>>?> accessor)
+    {
+        _get = accessor ?? throw new ArgumentNullException(nameof(accessor));
+    }
+
+    private IEnumerable<Tensor<T>> Items()
+    {
+        var items = _get();
+        if (items is null) yield break;
+        foreach (var t in items)
+        {
+            if (t is not null) yield return t;
+        }
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount
+    {
+        get { long n = 0; foreach (var t in Items()) n += t.Length; return n; }
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var result = new Vector<T>((int)ParameterCount);
+        int at = 0;
+        foreach (var t in Items())
+        {
+            for (int i = 0; i < t.Length; i++) result[at++] = t[i];
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        int at = 0;
+        foreach (var t in Items())
+        {
+            for (int i = 0; i < t.Length && at < parameters.Length; i++) t[i] = parameters[at++];
+        }
+    }
+}

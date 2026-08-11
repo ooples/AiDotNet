@@ -132,6 +132,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             if (emitTensors || emitLayers)
             {
                 var tensors = new List<string>();
+                var tensorSequences = new List<string>();
                 var layerGroups = new List<string>();
                 foreach (var member in classSymbol.GetMembers())
                 {
@@ -142,6 +143,15 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         {
                             if (emitTensors) tensors.Add(tf.Name);
                             continue;
+                        }
+                        // A SEQUENCE of tensors -- InstantNGP's multiresolution hash tables are a
+                        // Dictionary<int, Tensor<T>> -- belongs on the tensors hook too. The
+                        // registry path is not taken on this trunk, so without this the whole
+                        // collection is invisible.
+                        if (emitTensors)
+                        {
+                            var tseq = TensorSequenceAccessor(tf.Type, tf.Name, elem);
+                            if (tseq is not null) { tensorSequences.Add(tseq); continue; }
                         }
                         if (!emitLayers) continue;
                         var acc = LayerAccessorFor(tf.Type, tf.Name, elem);
@@ -159,10 +169,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     }
                 }
 
-                if (tensors.Count == 0 && layerGroups.Count == 0) continue;
+                if (tensors.Count == 0 && tensorSequences.Count == 0 && layerGroups.Count == 0) continue;
                 context.AddSource(
                     HintName(classSymbol) + ".ModelExtraTensors.g.cs",
-                    GenerateExtraTensorsSource(classSymbol, elem, tensors, layerGroups));
+                    GenerateExtraTensorsSource(classSymbol, elem, tensors, tensorSequences, layerGroups));
                 continue;
             }
 
@@ -196,8 +206,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 if (!IsRegisterableField(f, scratchSymbol, bufferSymbol)) continue;
 
                 var src = SourceFor(f.Type, elem);
-                if (src is null) continue;
-                fields.Add((f.Name, src));
+                if (src is not null) { fields.Add((f.Name, src)); continue; }
+
+                var seq = SequenceSourceFor(f.Type, f.Name, elem);
+                if (seq is not null) components.Add(seq);
             }
 
             if (fields.Count == 0 && components.Count == 0) continue;
@@ -321,11 +333,12 @@ public class ModelParameterGenerator : IIncrementalGenerator
     }
 
     private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
-                                                     List<string> tensors, List<string> layerGroups)
+                                                     List<string> tensors, List<string> tensorSequences,
+                                                     List<string> layerGroups)
     {
         var sb = OpenPartial(classSymbol, out var closers);
 
-        if (tensors.Count > 0)
+        if (tensors.Count > 0 || tensorSequences.Count > 0)
         {
             sb.AppendLine("    /// <summary>");
             sb.AppendLine("    /// Auto-generated: surfaces this model's tensor weights that live outside Layers,");
@@ -342,6 +355,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
             foreach (var name in tensors)
             {
                 sb.AppendLine($"        if ({name} is not null) yield return {name};");
+            }
+            foreach (var seq in tensorSequences)
+            {
+                sb.AppendLine($"        foreach (var __ts in {seq}) {{ if (__ts is not null) yield return __ts; }}");
             }
             sb.AppendLine("    }");
         }
@@ -617,6 +634,79 @@ public class ModelParameterGenerator : IIncrementalGenerator
         if (open.StartsWith(VectorTypeName + "<", System.StringComparison.Ordinal))
             return "VectorFieldWriteThroughSource";
         return null;
+    }
+
+    /// <summary>
+    /// A full <c>new XSequenceParameterSource&lt;T&gt;(...)</c> expression for a member holding a
+    /// SEQUENCE of weight-bearing values, or null.
+    /// </summary>
+    /// <remarks>
+    /// Covers a list, an array or a dictionary of Vector/Matrix/Tensor. Dictionary VALUES are
+    /// ordered by key rather than taken in enumeration order: dictionary order is an implementation
+    /// detail, and a rehash would silently permute every existing checkpoint.
+    /// </remarks>
+    private static string? SequenceSourceFor(ITypeSymbol? type, string name, string elem)
+    {
+        if (type is null) return null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        ITypeSymbol? element = null;
+        bool byKey = false;
+
+        if (bare is IArrayTypeSymbol arr)
+        {
+            element = arr.ElementType;
+        }
+        else if (bare is INamedTypeSymbol named)
+        {
+            var open = named.OriginalDefinition.ToDisplayString();
+            if (named.TypeArguments.Length == 1
+                && (open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal)
+                    || open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal)
+                    || open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal)
+                    || open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal)))
+            {
+                element = named.TypeArguments[0];
+            }
+            else if (named.TypeArguments.Length == 2
+                     && (open.StartsWith("System.Collections.Generic.Dictionary<", System.StringComparison.Ordinal)
+                         || open.StartsWith("System.Collections.Generic.IDictionary<", System.StringComparison.Ordinal)
+                         || open.StartsWith("System.Collections.Generic.IReadOnlyDictionary<", System.StringComparison.Ordinal)))
+            {
+                element = named.TypeArguments[1];
+                byKey = true;
+            }
+        }
+        if (element is null) return null;
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        var kind = element.OriginalDefinition.ToDisplayString();
+        string? source = null;
+        if (kind.StartsWith(TensorTypeName + "<", System.StringComparison.Ordinal)) source = "TensorSequenceParameterSource";
+        else if (kind.StartsWith(MatrixTypeName + "<", System.StringComparison.Ordinal)) source = "MatrixSequenceParameterSource";
+        else if (kind.StartsWith(VectorTypeName + "<", System.StringComparison.Ordinal)) source = "VectorSequenceParameterSource";
+        if (source is null) return null;
+        if (element is not INamedTypeSymbol en || en.TypeArguments.Length != 1
+            || en.TypeArguments[0].ToDisplayString() != elem) return null;
+
+        var access = byKey
+            ? $"{name} is null ? null : global::System.Linq.Enumerable.Select("
+              + $"global::System.Linq.Enumerable.OrderBy({name}, __kv => __kv.Key), __kv => __kv.Value)"
+            : $"{name}";
+        return $"new {source}<{elem}>(() => {access})";
+    }
+
+    /// <summary>An enumerable-of-tensors expression for a sequence member, or null.</summary>
+    /// <remarks>Dictionary values are ordered by KEY: dictionary order is an implementation
+    /// detail and a rehash would silently permute an existing checkpoint.</remarks>
+    private static string? TensorSequenceAccessor(ITypeSymbol? type, string name, string elem)
+    {
+        var full = SequenceSourceFor(type, name, elem);
+        if (full is null || !full.StartsWith("new TensorSequenceParameterSource<", System.StringComparison.Ordinal))
+            return null;
+        int i = full.IndexOf("() => ", System.StringComparison.Ordinal);
+        var inner = full.Substring(i + 6, full.Length - (i + 6) - 1);
+        return $"({inner}) ?? global::System.Linq.Enumerable.Empty<Tensor<{elem}>>()";
     }
 
     private static bool HasAttr(IFieldSymbol field, INamedTypeSymbol? attr) =>
