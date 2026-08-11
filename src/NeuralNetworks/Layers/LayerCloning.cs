@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using AiDotNet.Models;
 using AiDotNet.Serialization;
@@ -65,6 +66,10 @@ public static class LayerCloning
         var settings = options ?? CloneOptions.Full;
         var clone = Reconstruct(source);
 
+        // The clone derives its own stream unless asked to reuse the original's. A layer with no
+        // seed set has opted out of reproducibility, and copying null keeps it opted out.
+        if (settings.ShareRandomState) clone.RandomSeed = source.RandomSeed;
+
         if (settings.IncludeParameters)
         {
             var parameters = source.GetParameters();
@@ -84,7 +89,27 @@ public static class LayerCloning
                         + "shape from the original.");
                 }
 
-                clone.UpdateParameters(parameters);
+                switch (settings.Mode)
+                {
+                    // ONE set of weights behind two handles. Training either trains both; that is
+                    // what the caller asked for by naming it.
+                    case CloneMode.Shared:
+                        clone.SetTrainableParameters(source.GetTrainableParameters());
+                        break;
+
+                    // Storage shared until either side writes, then split. Observationally the same
+                    // as Deep, O(1) until the first write. This is what AIDOTNET_COW_DEEPCOPY chose
+                    // globally; naming it per call is the only change.
+                    case CloneMode.CopyOnWrite:
+                        clone.SetTrainableParameters(source.GetTrainableParameters()
+                            .Select(t => (Tensor<T>)t.CloneShared())
+                            .ToList());
+                        break;
+
+                    default:
+                        clone.UpdateParameters(parameters);
+                        break;
+                }
             }
         }
 
