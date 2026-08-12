@@ -42,7 +42,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
     ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterLayoutSource,
-    AiDotNet.Models.Parameters.IParameterChunkSource<T>
+    AiDotNet.Models.Parameters.IParameterChunkSource<T>,
+    AiDotNet.Models.Parameters.IParameterMaterializationSource
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -811,16 +812,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return readiness;
     }
 
-    /// <summary>Total across the registered components, or zero when none are registered.</summary>
-    protected long RegisteredComponentCount
-    {
-        get
-        {
-            _ = ParameterComponents;
-            return _parameterRegistry.ParameterCount;
-        }
-    }
-
     public virtual Vector<T> GetParameters()
     {
         // Pre-resolve any lazy layer shapes from the architecture before
@@ -889,15 +880,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             perLayerParameters.Add(flat);
             totalParameterCountLong += flat.Length;
         }
-        // Registered components, fourth and last -- the same position ParameterCount and
-        // SetParameters use, so the three describe one parameter set in one order.
-        var registeredComponents = ParameterComponents;
-        for (int ci = 0; ci < registeredComponents.Count; ci++)
-        {
-            var componentParameters = registeredComponents[ci].GetParameters();
-            perLayerParameters.Add(componentParameters);
-            totalParameterCountLong += componentParameters.Length;
-        }
+        // Registered components are one manifest-ordered tail. Let their registry own ordering,
+        // readiness and contract validation instead of flattening its registration list here and
+        // asking SetParameters to reconstruct a potentially different order later.
+        _ = ParameterComponents;
+        var registeredParameters = _parameterRegistry.GetParameters();
+        perLayerParameters.Add(registeredParameters);
+        totalParameterCountLong += registeredParameters.Length;
         int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
         var parameters = new Vector<T>(totalParameterCount);
@@ -2281,10 +2270,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> This tells you how many adjustable values (weights and biases) your neural network has.
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
     /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
-    /// <para>
-    /// <b>Performance:</b> This property uses caching to avoid recomputing the sum on every access.
-    /// The cache is invalidated when layers are modified.
-    /// </para>
+    /// The count is derived from the same stable parameter manifest used by the flat and chunked parameter
+    /// APIs. If any lazy shape is still unknown, this property throws instead of reporting a misleading
+    /// partial count.
     /// </remarks>
     public virtual long ParameterCount
     {
@@ -2301,48 +2289,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             EnsureParametersReady();
             ResolveLazyLayerShapes();
 
-            // Sum per-layer counts FRESH on every access. The previous cached
-            // implementation went stale — a Layer's ParameterCount can grow AFTER
-            // construction when its lazy input shape resolves inside a model-class-owned
-            // forward path (e.g. NeRF's DenseLayer inputs going from [1] sentinel to
-            // [60] after positional encoding + skip-concat on first Forward). The base
-            // class had no signal for those layer-internal transitions, so the cache
-            // reported the pre-resolution size while GetParameters (which also walked
-            // layers fresh) returned the post-resolution size. Downstream SetParameters
-            // then rejected the correctly-sized saved vector with a length-mismatch
-            // exception. Full diagnostic in #1832.
-            //
-            // Matches PyTorch's sum(p.numel() for p in model.parameters()) — walked on
-            // every call, always fresh. Sum of ~10-200 longs runs in nanoseconds even
-            // for deep transformers; ParameterCount is not a hot-path read (used by
-            // weight-streaming auto-detect + telemetry, not per-batch gradient loops),
-            // so the removed cache saves nothing observable and the correctness win is
-            // worth the microscopic per-access cost. Fixes #1832.
-            long total = 0L;
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                total += Layers[i].ParameterCount;
-            }
-
-            // Network-level weights that live OUTSIDE Layers -- a ViT's class and position
-            // embeddings, a Conformer's subsampler, PaLM-E's patch-embed conv. They were trained
-            // and serialized through a separate path while the flat surface pretended they did not
-            // exist, so a model holding them reported a count that its own GetParameters
-            // contradicted. Walked here, in GetParameters, in SetParameters and in
-            // GetParameterChunks in the SAME order, so all four describe one parameter set.
-            foreach (var extra in GetExtraTrainableLayers())
-            {
-                if (extra is not null) total += extra.ParameterCount;
-            }
-            foreach (var tensor in GetExtraTrainableTensors())
-            {
-                if (tensor is not null) total += tensor.Length;
-            }
-
-            // Registered components last, so a model that registers nothing is byte-identical.
-            total += RegisteredComponentCount;
-
-            return total;
+            // The manifest is rebuilt on every access. A layer's state can grow after construction
+            // when lazy input shapes resolve, so caching either the total or its slice boundaries
+            // would allow ParameterCount, GetParameters and SetParameters to describe different
+            // models. ParameterLayout is the one ordered ownership record shared by all parameter
+            // consumers; unresolved slots remain explicitly unresolved rather than becoming zero.
+            var layout = ParameterLayout;
+            if (layout.ParameterCount.HasValue) return layout.ParameterCount.Value;
+            throw new AiDotNet.Models.Parameters.ParameterLayoutNotReadyException("count", layout);
         }
     }
 
@@ -13451,7 +13405,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var restoreExtraTensors = GetExtraTrainableTensors().Where(tensor => tensor is not null).ToList();
         var restoreComponents = ParameterComponents;
 
-        (List<int> LayerCounts, List<int> ExtraLayerCounts, List<int> ComponentCounts, int Total)
+        (List<int> LayerCounts, List<int> ExtraLayerCounts, int ExtraTensorCount,
+            int ComponentCount, int Total)
             CaptureRestoreManifest()
         {
             static int ActualParameterLength(ILayer<T> layer)
@@ -13461,13 +13416,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             var layerCounts = restoreLayers.Select(ActualParameterLength).ToList();
             var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength(layer!)).ToList();
-            var componentCounts = restoreComponents.Select(component => component.GetParameters().Length).ToList();
-
+            int extraTensorCount = ParameterCountHelper.ToFlatVectorSize(
+                restoreExtraTensors.Sum(tensor => (long)tensor!.Length));
+            int componentCount = ParameterCountHelper.ToFlatVectorSize(
+                restoreComponents.Sum(component => (long)component.GetParameters().Length));
             long total = layerCounts.Sum(count => (long)count)
                        + extraLayerCounts.Sum(count => (long)count)
-                       + restoreExtraTensors.Sum(tensor => (long)tensor!.Length)
-                       + componentCounts.Sum(count => (long)count);
-            return (layerCounts, extraLayerCounts, componentCounts,
+                       + extraTensorCount
+                       + componentCount;
+            return (layerCounts, extraLayerCounts, extraTensorCount, componentCount,
                 ParameterCountHelper.ToFlatVectorSize(total));
         }
 
@@ -13481,10 +13438,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             manifest = CaptureRestoreManifest();
         }
 
-        if (parameters.Length != manifest.Total)
+        int fixedParameterCount = manifest.LayerCounts.Sum()
+                                + manifest.ExtraLayerCounts.Sum()
+                                + manifest.ExtraTensorCount;
+        if (parameters.Length < fixedParameterCount ||
+            (!_parameterRegistry.HasComponents && parameters.Length != fixedParameterCount))
         {
             throw new ArgumentException(
-                $"Expected {manifest.Total} parameters from the materialized restore layout, got {parameters.Length}. " +
+                $"Expected at least {fixedParameterCount} parameters from the materialized fixed " +
+                $"layout and a registry-compatible component tail, got {parameters.Length}. " +
                 $"If you're loading weights into a fresh model whose lazy layer shapes haven't " +
                 $"resolved yet (e.g. NeRF/InstantNGP where positional encoding grows DenseLayer " +
                 $"inputs on first forward), call model.ResolveShapes(sampleInput) first with a " +
@@ -13499,6 +13461,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             int layerParameterCount = manifest.LayerCounts[i];
             if (layerParameterCount == 0) continue;
+            if (currentIndex > srcSpan.Length - layerParameterCount)
+            {
+                throw new InvalidOperationException(
+                    $"The parameter layout changed while restoring {GetType().Name}: layer " +
+                    $"{restoreLayers[i].GetType().Name} declares {layerParameterCount} values at offset {currentIndex}, " +
+                    $"but the supplied vector contains {srcSpan.Length}. Its current serialized length is " +
+                    $"{restoreLayers[i].GetParameters().Length}.");
+            }
             // Bulk copy via Span instead of element-by-element
             var layerParameters = new Vector<T>((int)(layerParameterCount));
             srcSpan.Slice(currentIndex, layerParameterCount)
@@ -13524,14 +13494,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
             currentIndex += tensor.Length;
         }
-        for (int ci = 0; ci < restoreComponents.Count; ci++)
+
+        int registeredParameterCount = parameters.Length - currentIndex;
+        if (_parameterRegistry.HasComponents)
         {
-            int componentCount = manifest.ComponentCounts[ci];
-            if (componentCount == 0) continue;
-            var slice = new Vector<T>(componentCount);
-            srcSpan.Slice(currentIndex, componentCount).CopyTo(slice.AsWritableSpan());
-            restoreComponents[ci].SetParameters(slice);
-            currentIndex += componentCount;
+            var componentSlice = new Vector<T>(registeredParameterCount);
+            srcSpan.Slice(currentIndex, registeredParameterCount)
+                .CopyTo(componentSlice.AsWritableSpan());
+            _parameterRegistry.SetParameters(componentSlice);
+            currentIndex += registeredParameterCount;
         }
 
         // Some ITrainableLayer implementations swap their parameter tensors

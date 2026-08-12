@@ -135,7 +135,7 @@ public abstract class SegmentationTestBase<T> : NeuralNetworkModelTestBase<T>
             {
                 double first = ConvertToDouble(output[i]);
                 double second = ConvertToDouble(repeated[i]);
-                Assert.True(double.IsFinite(first) && double.IsFinite(second),
+                Assert.True(IsFinite(first) && IsFinite(second),
                     $"Position-aware uniform-input output [{i}] is not finite.");
                 Assert.Equal(first, second);
             }

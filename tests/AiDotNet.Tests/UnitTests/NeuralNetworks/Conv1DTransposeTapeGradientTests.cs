@@ -3,6 +3,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Vocoders;
+using AiDotNet.Tests.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -88,12 +89,14 @@ public class Conv1DTransposeTapeGradientTests
         model.SetTrainingMode(false);
         _ = model.ForwardForTraining(new Tensor<double>(new[] { 1, 4, 4 }));
 
-        var firstIds = new Dictionary<Tensor<double>, string>(ReferenceEqualityComparer.Instance);
+        var firstIds = new Dictionary<Tensor<double>, string>(ReferenceIdentityComparer<Tensor<double>>.Instance);
         var duplicates = new List<string>();
         foreach (var chunk in model.GetParameterStateChunks())
         {
-            if (!firstIds.TryAdd(chunk.Tensor, chunk.StableId))
-                duplicates.Add($"{chunk.StableId} aliases {firstIds[chunk.Tensor]}");
+            if (firstIds.TryGetValue(chunk.Tensor, out var firstId))
+                duplicates.Add($"{chunk.StableId} aliases {firstId}");
+            else
+                firstIds.Add(chunk.Tensor, chunk.StableId);
         }
 
         Assert.True(duplicates.Count == 0,

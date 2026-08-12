@@ -719,11 +719,6 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     // Helper methods
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        target.UpdateParameters(source.GetParameters());
-    }
-
     /// <inheritdoc/>
     public override void SaveModel(string filepath)
     {

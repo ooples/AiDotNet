@@ -4901,8 +4901,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         bool hasRegistry = (trainableForShape is not null && trainableForShape.Count > 0)
                         || (subsForShape is not null && subsForShape.Count > 0)
                         || BufferScalarCount() > 0;
+        int currentConcreteCount = FillParameters(null, 0);
 
-        if (hasRegistry && parameters.Length != ParameterCount)
+        if (hasRegistry && parameters.Length != currentConcreteCount)
         {
             EnsureMaterializedForParameterSurface();
             trainableForShape = GetTrainableParametersUnmaterialized();
@@ -4910,6 +4911,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             hasRegistry = (trainableForShape is not null && trainableForShape.Count > 0)
                        || (subsForShape is not null && subsForShape.Count > 0)
                        || BufferScalarCount() > 0;
+            currentConcreteCount = FillParameters(null, 0);
         }
 
         // The length check belongs AFTER this, not before it. A deferred layer has nothing
@@ -4928,14 +4930,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // error worth naming. Anything else is still waiting, and falls through to the wholesale
         // path below, which parks the payload until the shape arrives.
         bool shapeKnown = IsShapeResolved || ParametersAreConstructionSized;
+        // Use the concrete fold, not the cached virtual ParameterCount. A layer can expose fields by
+        // overriding GetTrainableParameters without registering them in the base list; that older
+        // pattern has no way to invalidate the base count cache when construction fills the fields.
+        // GetParameters is already sized from FillParameters for this reason, so restore must ask the
+        // same fold or it can mistake a complete registry for an empty deferred layer.
+        bool currentLayoutMatches = parameters.Length == currentConcreteCount;
 
-        if (hasRegistry && shapeKnown && parameters.Length != ParameterCount)
+        if (hasRegistry && shapeKnown && !currentLayoutMatches)
         {
             // Name the layer. A bare count pair says a restore failed somewhere in a hundred-layer
             // model without saying where, and the whole point of deriving these surfaces is that
             // the mismatch is now diagnosable rather than silent.
             throw new ArgumentException(
-                $"Expected {ParameterCount} parameters, but got {parameters.Length} " +
+                $"Expected {currentConcreteCount} parameters, but got {parameters.Length} " +
                 $"(layer {GetType().Name}, own {Parameters.Length}, tensors {trainableForShape?.Count ?? 0}, " +
                 $"buffers {BufferScalarCount()}, sub-layers {subsForShape?.Count ?? 0})");
         }
@@ -4947,7 +4955,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // because pre-resolution that length is a placeholder. That is a real failure, not a
         // hypothetical: it cut a 144-value restore down to the 32-element placeholder and
         // MusicSourceSeparator threw "Expected 144 parameters, but got 32" on its first forward.
-        // Park-and-replay, for BOTH the no-registry case and the still-deferred one.
+        // Park-and-replay, for BOTH the no-registry case and a still-deferred layout that does not
+        // already match the incoming vector.
         //
         // The no-registry case is the original wholesale semantics described above. The deferred
         // case is new and necessary: the guard now lets a shape-deferred layer through instead of
@@ -4957,10 +4966,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // slice would have turned a clear error into silent weight loss -- a worse failure than the
         // one being fixed.
         //
-        // Parking the whole vector is what a lazy module can correctly do: hold the payload until
-        // the shape arrives, then hand it on at materialization, which is the convention
-        // Conv1DLayer's ApplyResolvedParameters already follows.
-        if (!hasRegistry || !shapeKnown)
+        // A matching concrete registry is already a complete restore plan even when InputShape still
+        // contains -1. Constructor-sized layers such as DuelingCombinationLayer own real tensors
+        // before their first forward; parking the same vector in Parameters duplicated that state on
+        // every update (260 extra values per Rainbow update). The vector equality is decisive here:
+        // restore the registry when its current boundaries consume the entire payload, and reserve
+        // park-and-replay for a genuinely different, still-unknown destination layout.
+        //
+        // Parking the whole vector is what a lazy module can correctly do: hold a payload whose
+        // concrete layout is not known yet until the shape arrives, then hand it on at
+        // materialization, which is the convention Conv1DLayer's ApplyResolvedParameters follows.
+        if (!hasRegistry || (!shapeKnown && !currentLayoutMatches))
         {
             Parameters = parameters;
             return;
@@ -5007,10 +5023,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             for (int i = 0; i < subs.Count; i++)
             {
                 var s = subs[i];
-                if (s is null) continue;
-                long take = s.ParameterCount;
+                if (s is null || IsSubLayerParameterFrozen(s)) continue;
+                int take = s is LayerBase<T> layerBase
+                    ? layerBase.FillParameters(null, 0)
+                    : s.GetParameters().Length;
                 if (take <= 0) continue;
-                var slice = new Vector<T>((int)take);
+                var slice = new Vector<T>(take);
                 for (int j = 0; j < take; j++)
                     slice[j] = parameters[index++];
                 s.SetParameters(slice);

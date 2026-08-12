@@ -366,6 +366,10 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                         "$", entry.Role, ParameterReadiness.ShapeDeferred, null)
                 };
             }
+            else if (entry.Source is IParameterManifestProvider manifestProvider)
+            {
+                local = manifestProvider.ParameterLayout.Slots;
+            }
             else if (entry.Source is IParameterLayoutSource layoutSource)
             {
                 local = layoutSource.GetParameterLayout()
@@ -472,6 +476,20 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 $"Variable-length parameter component '{entries[found].Entry.StableId}' must be " +
                 "last in stable-ID order so its restore slice is unambiguous.");
         return found;
+    }
+
+    /// <summary>
+    /// Materializes shape-resolved child sources before an operation that reads or writes concrete
+    /// values. The manifest property itself remains allocation-free, so callers can still inspect
+    /// readiness without paying for storage.
+    /// </summary>
+    private void MaterializeSources()
+    {
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            if (_entries[i].Source is IParameterMaterializationSource materializer)
+                materializer.MaterializeParameters();
+        }
     }
 
     private List<Entry> OrderedEntries()

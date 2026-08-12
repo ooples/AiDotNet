@@ -392,12 +392,6 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _targetValueNetwork.SetParameters(updatedParams);
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.SetParameters(sourceParams.Clone());
-    }
-
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
         var result = new Vector<T>(state.Length + action.Length);

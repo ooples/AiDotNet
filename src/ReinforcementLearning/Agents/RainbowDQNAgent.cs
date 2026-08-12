@@ -64,8 +64,9 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 {
 
     /// <inheritdoc />
-    /// <remarks>The same components, in the same order, that the hand-written
-    /// GetParameters concatenated -- that order is the serialization order.</remarks>
+    /// <remarks>The online network is trainable state. The target is a derived periodic copy and
+    /// exposing it to the optimizer both doubles the vector and lets its lazy topology drift from
+    /// the online path after the first real observation.</remarks>
     protected override void RegisterComponents()
     {
         RegisterParameterComponent("rainbow/online-network", _onlineNetwork);
@@ -586,12 +587,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         }
 
         return output;
-    }
-
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
     }
 
     private int ArgMax(Vector<T> values)
