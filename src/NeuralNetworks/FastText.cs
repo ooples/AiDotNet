@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -72,6 +72,7 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         private int _embeddingDimension;
 
+
         /// <summary>
         /// The tokenizer used to process text input.
         /// </summary>
@@ -125,7 +126,7 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="tokenizer">Optional tokenizer for text processing.</param>
         /// <param name="optimizer">Optional optimizer for training.</param>
         /// <param name="vocabSize">The size of the vocabulary (default: 10000).</param>
-        /// <param name="bucketSize">The number of subword buckets (default: 2,000,000).</param>
+        /// <param name="bucketSize">The number of subword buckets (default: 2,000,000, the value used by the paper).</param>
         /// <param name="embeddingDimension">The dimension of the word vectors (default: 100).</param>
         /// <param name="maxTokens">The maximum tokens per sentence (default: 512).</param>
         /// <param name="lossFunction">Optional loss function. Defaults to Binary Cross Entropy.</param>
@@ -214,6 +215,7 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
+
         #endregion
 
         #region Methods
@@ -290,7 +292,9 @@ namespace AiDotNet.NeuralNetworks
             var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
             var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
 
-            // FastText uses word embeddings (layer 0) and n-gram embeddings (layer 1)
+            // Words and subwords are both looked up from the SAME table -- Layers[0], the chain's
+            // (vocabSize + bucketSize) x dim input matrix -- and averaged into one hidden vector.
+            // Both are indexed from the original tokens, never one from the other's output.
             var wordEmbeds = Layers[0].Forward(inputTensor);
 
             var sumVector = new Vector<T>(_embeddingDimension);
@@ -309,7 +313,12 @@ namespace AiDotNet.NeuralNetworks
                 var ngrams = GetCharacterNGrams(tokens[s], 3, 6);
                 if (ngrams.Count > 0)
                 {
-                    var ngramIndices = ngrams.Select(ng => Math.Abs(ng.GetHashCode()) % _bucketSize).ToArray();
+                    // Subword ids live ABOVE the word ids in the one shared table, matching
+                    // fastText's (nwords + bucket) x dim input matrix: words occupy
+                    // [0, _vocabSize), hashed n-grams [_vocabSize, _vocabSize + _bucketSize).
+                    var ngramIndices = ngrams
+                        .Select(ng => _vocabSize + (Math.Abs(ng.GetHashCode()) % _bucketSize))
+                        .ToArray();
                     var ngramValues = new T[ngramIndices.Length];
                     for (int i = 0; i < ngramIndices.Length; i++)
                     {
@@ -317,7 +326,7 @@ namespace AiDotNet.NeuralNetworks
                     }
 
                     var ngramInputTensor = Tensor<T>.FromVector(new Vector<T>(ngramValues), [ngrams.Count]);
-                    var ngramEmbeds = Layers[1].Forward(ngramInputTensor);
+                    var ngramEmbeds = Layers[0].Forward(ngramInputTensor);
 
                     for (int n = 0; n < ngrams.Count; n++)
                     {

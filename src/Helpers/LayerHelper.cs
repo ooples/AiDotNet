@@ -12334,19 +12334,36 @@ public static class LayerHelper<T>
         if (architecture.OutputSize > 0 && architecture.OutputSize != vocabSize)
             throw new ArgumentException("architecture.OutputSize must match vocabSize for FastText softmax output.", nameof(architecture));
 
-        // FastText architecture:
-        // 1. Word Embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        // FastText (Joulin et al. 2017, "Bag of Tricks for Efficient Text Classification"):
+        // look up an embedding for every feature, AVERAGE them into one hidden vector, then a
+        // single linear layer and softmax over classes.
+        //
+        // ONE embedding table covers words AND subwords, exactly as fastText's own input matrix
+        // does: it is (nwords + bucket) x dim, with word ids occupying [0, vocabSize) and hashed
+        // character n-grams occupying [vocabSize, vocabSize + bucketSize). There is no second
+        // table in the paper.
+        //
+        // The previous chain had the n-gram table as its own SECOND stage, which made the chain
+        // feed the word table's OUTPUT into it as if those floats were token ids -- not the paper's
+        // architecture, and no valid shape can satisfy it. Splitting it out of the chain instead
+        // would be just as wrong in the other direction: the chain's backward would never reach it,
+        // so it would be registered as trainable while being unable to receive a gradient.
 
-        // 2. N-gram Embeddings
-        yield return new EmbeddingLayer<T>(bucketSize, embeddingDimension);
+        // 1. Feature embeddings, words and subwords in one table:
+        //    [features] -> [features, embeddingDimension]
+        yield return new EmbeddingLayer<T>(vocabSize + bucketSize, embeddingDimension);
 
-        // 3. Context word projection (similar to Word2Vec)
+        // 2. Mean over the feature axis -- the paper's bag-of-features average.
+        //    [features, embeddingDimension] -> [embeddingDimension]
+        yield return new MeanLayer<T>(axis: 0);
+
+        // 3. Linear projection to the class/vocabulary scores.
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
 
         // 4. Output activation
         yield return new ActivationLayer<T>(new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
     }
+
 
     /// <summary>
     /// Creates default layers for a BLIP-2 neural network.
