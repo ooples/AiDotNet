@@ -226,14 +226,6 @@ public partial class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        return new TripoSRModel<T>(transformer: (DiTNoisePredictor<T>)_transformer.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner, defaultPointCount: DefaultPointCount);
-    }
-
     #endregion
 
     #region Metadata

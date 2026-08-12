@@ -1069,18 +1069,5 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
     }
 
-    /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphIsomorphismNetwork<T>(
-            architecture: Architecture,
-            mlpHiddenDim: MlpHiddenDim,
-            numLayers: NumLayers,
-            learnEpsilon: LearnEpsilon,
-            initialEpsilon: InitialEpsilon);
-    }
-
     #endregion
 }

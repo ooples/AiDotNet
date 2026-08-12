@@ -357,12 +357,6 @@ public partial class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabLLMGenGenerator<T>(Architecture, _options);
-    }
-
-    /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {
         return new Dictionary<string, T>();

@@ -893,12 +893,6 @@ public partial class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabula
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GOGGLEGenerator<T>(Architecture, _options);
-    }
-
-    /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

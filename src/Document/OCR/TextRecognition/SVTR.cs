@@ -490,12 +490,6 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         base.MaxSequenceLength = maxSeqLen;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SVTR<T>(Architecture, ImageSize, _imageHeight, MaxSequenceLength, _embedDim, _numLayers, _numHeads, _charset);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

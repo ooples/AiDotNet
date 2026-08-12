@@ -538,22 +538,5 @@ public partial class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         return Clone();
     }
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Lazy-preserving Clone: delegate to the U-Net's and AudioVAE's own Clone() (trained weights
-        // preserved); configuration is carried by the injected submodules + the passed-through fields.
-        return new AudioLDMModel<T>(
-            options: null,
-            scheduler: null,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
-            conditioner: _conditioner,
-            sampleRate: SampleRate,
-            defaultDurationSeconds: DefaultDurationSeconds,
-            melChannels: MelChannels,
-            isVersion2: _isVersion2);
-    }
-
     #endregion
 }

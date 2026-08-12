@@ -583,33 +583,4 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
     }
-
-    /// <summary>
-    /// Creates a new instance of the convolutional neural network model.
-    /// </summary>
-    /// <returns>A new instance of the convolutional neural network model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the convolutional neural network model with the same 
-    /// configuration as the current instance. It is used internally during serialization/deserialization 
-    /// processes to create a fresh instance that can be populated with the serialized data.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method creates a copy of the network structure without copying 
-    /// the learned data. Think of it like making a blank copy of the original network's blueprint - 
-    /// it has the same structure, same learning strategy, and same error measurement, but none of 
-    /// the knowledge that the original network has gained through training. This is primarily 
-    /// used when saving or loading models, creating an empty framework that can later be filled 
-    /// with the saved knowledge from the original network.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ConvolutionalNeuralNetwork<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm)
-        );
-    }
 }

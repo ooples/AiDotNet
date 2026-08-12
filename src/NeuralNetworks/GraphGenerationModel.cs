@@ -1150,19 +1150,5 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         _logVarWeights = Tensor<T>.FromVector(new Vector<T>(logVarData)).Reshape(_logVarWeights._shape);
     }
 
-    /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphGenerationModel<T>(
-            inputFeatures: Architecture.InputSize,
-            hiddenDim: HiddenDim,
-            latentDim: LatentDim,
-            numEncoderLayers: NumLayers,
-            maxNodes: MaxNodes,
-            generationType: GenerationType);
-    }
-
     #endregion
 }

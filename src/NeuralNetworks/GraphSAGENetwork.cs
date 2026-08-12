@@ -943,18 +943,5 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
     }
 
-    /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphSAGENetwork<T>(
-            architecture: Architecture,
-            aggregatorType: AggregatorType,
-            numLayers: NumLayers,
-            normalize: Normalize,
-            dropoutRate: DropoutRate);
-    }
-
     #endregion
 }

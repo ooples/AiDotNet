@@ -345,17 +345,6 @@ public partial class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
         return Clone();
     }
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                                return new T2IAdapterModel<T>(
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            adapterNetwork: (UNetNoisePredictor<T>)_adapterNetwork.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            adapterScale: _adapterScale);
-    }
-
     #endregion
 
     #region Metadata

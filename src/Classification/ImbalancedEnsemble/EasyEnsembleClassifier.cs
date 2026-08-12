@@ -670,19 +670,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>New instance with same hyperparameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates an untrained copy with the same settings.</para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new EasyEnsembleClassifier<T>(_nSubsets, _nEstimatorsPerSubset, _maxDepth,
-            _learningRate, _samplingStrategy, _softVoting);
-    }
-
-    /// <summary>
     /// Gets feature importance based on weak learner usage.
     /// </summary>
     /// <returns>Dictionary mapping feature names to importance scores.</returns>

@@ -178,24 +178,6 @@ namespace AiDotNet.NeuralNetworks
 
         #region Methods
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new SGPT<T>(
-                Architecture,
-                null,
-                null,
-                _vocabSize,
-                EmbeddingDimension,
-                MaxTokens,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                PoolingStrategy.Mean,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the SGPT model.
         /// </summary>

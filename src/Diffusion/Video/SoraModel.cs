@@ -344,17 +344,6 @@ public partial class SoraModel<T> : VideoDiffusionModelBase<T>
         return Clone();
     }
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        return new SoraModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     #endregion
 
     #region Metadata

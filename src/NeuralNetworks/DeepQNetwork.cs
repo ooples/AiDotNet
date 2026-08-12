@@ -814,32 +814,6 @@ public partial class DeepQNetwork<T> : NeuralNetworkBase<T>
             }
         }
     }
-
-    /// <summary>
-    /// Creates a new instance of the Deep Q-Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Deep Q-Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Deep Q-Network with the same architecture and
-    /// exploration rate (epsilon) as the current instance. It's used in scenarios where a fresh
-    /// copy of the model is needed while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the agent with the same setup.
-    /// 
-    /// Think of it like creating a clone of the agent:
-    /// - The new agent has the same neural network architecture
-    /// - The new agent has the same exploration rate (epsilon)
-    /// - But it's a completely separate instance with its own memory and learning state
-    /// 
-    /// This is useful when you need multiple instances of the same DQN model,
-    /// such as for parallel training or comparing different learning strategies.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DeepQNetwork<T>(this.Architecture, _lossFunction, Convert.ToDouble(this._epsilon));
-    }
 }
 
 

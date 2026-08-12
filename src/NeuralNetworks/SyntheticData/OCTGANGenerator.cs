@@ -835,12 +835,6 @@ public partial class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabula
         }
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new OCTGANGenerator<T>(Architecture, _options, _generatorOptimizer, _lossFunction);
-    }
-
     #endregion
 
 

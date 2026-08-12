@@ -779,25 +779,6 @@ public partial class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         MaxSequenceLength = maxSequenceLength;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TrOCR<T>(
-            Architecture,
-            _tokenizer,
-            ImageSize,
-            ImageSize,
-            _maxSequenceLength,
-            _encoderHiddenDim,
-            _decoderHiddenDim,
-            _numEncoderLayers,
-            _numDecoderLayers,
-            _numEncoderHeads,
-            _numDecoderHeads,
-            _patchSize,
-            _vocabSize);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

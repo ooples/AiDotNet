@@ -508,20 +508,6 @@ namespace AiDotNet.NeuralNetworks
             return Task.FromResult(EmbedBatch(texts));
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new GloVe<T>(
-                Architecture,
-                _tokenizer,
-                null, // Fresh optimizer for new instance
-                _vocabSize,
-                _embeddingDimension,
-                _maxTokens,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Returns technical details and configuration info about the GloVe model.
         /// </summary>

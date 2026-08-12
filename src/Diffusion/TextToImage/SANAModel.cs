@@ -302,19 +302,6 @@ public partial class SANAModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        return new SANAModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (EMMDiTPredictor<T>)_predictor.Clone(),
-            vae: (DeepCompressionVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            variant: _variant);
-    }
-
     #endregion
 
     #region Metadata

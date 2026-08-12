@@ -1428,17 +1428,6 @@ public partial class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioVisualEventLocalizationNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _temporalResolution,
-            _numEncoderLayers,
-            _supportedCategories);
-    }
-
     // No DeepCopy override. The one that used to live here rebuilt the model with the same
     // arguments CreateNewInstance above uses (plus the optimizer and loss function, which a copy
     // should NOT share — the sibling AudioVisualCorrespondenceNetwork says so in as many words)

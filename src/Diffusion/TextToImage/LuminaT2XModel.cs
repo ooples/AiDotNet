@@ -212,12 +212,6 @@ public partial class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                        return new LuminaT2XModel<T>(predictor: (FlagDiTPredictor<T>)_predictor.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

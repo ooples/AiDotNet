@@ -119,21 +119,6 @@ public partial class ARDiffusionModel<T> : LatentDiffusionModelBase<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone(),
-        // which reconstruct from their actual config fields and preserve materialized weights. Rebuilding
-        // a default-scale model here and SetParameters(GetParameters()) double-counts/mismatches the
-        // parameter vector once the source has been forwarded (lazy layers materialize on the forward path,
-        // a different entry than SetParameters' EnsureInitialized), and rebuilding at hardcoded scale can't
-        // accept an injected non-default predictor.
-        return new ARDiffusionModel<T>(
-            predictor: (SiTPredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

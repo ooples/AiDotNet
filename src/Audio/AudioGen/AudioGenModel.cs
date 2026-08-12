@@ -982,35 +982,6 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         _ = reader.ReadInt32();    // maxTextLength
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioGenModel<T>(
-            Architecture,
-            _modelSize,
-            _sampleRate,
-            _durationSeconds,
-            _maxDurationSeconds,
-            _temperature,
-            _topK,
-            _topP,
-            _guidanceScale,
-            _channels,
-            _textHiddenDim,
-            _lmHiddenDim,
-            _numLmLayers,
-            _numHeads,
-            _numCodebooks,
-            _codebookSize,
-            _maxTextLength,
-            seed: null,
-            tokenizer: _tokenizer,
-            optimizer: null,
-            lossFunction: _lossFunction);
-    }
-
     #endregion
 
     #region Private Methods

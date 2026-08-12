@@ -367,21 +367,4 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
         NumConvBlocks = reader.ReadInt32();
         BaseFilters = reader.ReadInt32();
     }
-
-    /// <summary>
-    /// Creates a new instance of this model type for cloning purposes.
-    /// </summary>
-    /// <returns>A new <see cref="VoxelCNN{T}"/> instance with the same configuration.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VoxelCNN<T>(
-            Architecture,
-            VoxelResolution,
-            NumConvBlocks,
-            BaseFilters,
-            _optimizer,
-            _lossFunction,
-            MaxGradNormValue);
-    }
 }

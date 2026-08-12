@@ -430,23 +430,6 @@ namespace AiDotNet.NeuralNetworks
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new TransformerEmbeddingNetwork<T>(
-                Architecture,
-                _tokenizer,
-                _optimizer,
-                _vocabSize,
-                _embeddingDimension,
-                _maxSequenceLength,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                _poolingStrategy,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
 
         /// <summary>
         /// Returns metadata about the transformer network configuration.

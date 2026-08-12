@@ -191,25 +191,6 @@ namespace AiDotNet.NeuralNetworks
             return new Vector<T>(resizedValues).SafeNormalize();
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new MatryoshkaEmbedding<T>(
-                Architecture,
-                null,
-                null,
-                _vocabSize,
-                EmbeddingDimension,
-                _nestedDimensions,
-                MaxTokens,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                PoolingStrategy.ClsToken,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the Matryoshka configuration.
         /// </summary>

@@ -936,18 +936,5 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
     }
 
-    /// <summary>
-    /// Creates a new instance of this network type for cloning or deserialization.
-    /// </summary>
-    /// <returns>A new GraphAttentionNetwork instance.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphAttentionNetwork<T>(
-            architecture: Architecture,
-            numHeads: NumHeads,
-            numLayers: NumLayers,
-            dropoutRate: DropoutRate);
-    }
-
     #endregion
 }

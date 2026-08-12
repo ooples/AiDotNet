@@ -269,23 +269,6 @@ namespace AiDotNet.NeuralNetworks
             return totalScore;
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new ColBERT<T>(
-                Architecture,
-                null,
-                null,
-                30522,
-                _outputDim,
-                MaxTokens,
-                12,
-                12,
-                3072,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the ColBERT model.
         /// </summary>

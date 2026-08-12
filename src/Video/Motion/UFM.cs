@@ -274,10 +274,4 @@ public partial class UFM<T> : OpticalFlowBase<T>
             if (Layers[1 + _numLayers] is ConvolutionalLayer<T> oc) _outputConv = oc;
         }
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UFM<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

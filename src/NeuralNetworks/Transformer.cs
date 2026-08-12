@@ -1160,40 +1160,4 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>, AiDo
         if (reader.BaseStream.Position < reader.BaseStream.Length)
             _headEmitsLogits = reader.ReadBoolean();
     }
-
-    /// <summary>
-    /// Creates a new instance of the Transformer with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new instance of the Transformer with the same configuration as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new Transformer neural network with the same architecture, loss function,
-    /// and optimizer as the current instance. The new instance has freshly initialized parameters,
-    /// making it useful for creating separate instances with identical configurations or for
-    /// resetting a network while preserving its structure.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a brand new Transformer with the same setup.
-    /// 
-    /// Think of it like creating a blueprint copy:
-    /// - It has the same architecture (number of layers, attention heads, etc.)
-    /// - It uses the same loss function to measure performance
-    /// - It uses the same optimizer to learn from data
-    /// - But it starts with fresh parameters (weights and biases)
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh network but keep the same design
-    /// - Create multiple networks with identical settings for comparison
-    /// - Reset a network to its initial state
-    /// 
-    /// The new Transformer will need to be trained from scratch, as it doesn't
-    /// inherit any of the learned knowledge from the original.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Transformer<T>(
-            _transformerArchitecture,
-            LossFunction,
-            _optimizer);
-    }
 }

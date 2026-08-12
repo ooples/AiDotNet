@@ -535,38 +535,6 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the FeedForwardNeuralNetwork with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new FeedForwardNeuralNetwork instance with the same architecture, optimizer, and loss function as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the FeedForwardNeuralNetwork with the same architecture, optimizer, and loss function
-    /// as the current instance. This is useful for model cloning, ensemble methods, or cross-validation scenarios where
-    /// multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method creates a fresh copy of the neural network's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of neural network with identical settings:
-    /// - This method creates a new, empty network with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new network has the same structure but no trained data
-    /// - This is useful for techniques that need multiple models, like ensemble methods
-    /// 
-    /// For example, when testing your model on different subsets of data,
-    /// you'd want each test to use a model with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FeedForwardNeuralNetwork<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
-
-    /// <summary>
     /// Indicates whether this network supports training.
     /// </summary>
     /// <remarks>

@@ -198,18 +198,6 @@ public partial class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        return new PromptToPromptModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

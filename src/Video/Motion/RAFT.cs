@@ -743,12 +743,6 @@ public partial class RAFT<T> : OpticalFlowBase<T>
         _ = reader.ReadInt32();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RAFT<T>(Architecture, _numFeatures, _correlationLevels, _correlationRadius, NumIterations);
-    }
-
     #endregion
 
     #region Base Class Abstract Methods

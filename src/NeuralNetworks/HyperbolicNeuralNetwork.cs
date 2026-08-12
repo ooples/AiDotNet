@@ -304,19 +304,6 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the HyperbolicNeuralNetwork with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new HyperbolicNeuralNetwork<T>(
-            Architecture,
-            NumOps.ToDouble(_curvature),
-            _optimizer,
-            LossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
-
-    /// <summary>
     /// Indicates whether this network supports training.
     /// </summary>
     public override bool SupportsTraining => true;

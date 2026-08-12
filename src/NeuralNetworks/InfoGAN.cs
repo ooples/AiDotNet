@@ -1041,34 +1041,6 @@ public partial class InfoGAN<T> : NeuralNetworkBase<T>
         ResetOptimizerState();
     }
 
-    /// <summary>
-    /// Creates a new instance of the InfoGAN with the same configuration.
-    /// </summary>
-    /// <returns>A new InfoGAN instance with the same architecture and hyperparameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a fresh InfoGAN instance with the same network architectures
-    /// and hyperparameters. The new instance has freshly initialized optimizers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the InfoGAN structure
-    /// but with new, untrained networks and fresh optimizers.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new InfoGAN<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            QNetwork.Architecture,
-            _latentCodeSize,
-            Architecture.InputType,
-            generatorOptimizer: null,
-            discriminatorOptimizer: null,
-            qNetworkOptimizer: null,
-            _lossFunction,
-            NumOps.ToDouble(_mutualInfoCoefficient));
-    }
-
     // UpdateParameters split the vector between Generator, Discriminator and QNetwork;
     // GetExtraTrainableLayers yields those three in the same order, so the base reproduces the
     // split. Removed under AIDN082.

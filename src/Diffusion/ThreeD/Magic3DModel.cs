@@ -253,17 +253,6 @@ public partial class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
         return Clone();
     }
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                                return new Magic3DModel<T>(
-            coarseUnet: (UNetNoisePredictor<T>)_coarseUnet.Clone(),
-            fineUnet: (UNetNoisePredictor<T>)_fineUnet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount);
-    }
-
     #endregion
 
     #region Metadata

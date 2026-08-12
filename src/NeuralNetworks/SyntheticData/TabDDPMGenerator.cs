@@ -1274,16 +1274,6 @@ public partial class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabul
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabDDPMGenerator<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
-
-    /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

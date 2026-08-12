@@ -322,21 +322,4 @@ public class UNet3D<T> : NeuralNetworkBase<T>
         BaseFilters = reader.ReadInt32();
         NumClasses = reader.ReadInt32();
     }
-
-    /// <summary>
-    /// Creates a new instance of this model type for cloning purposes.
-    /// </summary>
-    /// <returns>A new <see cref="UNet3D{T}"/> instance with the same configuration.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UNet3D<T>(
-            Architecture,
-            VoxelResolution,
-            NumEncoderBlocks,
-            BaseFilters,
-            _optimizer,
-            _lossFunction,
-            MaxGradNormValue);
-    }
 }

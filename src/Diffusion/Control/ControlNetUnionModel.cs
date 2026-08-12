@@ -213,13 +213,6 @@ public partial class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                                return new ControlNetUnionModel<T>(unet: (UNetNoisePredictor<T>)_unet.Clone(), controlNet: (UNetNoisePredictor<T>)_controlNet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

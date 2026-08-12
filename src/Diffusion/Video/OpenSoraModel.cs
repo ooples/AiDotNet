@@ -341,17 +341,6 @@ public partial class OpenSoraModel<T> : VideoDiffusionModelBase<T>
         return Clone();
     }
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                return new OpenSoraModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     #endregion
 
     #region Metadata

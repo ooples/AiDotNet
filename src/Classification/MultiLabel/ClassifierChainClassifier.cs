@@ -642,20 +642,6 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this classifier with default configuration.
-    /// </summary>
-    /// <returns>A new ClassifierChainClassifier instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
-    {
-        return new ClassifierChainClassifier<T>(_classifierFactory, _specifiedOrder, _useRandomOrder, null, Options, Regularization);
-    }
-
-    /// <summary>
     /// Creates a deep copy of this classifier.
     /// </summary>
     /// <returns>A new instance with the same parameters and state.</returns>

@@ -382,32 +382,4 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         _learningRate = NumOps.FromDouble(reader.ReadDouble());
     }
-
-    /// <summary>
-    /// Creates a new instance of the GRU Neural Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new GRU Neural Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the GRU Neural Network with the same architecture as the current instance.
-    /// It's used in scenarios where a fresh copy of the model is needed while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the neural network with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - But it's a completely separate instance with its own parameters and learning state
-    /// 
-    /// This is useful when you need multiple instances of the same GRU model,
-    /// such as for ensemble learning or comparing different training approaches.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GRUNeuralNetwork<T>(
-            Architecture,
-            lossFunction: LossFunction,
-            options: _options,
-            learningRate: NumOps.ToDouble(_learningRate));
-    }
 }

@@ -289,14 +289,4 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
 
         _options = options;
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AutoIntNetwork<T>(
-            Architecture,
-            _options,
-            null,
-            _lossFunction);
-    }
 }

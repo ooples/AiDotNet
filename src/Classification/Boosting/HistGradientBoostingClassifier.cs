@@ -757,19 +757,6 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>New instance with same hyperparameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates an untrained copy with the same settings.</para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new HistGradientBoostingClassifier<T>(_maxBins, _maxDepth, _nEstimators,
-            _learningRate, _minSamplesLeaf, _l2Regularization);
-    }
-
-    /// <summary>
     /// Gets feature importance based on total gain reduction.
     /// </summary>
     /// <returns>Dictionary mapping feature names to importance scores.</returns>

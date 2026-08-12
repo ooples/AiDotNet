@@ -117,20 +117,6 @@ public partial class OmniGen2Model<T> : LatentDiffusionModelBase<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
-        // actual config fields and preserve materialized weights. The previous form rebuilt a
-        // DEFAULT-scale model (SiTPredictor 1152/28) and SetParameters(GetParameters()) onto it,
-        // which both ignored a caller-injected variant and threw on the resulting parameter-count
-        // mismatch for any non-default predictor.
-        return new OmniGen2Model<T>(
-            predictor: (SiTPredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

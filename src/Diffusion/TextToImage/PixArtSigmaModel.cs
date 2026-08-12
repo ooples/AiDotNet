@@ -216,21 +216,6 @@ public partial class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Lazy-preserving clone: delegate to the predictor's and VAE's own Clone(), which
-        // reconstruct from their actual config fields and copy only materialized weights.
-        // The previous flatten -> SetParameters(GetParameters()) round-trip materialised the
-        // entire foundation-scale DiT + VAE (model + clone + flat parameter vector) at once
-        // and OOM'd the runner. Delegating also lets a caller-injected non-default-scale
-        // predictor/VAE round-trip correctly instead of being rebuilt at fixed constants.
-        return new PixArtSigmaModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

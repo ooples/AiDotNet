@@ -758,37 +758,4 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
             }
         }
     }
-
-    /// <summary>
-    /// Creates a new instance of the HTM Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new HTM Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the HTM Network with the same architecture and HTM-specific
-    /// parameters as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the HTM network with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - It has the same number of columns, cells per column, and sparsity threshold
-    /// - But it's a completely separate instance with its own state
-    /// - It starts with clean internal memory and connections
-    /// 
-    /// This is useful when you want to:
-    /// - Train the same network design on different datasets
-    /// - Compare how the same network structure learns from different sequences
-    /// - Start with a fresh network that has the same configuration but no learned patterns
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new HTMNetwork<T>(
-            this.Architecture,
-            _columnCount,
-            _cellsPerColumn,
-            NumOps.ToDouble(_sparsityThreshold));
-    }
 }

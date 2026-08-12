@@ -677,16 +677,6 @@ public partial class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabul
         // Layers are handled by base class
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FinDiffGenerator<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
-
     #endregion
 
     #region Input Validation and Column Management

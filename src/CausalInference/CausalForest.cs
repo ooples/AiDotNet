@@ -902,14 +902,6 @@ public class CausalForest<T> : CausalModelBase<T>
         return newModel;
     }
 
-    /// <summary>
-    /// Creates a new instance of the same type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CausalForest<T>(_numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction);
-    }
-
     /// <inheritdoc/>
     /// <remarks>
     /// A fitted causal forest's predictive state is its tree ensemble, not

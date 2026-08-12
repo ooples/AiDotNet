@@ -683,12 +683,6 @@ public partial class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISynt
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabTransformerGenGenerator<T>(Architecture, _options);
-    }
-
-    /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

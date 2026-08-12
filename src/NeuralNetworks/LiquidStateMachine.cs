@@ -735,39 +735,4 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             SetTrainingMode(false);
         }
     }
-
-    /// <summary>
-    /// Creates a new instance of the Liquid State Machine with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Liquid State Machine instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Liquid State Machine with the same architecture and LSM-specific
-    /// parameters as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the LSM with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - It has the same reservoir size, connection probability, and other settings
-    /// - But it's a completely separate instance with its own internal state
-    /// - The reservoir will be randomly initialized again, creating a different random network
-    /// 
-    /// This is useful when you want to:
-    /// - Train multiple networks with the same configuration
-    /// - Compare how different random initializations affect learning
-    /// - Create an ensemble of models with the same parameters
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LiquidStateMachine<T>(
-            this.Architecture,
-            _reservoirSize,
-            NumOps.ToDouble(_connectionProbability),
-            NumOps.ToDouble(_spectralRadius),
-            NumOps.ToDouble(_inputScaling),
-            NumOps.ToDouble(_leakingRate));
-    }
 }

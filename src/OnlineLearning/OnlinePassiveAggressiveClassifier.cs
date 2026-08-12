@@ -322,14 +322,6 @@ public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
         return newModel;
     }
 
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlinePassiveAggressiveClassifier<T>(_c, _paType, _fitIntercept);
-    }
-
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {

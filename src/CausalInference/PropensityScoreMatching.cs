@@ -718,14 +718,6 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new PropensityScoreMatching<T>(_caliper, _withReplacement, _matchRatio);
-    }
-
-    /// <summary>
     /// Gets additional model data for serialization.
     /// </summary>
     protected override Dictionary<string, object> GetAdditionalModelData()

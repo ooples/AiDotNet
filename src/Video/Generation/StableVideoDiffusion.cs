@@ -1223,15 +1223,6 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         _variant = (SVDModelVariant)reader.ReadInt32();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new StableVideoDiffusion<T>(
-            Architecture, _variant, _numFrames, _numInferenceSteps, _guidanceScale,
-            textEncoderDim: _textEncoderDim, textEncoderLayers: _textEncoderLayers,
-            textEncoderHeads: _textEncoderHeads);
-    }
-
     #endregion
 }
 

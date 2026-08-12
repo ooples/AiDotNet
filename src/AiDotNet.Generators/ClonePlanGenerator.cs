@@ -45,6 +45,16 @@ namespace AiDotNet.Generators;
 [Generator]
 public class ClonePlanGenerator : IIncrementalGenerator
 {
+    /// <summary>
+    /// Stands in a recorded constructor for "pass this parameter's declared default".
+    /// </summary>
+    /// <remarks>
+    /// Not a member name -- no C# member can be called this -- so it cannot collide with one. The
+    /// same literal is spelled out in <c>CloneEngine</c>, which is in a different assembly and cannot
+    /// reference this one; changing it here requires changing it there.
+    /// </remarks>
+    internal const string UseDefault = "=default";
+
     private const string NotConfiguration = "NotConfigurationAttribute";
     private const string ExternalResource = "ExternalResourceAttribute";
 
@@ -407,7 +417,20 @@ public class ClonePlanGenerator : IIncrementalGenerator
 
                 var member = FindSource(type, parameter);
 
-                if (member is null) { satisfied = false; break; }
+                if (member is null)
+                {
+                    // An OPTIONAL parameter nothing stores gets its declared default. That is not a
+                    // concession -- it is exactly what the hand-written override did: `new Foo(_options)`
+                    // left every unstored argument at its default too. 240 models are blocked on a
+                    // `seed` and 67 on a `maxGradNorm` that is passed to an initializer and never kept,
+                    // and refusing them bought nothing, because there is no value to preserve. A
+                    // REQUIRED parameter still refuses: onnxModelPath is required, which is what keeps
+                    // an ONNX model from being rebuilt as a native one.
+                    if (!parameter.IsOptional) { satisfied = false; break; }
+
+                    mapped.Add(UseDefault);
+                    continue;
+                }
 
                 mapped.Add(member);
             }
@@ -472,10 +495,87 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 }
             }
         }
-
-        return null;
+        return FindUniqueByType(type, parameter);
     }
 
+    /// <summary>
+    /// Finds the single member of a parameter's exact type, when the name did not match.
+    /// </summary>
+    /// <param name="type">The type being planned.</param>
+    /// <param name="parameter">The constructor parameter to source.</param>
+    /// <returns>That member's name, or <see langword="null"/> when there is not exactly one.</returns>
+    /// <remarks>
+    /// <para>
+    /// The name rule alone missed 132 models, all the same way: the constructor takes
+    /// <c>options</c> and the field is <c>_algoOptions</c>. The value IS stored -- just not under a
+    /// name the rule guesses -- so refusing produced a model that needed a hand-written clone for a
+    /// naming choice rather than for anything about its state.
+    /// </para>
+    /// <para>
+    /// EXACTLY ONE, and by exact type. Two members of the same type would bind in whichever order
+    /// they happen to be declared, so a clone could silently swap a generator for a discriminator.
+    /// Uniqueness is what makes this unambiguous, and it is checked across the whole inheritance
+    /// chain rather than one level, because the member usually lives on a base.
+    /// </para>
+    /// <para>
+    /// Base types are excluded from the exact-type search only for very common primitives, where a
+    /// unique match is a coincidence rather than a correspondence.
+    /// </para>
+    /// </remarks>
+    private static string? FindUniqueByType(INamedTypeSymbol type, IParameterSymbol parameter)
+    {
+        // A lone int or string field matching a lone int or string parameter says nothing: those
+        // types recur, and the match would be luck. Richer types are genuinely identifying.
+        if (parameter.Type.SpecialType is not SpecialType.None) return null;
+        if (parameter.Type.TypeKind == TypeKind.Enum) return null;
+
+        string? found = null;
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers())
+            {
+                string? name = member switch
+                {
+                    IPropertySymbol { IsStatic: false, IsIndexer: false } p
+                        when p.GetMethod is not null && IsSameType(p.Type, parameter.Type) => p.Name,
+                    IFieldSymbol { IsStatic: false, IsConst: false } f
+                        when IsSameType(f.Type, parameter.Type) => f.Name,
+                    _ => null,
+                };
+
+                if (name is null) continue;
+                if (found is not null) return null;
+
+                found = name;
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Compares two types ignoring nullable annotation.
+    /// </summary>
+    /// <param name="a">The first type.</param>
+    /// <param name="b">The second type.</param>
+    /// <returns><see langword="true"/> when they are the same type.</returns>
+    private static bool IsSameType(ITypeSymbol a, ITypeSymbol b)
+        => SymbolEqualityComparer.Default.Equals(
+            a.WithNullableAnnotation(NullableAnnotation.None),
+            b.WithNullableAnnotation(NullableAnnotation.None));
+
+    /// <summary>
+    /// Determines whether a member's value can be passed for a parameter without a conversion.
+    /// </summary>
+    /// <param name="property">The member's type.</param>
+    /// <param name="parameter">The parameter type.</param>
+    /// <returns><see langword="true"/> when the value is passable as-is.</returns>
+    /// <remarks>
+    /// Reference conversions only -- a base class or an implemented interface. Numeric and
+    /// user-defined conversions are deliberately refused: the value is passed through
+    /// <c>ConstructorInfo.Invoke</c>, which performs no user-defined conversion, so accepting one
+    /// here would produce a plan that compiles and then throws at the point of cloning.
     /// </remarks>
     private static bool IsCarriedAs(ITypeSymbol property, ITypeSymbol parameter)
     {

@@ -1808,36 +1808,4 @@ public partial class NEAT<T> : NeuralNetworkBase<T>
                _population.Count > 0 &&
                _population.Any(g => g.Connections.Count > 0);
     }
-
-    /// <summary>
-    /// Creates a new instance of the NEAT model with the same architecture and evolutionary parameters.
-    /// </summary>
-    /// <returns>A new instance of the NEAT model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new NEAT model with the same architecture, population size, mutation rate,
-    /// and crossover rate as the current instance. The new instance starts with a fresh population,
-    /// making it useful for restarting evolution with the same parameters or for creating parallel
-    /// evolutionary runs.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a brand new NEAT system with the same settings.
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh population but keep the same settings
-    /// - Run multiple separate evolutions with identical parameters
-    /// - Create a "clean slate" version of a successful setup
-    /// 
-    /// The new NEAT system will have:
-    /// - The same number of inputs and outputs
-    /// - The same population size and mutation/crossover rates
-    /// - A brand new initial population (not copying any evolved networks)
-    /// 
-    /// This effectively creates a "twin" of your NEAT system, but at the starting point
-    /// rather than with any of the evolved progress.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NEAT<T>(Architecture, _populationSize, NumOps.ToDouble(_mutationRate), NumOps.ToDouble(_crossoverRate));
-    }
 }

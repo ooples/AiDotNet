@@ -530,19 +530,4 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
                 $"Serialized includeClassifier ({includeClassifier}) does not match current configuration ({_configuration.IncludeClassifier}).");
         }
     }
-
-    /// <summary>
-    /// Creates a new instance of the VGG network model.
-    /// </summary>
-    /// <returns>A new instance of the VGG network with the same configuration.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VGGNetwork<T>(
-            Architecture,
-            _configuration,
-            _optimizer,
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm)
-        );
-    }
 }

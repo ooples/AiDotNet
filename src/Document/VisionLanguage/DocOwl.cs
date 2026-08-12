@@ -592,13 +592,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         MaxSequenceLength = maxSeqLen;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DocOwl<T>(Architecture, ImageSize, MaxSequenceLength, _visionDim, _languageDim,
-            _visionLayers, _languageLayers, _numHeads, _vocabSize, visionNumHeads: _visionNumHeads);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

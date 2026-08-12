@@ -387,14 +387,4 @@ public class GANDALFNetwork<T> : NeuralNetworkBase<T>
         // Options are reconstructed from serialized data
         // Layers are handled by base class
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GANDALFNetwork<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
 }

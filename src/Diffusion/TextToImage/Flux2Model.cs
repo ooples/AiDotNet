@@ -299,16 +299,6 @@ public partial class Flux2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                        return new Flux2Model<T>(
-            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            variant: _variant);
-    }
-
     #endregion
 
     #region Metadata

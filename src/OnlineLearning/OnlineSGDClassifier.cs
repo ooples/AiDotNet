@@ -342,15 +342,6 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
         return newModel;
     }
 
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineSGDClassifier<T>(
-            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
-    }
-
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {

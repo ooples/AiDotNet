@@ -27,6 +27,16 @@ namespace AiDotNet.Models;
 public static class CloneEngine
 {
     /// <summary>
+    /// Stands in a recorded constructor for "pass this parameter's declared default".
+    /// </summary>
+    /// <remarks>
+    /// Not a member name -- no C# member can be called this -- so it cannot collide with one. The
+    /// same literal is spelled out in <c>ClonePlanGenerator</c>, which lives in the analyzer assembly
+    /// and cannot be referenced from here; changing it there requires changing it here.
+    /// </remarks>
+    private const string UseDefault = "=default";
+
+    /// <summary>
     /// Creates a configuration copy of <paramref name="source"/>.
     /// </summary>
     /// <param name="source">The instance to copy.</param>
@@ -170,6 +180,11 @@ public static class CloneEngine
 
             for (int i = 0; i < arguments.Length; i++)
             {
+                // The sentinel means the generator found nothing storing this OPTIONAL parameter, so
+                // the constructor's own default is what it gets -- the same value the hand-written
+                // override left it at. Type.Missing is how reflection spells that.
+                if (candidate[i] == UseDefault) { arguments[i] = Type.Missing; continue; }
+
                 if (!TryReadMember(type, candidate[i], source, out arguments[i])) { readable = false; break; }
             }
 
@@ -210,7 +225,14 @@ public static class CloneEngine
                 }
             }
 
-            if (satisfied) return withArgs.Invoke(arguments);
+            // OptionalParamBinding is what turns a Type.Missing slot into the declared default.
+            // Without it the call throws, and it throws for every model with an unstored optional
+            // parameter -- which is 307 of them.
+            if (satisfied)
+            {
+                return withArgs.Invoke(
+                    BindingFlags.OptionalParamBinding, binder: null, arguments, culture: null);
+            }
         }
 
         var constructor = type.GetConstructor(
@@ -355,6 +377,9 @@ public static class CloneEngine
     private static bool NamesTheSameValue(string? parameter, string member)
     {
         if (parameter is null) return false;
+
+        // The sentinel stands for the parameter's own default, so it matches whatever it sits against.
+        if (member == UseDefault) return true;
 
         var trimmed = member.StartsWith("_", StringComparison.Ordinal) ? member.Substring(1) : member;
         return string.Equals(parameter, trimmed, StringComparison.OrdinalIgnoreCase);

@@ -205,14 +205,6 @@ public partial class SoundStormModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                return new SoundStormModel<T>(conformer: (DiTNoisePredictor<T>)_conformer.Clone(),
-            audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

@@ -386,16 +386,6 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineSGDRegressor<T>(
-            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty,
-            _fitIntercept, _lossType, _epsilon);
-    }
-
-    /// <summary>
     /// Gets the feature importance scores (absolute weights).
     /// </summary>
     public override Dictionary<string, T> GetFeatureImportance()

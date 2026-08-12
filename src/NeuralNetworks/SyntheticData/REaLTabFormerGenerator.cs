@@ -727,12 +727,6 @@ public partial class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheti
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new REaLTabFormerGenerator<T>(Architecture, _options);
-    }
-
-    /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

@@ -276,29 +276,6 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the OctonionNeuralNetwork with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This creates a fresh network instance with a new optimizer to avoid state conflicts.
-    /// Sharing an optimizer instance between networks would cause training issues since
-    /// the optimizer maintains internal state (momentum, adaptive learning rates, etc.)
-    /// that is specific to each network's parameters.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Pass null for optimizer to create a fresh optimizer for the new instance.
-        // Sharing optimizer instances between networks causes state conflicts since
-        // optimizers maintain internal state (momentum, etc.) tied to specific parameters.
-        return new OctonionNeuralNetwork<T>(
-            Architecture,
-            null, // Create fresh optimizer - don't share _optimizer
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
-
-    /// <summary>
     /// Indicates whether this network supports training.
     /// </summary>
     public override bool SupportsTraining => true;

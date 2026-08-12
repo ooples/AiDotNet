@@ -1462,26 +1462,5 @@ public partial class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>, NeuralRa
         }
     }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NeRF<T>(
-            positionEncodingLevels: _positionEncodingLevels,
-            directionEncodingLevels: _directionEncodingLevels,
-            hiddenDim: _hiddenDim,
-            numLayers: _numLayers,
-            colorHiddenDim: _colorHiddenDim,
-            colorNumLayers: _colorNumLayers,
-            useHierarchicalSampling: _useHierarchicalSampling,
-            renderSamples: _renderSamples,
-            hierarchicalSamples: _hierarchicalSamples,
-            renderNearBound: NumOps.ToDouble(_renderNearBound),
-            renderFarBound: NumOps.ToDouble(_renderFarBound),
-            learningRate: NumOps.ToDouble(_learningRate),
-            lossFunction: _lossFunction);
-    }
-
     #endregion
 }

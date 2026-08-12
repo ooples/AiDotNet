@@ -1018,12 +1018,6 @@ public partial class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabul
         }
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PATEGANGenerator<T>(Architecture, _options, _generatorOptimizer, _lossFunction);
-    }
-
     #endregion
 
 }

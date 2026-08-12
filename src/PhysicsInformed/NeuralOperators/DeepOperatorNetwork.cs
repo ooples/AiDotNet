@@ -880,21 +880,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _trunkNet.Deserialize(reader.ReadBytes(trunkLength));
         }
 
-        /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New DeepONet instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new DeepOperatorNetwork<T>(
-                Architecture,
-                _branchNet.Architecture,
-                _trunkNet.Architecture,
-                _p,
-                _numSensors,
-                _optimizer);
-        }
-
         private static void ClearNetworkGradients(NeuralNetworkBase<T> network)
         {
             foreach (var layer in network.Layers)

@@ -448,10 +448,4 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
-    {
-        return new RAkELClassifier<T>(LabelsetSize, NumLabelsets, null, Options, Regularization);
-    }
 }

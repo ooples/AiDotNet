@@ -135,23 +135,6 @@ public partial class TCDModel<T> : LatentDiffusionModelBase<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // #1706: delegate to the sub-models' own Clone() (UNetNoisePredictor.Clone materializes the
-        // clone's lazy layers then copies weights). The previous fresh-construct + model-level
-        // TryShareParametersFrom path left the clone's U-Net lazy — the share saw zero-shape tensors,
-        // fell back to SetParameters, and the clone re-RNG-initialized on its first forward, diverging
-        // from the source (Clone_ShouldProduceIdenticalOutput; the seed was random too).
-        return new TCDModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

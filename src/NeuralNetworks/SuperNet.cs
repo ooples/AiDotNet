@@ -1018,11 +1018,6 @@ namespace AiDotNet.NeuralNetworks
         public override bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputSize;
         public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
 
-        public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-        {
-            return new SuperNet<T>(_searchSpace, _numNodes);
-        }
-
         public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
         #region IInterpretableModel Implementation

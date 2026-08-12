@@ -506,12 +506,6 @@ public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassif
         return copy;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new RocketClassifier<T>(_rocketOptions);
-    }
-
 
 
     /// <inheritdoc />

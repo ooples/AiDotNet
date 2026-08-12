@@ -701,13 +701,6 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         RebindBranchLayers();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ABINet<T>(Architecture, ImageSize, _imageHeight, MaxSequenceLength, _visionDim, _languageDim,
-            _visionLayers, _languageLayers, _numIterations, _charset);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

@@ -1241,16 +1241,6 @@ public partial class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifie
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UnifiedMultimodalNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _maxSequenceLength,
-            _numTransformerLayers);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         return base.DeepCopy();

@@ -242,14 +242,6 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Constructs a fresh CSPDarknet with the same depth, width multiplier, and
-    /// input-channel configuration. All internal layers are freshly allocated.
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new CSPDarknet<T>(_depthOriginal, _widthMultiplier, _inChannels, _activation);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,

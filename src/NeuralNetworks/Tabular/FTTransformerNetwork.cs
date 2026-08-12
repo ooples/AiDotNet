@@ -346,15 +346,4 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
             _options.CategoricalCardinalities = null;
         }
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create with cloned options and a fresh optimizer to avoid shared mutable state
-        return new FTTransformerNetwork<T>(
-            Architecture,
-            _options.Clone(),
-            optimizer: null,
-            _lossFunction);
-    }
 }

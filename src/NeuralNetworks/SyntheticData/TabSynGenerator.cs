@@ -1216,16 +1216,6 @@ public partial class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabula
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabSynGenerator<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
-
-    /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

@@ -358,20 +358,6 @@ namespace AiDotNet.NeuralNetworks
             return result.SafeNormalize();
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new SiameseNeuralNetwork<T>(
-                Architecture,
-                _tokenizer,
-                null, // Fresh optimizer for new instance
-                _vocabSize,
-                _embeddingDimension,
-                _maxSequenceLength,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the Siamese dual-encoder model.
         /// </summary>

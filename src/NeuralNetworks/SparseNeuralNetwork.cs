@@ -456,19 +456,6 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the SparseNeuralNetwork with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SparseNeuralNetwork<T>(
-            Architecture,
-            NumOps.ToDouble(_sparsity),
-            _optimizer,
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
-
-    /// <summary>
     /// Indicates whether this network supports training.
     /// </summary>
     public override bool SupportsTraining => true;

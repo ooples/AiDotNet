@@ -532,14 +532,6 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the same type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CoxProportionalHazards<T>(_learningRate, _maxIterations, _tolerance, _l2Penalty);
-    }
-
-    /// <summary>
     /// Gets the feature importance scores based on coefficient magnitudes.
     /// </summary>
     /// <remarks>

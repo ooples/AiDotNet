@@ -1105,12 +1105,6 @@ public partial class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabu
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TableGANGenerator<T>(Architecture, _options);
-    }
-
-    /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

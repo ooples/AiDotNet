@@ -643,17 +643,4 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 $"Serialized zeroInitResidual ({zeroInitResidual}) does not match current configuration ({_configuration.ZeroInitResidual}).");
         }
     }
-
-    /// <summary>
-    /// Creates a new instance of the ResNet network model.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ResNetNetwork<T>(
-            Architecture,
-            _configuration,
-            null,
-            _lossFunction,
-            MaxGradNormValue);
-    }
 }
