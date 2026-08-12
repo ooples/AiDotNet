@@ -10969,24 +10969,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // to float. Only the generic-type-argument occurrences of `double` are rewritten;
         // the `double`-keyword tolerance/return-type overrides emitted below are untouched.
         // Float-scaffold selection: the legacy hard-coded roster, the self-declaring
-        // [GenerateFloatTestScaffold] attribute, or a currently resource-bound generated
-        // model shard. The A-I and N-Z shards repeatedly exhaust the 16 GB CI runner when
-        // many individually viable neural/layer-based <double> training fixtures execute
-        // back-to-back; using <float> for every generic test family in the affected ranges
-        // prevents the cumulative OOM/timeout whack-a-mole while preserving topology and
-        // invariants. Lightweight non-generic regression/RL/anomaly bases stay unchanged.
-        // GraFPrint and SambaLanguageModel remain in double because their float optimizer
-        // trajectories are known to diverge; their expensive probes are already capped.
-        char shardInitial = model.ClassName.Length > 0
-            ? char.ToUpperInvariant(model.ClassName[0])
-            : '\0';
-        bool isResourceBoundShard = (shardInitial >= 'A' && shardInitial <= 'I')
-                                 || (shardInitial >= 'N' && shardInitial <= 'Z');
+        // [GenerateFloatTestScaffold] attribute, or a supported generic family. Supported
+        // families run at float regardless of the model-name initial; the former A-I / N-Z
+        // shard-letter rule arbitrarily excluded J-M even though genuinely incompatible models
+        // are already named individually below. Non-generic family bases remain at their default
+        // precision until the base itself is made generic. GraFPrint, SambaLanguageModel and
+        // TabPFNNetwork remain in double because their float optimizer trajectories are known to
+        // diverge; their expensive probes are already capped.
         bool supportsFloatScaffold = baseClassName is
-            // These five are generic already and were simply never listed, so 74 suites emitted at
-            // double for no reason other than the omission -- AnomalyDetectorTestBase alone is 51.
-            // Verified against the block below rather than by grepping the file, which gives false
-            // hits: these names appear elsewhere in it.
+            // These families are explicitly eligible for float scaffolds. Keep this list and the
+            // compiled-output assertions in GeneratedFloatScaffoldSmokeTests in sync.
             "AnomalyDetectorTestBase" or
             "ReinforcementLearningTestBase" or
             "RiskModelTestBase" or
@@ -11016,14 +11008,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VideoNNModelTestBase" or
             "VideoSuperResolutionTestBase" or
             "VisionLanguageTestBase";
-        bool useFloat = Fp32TestClassNames.Contains(model.ClassName)
-                     || model.RequestsFloatScaffold
-                     || (isResourceBoundShard
-                         && supportsFloatScaffold
-                         // TabPFN had no timeout/OOM evidence; blanket T-Z floatification
-                         // introduced late-step optimizer drift in MoreData. Keep it in
-                         // the default precision and reserve FP32 for measured resource cases.
-                         && model.ClassName is not ("GraFPrint" or "SambaLanguageModel" or "TabPFNNetwork"));
+        // These exclusions override EVERY opt-in route, including the legacy FP32 roster and an
+        // attribute. SambaLanguageModel is still present in the historical roster above; placing
+        // this check only inside the supported-family branch silently floated it despite the
+        // measured optimizer divergence documented by HeavyTrainingTimeoutClassNames.
+        bool isFloatExcluded = model.ClassName is
+            "GraFPrint" or "SambaLanguageModel" or "TabPFNNetwork";
+        bool useFloat = !isFloatExcluded
+                     && (Fp32TestClassNames.Contains(model.ClassName)
+                         || model.RequestsFloatScaffold
+                         || supportsFloatScaffold);
         if (useFloat)
         {
             baseClassName += "<float>";

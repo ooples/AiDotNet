@@ -12,7 +12,8 @@ namespace AiDotNet.Tests.Generators;
 /// types, that the float rewrite fired exactly where intended and nowhere else:
 ///   * training-perf-bound models (in Fp32TestClassNames / [GenerateFloatTestScaffold]) inherit a
 ///     <c>&lt;float&gt;</c> test base, and
-///   * the default models still inherit a <c>&lt;double&gt;</c> base (float-ing didn't leak everywhere).
+///   * models in supported generic families inherit a <c>&lt;float&gt;</c> test base regardless of
+///     their name's initial, while explicit exclusions still inherit <c>&lt;double&gt;</c>.
 /// Because it reads the compiled output, it also confirms the rewritten scaffolds compile — the
 /// minimum bar the review asked for.
 /// </summary>
@@ -68,12 +69,10 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.True(doubleScaffolds.Count > 0,
             "No generated scaffold inherits a <double> test base — the float rewrite leaked to all models.");
 
-        // #1680 review: a bare count check still passes if the float path regresses to a single accidental
-        // model. Pin the roster by name — a known auto-generated opt-in must resolve to <float>, and a stable
-        // auto-generated opt-out must resolve to <double>. WhisperLargeV3 is a Fp32TestClassNames opt-in with
-        // no manual scaffold (so it IS auto-generated). LayoutGraph is a stable auto-generated J-M model,
-        // outside the resource-bound A-I/N-Z shard ranges and not in any explicit float roster, so it remains
-        // the double control. If either precision route silently regresses, this test fails.
+        // A bare count still passes if the float path regresses to one accidental model. Pin each
+        // selection route and every newly eligible family by name, plus stable explicit double
+        // exclusions. LayoutGraph is deliberate: its L initial used to keep it at double and proves
+        // the obsolete shard-letter gate did not return.
         Assert.Contains(floatScaffolds, t => t.Name == "ABINetTests");
         Assert.Contains(floatScaffolds, t => t.Name == "WhisperLargeV3Tests");
         Assert.Contains(floatScaffolds, t => t.Name == "CIFEncoderTests");
@@ -99,7 +98,17 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "PyramidNERTests");
         Assert.Contains(floatScaffolds, t => t.Name == "PerVFITests");
         Assert.Contains(floatScaffolds, t => t.Name == "PIDNetTests");
-        Assert.Contains(doubleScaffolds, t => t.Name == "LayoutGraphTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "LayoutGraphTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "ZScoreDetectorTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "NeuralCVaRTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "BSVDTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "AVIDTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "DIFRINTTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "DQNAgentTests");
+
+        Assert.Contains(doubleScaffolds, t => t.Name == "GraFPrintTests");
+        Assert.Contains(doubleScaffolds, t => t.Name == "SambaLanguageModelTests");
+        Assert.Contains(doubleScaffolds, t => t.Name == "TabPFNNetworkTests");
     }
 
     [Fact]
