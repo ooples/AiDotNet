@@ -83,6 +83,7 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
         _numClasses = numClasses;
 
         _classificationHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

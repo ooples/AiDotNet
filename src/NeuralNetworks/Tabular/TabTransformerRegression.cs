@@ -86,6 +86,7 @@ public class TabTransformerRegression<T> : TabTransformerBase<T>
 
         // Regression head
         _regressionHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

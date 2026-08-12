@@ -134,6 +134,7 @@ public abstract class FTTransformerBase<T>
     {
         get
         {
+            MaterializeParameterComponents();
             int count = checked((int)Tokenizer.ParameterCount);
             foreach (var layer in EncoderLayers)
             {
@@ -145,6 +146,25 @@ public abstract class FTTransformerBase<T>
                 if (extra is not null) count += (int)extra.ParameterCount;
             }
             return count;
+        }
+    }
+
+    /// <summary>
+    /// Materializes the constructor-sized transformer stack before any public parameter surface
+    /// measures it. This keeps a fresh checkpoint identical to one taken after the first forward
+    /// without allocating those tensors merely for constructing the model.
+    /// </summary>
+    private void MaterializeParameterComponents()
+    {
+        foreach (var layer in EncoderLayers)
+            layer.MaterializeParameters();
+
+        FinalLayerNorm.MaterializeParameters();
+
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is LayerBase<T> layer)
+                layer.MaterializeParameters();
         }
     }
 
@@ -192,13 +212,14 @@ public abstract class FTTransformerBase<T>
         {
             var encoderLayer = new TransformerEncoderLayer<T>(
                 Options.NumHeads,
-                Options.FeedForwardDimension);
+                Options.FeedForwardDimension,
+                Options.EmbeddingDimension);
 
             EncoderLayers.Add(encoderLayer);
         }
 
         // Final layer normalization
-        FinalLayerNorm = new LayerNormalizationLayer<T>();
+        FinalLayerNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
 
         // Initialize cache
         _layerOutputsCache = new List<Tensor<T>>();
@@ -282,6 +303,7 @@ public abstract class FTTransformerBase<T>
     /// </summary>
     public virtual Vector<T> GetParameters()
     {
+        MaterializeParameterComponents();
         var allParams = new List<T>();
 
         // Tokenizer parameters
@@ -327,6 +349,7 @@ public abstract class FTTransformerBase<T>
     /// </summary>
     public virtual void SetParameters(Vector<T> parameters)
     {
+        MaterializeParameterComponents();
         int offset = 0;
 
         // Tokenizer parameters

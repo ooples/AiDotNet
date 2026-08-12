@@ -102,6 +102,7 @@ public abstract class NODEBase<T>
         {
             _featurePreprocessing = new FullyConnectedLayer<T>(
                 numFeatures,
+                numFeatures,
                 Options.HiddenActivation ?? new ReLUActivation<T>());
         }
 

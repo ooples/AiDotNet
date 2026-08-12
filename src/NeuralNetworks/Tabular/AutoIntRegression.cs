@@ -85,6 +85,7 @@ public class AutoIntRegression<T> : AutoIntBase<T>
         _outputDimension = outputDimension;
 
         _regressionHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

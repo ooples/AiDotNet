@@ -86,6 +86,7 @@ public class NODEClassifier<T> : NODEBase<T>
 
         // Classification head maps from tree output to class logits
         _classificationHead = new FullyConnectedLayer<T>(
+            TreeOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

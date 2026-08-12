@@ -457,6 +457,13 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private bool _isInitialized;
 
     /// <summary>
+    /// The eager constructor supplies the embedding width, so every nested attention,
+    /// feed-forward, and normalization parameter can be sized without observing input data.
+    /// The lazy constructor keeps the default deferred behavior until its first forward.
+    /// </summary>
+    protected override bool ParametersAreConstructionSized => _embeddingSize > 0;
+
+    /// <summary>
     /// AiDotNet#1370 shape oracle override: when the eager-dimension ctor
     /// (<c>(numHeads, feedForwardDim, embeddingSize)</c>) supplied a concrete
     /// embedding width, sublayers were constructed at ctor time

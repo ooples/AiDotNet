@@ -89,6 +89,7 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
         _numClasses = numClasses;
 
         _classificationHead = new FullyConnectedLayer<T>(
+            MLPOutputDimension,
             numClasses,
             (IActivationFunction<T>?)null);
     }

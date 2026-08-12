@@ -116,9 +116,14 @@ public abstract class TabDPTBase<T>
         int embDim = Options.EmbeddingDimension;
 
         // Feature projection for numerical features
-        _featureProjection = new FullyConnectedLayer<T>(
-            embDim,
-            Options.InputActivation ?? new ReLUActivation<T>());
+        _featureProjection = numNumericalFeatures > 0
+            ? new FullyConnectedLayer<T>(
+                numNumericalFeatures,
+                embDim,
+                Options.InputActivation ?? new ReLUActivation<T>())
+            : new FullyConnectedLayer<T>(
+                embDim,
+                Options.InputActivation ?? new ReLUActivation<T>());
 
         // Categorical embeddings
         var cardinalities = Options.CategoricalCardinalities ?? [];
@@ -127,6 +132,7 @@ public abstract class TabDPTBase<T>
         for (int i = 0; i < cardinalities.Length; i++)
         {
             _categoricalEmbeddings[i] = new FullyConnectedLayer<T>(
+                cardinalities[i],
                 embDim,
                 (IActivationFunction<T>?)null);
         }
@@ -164,12 +170,13 @@ public abstract class TabDPTBase<T>
         {
             bool isLast = i == mlpDims.Length - 1;
             _mlpLayers[i] = new FullyConnectedLayer<T>(
+                inputDim,
                 mlpDims[i],
                 isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
             inputDim = mlpDims[i];
         }
 
-        _finalNorm = new LayerNormalizationLayer<T>();
+        _finalNorm = new LayerNormalizationLayer<T>(inputDim);
     }
 
     /// <summary>
@@ -390,16 +397,18 @@ public abstract class TabDPTBase<T>
 
             // Feed-forward network
             _ff1 = new FullyConnectedLayer<TBlock>(
+                embeddingDim,
                 ffDim,
                 new GELUActivation<TBlock>() as IActivationFunction<TBlock>);
 
             _ff2 = new FullyConnectedLayer<TBlock>(
+                ffDim,
                 embeddingDim,
                 (IActivationFunction<TBlock>?)null);
 
             // Layer normalizations
-            _norm1 = new LayerNormalizationLayer<TBlock>();
-            _norm2 = new LayerNormalizationLayer<TBlock>();
+            _norm1 = new LayerNormalizationLayer<TBlock>(embeddingDim);
+            _norm2 = new LayerNormalizationLayer<TBlock>(embeddingDim);
         }
 
         private static Tensor<TBlock> InitializeWeights(int[] shape, double scale, Random random)
