@@ -113,6 +113,8 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "NoiseContrastiveEstimationLossTests");
         Assert.Contains(floatScaffolds, t => t.Name == "SparseCategoricalCrossEntropyLossTests");
         Assert.Contains(floatScaffolds, t => t.Name == "GraphAttentionLayerTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CrossAttentionLayerTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "AddLayerTests");
 
         Assert.Contains(doubleScaffolds, t => t.Name == "GraFPrintTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "SambaLanguageModelTests");
