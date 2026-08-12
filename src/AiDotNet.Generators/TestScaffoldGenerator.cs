@@ -10983,6 +10983,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "AnomalyDetectorTestBase" or
             "CausalModelTestBase" or
             "MultiLabelClassifierTestBase" or
+            "RegressionModelTestBase" or
             "ReinforcementLearningTestBase" or
             "RiskModelTestBase" or
             "VideoDenoisingTestBase" or
