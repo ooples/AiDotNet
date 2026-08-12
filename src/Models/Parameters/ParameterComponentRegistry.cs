@@ -104,7 +104,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     {
         for (int i = 0; i < _entries.Count; i++)
         {
-            if (component is not null && ReferenceEquals(_entries[i].Source, component)) return;
+            if (component is not null && ReferencesSameSource(_entries[i].Source, component)) return;
         }
 
         string seed = "legacy-v1\n" + ownerIdentity + "\n" +
@@ -279,13 +279,52 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
         var captured = CaptureLayout();
+        int variableIndex = FindVariableEntryIndex(captured.Entries);
+        if (variableIndex >= 0 && captured.Snapshot.ParameterCount.HasValue &&
+            parameters.Length != captured.Snapshot.ParameterCount.Value)
+        {
+            // A variable tail gets whatever remains after every fixed component. Materialize fixed
+            // neural networks first so their checkpoint spans are known before the remainder is
+            // calculated; the variable source itself deliberately learns its width from the slice.
+            for (int i = 0; i < variableIndex; i++)
+            {
+                if (TryGetNetwork(captured.Entries[i].Entry.Source, out var network))
+                    network.MaterializeParameters();
+            }
+            captured = CaptureLayout();
+            variableIndex = FindVariableEntryIndex(captured.Entries);
+        }
+        else if (captured.Snapshot.ParameterCount.HasValue &&
+            parameters.Length != captured.Snapshot.ParameterCount.Value)
+        {
+            // Materialize in stable flat-vector order and stop as soon as the incoming length is
+            // explained. A checkpoint may honestly contain only the prefix of networks that have
+            // executed (A3C can run its policy before its value network); materializing every fresh
+            // component would invent a longer target layout than the source actually emitted.
+            for (int i = 0; i < captured.Entries.Count; i++)
+            {
+                if (TryGetNetwork(captured.Entries[i].Entry.Source, out var network))
+                    network.MaterializeParameters();
+
+                captured = CaptureLayout();
+                long? recapturedCount = captured.Snapshot.ParameterCount;
+                if (!recapturedCount.HasValue || recapturedCount.Value >= parameters.Length) break;
+            }
+        }
         var layout = captured.Snapshot;
         if (!layout.ParameterCount.HasValue)
             throw new ParameterLayoutNotReadyException("restore", layout);
-        if (parameters.Length != layout.ParameterCount.Value)
+        long fixedParameterCount = variableIndex < 0
+            ? layout.ParameterCount.Value
+            : layout.ParameterCount.Value - captured.Entries[variableIndex].ParameterCount!.Value;
+        if (variableIndex < 0 && parameters.Length != fixedParameterCount)
             throw new ArgumentException(
-                $"Expected {layout.ParameterCount.Value} parameters, got {parameters.Length}.",
+                $"Expected {fixedParameterCount} parameters, got {parameters.Length}.",
                 nameof(parameters));
+        if (variableIndex >= 0 && parameters.Length < fixedParameterCount)
+            throw new ArgumentException(
+                $"Expected at least {fixedParameterCount} parameters for the fixed components, " +
+                $"got {parameters.Length}.", nameof(parameters));
 
         // Slice by the captured layout, never by re-querying live source counts. The same immutable
         // snapshot validated the total above and records each source's declared span, so lazy
@@ -296,7 +335,9 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             var item = captured.Entries[i];
             var source = item.Entry.Source;
             if (source is null) continue;
-            int count = checked((int)item.ParameterCount!.Value);
+            int count = i == variableIndex
+                ? checked(parameters.Length - offset)
+                : checked((int)item.ParameterCount!.Value);
             var slice = new Vector<T>(count);
             parameters.AsSpan().Slice(offset, count).CopyTo(slice.AsWritableSpan());
             offset += count;
@@ -382,7 +423,55 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 entryCountKnown ? entryCount : (long?)null));
         }
 
-        return new CapturedLayout(new ParameterLayoutSnapshot(slots), captured.AsReadOnly());
+        var capturedEntries = captured.AsReadOnly();
+        _ = FindVariableEntryIndex(capturedEntries);
+        return new CapturedLayout(new ParameterLayoutSnapshot(slots), capturedEntries);
+    }
+
+    private static bool ReferencesSameSource(IParameterSource<T>? registered, IParameterSource<T> candidate)
+        => ReferenceEquals(registered, candidate)
+        || registered is ComponentAccessorParameterSource<T> accessor
+           && ReferenceEquals(accessor.Current,
+               candidate is ComponentAccessorParameterSource<T> candidateAccessor
+                   ? candidateAccessor.Current
+                   : candidate)
+        || candidate is ComponentAccessorParameterSource<T> reverseAccessor
+           && ReferenceEquals(reverseAccessor.Current, registered);
+
+    private static bool TryGetNetwork(
+        IParameterSource<T>? source,
+        out NeuralNetworks.NeuralNetworkBase<T> network)
+    {
+        var current = source is ComponentAccessorParameterSource<T> accessor
+            ? accessor.Current
+            : source;
+        if (current is NeuralNetworks.NeuralNetworkBase<T> found)
+        {
+            network = found;
+            return true;
+        }
+
+        network = null!;
+        return false;
+    }
+
+    private static int FindVariableEntryIndex(IReadOnlyList<CapturedEntry> entries)
+    {
+        int found = -1;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            if (entries[i].Entry.Source is not IVariableLengthParameterSource<T>) continue;
+            if (found >= 0)
+                throw new InvalidOperationException(
+                    "A parameter manifest may contain at most one variable-length component.");
+            found = i;
+        }
+
+        if (found >= 0 && found != entries.Count - 1)
+            throw new InvalidOperationException(
+                $"Variable-length parameter component '{entries[found].Entry.StableId}' must be " +
+                "last in stable-ID order so its restore slice is unambiguous.");
+        return found;
     }
 
     private List<Entry> OrderedEntries()

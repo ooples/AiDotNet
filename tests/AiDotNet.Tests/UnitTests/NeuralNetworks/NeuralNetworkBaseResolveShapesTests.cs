@@ -1,6 +1,11 @@
 using System;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralRadianceFields.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -26,6 +31,19 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks;
 /// </summary>
 public class NeuralNetworkBaseResolveShapesTests
 {
+    private static NeuralNetwork<double> BuildLazyDenseNetwork() => new(
+        new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Medium,
+            inputSize: 3,
+            outputSize: 2,
+            layers:
+            [
+                new DenseLayer<double>(4, (IActivationFunction<double>)new ReLUActivation<double>()),
+                new DenseLayer<double>(2, (IActivationFunction<double>)new IdentityActivation<double>())
+            ]));
+
     private static NeRF<float> BuildNeRF() => new NeRF<float>(
         positionEncodingLevels: 10,
         directionEncodingLevels: 4,
@@ -68,13 +86,13 @@ public class NeuralNetworkBaseResolveShapesTests
     [Fact]
     public void ParameterCount_ReflectsLazyShapeResolutionAfterTrain()
     {
-        // Fresh model has lazy input shapes ([1] sentinels for the position/direction
-        // input Dense layers). Its parameter count is the pre-resolution total.
+        // A fresh model has resolved shapes but deliberately unmaterialized weights. Reads stay
+        // allocation-free, so the concrete count is honestly zero and readiness carries the fact
+        // that parameters are still pending.
         var model = BuildNeRF();
         long freshCount = model.ParameterCount;
-        Assert.True(freshCount > 0,
-            "Fresh model should have a positive ParameterCount from architecture-based " +
-            "shape resolution (layers propagate via ResolveLazyLayerShapes at construction).");
+        Assert.Equal(0, freshCount);
+        Assert.True(model.HasUninitializedParameters);
 
         // First Train call materializes DenseLayer inputs via positional encoding
         // (3 → 60 for pos, 3 → 24 for dir) + skip-concat. Layer weight matrices resize.
@@ -109,10 +127,10 @@ public class NeuralNetworkBaseResolveShapesTests
             "Fresh sibling should have FEWER parameters than the trained model (lazy layers " +
             "not yet resolved). If they're equal, the test fixture broke.");
 
-        // Pre-ResolveShapes: SetParameters MUST reject the mismatched size with a message
-        // that points the caller at ResolveShapes as the fix.
-        var mismatch = Assert.Throws<ArgumentException>(() => fresh.SetParameters(savedParams));
-        Assert.Contains("ResolveShapes", mismatch.Message);
+        // NeRF declares its real non-sequential topology in ResolveLazyLayerShapes, so restore can
+        // materialize that known layout on demand without requiring a sample input first.
+        fresh.SetParameters(savedParams);
+        Assert.Equal(savedParams.Length, fresh.GetParameters().Length);
 
         // ResolveShapes with a sample input drives one forward pass to materialize the
         // lazy layers. After it returns, the fresh model's size matches the trained one.
@@ -135,5 +153,34 @@ public class NeuralNetworkBaseResolveShapesTests
     {
         var model = BuildNeRF();
         Assert.Throws<ArgumentNullException>(() => model.ResolveShapes(null!));
+    }
+
+    [Fact]
+    public void SetParameters_EmptyLazyCheckpoint_DoesNotChangeLayoutMidRestore()
+    {
+        var source = BuildLazyDenseNetwork();
+        var target = BuildLazyDenseNetwork();
+        var checkpoint = source.GetParameters();
+
+        Assert.Empty(checkpoint);
+        target.SetParameters(checkpoint);
+        Assert.Empty(target.GetParameters());
+    }
+
+    [Fact]
+    public void SetParameters_MaterializedCheckpoint_UsesActualVectorManifest()
+    {
+        var source = BuildLazyDenseNetwork();
+        var target = BuildLazyDenseNetwork();
+        source.MaterializeParameters();
+        var checkpoint = source.GetParameters();
+
+        Assert.NotEmpty(checkpoint);
+        target.SetParameters(checkpoint);
+
+        var restored = target.GetParameters();
+        Assert.Equal(checkpoint.Length, restored.Length);
+        for (int i = 0; i < checkpoint.Length; i++)
+            Assert.Equal(checkpoint[i], restored[i]);
     }
 }

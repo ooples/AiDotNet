@@ -41,6 +41,7 @@ namespace AiDotNet.NeuralNetworks;
 public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     IParameterizable<T, Tensor<T>, Tensor<T>>, IFeatureAware, IGradientComputable<T, Tensor<T>, Tensor<T>>,
     ISupportsLossFunction<T>, AiDotNet.Models.Parameters.IParameterManifestProvider,
+    AiDotNet.Models.Parameters.IParameterLayoutSource,
     AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
     /// <summary>
@@ -677,6 +678,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         get => BuildParameterLayout();
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<AiDotNet.Models.Parameters.ParameterSlotDescriptor> GetParameterLayout()
+        => ParameterLayout.Slots;
+
     private AiDotNet.Models.Parameters.ParameterLayoutSnapshot BuildParameterLayout()
     {
         EnsureParametersReady();
@@ -909,6 +914,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         return parameters;
+    }
+
+    /// <summary>
+    /// Gets the exact length <see cref="GetParameters"/> would emit without allocating its flat
+    /// vector. Component registries use this when a network is nested inside another model so an
+    /// unmaterialized child contributes an honest zero-length checkpoint slice.
+    /// </summary>
+    internal int ParameterVectorLength
+    {
+        get
+        {
+            EnsureParametersReady();
+            ResolveLazyLayerShapes();
+
+            static int ActualLayerLength(ILayer<T> layer)
+                => layer is Layers.LayerBase<T> layerBase
+                    ? layerBase.ParameterVectorLength
+                    : layer.GetParameters().Length;
+
+            long total = Layers.Sum(layer => (long)ActualLayerLength(layer));
+            total += GetExtraTrainableLayers()
+                .Where(layer => layer is not null)
+                .Sum(layer => (long)ActualLayerLength(layer!));
+            total += GetExtraTrainableTensors()
+                .Where(tensor => tensor is not null)
+                .Sum(tensor => (long)tensor!.Length);
+            total += ParameterComponents.Sum(component => (long)component.GetParameters().Length);
+            return ParameterCountHelper.ToFlatVectorSize(total);
+        }
     }
 
     /// <inheritdoc />
@@ -13407,26 +13441,50 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Restore must see the same model the count and the vector saw.
         EnsureParametersReady();
 
-        // ParameterCount is long; SetParameters takes a flat Vector<T> whose
-        // Length is int. Guard at this boundary: if the model's true
-        // parameter count exceeds int.MaxValue the caller can't even
-        // construct a Vector<T> big enough to feed in, so report which
-        // limit was hit clearly instead of silently truncating.
-        long totalParameterCountLong = ParameterCount;
-        if (totalParameterCountLong > int.MaxValue)
+        // Capture the restore manifest from the exact vectors GetParameters emits. ParameterCount
+        // is metadata and may deliberately describe construction-sized weights that have not been
+        // allocated yet; using it for validation and then materializing changed the layout between
+        // the check and the slices. That made an honest empty checkpoint from a fresh lazy network
+        // validate at length zero, then fail when the target suddenly grew during restore.
+        var restoreLayers = Layers.ToList();
+        var restoreExtraLayers = GetExtraTrainableLayers().Where(layer => layer is not null).ToList();
+        var restoreExtraTensors = GetExtraTrainableTensors().Where(tensor => tensor is not null).ToList();
+        var restoreComponents = ParameterComponents;
+
+        (List<int> LayerCounts, List<int> ExtraLayerCounts, List<int> ComponentCounts, int Total)
+            CaptureRestoreManifest()
         {
-            throw new InvalidOperationException(
-                $"Model parameter count ({totalParameterCountLong:N0}) exceeds " +
-                $"int32 capacity ({int.MaxValue:N0}); the flat-vector " +
-                $"SetParameters path cannot accept a model this large. Walk " +
-                $"Layers per-layer and call SetParameters on each, or split " +
-                $"this architecture across multiple network instances.");
+            static int ActualParameterLength(ILayer<T> layer)
+                => layer is Layers.LayerBase<T> layerBase
+                    ? layerBase.ParameterVectorLength
+                    : layer.GetParameters().Length;
+
+            var layerCounts = restoreLayers.Select(ActualParameterLength).ToList();
+            var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength(layer!)).ToList();
+            var componentCounts = restoreComponents.Select(component => component.GetParameters().Length).ToList();
+
+            long total = layerCounts.Sum(count => (long)count)
+                       + extraLayerCounts.Sum(count => (long)count)
+                       + restoreExtraTensors.Sum(tensor => (long)tensor!.Length)
+                       + componentCounts.Sum(count => (long)count);
+            return (layerCounts, extraLayerCounts, componentCounts,
+                ParameterCountHelper.ToFlatVectorSize(total));
         }
-        int totalParameterCount = (int)totalParameterCountLong;
-        if (parameters.Length != totalParameterCount)
+
+        var manifest = CaptureRestoreManifest();
+        if (parameters.Length != manifest.Total)
+        {
+            // A non-empty checkpoint is evidence that an architecturally resolved lazy target needs
+            // weights. Materialize only on this write path, then recapture the manifest. Empty reads
+            // and empty-to-empty target-network copies remain allocation-free.
+            MaterializeParameters();
+            manifest = CaptureRestoreManifest();
+        }
+
+        if (parameters.Length != manifest.Total)
         {
             throw new ArgumentException(
-                $"Expected {totalParameterCount} parameters, got {parameters.Length}. " +
+                $"Expected {manifest.Total} parameters from the materialized restore layout, got {parameters.Length}. " +
                 $"If you're loading weights into a fresh model whose lazy layer shapes haven't " +
                 $"resolved yet (e.g. NeRF/InstantNGP where positional encoding grows DenseLayer " +
                 $"inputs on first forward), call model.ResolveShapes(sampleInput) first with a " +
@@ -13435,56 +13493,40 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"model. See #1832 for the diagnostic and #1826 for the facade context.");
         }
 
-        // Materialize BEFORE walking. The filter below reads ParameterCount, and a lazily sized
-        // layer reports 0 until its shape is known -- so filtering first silently SKIPS exactly the
-        // layers a restore is supposed to populate, and the clone keeps its random initialization
-        // while the restore reports success. DCCRN, DeepFilterNet, SAM and ViMUNet each carried a
-        // hand-written UpdateParameters whose first statement was ResolveLazyLayerShapes() for this
-        // reason; that is the base's job, not theirs, and doing it here is what makes those
-        // overrides deletable.
-        //
-        // Best-effort: a model that cannot resolve without a real input is no worse off than before
-        // -- it still reaches the walk, and the guard above has already reported any length
-        // mismatch with the ResolveShapes(sampleInput) advice.
-        foreach (var layer in Layers)
-        {
-            if (layer is Layers.LayerBase<T> lazyLayer) lazyLayer.MaterializeParameters();
-        }
-
         int currentIndex = 0;
         var srcSpan = parameters.AsSpan();
-        foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
+        for (int i = 0; i < restoreLayers.Count; i++)
         {
-            int layerParameterCount = checked((int)layer.ParameterCount);
+            int layerParameterCount = manifest.LayerCounts[i];
+            if (layerParameterCount == 0) continue;
             // Bulk copy via Span instead of element-by-element
             var layerParameters = new Vector<T>((int)(layerParameterCount));
             srcSpan.Slice(currentIndex, layerParameterCount)
                 .CopyTo(layerParameters.AsWritableSpan());
-            layer.SetParameters(layerParameters);
+            restoreLayers[i].SetParameters(layerParameters);
             currentIndex += layerParameterCount;
         }
 
         // Restore the network-level extras from the tail of the vector, in the order
         // ParameterCount summed and GetParameters wrote them.
-        foreach (var extra in GetExtraTrainableLayers())
+        for (int i = 0; i < restoreExtraLayers.Count; i++)
         {
-            if (extra is null || extra.ParameterCount <= 0) continue;
-            int extraCount = checked((int)extra.ParameterCount);
+            int extraCount = manifest.ExtraLayerCounts[i];
+            if (extraCount == 0) continue;
             var extraParameters = new Vector<T>(extraCount);
             srcSpan.Slice(currentIndex, extraCount).CopyTo(extraParameters.AsWritableSpan());
-            extra.SetParameters(extraParameters);
+            restoreExtraLayers[i]!.SetParameters(extraParameters);
             currentIndex += extraCount;
         }
-        foreach (var tensor in GetExtraTrainableTensors())
+        foreach (var tensor in restoreExtraTensors)
         {
-            if (tensor is null || tensor.Length == 0) continue;
+            if (tensor!.Length == 0) continue;
             srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
             currentIndex += tensor.Length;
         }
-        var restoreComponents = ParameterComponents;
         for (int ci = 0; ci < restoreComponents.Count; ci++)
         {
-            int componentCount = (int)restoreComponents[ci].ParameterCount;
+            int componentCount = manifest.ComponentCounts[ci];
             if (componentCount == 0) continue;
             var slice = new Vector<T>(componentCount);
             srcSpan.Slice(currentIndex, componentCount).CopyTo(slice.AsWritableSpan());

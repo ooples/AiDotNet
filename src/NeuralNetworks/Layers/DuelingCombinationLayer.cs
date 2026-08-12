@@ -80,6 +80,11 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _advantageWeights;
     private Tensor<T> _advantageBias;
 
+    /// <inheritdoc />
+    /// <remarks>All four head tensors are sized by <c>featureDim</c> and <c>actionSize</c> in the
+    /// constructor; no input observation is needed to restore them.</remarks>
+    protected override bool ParametersAreConstructionSized => true;
+
     /// <summary>
     /// Initializes a new dueling combination head.
     /// </summary>

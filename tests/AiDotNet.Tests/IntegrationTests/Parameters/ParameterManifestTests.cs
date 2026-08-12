@@ -149,6 +149,80 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task Restore_GivesTheVariableTailWhateverFixedComponentsLeave()
+    {
+        await Task.Yield();
+        var fixedSource = new ContractProbeSource(2, new[] { 1d, 2d });
+        double[]? restoredTail = null;
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("fixed", fixedSource);
+        registry.Register("tail", new VariableLengthParameterSource<double>(
+            () => restoredTail?.Length ?? 0,
+            () => new Vector<double>(restoredTail ?? Array.Empty<double>()),
+            values => restoredTail = values.ToArray()));
+
+        registry.SetParameters(new Vector<double>(new[] { 10d, 20d, 30d, 40d, 50d }));
+
+        Assert.Equal(new[] { 10d, 20d }, fixedSource.LastRestored);
+        Assert.Equal(new[] { 30d, 40d, 50d }, restoredTail);
+        Assert.Equal(5, registry.ParameterCount);
+    }
+
+    [Fact]
+    public async Task Restore_EmptyVariableTail_DoesNotMaterializeAnEmptyLazyPrefix()
+    {
+        await Task.Yield();
+        var lazyNetwork = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                AiDotNet.Enums.InputType.OneDimensional,
+                AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+                AiDotNet.Enums.NetworkComplexity.Medium,
+                inputSize: 3,
+                outputSize: 2,
+                layers: [new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(2)]));
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("fixed", lazyNetwork);
+        registry.Register("tail", new VariableLengthParameterSource<double>(
+            () => 0, () => new Vector<double>(0), values => Assert.Empty(values)));
+
+        registry.SetParameters(new Vector<double>(0));
+
+        Assert.Empty(lazyNetwork.GetParameters());
+        Assert.Equal(0, registry.ParameterCount);
+    }
+
+    [Fact]
+    public async Task Restore_RejectsAVariableComponentThatIsNotLastInStableOrder()
+    {
+        await Task.Yield();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("a-variable", new VariableLengthParameterSource<double>(
+            () => 0, () => new Vector<double>(0), _ => { }));
+        registry.Register("z-fixed", new ContractProbeSource(1, new[] { 1d }));
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            registry.SetParameters(new Vector<double>(new[] { 1d })));
+
+        Assert.Contains("must be last", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Restore_RejectsMoreThanOneVariableComponent()
+    {
+        await Task.Yield();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("first", new VariableLengthParameterSource<double>(
+            () => 0, () => new Vector<double>(0), _ => { }));
+        registry.Register("second", new VariableLengthParameterSource<double>(
+            () => 0, () => new Vector<double>(0), _ => { }));
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            registry.SetParameters(new Vector<double>(0)));
+
+        Assert.Contains("at most one", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayoutSnapshot_CannotBeMutatedThroughItsPublicSlotCollection()
     {
         await Task.Yield();
@@ -272,6 +346,22 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task LegacyRegistration_DeduplicatesGeneratedAndManualAccessorsToTheSameComponent()
+    {
+        await Task.Yield();
+        var component = new ContractProbeSource(1, new[] { 1d });
+        var registry = new ParameterComponentRegistry<double>();
+        registry.RegisterLegacy("Example.Model", "generated", "component",
+            new ComponentAccessorParameterSource<double>(() => component));
+        registry.RegisterLegacy("Example.Model", "manual", "component",
+            new ComponentAccessorParameterSource<double>(() => component));
+
+        Assert.Single(registry.Components);
+        Assert.Single(registry.ParameterLayout.Slots);
+        Assert.Equal(1, registry.ParameterCount);
+    }
+
+    [Fact]
     public async Task NeuralNetworkManifest_DescribesTheCompletePublicSurface()
     {
         await Task.Yield();
@@ -282,6 +372,20 @@ public class ParameterManifestTests
         Assert.Equal(ParameterReadiness.Materialized, layout.Readiness);
         Assert.Equal(network.ParameterCount, layout.ParameterCount);
         Assert.Equal(network.ParameterCount, network.GetParameters().Length);
+    }
+
+    [Fact]
+    public async Task DuelingCombinationLayer_RestoreDoesNotDuplicateItsConstructionSizedTensors()
+    {
+        await Task.Yield();
+        var source = new AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<double>(4, 2, seed: 7);
+        var target = new AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<double>(4, 2, seed: 11);
+        var parameters = source.GetParameters();
+
+        target.SetParameters(parameters);
+
+        Assert.Equal(parameters.Length, target.ParameterCount);
+        Assert.Equal(parameters.ToArray(), target.GetParameters().ToArray());
     }
 
     [Fact]

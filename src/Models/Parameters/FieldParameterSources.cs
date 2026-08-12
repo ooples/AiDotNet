@@ -321,6 +321,9 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
         _get = get ?? throw new ArgumentNullException(nameof(get));
     }
 
+    /// <summary>The current component, used internally to deduplicate and materialize its storage.</summary>
+    internal IParameterSource<T>? Current => _get();
+
     /// <inheritdoc />
     public long ParameterCount => _get()?.ParameterCount ?? 0;
 
@@ -334,6 +337,17 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
             {
                 new ParameterSlotDescriptor(
                     "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+            };
+        }
+
+        if (component is NeuralNetworks.NeuralNetworkBase<T> network)
+        {
+            var layout = network.ParameterLayout;
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable, layout.Readiness,
+                    network.ParameterVectorLength)
             };
         }
 

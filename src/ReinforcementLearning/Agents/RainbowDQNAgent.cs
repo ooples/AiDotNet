@@ -68,8 +68,16 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     /// GetParameters concatenated -- that order is the serialization order.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(_onlineNetwork);
-        RegisterParameterComponent(_targetNetwork);
+        RegisterParameterComponent("rainbow/online-network", _onlineNetwork);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The target network is a periodically refreshed copy of the online network, not an
+    /// independent trainable component. A restore must refresh it immediately so training never
+    /// resumes against stale target weights.</remarks>
+    protected override void OnParametersRestored()
+    {
+        CopyNetworkWeights(_onlineNetwork, _targetNetwork);
     }
     private RainbowDQNOptions<T> _options;
 
@@ -77,6 +85,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
+    [ParameterAlias("rainbow/online-network")]
     private INeuralNetwork<T> _onlineNetwork;
     [Buffer]
     private INeuralNetwork<T> _targetNetwork;

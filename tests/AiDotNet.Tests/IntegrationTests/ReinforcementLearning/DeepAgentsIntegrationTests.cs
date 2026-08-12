@@ -126,6 +126,7 @@ public class DeepAgentsIntegrationTests
         });
 
         ExerciseReplayAgent(rainbow, DiscreteStateSize, DiscreteActionSize, true, 2, true);
+        Assert.NotEmpty(rainbow.GetParameters());
     }
 
     [Fact(Timeout = 120000)]
@@ -148,6 +149,7 @@ public class DeepAgentsIntegrationTests
         });
 
         ExerciseTrajectoryAgent(a2c, DiscreteStateSize, DiscreteActionSize, 1, true, true);
+        Assert.Equal(44, a2c.GetParameters().Length);
 
         var a3c = new A3CAgent<double>(new A3COptions<double>
         {
@@ -171,6 +173,7 @@ public class DeepAgentsIntegrationTests
         AssertOneHot(a3cAction, DiscreteActionSize, "A3CAgent");
         var a3cLoss = a3c.Train();
         Assert.False(double.IsNaN(a3cLoss), "A3CAgent Train returned NaN.");
+        Assert.Equal(27, a3c.GetParameters().Length);
         AssertAgentState(a3c, true);
 
         var ppo = new PPOAgent<double>(new PPOOptions<double>

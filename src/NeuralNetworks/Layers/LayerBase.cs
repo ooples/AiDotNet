@@ -4549,6 +4549,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Gets the exact length <see cref="GetParameters"/> would emit without allocating its flat
+    /// vector. Used by the network-level restore manifest so validation remains proportional to the
+    /// number of layers rather than allocating a second model-sized checkpoint.
+    /// </summary>
+    internal int ParameterVectorLength => FillParameters(null, 0);
+
+    /// <summary>
     /// Enumerates the exact state walk used by <see cref="GetParameters"/>, preserving trainable
     /// tensors, persistent buffers, sparse payloads, legacy flat storage, and child-layer order.
     /// </summary>
