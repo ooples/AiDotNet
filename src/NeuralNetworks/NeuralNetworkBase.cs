@@ -14024,10 +14024,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // unmatched (frozen/detached) one contributes paramTensor.Length. Those agree in
         // practice, but the old List grew to whatever they summed to, so sizing off
         // ParameterCount would silently change the returned length if they ever diverged.
-        long totalLength = 0;
+        // Enumerate GetParameterChunks EXACTLY ONCE. It is a lazy `yield` iterator and it is
+        // virtual, so an override is free to synthesize its chunks per call (a sparse compact
+        // copy, a view, a concatenation). `grads` is REFERENCE-keyed, so a second enumeration
+        // handing back freshly-built tensors would miss every lookup, take the zero-fill branch
+        // for every slot, and return an all-zero gradient vector -- silent wrong gradients, not
+        // an exception. Materializing the references first also guarantees the sizing pass and
+        // the fill pass agree, which is what keeps the offsets valid.
+        var chunks = new List<Tensor<T>>();
         foreach (var paramTensor in GetParameterChunks())
         {
             if (paramTensor is null || paramTensor.Length == 0) continue;
+            chunks.Add(paramTensor);
+        }
+
+        long totalLength = 0;
+        foreach (var paramTensor in chunks)
+        {
             totalLength += grads.TryGetValue(paramTensor, out var sizingGrad)
                 ? sizingGrad.Length
                 : paramTensor.Length;
@@ -14040,9 +14053,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // single allocation won. The span is resolved once and written contiguously.
         var destination = flatGradients.AsWritableSpan();
         int writeOffset = 0;
-        foreach (var paramTensor in GetParameterChunks())
+        foreach (var paramTensor in chunks)
         {
-            if (paramTensor is null || paramTensor.Length == 0) continue;
             if (grads.TryGetValue(paramTensor, out var grad))
             {
                 for (int i = 0; i < grad.Length; i++)
