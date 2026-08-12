@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -382,26 +382,40 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         T beta2 = NumOps.FromDouble(_options.Beta2);
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
-        var mScaled = (Vector<T>)Engine.Multiply(_m, beta1);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
-
-        // Update exponentially weighted infinity norm: u = max(beta2 * u, |gradient|)
-        var uScaled = (Vector<T>)Engine.Multiply(_u, beta2);
-        var absGradient = (Vector<T>)Engine.Abs(gradient);
-        _u = (Vector<T>)Engine.Max(uScaled, absGradient);
-
-        // Compute bias-corrected learning rate
+        // ONE FUSED IN-PLACE PASS -- same rewrite as the rest of the family, same reason: each
+        // Engine call returned a fresh full-length vector and CreateDefault broadcast the scalar
+        // epsilon into a full-length constant vector. Measured elsewhere in the family at
+        // 2,000,000 double parameters: hundreds of MB and hundreds of ms per step, down to
+        // 15.26 MB and single/low-double-digit ms.
+        //
+        // Per-element operand and association order preserved exactly (Kingma & Ba 2015 sec. 7.1,
+        // the infinity-norm variant): u is a running MAX, not an exponential average of squares.
+        //   m = b1*m + (1-b1)*g ;  u = max(b2*u, |g|) ;  out = p - (alpha*m) / (u + eps)
         T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
-
-        // Update parameters: params = params - (alpha * m) / (u + epsilon)
-        // Add epsilon to prevent 0/0 division when gradients are always zero
         T epsilon = NumOps.FromDouble(1e-8);
-        var epsilonVec = Vector<T>.CreateDefault(_u.Length, epsilon);
-        var uSafe = (Vector<T>)Engine.Add(_u, epsilonVec);
-        var alphaMScaled = (Vector<T>)Engine.Multiply(_m, alpha);
-        var update = (Vector<T>)Engine.Divide(alphaMScaled, uSafe);
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+
+        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var pSpan = parameters.AsWritableSpan();
+        var gSpan = gradient.AsWritableSpan();
+        var mSpan = _m.AsWritableSpan();
+        var uSpan = _u.AsWritableSpan();
+        var outSpan = updatedParams.AsWritableSpan();
+
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            T g = gSpan[i];
+
+            T m = NumOps.Add(NumOps.Multiply(mSpan[i], beta1), NumOps.Multiply(g, oneMinusBeta1));
+            mSpan[i] = m;
+
+            T uScaled = NumOps.Multiply(uSpan[i], beta2);
+            T absG = NumOps.Abs(g);
+            T u = NumOps.GreaterThan(uScaled, absG) ? uScaled : absG;
+            uSpan[i] = u;
+
+            T update = NumOps.Divide(NumOps.Multiply(m, alpha), NumOps.Add(u, epsilon));
+            outSpan[i] = NumOps.Subtract(pSpan[i], update);
+        }
 
         return updatedParams;
     }

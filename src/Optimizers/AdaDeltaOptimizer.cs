@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -348,8 +348,25 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
 
         // Vectorized copy of accumulated state
-        _previousAccumulatedSquaredGradients = new Vector<T>(_accumulatedSquaredGradients);
-        _previousAccumulatedSquaredUpdates = new Vector<T>(_accumulatedSquaredUpdates);
+        // Allocated once, copied into IN PLACE: `new Vector<T>(_acc...)` ran every step, allocating
+        // two FULL-LENGTH vectors, and binds to Vector(IEnumerable<T>) so the copy went through an
+        // enumerator one element at a time instead of a memmove.
+        if (_previousAccumulatedSquaredGradients == null
+            || _previousAccumulatedSquaredGradients.Length != _accumulatedSquaredGradients.Length)
+        {
+            _previousAccumulatedSquaredGradients =
+                new Vector<T>(_accumulatedSquaredGradients.Length, skipZeroInit: true);
+        }
+        if (_previousAccumulatedSquaredUpdates == null
+            || _previousAccumulatedSquaredUpdates.Length != _accumulatedSquaredUpdates.Length)
+        {
+            _previousAccumulatedSquaredUpdates =
+                new Vector<T>(_accumulatedSquaredUpdates.Length, skipZeroInit: true);
+        }
+        _accumulatedSquaredGradients.AsWritableSpan()
+            .CopyTo(_previousAccumulatedSquaredGradients.AsWritableSpan());
+        _accumulatedSquaredUpdates.AsWritableSpan()
+            .CopyTo(_previousAccumulatedSquaredUpdates.AsWritableSpan());
 
         // === Vectorized AdaDelta Update using IEngine (Phase B: US-GPU-015) ===
         T rho = NumOps.FromDouble(_options.Rho);
@@ -357,36 +374,45 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
         // Update accumulated squared gradients: accSqGrad = rho * accSqGrad + (1 - rho) * gradient^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var rhoTimesAccSqGrad = (Vector<T>)Engine.Multiply(_accumulatedSquaredGradients, rho);
-        var oneMinusRhoTimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusRho);
-        _accumulatedSquaredGradients = (Vector<T>)Engine.Add(rhoTimesAccSqGrad, oneMinusRhoTimesGradSq);
+        // ONE FUSED IN-PLACE PASS -- same rewrite as the rest of the family. Replaces 14 Engine
+        // calls that each RETURNED a fresh full-length vector, plus a CreateDefault broadcasting the
+        // scalar epsilon into a full-length constant vector reused for both RMS terms.
+        //
+        // Per-element operand and association order preserved exactly (Zeiler 2012), including the
+        // detail the original comment flags: the accumulated-squared-updates term uses the UNSCALED
+        // update, which is what preserves AdaDelta's self-tuning property. The learning rate is only
+        // a scaling factor on the parameter step.
+        //   accSqGrad = rho*accSqGrad + (1-rho)*g*g
+        //   upd       = (sqrt(accSqUpd + eps) / sqrt(accSqGrad + eps)) * g
+        //   accSqUpd  = rho*accSqUpd + (1-rho)*upd*upd        [UNSCALED upd]
+        //   out       = p - upd*lr
+        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var pSpan = parameters.AsWritableSpan();
+        var gSpan = gradient.AsWritableSpan();
+        var accGSpan = _accumulatedSquaredGradients.AsWritableSpan();
+        var accUSpan = _accumulatedSquaredUpdates.AsWritableSpan();
+        var outSpan = updatedParams.AsWritableSpan();
+        T learningRate = CurrentLearningRate;
 
-        // Compute RMS of accumulated squared updates and gradients
-        var epsilonVec = Vector<T>.CreateDefault(_accumulatedSquaredUpdates.Length, epsilon);
-        var accSqUpdPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredUpdates, epsilonVec);
-        var rmsUpdate = (Vector<T>)Engine.Sqrt(accSqUpdPlusEps);
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            T g = gSpan[i];
 
-        var accSqGradPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredGradients, epsilonVec);
-        var rmsGrad = (Vector<T>)Engine.Sqrt(accSqGradPlusEps);
+            T accG = NumOps.Add(
+                NumOps.Multiply(accGSpan[i], rho),
+                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusRho));
+            accGSpan[i] = accG;
 
-        // Compute unscaled update: updateUnscaled = (RMS[Δ] / RMS[g]) * gradient
-        var ratio = (Vector<T>)Engine.Divide(rmsUpdate, rmsGrad);
-        var updateUnscaled = (Vector<T>)Engine.Multiply(ratio, gradient);
+            T rmsUpdate = NumOps.Sqrt(NumOps.Add(accUSpan[i], epsilon));
+            T rmsGrad = NumOps.Sqrt(NumOps.Add(accG, epsilon));
+            T updateUnscaled = NumOps.Multiply(NumOps.Divide(rmsUpdate, rmsGrad), g);
 
-        // Update accumulated squared updates using UNSCALED update to preserve AdaDelta's
-        // self-tuning property: accSqUpd = rho * accSqUpd + (1 - rho) * updateUnscaled^2
-        var updateUnscaledSquared = (Vector<T>)Engine.Multiply(updateUnscaled, updateUnscaled);
-        var rhoTimesAccSqUpd = (Vector<T>)Engine.Multiply(_accumulatedSquaredUpdates, rho);
-        var oneMinusRhoTimesUpdSq = (Vector<T>)Engine.Multiply(updateUnscaledSquared, oneMinusRho);
-        _accumulatedSquaredUpdates = (Vector<T>)Engine.Add(rhoTimesAccSqUpd, oneMinusRhoTimesUpdSq);
+            accUSpan[i] = NumOps.Add(
+                NumOps.Multiply(accUSpan[i], rho),
+                NumOps.Multiply(NumOps.Multiply(updateUnscaled, updateUnscaled), oneMinusRho));
 
-        // Apply learning rate as scaling factor for parameter update only
-        // The learning rate serves as a scaling factor as documented in AdaDeltaOptimizerOptions
-        var scaledUpdate = (Vector<T>)Engine.Multiply(updateUnscaled, CurrentLearningRate);
-
-        // Update parameters: params = params - lr * updateUnscaled
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
+            outSpan[i] = NumOps.Subtract(pSpan[i], NumOps.Multiply(updateUnscaled, learningRate));
+        }
 
         return updatedParams;
     }
