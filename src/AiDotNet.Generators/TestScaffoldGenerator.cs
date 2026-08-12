@@ -17581,7 +17581,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ? $"new {typeName}<double>()"
             : $"new {typeName}<double>()";
 
-        if (category == AlgorithmCategory.Distillation)
+        if (category is AlgorithmCategory.ActiveLearning or AlgorithmCategory.Distillation)
             constructorExpr = $"new {typeName}<float>()";
 
         // The paper's cMLP is a proximal-gradient model whose absent causes are represented by
@@ -17699,9 +17699,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extraUsings = "using AiDotNet.CausalDiscovery;\n";
                 break;
             case AlgorithmCategory.ActiveLearning:
-                baseClass = "ActiveLearningTestBase";
+                baseClass = "ActiveLearningTestBase<float>";
                 factoryMethod = "CreateStrategy";
-                factoryReturnType = "IActiveLearningStrategy<double>";
+                factoryReturnType = "IActiveLearningStrategy<float>";
                 extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.Models;\n";
                 break;
             case AlgorithmCategory.ContinualLearning:
@@ -17781,7 +17781,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Emit mock factory methods for categories that need them
         if (category == AlgorithmCategory.ActiveLearning)
         {
-            EmitMockModelFactory(sb);
+            EmitMockModelFactory(sb, "float");
         }
         else if (category == AlgorithmCategory.ContinualLearning)
         {
@@ -17798,47 +17798,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// <summary>
     /// Emits a CreateMockModel override that returns a simple pass-through IFullModel for active learning tests.
     /// </summary>
-    private static void EmitMockModelFactory(StringBuilder sb)
+    private static void EmitMockModelFactory(StringBuilder sb, string numericType)
     {
         sb.AppendLine();
-        sb.AppendLine("    protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateMockModel()");
+        sb.AppendLine($"    protected override IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> CreateMockModel()");
         sb.AppendLine("        => new PassThroughModel();");
         sb.AppendLine();
-        sb.AppendLine("    private class PassThroughModel : IFullModel<double, Tensor<double>, Tensor<double>>");
+        sb.AppendLine($"    private class PassThroughModel : IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>>");
         sb.AppendLine("    {");
-        sb.AppendLine("        public Tensor<double> Predict(Tensor<double> input)");
+        sb.AppendLine($"        public Tensor<{numericType}> Predict(Tensor<{numericType}> input)");
         sb.AppendLine("        {");
-        sb.AppendLine("            // Return softmax-like output: each sample gets uniform class probabilities");
+        sb.AppendLine("            // Return deterministic, normalized probability-like output.");
         sb.AppendLine("            int batch = input.Shape[0];");
         sb.AppendLine("            int numClasses = 4;");
         sb.AppendLine("            var rng = new System.Random(batch);");
-        sb.AppendLine("            var data = new double[batch * numClasses];");
+        sb.AppendLine($"            var data = new {numericType}[batch * numClasses];");
         sb.AppendLine("            for (int i = 0; i < batch; i++)");
         sb.AppendLine("            {");
-        sb.AppendLine("                double sum = 0;");
+        sb.AppendLine($"                {numericType} sum = 0;");
         sb.AppendLine("                for (int c = 0; c < numClasses; c++)");
         sb.AppendLine("                {");
-        sb.AppendLine("                    data[i * numClasses + c] = rng.NextDouble() + 0.01;");
+        sb.AppendLine($"                    data[i * numClasses + c] = ({numericType})(rng.NextDouble() + 0.01);");
         sb.AppendLine("                    sum += data[i * numClasses + c];");
         sb.AppendLine("                }");
         sb.AppendLine("                for (int c = 0; c < numClasses; c++)");
         sb.AppendLine("                    data[i * numClasses + c] /= sum;");
         sb.AppendLine("            }");
-        sb.AppendLine("            return new Tensor<double>(data, new[] { batch, numClasses });");
+        sb.AppendLine($"            return new Tensor<{numericType}>(data, new[] {{ batch, numClasses }});");
         sb.AppendLine("        }");
-        sb.AppendLine("        public void Train(Tensor<double> input, Tensor<double> output) { }");
-        sb.AppendLine("        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();");
-        sb.AppendLine("        public Vector<double> GetParameters() => new Vector<double>(10);");
-        sb.AppendLine("        public void SetParameters(Vector<double> p) { }");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) => this;");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => this;");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => this;");
+        sb.AppendLine($"        public void Train(Tensor<{numericType}> input, Tensor<{numericType}> output) {{ }}");
+        sb.AppendLine($"        public ILossFunction<{numericType}> DefaultLossFunction => new MeanSquaredErrorLoss<{numericType}>();");
+        sb.AppendLine($"        public Vector<{numericType}> GetParameters() => new Vector<{numericType}>(10);");
+        sb.AppendLine($"        public void SetParameters(Vector<{numericType}> p) {{ }}");
+        sb.AppendLine($"        public IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> WithParameters(Vector<{numericType}> p) => this;");
+        sb.AppendLine($"        public IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> DeepCopy() => this;");
+        sb.AppendLine($"        public IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> Clone() => this;");
         sb.AppendLine("        public long ParameterCount => 10;");
         sb.AppendLine("        public bool SupportsParameterInitialization => false;");
-        sb.AppendLine("        public Vector<double> SanitizeParameters(Vector<double> p) => p;");
-        sb.AppendLine("        public Vector<double> ComputeGradients(Tensor<double> i, Tensor<double> t, ILossFunction<double>? l = null) => new Vector<double>(10);");
-        sb.AppendLine("        public void ApplyGradients(Vector<double> g, double lr) { }");
-        sb.AppendLine("        public AiDotNet.Models.ModelMetadata<double> GetModelMetadata() => new();");
+        sb.AppendLine($"        public Vector<{numericType}> SanitizeParameters(Vector<{numericType}> p) => p;");
+        sb.AppendLine($"        public Vector<{numericType}> ComputeGradients(Tensor<{numericType}> i, Tensor<{numericType}> t, ILossFunction<{numericType}>? l = null) => new Vector<{numericType}>(10);");
+        sb.AppendLine($"        public void ApplyGradients(Vector<{numericType}> g, {numericType} lr) {{ }}");
+        sb.AppendLine($"        public AiDotNet.Models.ModelMetadata<{numericType}> GetModelMetadata() => new();");
         sb.AppendLine("        public byte[] Serialize() => System.Array.Empty<byte>();");
         sb.AppendLine("        public void Deserialize(byte[] data) { }");
         sb.AppendLine("        public void SaveModel(string path) { }");
@@ -17848,7 +17848,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("        public System.Collections.Generic.IEnumerable<int> GetActiveFeatureIndices() => System.Array.Empty<int>();");
         sb.AppendLine("        public void SetActiveFeatureIndices(System.Collections.Generic.IEnumerable<int> f) { }");
         sb.AppendLine("        public bool IsFeatureUsed(int i) => false;");
-        sb.AppendLine("        public System.Collections.Generic.Dictionary<string, double> GetFeatureImportance() => new();");
+        sb.AppendLine($"        public System.Collections.Generic.Dictionary<string, {numericType}> GetFeatureImportance() => new();");
         // IFullModel now requires IDisposable (issue #1136 plan part 3 — every model
         // implementer must declare its disposal contract). PassThroughModel holds
         // no disposable state, so the implementation is a no-op.
