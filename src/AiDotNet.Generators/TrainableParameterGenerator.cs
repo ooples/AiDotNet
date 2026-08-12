@@ -1077,7 +1077,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             }
             // Also check the type itself
             var typeDisplay = named.OriginalDefinition.ToDisplayString();
-            if (typeDisplay.StartsWith(LayerBaseTypeName + "<") || typeDisplay == LayerBaseTypeName)
+            if (typeDisplay.StartsWith(ILayerTypeName + "<") || typeDisplay == ILayerTypeName
+                || typeDisplay.StartsWith(LayerBaseTypeName + "<") || typeDisplay == LayerBaseTypeName)
                 return true;
         }
         return false;

@@ -215,6 +215,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// These biases help the RBM learn features that occur with different frequencies in your data.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenUnits")]
     private Tensor<T> _hiddenBiases;
 
     /// <summary>

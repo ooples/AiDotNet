@@ -1782,6 +1782,14 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             copy = new DenseLayer<T>(OutputShape[0], ScalarActivation);
         }
 
+        // The public constructor is intentionally lazy, but a clone of a resolved layer must
+        // preserve its resolved geometry before the parameter vector is restored. Otherwise
+        // SetParameters has no input width from which to allocate [input, output] weights, leaves
+        // the clone at InputShape [-1], and the clone's first Forward randomizes over the values
+        // it was supposed to copy.
+        if (IsShapeResolved && InputShape.Length > 0 && InputShape.All(d => d > 0))
+            copy.ResolveShapesOnly(InputShape);
+
         copy.SetParameters(GetParameters());
         return copy;
     }

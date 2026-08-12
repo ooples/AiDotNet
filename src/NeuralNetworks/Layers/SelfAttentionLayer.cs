@@ -106,7 +106,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Queries represent what each position in the sequence is looking for in other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
 
     private Tensor<T> _queryWeights;
 
@@ -118,7 +118,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Keys represent what each position in the sequence has to offer to other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
     private Tensor<T> _keyWeights;
 
     /// <summary>
@@ -130,7 +130,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// is being extracted from each position.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
     private Tensor<T> _valueWeights;
 
     /// <summary>
@@ -142,7 +142,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// baseline activation level of the attention output.
     /// Shape: [embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_embeddingDimension")]
 
     private Tensor<T> _outputBias;
 

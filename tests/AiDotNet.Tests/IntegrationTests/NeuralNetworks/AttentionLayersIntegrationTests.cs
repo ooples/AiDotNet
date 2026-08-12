@@ -2,6 +2,8 @@ using System.Threading.Tasks;
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 using AiDotNet.Interfaces;
+using AiDotNet.Initialization;
+using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
@@ -111,6 +113,25 @@ public class AttentionLayersIntegrationTests
     #endregion
 
     #region SelfAttentionLayer Tests
+
+    [Fact(Timeout = 120000)]
+    public async Task SelfAttentionLayer_LazyLayout_DeclaresConstructionKnownParameters()
+    {
+        const int embeddingDimension = 8;
+        using var layer = new SelfAttentionLayer<float>(
+            sequenceLength: 4,
+            embeddingDimension,
+            headCount: 2,
+            activationFunction: null,
+            initializationStrategy: InitializationStrategies<float>.Lazy);
+
+        var slot = Assert.Single(layer.GetParameterLayout());
+
+        // Q, K, V are each [8,8], plus one [8] output bias. The layout must be
+        // answerable without forcing the deliberately lazy tensors to allocate.
+        Assert.Equal(200, slot.ParameterCount);
+        Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, slot.Readiness);
+    }
 
     [Fact(Timeout = 120000)]
     public async Task SelfAttentionLayer_ForwardPass_2D_ProducesValidOutput()
