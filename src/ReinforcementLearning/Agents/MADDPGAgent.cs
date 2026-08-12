@@ -549,12 +549,6 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(targetParams);
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     private Vector<T> ConcatenateVectors(List<Vector<T>> vectors)
     {
         int totalSize = 0;

@@ -162,6 +162,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     /// <summary>Concatenates the same stable-ID ordered entries described by the manifest.</summary>
     public Vector<T> GetParameters()
     {
+        MaterializeSources();
         var captured = CaptureLayout();
         var layout = captured.Snapshot;
         if (!layout.ParameterCount.HasValue)
@@ -193,6 +194,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     /// </summary>
     public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
     {
+        MaterializeSources();
         var captured = CaptureLayout();
         if (!captured.Snapshot.ParameterCount.HasValue)
             throw new ParameterLayoutNotReadyException("enumerate chunks", captured.Snapshot);
@@ -278,6 +280,12 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
+        // A restore is a write, not a metadata query. Give every lazy child one chance to turn its
+        // shape-resolved slots into concrete storage BEFORE the immutable destination layout is
+        // captured. Without this, fresh agent clones captured their child networks at zero, then
+        // NeuralNetworkBase materialized inside SetParameters and changed all following offsets.
+        MaterializeSources();
+
         var captured = CaptureLayout();
         var layout = captured.Snapshot;
         if (!layout.ParameterCount.HasValue)
@@ -324,6 +332,10 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     new ParameterSlotDescriptor(
                         "$", entry.Role, ParameterReadiness.ShapeDeferred, null)
                 };
+            }
+            else if (entry.Source is IParameterManifestProvider manifestProvider)
+            {
+                local = manifestProvider.ParameterLayout.Slots;
             }
             else if (entry.Source is IParameterLayoutSource layoutSource)
             {
@@ -383,6 +395,20 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
 
         return new CapturedLayout(new ParameterLayoutSnapshot(slots), captured.AsReadOnly());
+    }
+
+    /// <summary>
+    /// Materializes shape-resolved child sources before an operation that reads or writes concrete
+    /// values. The manifest property itself remains allocation-free, so callers can still inspect
+    /// readiness without paying for storage.
+    /// </summary>
+    private void MaterializeSources()
+    {
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            if (_entries[i].Source is IParameterMaterializationSource materializer)
+                materializer.MaterializeParameters();
+        }
     }
 
     private List<Entry> OrderedEntries()

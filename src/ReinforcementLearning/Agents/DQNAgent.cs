@@ -451,14 +451,6 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
         SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
     }
 
-    // Helper methods
-
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     private int ArgMax(Vector<T> vector)
     {
         int maxIndex = 0;

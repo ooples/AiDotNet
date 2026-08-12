@@ -564,10 +564,6 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             "Direct gradient application through this interface is not applicable.");
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        target.UpdateParameters(source.GetParameters());
-    }
     /// <inheritdoc/>
     public override void SaveModel(string filepath)
     {

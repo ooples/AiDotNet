@@ -323,6 +323,21 @@ public interface IParameterManifestProvider
 }
 
 /// <summary>
+/// Implemented by lazy parameter sources that can make every shape-resolved slot writable.
+/// </summary>
+/// <remarks>
+/// Read operations may remain allocation-free and report
+/// <see cref="ParameterReadiness.ShapeResolvedUnmaterialized"/>. A restore is an explicit write,
+/// so registries call this hook before capturing the destination layout; otherwise a zero-sized
+/// lazy snapshot can accept a vector and then change its boundaries midway through application.
+/// </remarks>
+public interface IParameterMaterializationSource
+{
+    /// <summary>Allocates every parameter whose shape is already known.</summary>
+    void MaterializeParameters();
+}
+
+/// <summary>
 /// Implemented by generated partial classes so automated registration composes with hand-written
 /// exceptional registration instead of either surface suppressing the other.
 /// </summary>
