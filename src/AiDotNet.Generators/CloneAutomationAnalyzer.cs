@@ -86,7 +86,15 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
 
         if (!IsSingleReturnOfNewObject(method)) return;
 
-        if (context.ContainingSymbol?.ContainingType is not INamedTypeSymbol type) return;
+        if (context.ContainingSymbol is not IMethodSymbol symbol) return;
+
+        // An override that satisfies an abstract member is not optional, whatever its body looks
+        // like. A test file declares its own MockModelBase with `public abstract Clone()`, and
+        // telling three mocks to delete the only implementation of it produced CS0534 instead of a
+        // cleaner tree. Redundancy is a property of the base being CONCRETE, not of the body alone.
+        if (symbol.OverriddenMethod is null || symbol.OverriddenMethod.IsAbstract) return;
+
+        if (symbol.ContainingType is not INamedTypeSymbol type) return;
         if (ClonePlanGenerator.CollectConstructorParameters(type, IsModel(type)) is null) return;
 
         context.ReportDiagnostic(Diagnostic.Create(

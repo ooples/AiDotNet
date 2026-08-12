@@ -165,10 +165,5 @@ public class NeuralNetworkBaseIntegrationTests
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
         }
-
-        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
-        {
-            return new TestNeuralNetwork(Architecture);
-        }
     }
 }

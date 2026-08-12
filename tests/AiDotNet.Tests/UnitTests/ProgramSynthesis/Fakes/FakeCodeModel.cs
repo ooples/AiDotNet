@@ -65,11 +65,6 @@ internal sealed class FakeCodeModel : CodeModelBase<double>
         _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
-    {
-        return new FakeCodeModel(_architecture);
-    }
-
     public static FakeCodeModel CreateDefault(ProgramLanguage targetLanguage = ProgramLanguage.CSharp)
     {
         var architecture = new CodeSynthesisArchitecture<double>(

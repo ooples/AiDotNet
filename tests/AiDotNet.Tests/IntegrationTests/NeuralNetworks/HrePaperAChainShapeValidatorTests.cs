@@ -270,6 +270,5 @@ public partial class HrePaperAChainShapeValidatorTests
         public override void SetParameters(Vector<float> parameters) { }
         public override Vector<float> GetParameterGradients() => new Vector<float>(0);
         public override void ResetState() { }
-        public override LayerBase<float> Clone() => new FixedShapeRank2Layer(GetInputShape(), GetOutputShape());
     }
 }

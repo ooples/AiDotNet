@@ -219,8 +219,5 @@ public class CompileForwardTests
 
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
-
-        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
-            => new SimpleTestNetwork(Architecture);
     }
 }
