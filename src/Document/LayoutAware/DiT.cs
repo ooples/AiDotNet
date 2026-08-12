@@ -539,12 +539,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         ImageSize = imageSize;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DiT<T>(Architecture, _numClasses, ImageSize, _patchSize, _hiddenDim, _numLayers, _numHeads, _modelSize);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

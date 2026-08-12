@@ -865,13 +865,6 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
             DistributeLayers();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LayoutLMv2<T>(Architecture, _tokenizer, _numClasses, ImageSize, MaxSequenceLength,
-            _hiddenDim, _numLayers, _numHeads, _vocabSize, _visualBackboneChannels);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

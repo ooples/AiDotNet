@@ -208,27 +208,6 @@ public class SAGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
-    /// Constructs a fresh SAGAN with the same hyperparameters so Clone / DeepCopy
-    /// rebuilds both architectures from scratch (rather than reusing layer instances
-    /// whose shape state was resolved by the original's forward pass, which the
-    /// CNN clone-path validation rejects). Mirrors <see cref="DCGAN{T}"/>.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SAGAN<T>(
-            _latentSize,
-            _imageChannels,
-            _imageHeight,
-            _imageWidth,
-            _numClasses,
-            _generatorChannels,
-            _discriminatorChannels,
-            _attentionLayers,
-            lossFunction: LossFunction,
-            options: _options);
-    }
-
-    /// <summary>
     /// Builds the paper-faithful generator architecture: a 1D latent vector projected
     /// by a dense layer, reshaped into a small spatial feature map, then upsampled by
     /// transposed convolutions to the target image (Goodfellow 2014 §3, Radford 2015

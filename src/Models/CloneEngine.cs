@@ -158,28 +158,27 @@ public static class CloneEngine
         // the type -- a property, or the private field the constructor stored it in -- so this cannot
         // be partially satisfied: either the constructor is a pure function of state the instance
         // still holds, or nothing was recorded and the parameterless path below applies.
-        // function of carried configuration, or the build already failed.
-        if (plan.ConstructorParameters.Count > 0)
+        // Each recorded constructor is tried in order, and the first one the INSTANCE can actually
+        // satisfy wins. "Satisfy" means no required parameter -- one with no default -- would receive
+        // null. That is what distinguishes a model loaded from an ONNX file, which has its path
+        // stored, from one trained natively, which does not: taking the widest constructor
+        // unconditionally passed null for onnxModelPath and made 51 models throw on clone.
+        foreach (var candidate in plan.ConstructorCandidates)
         {
-            var arguments = new object?[plan.ConstructorParameters.Count];
+            var arguments = new object?[candidate.Count];
+            var readable = true;
+
             for (int i = 0; i < arguments.Length; i++)
             {
-                if (!TryReadMember(type, plan.ConstructorParameters[i], source, out arguments[i]))
-                {
-                    throw new InvalidOperationException(
-                        $"{type.Name} records constructor parameter '{plan.ConstructorParameters[i]}' "
-                        + "but no member of that name supplies it. The generated plan and the runtime "
-                        + "type disagree, which means the assembly was built against a different "
-                        + "version of this type.");
-                }
+                if (!TryReadMember(type, candidate[i], source, out arguments[i])) { readable = false; break; }
             }
+
+            if (!readable) continue;
 
             // Matched on parameter NAMES, not on how many there are. Overloads of equal arity are
             // ordinary -- a model taking (options, regularization) beside one taking
             // (options, lossFunction) -- and picking by count alone would pass each value to
-            // whichever overload reflection happened to return first. The plan records the property
-            // that supplies each position, and those property names are the parameter names the
-            // generator matched, so comparing them identifies the constructor it actually planned.
+            // whichever overload reflection happened to return first.
             var withArgs = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                 .FirstOrDefault(c =>
                 {
@@ -188,19 +187,30 @@ public static class CloneEngine
 
                     for (int i = 0; i < parameters.Length; i++)
                     {
-                        if (!NamesTheSameValue(parameters[i].Name, plan.ConstructorParameters[i]))
-                        {
-                            return false;
-                        }
+                        if (!NamesTheSameValue(parameters[i].Name, candidate[i])) return false;
                     }
 
                     return true;
                 });
 
-            if (withArgs is not null)
+            if (withArgs is null) continue;
+
+            var parameterInfos = withArgs.GetParameters();
+            var satisfied = true;
+
+            for (int i = 0; i < parameterInfos.Length; i++)
             {
-                return withArgs.Invoke(arguments);
+                // A required parameter handed null is the signature of the wrong constructor for
+                // this instance -- the value it wants was never stored because this object was not
+                // built that way. An optional one is fine: its default is what it would have got.
+                if (arguments[i] is null && !parameterInfos[i].HasDefaultValue)
+                {
+                    satisfied = false;
+                    break;
+                }
             }
+
+            if (satisfied) return withArgs.Invoke(arguments);
         }
 
         var constructor = type.GetConstructor(

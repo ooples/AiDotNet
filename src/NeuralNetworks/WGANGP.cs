@@ -1077,21 +1077,6 @@ public partial class WGANGP<T> : NeuralNetworkBase<T>
         Critic.Deserialize(criticData);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new WGANGP<T>(
-            Generator.Architecture,
-            Critic.Architecture,
-            Architecture.InputType,
-            null, // Use default optimizer
-            null, // Use default optimizer
-            _lossFunction,
-            _gradientPenaltyCoefficient,
-            _criticIterations,
-            new WGANGPOptions(_options));
-    }
-
     // UpdateParameters split the vector between Generator and Critic. Both sub-networks' layers are
     // added to Layers in that same order (Layers.AddRange(Generator.Layers) then
     // Layers.AddRange(Critic.Layers)), so the base fold reproduces the split. Removed under AIDN082.

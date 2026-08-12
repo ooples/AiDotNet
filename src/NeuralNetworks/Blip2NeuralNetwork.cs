@@ -2153,30 +2153,6 @@ public partial class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Blip2NeuralNetwork<T>(
-            Architecture,
-            _imageSize,
-            3,
-            _patchSize,
-            _vocabularySize,
-            _maxSequenceLength,
-            _embeddingDimension,
-            _qformerHiddenDim,
-            _visionHiddenDim,
-            _lmHiddenDim,
-            _numQformerLayers,
-            _numQueryTokens,
-            _numHeads,
-            _numLmDecoderLayers,
-            _languageModelBackbone,
-            _tokenizer,
-            null,
-            LossFunction);
-    }
-
-    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (disposing)

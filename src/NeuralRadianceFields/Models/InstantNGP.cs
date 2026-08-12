@@ -2007,48 +2007,6 @@ public partial class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>, Ne
         RebuildOccupancyBitfield();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new InstantNGP<T>(
-            new InstantNGPOptions<T>
-            {
-                HashTableSize = _hashTableSize,
-                NumLevels = _numLevels,
-                FeaturesPerLevel = _featuresPerLevel,
-                FinestResolution = _finestResolution,
-                CoarsestResolution = _coarsestResolution,
-                MlpHiddenDim = _mlpHiddenDim,
-                MlpNumLayers = _mlpNumLayers,
-                FeatureDim = _featureDim,
-                ColorHiddenDim = _colorHiddenDim,
-                ColorNumLayers = _colorNumLayers,
-                UseOccupancyGrid = _useOccupancyGrid,
-                OccupancyGridResolution = _occupancyGridResolution,
-                LearningRate = NumOps.ToDouble(_learningRate),
-                OccupancyDecay = _occupancyDecay,
-                OccupancyThreshold = _occupancyThreshold,
-                OccupancyUpdateInterval = _occupancyUpdateInterval,
-                OccupancySamplesPerCell = _occupancySamplesPerCell,
-                OccupancyJitter = _occupancyJitter,
-                RenderSamples = _renderSamples,
-                RenderNearBound = NumOps.ToDouble(_renderNearBound),
-                RenderFarBound = NumOps.ToDouble(_renderFarBound),
-                SceneMin = new Vector<T>(3)
-                {
-                    [0] = NumOps.FromDouble(_sceneMin[0]),
-                    [1] = NumOps.FromDouble(_sceneMin[1]),
-                    [2] = NumOps.FromDouble(_sceneMin[2])
-                },
-                SceneMax = new Vector<T>(3)
-                {
-                    [0] = NumOps.FromDouble(_sceneMax[0]),
-                    [1] = NumOps.FromDouble(_sceneMax[1]),
-                    [2] = NumOps.FromDouble(_sceneMax[2])
-                }
-            },
-            LossFunction);
-    }
-
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

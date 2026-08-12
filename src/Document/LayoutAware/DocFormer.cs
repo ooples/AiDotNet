@@ -580,13 +580,6 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         MaxSequenceLength = maxSeqLen;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DocFormer<T>(Architecture, _tokenizer, _numClasses, ImageSize, MaxSequenceLength,
-            _hiddenDim, _numLayers, _numHeads, _vocabSize, _spatialDim);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

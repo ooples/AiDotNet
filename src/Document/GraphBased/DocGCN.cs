@@ -508,12 +508,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         _ = reader.ReadBoolean(); // useNativeMode - already set by constructor
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DocGCN<T>(Architecture, _nodeDim, _edgeDim, _gcnLayers, _numClasses, _maxNodes);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

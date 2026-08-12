@@ -647,13 +647,6 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         MaxSequenceLength = maxSeqLen;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LayoutXLM<T>(Architecture, _tokenizer, _numClasses, ImageSize, MaxSequenceLength,
-            _hiddenDim, _numLayers, _numHeads, _vocabSize, _visualBackboneChannels, _numLanguages);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

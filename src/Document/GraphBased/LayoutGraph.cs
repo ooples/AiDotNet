@@ -515,12 +515,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         _ = reader.ReadBoolean(); // useNativeMode - already set by constructor
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LayoutGraph<T>(Architecture, _nodeDim, _edgeDim, _graphLayers, _numClasses, _maxNodes);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

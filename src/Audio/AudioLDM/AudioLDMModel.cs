@@ -1385,19 +1385,6 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         // The CreateNewInstance method should be used for proper cloning.
     }
 
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioLDMModel<T>(
-            Architecture,
-            _options,
-            _tokenizer,
-            null,
-            _lossFunction);
-    }
-
     #endregion
 
     #region IDisposable

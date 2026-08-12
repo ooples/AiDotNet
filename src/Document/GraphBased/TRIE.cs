@@ -636,12 +636,6 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         ImageSize = imageSize;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TRIE<T>(Architecture, ImageSize, _visualDim, _textDim, _graphDim, _numEntityTypes, _maxEntities);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

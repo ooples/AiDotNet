@@ -535,14 +535,6 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         MaxSequenceLength = maxSeqLen;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new InfographicVQA<T>(Architecture, ImageSize, MaxSequenceLength, _visionDim, _textDim,
-            _fusionDim, _visionLayers, _fusionLayers, _numHeads, _vocabSize,
-            options: new InfographicVQAOptions(_options));
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

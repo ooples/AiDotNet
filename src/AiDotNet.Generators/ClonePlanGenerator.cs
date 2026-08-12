@@ -202,8 +202,9 @@ public class ClonePlanGenerator : IIncrementalGenerator
     private static void EmitRegistration(StringBuilder sb, INamedTypeSymbol type)
     {
         var entries = CollectConfiguration(type);
-        var constructor = CollectConstructorParameters(
+        var candidates = CollectConstructorCandidates(
             type, type.AllInterfaces.Any(i => i.Name == "IFullModel"));
+        var constructor = candidates is null || candidates.Count == 0 ? null : candidates[0];
 
         // A type with no settable configuration is still worth a plan when its constructor was
         // recorded. That is the normal shape of a model: the arguments it was built from live in
@@ -232,7 +233,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
         else
         {
             var names = string.Join(", ", constructor.Select(n => $"\"{n}\""));
-            sb.AppendLine($"            CloneRegistry.Register(new ClonePlan(t, e, new[] {{ {names} }}));");
+            var all = string.Join(", ", candidates!.Select(c =>
+                "new string[] { " + string.Join(", ", c.Select(n => $"\"{n}\"")) + " }"));
+            sb.AppendLine(
+                $"            CloneRegistry.Register(new ClonePlan(t, e, new[] {{ {names} }}, "
+                + $"new IReadOnlyList<string>[] {{ {all} }}));");
         }
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -344,13 +349,26 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// bare constructor either, <c>CloneEngine</c> says so by name at runtime rather than guessing.
     /// </para>
     /// <para>
-    /// <b>The widest satisfiable constructor wins.</b> A constructor derives things from its
-    /// arguments -- buffers sized from a layer count, sub-models built from a depth setting -- and
-    /// re-deriving them is what keeps a clone self-consistent. Passing fewer arguments and assigning
-    /// the rest afterwards would leave those derived structures built from defaults.
+    /// <b>Candidates are ordered widest first, and chosen at run time.</b> A constructor derives
+    /// things from its arguments -- buffers sized from a layer count, sub-models built from a depth
+    /// setting -- so re-deriving from more state is better. But which constructor applies depends on
+    /// the instance: a model built natively has no ONNX path stored, and rebuilding it through the
+    /// wider ONNX constructor passes null and throws. <c>CloneEngine</c> makes that choice.
     /// </para>
     /// </remarks>
     internal static List<string>? CollectConstructorParameters(INamedTypeSymbol type, bool isModel)
+    {
+        var candidates = CollectConstructorCandidates(type, isModel);
+        return candidates is null || candidates.Count == 0 ? null : candidates[0];
+    }
+
+    /// <summary>
+    /// Records every constructor a clone could call, widest first.
+    /// </summary>
+    /// <param name="type">The type being planned.</param>
+    /// <param name="isModel">Whether the library treats this type as a model.</param>
+    /// <returns>One entry per satisfiable constructor, or <see langword="null"/> when none is.</returns>
+    internal static List<List<string>>? CollectConstructorCandidates(INamedTypeSymbol type, bool isModel)
     {
         var constructors = type.InstanceConstructors
             .Where(c => c.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal)
@@ -364,15 +382,20 @@ public class ClonePlanGenerator : IIncrementalGenerator
         // unless it is a model, whose configuration lives in fields that assignment cannot reach.
         if (!isModel && type.InstanceConstructors.Any(c => c.Parameters.Length == 0)) return null;
 
-        // ONLY the widest constructor is a candidate. A narrower one is usually a convenience
-        // overload that forwards to it with defaults filled in -- DDPMModel's two-argument form
-        // forwards architecture, options, channels and imageSize as defaults -- so recording it
-        // would rebuild the clone at those defaults while every property comparison still passed.
-        // Refusing is the safe answer: the type keeps its hand-written override, and the parameters
-        // that blocked it are named rather than silently worked around.
-        var widest = constructors.Max(c => c.Parameters.Length);
+        // EVERY satisfiable constructor is recorded, widest first -- not just the widest.
+        //
+        // Recording only the widest was wrong, and the sweep proved it: 51 models failed to clone
+        // with "onnxModelPath cannot be null". Those models take a model path in one constructor and
+        // an optimizer in another, the ONNX one is wider, and a natively-built instance has no path
+        // stored -- so rebuilding it through the widest constructor passed null and threw. Which
+        // constructor applies is a property of the INSTANCE, and nothing known here can decide it.
+        //
+        // Width still orders the candidates, because a narrower overload usually forwards to the
+        // wider one with defaults filled in and re-deriving from more state is better. CloneEngine
+        // walks them in this order and takes the first whose required arguments the instance holds.
+        var candidates = new List<List<string>>();
 
-        foreach (var constructor in constructors.Where(c => c.Parameters.Length == widest))
+        foreach (var constructor in constructors.OrderByDescending(c => c.Parameters.Length))
         {
             var mapped = new List<string>(constructor.Parameters.Length);
             var satisfied = true;
@@ -389,10 +412,10 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 mapped.Add(member);
             }
 
-            if (satisfied) return mapped;
+            if (satisfied) candidates.Add(mapped);
         }
 
-        return null;
+        return candidates.Count == 0 ? null : candidates;
     }
 
     /// <summary>

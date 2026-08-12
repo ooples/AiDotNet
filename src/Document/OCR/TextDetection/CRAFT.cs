@@ -471,12 +471,6 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         ImageSize = imageSize;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CRAFT<T>(Architecture, ImageSize, _backboneChannels, _upscaleChannels);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

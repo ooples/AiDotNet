@@ -1071,19 +1071,6 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         _ = reader.ReadBoolean();
     }
 
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new StableAudioModel<T>(
-            Architecture,
-            _options,
-            _tokenizer,
-            null,
-            _lossFunction);
-    }
-
     #endregion
 
     #region IDisposable

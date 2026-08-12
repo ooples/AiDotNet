@@ -32,12 +32,36 @@ public sealed class ClonePlan
     public ClonePlan(
         Type type,
         IReadOnlyList<ClonePlanEntry> entries,
-        IReadOnlyList<string>? constructorParameters = null)
+        IReadOnlyList<string>? constructorParameters = null,
+        IReadOnlyList<IReadOnlyList<string>>? constructorCandidates = null)
     {
         Type = type ?? throw new ArgumentNullException(nameof(type));
         Entries = entries ?? throw new ArgumentNullException(nameof(entries));
         ConstructorParameters = constructorParameters ?? Array.Empty<string>();
+        ConstructorCandidates = constructorCandidates
+            ?? (ConstructorParameters.Count > 0
+                ? new[] { ConstructorParameters }
+                : Array.Empty<IReadOnlyList<string>>());
     }
+
+    /// <summary>
+    /// Gets every constructor the type can be rebuilt through, widest first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// More than one is normal, and recording only the widest was wrong. Around fifty models in this
+    /// library take an ONNX model path in one constructor and an optimizer in another; a model built
+    /// natively has no path stored, so rebuilding it through the ONNX constructor passes null and
+    /// throws. Which constructor is right is a property of the INSTANCE, not of the type, and cannot
+    /// be decided when the plan is generated.
+    /// </para>
+    /// <para>
+    /// So the choice is deferred: every satisfiable constructor is recorded, and
+    /// <c>CloneEngine</c> picks the one whose required arguments the instance actually holds. The
+    /// mode is read off the state the object already carries rather than recorded separately.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<IReadOnlyList<string>> ConstructorCandidates { get; }
 
     /// <summary>Gets the type this plan reproduces.</summary>
     public Type Type { get; }

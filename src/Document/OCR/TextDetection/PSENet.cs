@@ -582,12 +582,6 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         ImageSize = imageSize;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PSENet<T>(Architecture, ImageSize, _backboneChannels, _featureChannels, _numKernels);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

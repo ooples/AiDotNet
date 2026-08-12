@@ -576,12 +576,6 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         ImageSize = imageSize;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new EAST<T>(Architecture, ImageSize, _backboneChannels, _featureChannels, _geometryType);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

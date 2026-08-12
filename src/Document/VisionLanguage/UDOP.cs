@@ -736,13 +736,6 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
             _classHead = null;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UDOP<T>(Architecture, _tokenizer, _numClasses, ImageSize, MaxSequenceLength,
-            _hiddenDim, _numEncoderLayers, _numDecoderLayers, _numHeads, _vocabSize);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

@@ -187,25 +187,6 @@ public class BigGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
-    /// Constructs a fresh BigGAN with the same hyperparameters so Clone / DeepCopy
-    /// rebuilds both architectures from scratch. Mirrors <see cref="DCGAN{T}"/>.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new BigGAN<T>(
-            _latentSize,
-            _numClasses,
-            _classEmbeddingDim,
-            _imageChannels,
-            _imageHeight,
-            _imageWidth,
-            _generatorChannels,
-            _discriminatorChannels,
-            lossFunction: LossFunction,
-            options: _options);
-    }
-
-    /// <summary>
     /// Builds the paper-faithful generator architecture: a 1D latent vector projected
     /// by a dense layer, reshaped into a small spatial feature map, then upsampled by
     /// transposed convolutions to the target image (Brock et al. 2018, Radford 2015 §3).

@@ -1078,24 +1078,6 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
         DiscriminatorRequired.SetParameters(new Vector<T>(discriminatorParams));
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RealESRGAN<T>(
-            Architecture,
-            Architecture, // Use same architecture for discriminator (will be overwritten on load)
-            Architecture.InputType,
-            _generatorOptimizer,
-            _discriminatorOptimizer,
-            _scaleFactor,
-            _numRRDBBlocks,
-            _numFeatures,
-            _residualScale,
-            _l1Lambda,
-            _perceptualLambda,
-            _ganLambda);
-    }
-
     #endregion
 
     #region Base Class Abstract Methods

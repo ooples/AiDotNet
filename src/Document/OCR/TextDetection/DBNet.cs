@@ -634,19 +634,6 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         ImageSize = imageSize;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DBNet<T>(
-            Architecture,
-            ImageSize,
-            _backboneChannels,
-            _innerChannels,
-            _expandRatio,
-            _thresholdK,
-            _minTextArea);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

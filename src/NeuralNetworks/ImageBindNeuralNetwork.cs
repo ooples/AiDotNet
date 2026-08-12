@@ -1671,26 +1671,6 @@ public partial class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBin
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ImageBindNeuralNetwork<T>(
-            Architecture,
-            _imageSize,
-            channels: 3,
-            _patchSize,
-            _vocabularySize,
-            _maxSequenceLength,
-            _embeddingDimension,
-            _hiddenDim,
-            _numEncoderLayers,
-            _numHeads,
-            _audioSampleRate,
-            _audioMaxDuration,
-            _imuTimesteps,
-            _numVideoFrames);
-    }
-
-    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (disposing)

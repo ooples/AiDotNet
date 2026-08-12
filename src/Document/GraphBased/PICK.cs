@@ -462,13 +462,6 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         MaxSequenceLength = maxSeqLen;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PICK<T>(Architecture, _tokenizer, _numEntityTypes, ImageSize, MaxSequenceLength,
-            _hiddenDim, _numGcnLayers, _numHeads, _vocabSize);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

@@ -1521,25 +1521,6 @@ public partial class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LLaVANeuralNetwork<T>(
-            Architecture,
-            _imageSize,
-            channels: 3,
-            _patchSize,
-            _vocabularySize,
-            _maxSequenceLength,
-            _embeddingDimension,
-            _visionHiddenDim,
-            _numVisionLayers,
-            _numLmLayers,
-            _numHeads,
-            _languageModelBackbone,
-            _visionEncoderType);
-    }
-
-    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (disposing)
