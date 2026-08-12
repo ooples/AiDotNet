@@ -69,8 +69,39 @@ public class ParameterCountContractTests
     /// <summary>Bounded so one pathological constructor cannot stall the sweep.</summary>
     private static readonly TimeSpan ConstructionTimeout = TimeSpan.FromSeconds(10);
 
-    [Fact(Timeout = 1800000)]
-    public async System.Threading.Tasks.Task AllModels_ParameterCountMatchesGetParameters()
+    /// <summary>
+    /// Number of disjoint slices the sweep is split into. Every model is measured by exactly one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sweep measures ~2,000 models at roughly 4.3 s each — construction plus a full
+    /// <c>GetParameters()</c> materialization — and runs three isolated workers at a time, so it
+    /// needs about 2.4 h. Against a 30-minute per-test budget it could never do anything but time
+    /// out, and a timed-out sweep asserts nothing at all.
+    /// </para>
+    /// <para>
+    /// The cost is the measuring itself, not the harness around it: launching one worker process
+    /// per model was measured at ~160 ms, about 2 minutes across the whole sweep — 1.4% — so
+    /// batching models into shared processes was not the answer. Nothing here is made cheaper.
+    /// Instead the SAME total work is split into <see cref="ShardCount"/> cases, each of which fits
+    /// the existing budget with room to spare, and which CI can place in separate matrix jobs.
+    /// Coverage is unchanged: every model is still measured, and no assertion is relaxed.
+    /// </para>
+    /// <para>
+    /// Slicing is round-robin (<c>index % ShardCount</c>) rather than contiguous because cost is
+    /// heavily clustered by name — the LLaVA, CogVideo and Emu families sit together in discovery
+    /// order, and contiguous blocks would hand one shard nearly all of the expensive models while
+    /// the rest finished in seconds.
+    /// </para>
+    /// </remarks>
+    public const int ShardCount = 8;
+
+    public static IEnumerable<object[]> Shards =>
+        Enumerable.Range(0, ShardCount).Select(i => new object[] { i });
+
+    [Theory(Timeout = 1800000)]
+    [MemberData(nameof(Shards))]
+    public async System.Threading.Tasks.Task AllModels_ParameterCountMatchesGetParameters(int shardIndex)
     {
         await System.Threading.Tasks.Task.Yield();
 #if !NET10_0_OR_GREATER
@@ -86,7 +117,10 @@ public class ParameterCountContractTests
         // "Test host process crashed" and produced NOTHING. A gate that can lose its whole result
         // is worse than no gate: it is indistinguishable from a pass. The file survives the crash,
         // and the last line in it names the model that was being measured when the host died.
-        var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "parameter-count-violations.txt");
+        // Per shard: the shards of one run would otherwise truncate each other's log, and this file
+        // is the only record that survives a test-host crash.
+        var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            $"parameter-count-violations-shard{shardIndex}of{ShardCount}.txt");
         // DISPOSED ON EVERY PATH, AND A FAILURE TO OPEN IS REPORTED. The manual dispose ran only
         // on the normal path, so a throw from the enumeration below -- Assembly.GetTypes() raises
         // ReflectionTypeLoadException, and this sweep calls it -- leaked the handle and left the
@@ -106,7 +140,16 @@ public class ParameterCountContractTests
 
         using var _logHandle = log;
 
-        var modelTypes = GetConstructableModelTypes().ToArray();
+        var allModelTypes = GetConstructableModelTypes().ToArray();
+        var modelTypes = allModelTypes.Where((_, i) => i % ShardCount == shardIndex).ToArray();
+        _output.WriteLine($"Shard {shardIndex} of {ShardCount}: {modelTypes.Length} of " +
+                          $"{allModelTypes.Length} constructable models.");
+
+        // A shard that received nothing means the slicing broke, not that the models are healthy.
+        Assert.True(modelTypes.Length > 0,
+            $"Shard {shardIndex} of {ShardCount} was given no models to measure, so it can only " +
+            $"pass vacuously. Discovery returned {allModelTypes.Length} constructable model(s).");
+
         var measurements = await ParameterSweepProcess.MeasureAllAsync(
             modelTypes, includeChunks: false, MaxParametersToMaterialize, ConstructionTimeout);
 
@@ -170,15 +213,18 @@ public class ParameterCountContractTests
             }
         }
 
-        _output.WriteLine($"Checked {checkedCount} models; {skipped} skipped (no flat vector), " +
+        _output.WriteLine($"Shard {shardIndex}/{ShardCount}: checked {checkedCount} models; " +
+                          $"{skipped} skipped (no flat vector), " +
                           $"{unsized} deferred/unmaterialized; {unmeasurable} unmeasurable; " +
                           $"{violations.Count} violations.");
 
         Assert.True(checkedCount > 0,
-            "The isolated parameter-count sweep did not complete a single measurement.");
+            $"Shard {shardIndex} of {ShardCount} of the isolated parameter-count sweep did not " +
+            $"complete a single measurement out of the {modelTypes.Length} models it was given.");
 
         Assert.True(violations.Count == 0,
-            $"{violations.Count} model(s) report a ParameterCount that disagrees with " +
+            $"Shard {shardIndex} of {ShardCount}: {violations.Count} model(s) report a " +
+            "ParameterCount that disagrees with " +
             "GetParameters().Length. The two must describe the same tensors: SetParameters pairs " +
             "them by length, and 284 call sites slice a flat vector by the count, so a mismatch " +
             "means a saved checkpoint restores into the wrong tensors and the model silently keeps " +
