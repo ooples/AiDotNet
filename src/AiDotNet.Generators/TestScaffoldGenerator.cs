@@ -17581,6 +17581,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ? $"new {typeName}<double>()"
             : $"new {typeName}<double>()";
 
+        if (category == AlgorithmCategory.Distillation)
+            constructorExpr = $"new {typeName}<float>()";
+
         // The paper's cMLP is a proximal-gradient model whose absent causes are represented by
         // EXACTLY-zero first-layer groups. The production constructor retains its research-scale
         // and fully customizable options; this generated invariant fixture uses the same optimizer
@@ -17708,9 +17711,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.NeuralNetworks;\n";
                 break;
             case AlgorithmCategory.Distillation:
-                baseClass = "DistillationStrategyTestBase";
+                baseClass = "DistillationStrategyTestBase<float>";
                 factoryMethod = "CreateStrategy";
-                factoryReturnType = "IDistillationStrategy<double>";
+                factoryReturnType = "IDistillationStrategy<float>";
                 extraUsings = "using AiDotNet.Interfaces;\n";
                 break;
             default:
