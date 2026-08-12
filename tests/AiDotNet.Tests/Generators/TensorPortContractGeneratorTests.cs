@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks
     using AiDotNet.NeuralNetworks.Layers;
     public readonly struct ModelInputShapeConstraint
     {
-        public ModelInputShapeConstraint(int minimumRank, int minimumElements) { }
+        public ModelInputShapeConstraint(int minimumRank, int minimumElements, int exactRank = 0) { }
     }
     public abstract class NeuralNetworkBase<T>
     {
@@ -77,6 +77,7 @@ namespace AiDotNet.Attributes
     [AttributeUsage(AttributeTargets.Class)]
     public sealed class ModelInputShapeConstraintAttribute : Attribute
     {
+        public int ExactRank { get; set; }
         public int MinimumRank { get; set; }
         public int MinimumElementCount { get; set; }
         public string MinimumElementCountMember { get; set; }
@@ -110,7 +111,7 @@ namespace AiDotNet.Attributes
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
         var result = driver.GetRunResult();
         string generated = string.Join("\n", result.GeneratedTrees.Select(tree => tree.GetText().ToString()));
-        return (diagnostics.AddRange(result.Diagnostics), generated);
+        return (diagnostics, generated);
     }
 
     [Fact]
@@ -171,14 +172,14 @@ using AiDotNet.NeuralNetworks.Layers;
 [TensorPort(""token_ids"", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
     Role = TensorPortRole.TokenIds, MaxExclusiveMember = ""_vocabularySize"")]
 public partial class Lookup<T> : LayerBase<T> { private int _vocabularySize = 10; }
-[ModelInputShapeConstraint(MinimumRank = 2, MinimumElementCountMember = ""MinimumSize"")]
+[ModelInputShapeConstraint(MinimumRank = 2, MinimumElementCountMember = ""MinimumSize"", ExactRank = 2)]
 public partial class Model<T> : NeuralNetworkBase<T> { private int MinimumSize() => 4096; }
 ";
 
         var run = Run(source);
         Assert.Contains("override global::System.Collections.Generic.IReadOnlyList", run.Generated);
         Assert.Contains("LayerInputDomain.Indices(_vocabularySize)", run.Generated);
-        Assert.Contains("GetInputShapeConstraint() => new(2, MinimumSize())", run.Generated);
+        Assert.Contains("GetInputShapeConstraint() => new(2, MinimumSize(), 2)", run.Generated);
     }
 
     [Fact]
@@ -193,5 +194,20 @@ public partial class Model<T> : NeuralNetworkBase<T> { }";
 
         var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT005"));
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
+    public async Task GeneratedContractOnNonPartialType_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""input"", TensorPortDirection.Input, LayerInputDomainKind.Continuous)]
+public class Layer<T> : LayerBase<T> { }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT006"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("must be declared partial", diagnostic.GetMessage());
     }
 }

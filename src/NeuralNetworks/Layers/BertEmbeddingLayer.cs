@@ -14,6 +14,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, ChangesShape = true,
     TestInputShape = "1, 4", TestConstructorArgs = "100, 16, 32")]
+[TensorPort("input_ids", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
+    Role = TensorPortRole.TokenIds, MaxExclusiveMember = "_vocabularySize")]
+[TensorPort("token_type_ids", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
+    Role = TensorPortRole.TokenTypeIds, Required = false, MaxExclusiveMember = "_tokenTypeVocabularySize")]
+[TensorPort("output", TensorPortDirection.Output, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features)]
 [TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
@@ -84,10 +90,6 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />
-    public override LayerInputDomain GetInputDomain(int[]? inputShape) =>
-        LayerInputDomain.Indices(_vocabularySize);
-
-    /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank switch
     {
         1 =>
@@ -108,6 +110,15 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// Looks up input tokens with generated position IDs and all-zero token-type IDs.
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => ForwardCore(input, null);
+
+    /// <inheritdoc />
+    protected override Tensor<T> ForwardTracedPorts(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (!inputs.TryGetValue("input_ids", out var inputIds))
+            throw new ArgumentException("Missing required input port 'input_ids'.", nameof(inputs));
+        inputs.TryGetValue("token_type_ids", out var tokenTypeIds);
+        return ForwardCore(inputIds, tokenTypeIds);
+    }
 
     /// <summary>
     /// Positional multi-input form: <c>[inputIds]</c> or <c>[inputIds, tokenTypeIds]</c>.

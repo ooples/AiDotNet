@@ -101,6 +101,12 @@ public sealed class RankRoutedInputDomainAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class ModelInputShapeConstraintAttribute : Attribute
 {
+    /// <summary>
+    /// Exact external tensor rank. Zero means unconstrained. This is useful when a model's first
+    /// layer intentionally adds the matrix axis consumed by later operations.
+    /// </summary>
+    public int ExactRank { get; set; }
+
     /// <summary>Minimum tensor rank accepted by the model. Zero means unconstrained.</summary>
     public int MinimumRank { get; set; }
 

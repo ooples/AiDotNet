@@ -58,6 +58,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // covered explicitly by LayoutEmbeddingLayerTests.
 [LayerProperty(IsTrainable = true, ChangesShape = true,
     TestInputShape = "8", TestConstructorArgs = "64, 16, 32, 64")]
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
+    Role = TensorPortRole.TokenIds, MaxExclusiveResolver = "ResolveInputDomainMaximum")]
+[TensorPort("output", TensorPortDirection.Output, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features)]
 // Two layouts are declared because two are statically determined. Axis 0/1 is Time - the token's
 // place in the reading order - and the trailing axis is Features on both sides, but it means
 // different things: going in it is the PACKED column (token id, then the four box coordinates),
@@ -180,16 +184,16 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// for packed shapes, because a value legal in the smaller range is legal in both, whereas
     /// reporting the wider one would call a coordinate of 20000 acceptable and then saturate it.
     /// </remarks>
-    public override LayerInputDomain GetInputDomain(int[]? inputShape)
+    private int ResolveInputDomainMaximum(int[]? inputShape)
     {
         bool packed = inputShape is not null
             && inputShape.Length >= 2
             && inputShape[inputShape.Length - 1] == RowWidth;
 
         // Boxes-only rows carry no token column, so the coordinate grid is the whole domain.
-        if (!_includeTokens) return LayerInputDomain.Indices(_maxPosition2D);
+        if (!_includeTokens) return _maxPosition2D;
 
-        return LayerInputDomain.Indices(packed ? Math.Min(_vocabSize, _maxPosition2D) : _vocabSize);
+        return packed ? Math.Min(_vocabSize, _maxPosition2D) : _vocabSize;
     }
 
     /// <summary>

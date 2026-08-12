@@ -3389,6 +3389,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Minimum external input geometry required by this model. The tensor-port generator overrides
+    /// this from <c>[ModelInputShapeConstraint]</c>, so model and fixture implementations do not
+    /// duplicate configuration-derived shape rules.
+    /// </summary>
+    public virtual ModelInputShapeConstraint GetInputShapeConstraint() =>
+        ModelInputShapeConstraint.None;
+
+    /// <summary>
     /// Publishes tape-computed gradients onto every layer's gradient surface.
     /// </summary>
     /// <param name="grads">Tape gradients, keyed by parameter tensor reference.</param>

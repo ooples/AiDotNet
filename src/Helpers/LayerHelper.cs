@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -2905,8 +2906,24 @@ public static class LayerHelper<T>
             activationFunction: new IdentityActivation<T>()
         );
 
-        // Add the final Activation Layer (typically Softmax for classification tasks)
-        yield return new ActivationLayer<T>(new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Match the head to the declared task. Applying softmax unconditionally makes a regression
+        // network incapable of fitting ordinary continuous targets because every output is forced
+        // onto the probability simplex.
+        if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>(
+                new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>(
+                new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
+        else
+        {
+            yield return new ActivationLayer<T>(
+                new IdentityActivation<T>() as IActivationFunction<T>);
+        }
     }
 
     /// <summary>
@@ -5808,6 +5825,7 @@ public static class LayerHelper<T>
     /// Reference: "AudioGen: Textually Guided Audio Generation" by Kreuk et al., 2022
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultAudioGenLayers(
         int textHiddenDim = 768,
         int lmHiddenDim = 1536,
@@ -5822,82 +5840,66 @@ public static class LayerHelper<T>
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // === TEXT ENCODER (T5-style) ===
+        var encoderLayers = new List<ILayer<T>>
+        {
+            new EmbeddingLayer<T>(32128, textHiddenDim),
+            new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim)
+        };
 
-        // Token embedding: T5 vocabulary to hidden dimension
-        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
-
-        // Positional encoding for text
-        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
-
-        // Encoder dropout
         if (dropoutRate > 0)
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            encoderLayers.Add(new DropoutLayer<T>(dropoutRate));
         }
 
-        // Text encoder transformer layers (6 layers, T5-base style)
         for (int i = 0; i < 6; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textHiddenDim) / (numHeads));
-
-            // Layer norm
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feedforward
-            yield return new DenseLayer<T>(textHiddenDim * 4, geluActivation);
-            yield return new DenseLayer<T>(textHiddenDim, identityActivation);
-
-            // Layer norm
-            yield return new LayerNormalizationLayer<T>();
+            encoderLayers.Add(new MultiHeadAttentionLayer<T>(numHeads, textHiddenDim / numHeads));
+            encoderLayers.Add(new LayerNormalizationLayer<T>());
+            encoderLayers.Add(new DenseLayer<T>(textHiddenDim * 4, geluActivation));
+            encoderLayers.Add(new DenseLayer<T>(textHiddenDim, identityActivation));
+            encoderLayers.Add(new LayerNormalizationLayer<T>());
 
             if (dropoutRate > 0)
             {
-                yield return new DropoutLayer<T>(dropoutRate);
+                encoderLayers.Add(new DropoutLayer<T>(dropoutRate));
             }
         }
 
-        // Project text to language model dimension
-        yield return new DenseLayer<T>(lmHiddenDim, identityActivation);
+        encoderLayers.Add(new DenseLayer<T>(lmHiddenDim, identityActivation));
 
-        // === AUDIO CODE EMBEDDING ===
-
-        // Embedding for audio codes from all codebooks
-        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks, lmHiddenDim);
-
-        // Positional encoding for audio sequence
-        yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
-
+        var decoderLayers = new List<ILayer<T>>
+        {
+            new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim)
+        };
         if (dropoutRate > 0)
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            decoderLayers.Add(new DropoutLayer<T>(dropoutRate));
         }
 
-        // === LANGUAGE MODEL DECODER ===
-
-        // Transformer decoder layers
         for (int i = 0; i < numLmLayers; i++)
         {
-            yield return new TransformerDecoderLayer<T>(
+            decoderLayers.Add(new TransformerDecoderLayer<T>(
                 numHeads: numHeads,
                 feedForwardDim: lmHiddenDim * 4,
                 sequenceLength: maxAudioTokens,
-                ffnActivation: geluActivation);
+                ffnActivation: geluActivation));
 
             if (dropoutRate > 0 && i < numLmLayers - 1)
             {
-                yield return new DropoutLayer<T>(dropoutRate);
+                decoderLayers.Add(new DropoutLayer<T>(dropoutRate));
             }
         }
 
-        // Final layer norm
-        yield return new LayerNormalizationLayer<T>();
-
-        // === OUTPUT PROJECTION ===
-
-        // Project to codebook logits
-        yield return new DenseLayer<T>(codebookSize * numCodebooks, identityActivation);
+        decoderLayers.Add(new LayerNormalizationLayer<T>());
+        int decoderVocabularySize = codebookSize * numCodebooks;
+        yield return new TokenConditionedDecoderLayer<T>(
+            encoderLayers,
+            new EmbeddingLayer<T>(decoderVocabularySize, lmHiddenDim),
+            decoderLayers,
+            new DenseLayer<T>(decoderVocabularySize, identityActivation),
+            encoderVocabularySize: 32128,
+            decoderVocabularySize: decoderVocabularySize,
+            maximumDecoderLength: maxAudioTokens);
     }
 
     /// <summary>
@@ -10770,7 +10772,8 @@ public static class LayerHelper<T>
     /// Reference: "Pix2Struct: Screenshot Parsing as Pretraining" (ICML 2023)
     /// </para>
     /// </remarks>
-    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultPix2StructLayers(
+    [ValidateSequentialLayerDomains]
+    public static IEnumerable<ILayer<T>> CreateDefaultPix2StructLayers(
         int hiddenDim = 1024,
         int numEncoderLayers = 18,
         int numDecoderLayers = 18,
@@ -10780,10 +10783,16 @@ public static class LayerHelper<T>
         int maxPatches = 4096,
         int maxSequenceLength = 1024)
     {
-        return (
+        var decoderLayers = CreatePix2StructDecoderLayers(
+            hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength).ToList();
+
+        yield return new VisionEncoderDecoderLayer<T>(
             CreatePix2StructEncoderLayers(hiddenDim, numEncoderLayers, numHeads, patchSize, maxPatches),
-            CreatePix2StructDecoderLayers(hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength)
-        );
+            (EmbeddingLayer<T>)decoderLayers[0],
+            decoderLayers.Skip(1).Take(decoderLayers.Count - 2),
+            decoderLayers[decoderLayers.Count - 1],
+            vocabSize,
+            maxSequenceLength);
     }
 
     private static IEnumerable<ILayer<T>> CreatePix2StructEncoderLayers(
@@ -10792,8 +10801,10 @@ public static class LayerHelper<T>
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Patch embedding
-        yield return new DenseLayer<T>(hiddenDim, identityActivation);
+        // Convert the image to a patch sequence before applying sequence-position and attention
+        // layers. A Dense layer alone preserves [batch, channels, height, width], leaving rank 4
+        // encoder memory that cannot be consumed by the decoder's cross-attention path.
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
 
@@ -10848,7 +10859,8 @@ public static class LayerHelper<T>
     /// Reference: "Nougat: Neural Optical Understanding for Academic Documents" (arXiv 2023)
     /// </para>
     /// </remarks>
-    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultNougatLayers(
+    [ValidateSequentialLayerDomains]
+    public static IEnumerable<ILayer<T>> CreateDefaultNougatLayers(
         int hiddenDim = 1024,
         int numEncoderLayers = 12,
         int numDecoderLayers = 10,
@@ -10858,10 +10870,16 @@ public static class LayerHelper<T>
         int patchSize = 16,
         int maxSequenceLength = 4096)
     {
-        return (
+        var decoderLayers = CreateNougatDecoderLayers(
+            hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength).ToList();
+
+        yield return new VisionEncoderDecoderLayer<T>(
             CreateNougatEncoderLayers(hiddenDim, numEncoderLayers, numHeads, imageSize, patchSize),
-            CreateNougatDecoderLayers(hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength)
-        );
+            (EmbeddingLayer<T>)decoderLayers[0],
+            decoderLayers.Skip(1).Take(decoderLayers.Count - 2),
+            decoderLayers[decoderLayers.Count - 1],
+            vocabSize,
+            maxSequenceLength);
     }
 
     private static IEnumerable<ILayer<T>> CreateNougatEncoderLayers(
@@ -12321,6 +12339,7 @@ public static class LayerHelper<T>
     /// (character n-grams). It represents words as the sum of their n-gram embeddings.
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFastTextLayers(
         NeuralNetworkArchitecture<T> architecture,
         int vocabSize,
@@ -12349,18 +12368,15 @@ public static class LayerHelper<T>
         // would be just as wrong in the other direction: the chain's backward would never reach it,
         // so it would be registered as trainable while being unable to receive a gradient.
 
-        // 1. Feature embeddings, words and subwords in one table:
-        //    [features] -> [features, embeddingDimension]
-        yield return new EmbeddingLayer<T>(vocabSize + bucketSize, embeddingDimension);
+        // The generated composite owns that one shared input matrix, performs the parallel word
+        // and hashed-subword lookups, and averages the feature axis correctly for both unbatched
+        // [features] and batched [batch, features] inputs.
+        yield return new FastTextEmbeddingLayer<T>(vocabSize, bucketSize, embeddingDimension);
 
-        // 2. Mean over the feature axis -- the paper's bag-of-features average.
-        //    [features, embeddingDimension] -> [embeddingDimension]
-        yield return new MeanLayer<T>(axis: 0);
-
-        // 3. Linear projection to the class/vocabulary scores.
+        // Linear projection to the class/vocabulary scores.
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
 
-        // 4. Output activation
+        // Output activation.
         yield return new ActivationLayer<T>(new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
     }
 
@@ -16996,6 +17012,7 @@ public static class LayerHelper<T>
     /// financial text, enabling it to understand financial terminology and sentiment nuances.
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFinBERTLayers(
         NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 30522,
@@ -17007,25 +17024,11 @@ public static class LayerHelper<T>
         int numSentimentClasses = 3,
         double dropoutRate = 0.1)
     {
-        // === Token Embedding Layer ===
-        // Maps token IDs to dense vectors
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: vocabularySize,
-            embeddingDimension: hiddenDimension);
-
-        // === Position Embedding Layer ===
-        // Adds position information to token embeddings
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: maxSequenceLength,
-            embeddingDimension: hiddenDimension);
-
-        // === Layer Normalization ===
-        // Normalizes embeddings before transformer layers
-        yield return new LayerNormalizationLayer<T>(
-            );
-
-        // === Dropout ===
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new BertEmbeddingLayer<T>(
+            vocabularySize,
+            hiddenDimension,
+            maxSequenceLength,
+            dropoutProbability: dropoutRate);
 
         // === Transformer Layers ===
         // Each block is a RESIDUAL self-attention sublayer + RESIDUAL GELU-FFN sublayer with
@@ -17401,6 +17404,7 @@ public static class LayerHelper<T>
     /// heads handle different aspects of financial analysis.
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
         NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 32000,
@@ -17412,12 +17416,11 @@ public static class LayerHelper<T>
         int numClasses = 3,
         double dropoutRate = 0.1)
     {
-        // Token and position embeddings
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
-
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new BertEmbeddingLayer<T>(
+            vocabularySize,
+            hiddenDimension,
+            maxSequenceLength,
+            dropoutProbability: dropoutRate);
 
         // Shared transformer backbone
         for (int i = 0; i < numLayers; i++)

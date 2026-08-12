@@ -13,7 +13,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// parameter, checkpoint, optimizer, training-mode, and gradient-tape behavior from
 /// <see cref="LayerBase{T}"/>.
 /// </remarks>
-public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
+public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>
 {
     private readonly List<ILayer<T>> _encoderLayers;
     private readonly EmbeddingLayer<T> _decoderEmbedding;
@@ -21,7 +21,7 @@ public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>, IShap
     private readonly ILayer<T> _outputLayer;
     protected readonly int _encoderVocabularySize;
     protected readonly int _decoderVocabularySize;
-    private readonly int _maximumDecoderLength;
+    protected readonly int _maximumDecoderLength;
 
     /// <summary>Creates an encoder-decoder composite from its independently executed branches.</summary>
     protected AutoregressiveEncoderDecoderLayer(
@@ -72,7 +72,7 @@ public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>, IShap
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
-        var current = input;
+        var current = NormalizeEncoderInput(input);
         foreach (var layer in _encoderLayers)
             current = layer.Forward(current);
 
@@ -127,7 +127,11 @@ public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>, IShap
             : Decode(memory, CreateInitialDecoderIds(encoderInput));
     }
 
-    private Tensor<T> CreateInitialDecoderIds(Tensor<T> input)
+    /// <summary>Normalizes an external encoder input into the representation its branch consumes.</summary>
+    protected virtual Tensor<T> NormalizeEncoderInput(Tensor<T> input) => input;
+
+    /// <summary>Creates the zero-valued decoder prompt used by the single-input model path.</summary>
+    protected virtual Tensor<T> CreateInitialDecoderIds(Tensor<T> input)
     {
         int batchSize = input.Rank is 2 or 4 ? input.Shape[0] : 0;
         int sourceLength = input.Rank is 1 or 2 ? input.Shape[input.Rank - 1] : 1;
@@ -161,7 +165,7 @@ public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>, IShap
 [TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-public partial class TokenConditionedDecoderLayer<T> : AutoregressiveEncoderDecoderLayer<T>
+public partial class TokenConditionedDecoderLayer<T> : AutoregressiveEncoderDecoderLayer<T>, IShapeContract
 {
     /// <summary>Creates a token-conditioned autoregressive decoder.</summary>
     public TokenConditionedDecoderLayer(
@@ -175,6 +179,27 @@ public partial class TokenConditionedDecoderLayer<T> : AutoregressiveEncoderDeco
         : base(encoderLayers, decoderEmbedding, decoderLayers, outputLayer,
             encoderVocabularySize, decoderVocabularySize, maximumDecoderLength)
     {
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> NormalizeEncoderInput(Tensor<T> input)
+    {
+        if (input.Rank <= 2)
+            return input;
+
+        int batchSize = input.Shape[0];
+        return input.Reshape([batchSize, input.Length / batchSize]);
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> CreateInitialDecoderIds(Tensor<T> input)
+    {
+        int batchSize = input.Rank >= 2 ? input.Shape[0] : 0;
+        int sourceLength = batchSize > 0 ? input.Length / batchSize : input.Length;
+        int decoderLength = Math.Max(1, Math.Min(sourceLength, _maximumDecoderLength));
+        return batchSize > 0
+            ? new Tensor<T>([batchSize, decoderLength])
+            : new Tensor<T>([decoderLength]);
     }
 
     /// <inheritdoc />
@@ -210,7 +235,7 @@ public partial class TokenConditionedDecoderLayer<T> : AutoregressiveEncoderDeco
 [TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-public partial class VisionEncoderDecoderLayer<T> : AutoregressiveEncoderDecoderLayer<T>
+public partial class VisionEncoderDecoderLayer<T> : AutoregressiveEncoderDecoderLayer<T>, IShapeContract
 {
     /// <summary>Creates a vision-conditioned autoregressive decoder.</summary>
     public VisionEncoderDecoderLayer(

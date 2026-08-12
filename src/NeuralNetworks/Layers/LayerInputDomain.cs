@@ -5,13 +5,19 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </summary>
 public enum LayerInputDomainKind
 {
+    /// <summary>The producer intentionally leaves the value domain unchanged or unknown.</summary>
+    Unspecified,
+
     /// <summary>Any real value. The default for almost every layer.</summary>
     Continuous,
 
     /// <summary>
     /// Integer token indices in a half-open range. An embedding table is the canonical case.
     /// </summary>
-    IntegerIndices
+    IntegerIndices,
+
+    /// <summary>A mask whose elements represent false/true membership.</summary>
+    BooleanMask
 }
 
 /// <summary>
@@ -61,6 +67,14 @@ public readonly struct LayerInputDomain
     public static LayerInputDomain Continuous { get; } =
         new LayerInputDomain(LayerInputDomainKind.Continuous, 0, 0);
 
+    /// <summary>No value-domain opinion; accepted by every consumer.</summary>
+    public static LayerInputDomain Unspecified { get; } =
+        new LayerInputDomain(LayerInputDomainKind.Unspecified, 0, 0);
+
+    /// <summary>A Boolean mask represented by the numeric tensor type.</summary>
+    public static LayerInputDomain BooleanMask { get; } =
+        new LayerInputDomain(LayerInputDomainKind.BooleanMask, 0, 2);
+
     /// <summary>
     /// Integer indices in <c>[0, vocabularySize)</c>.
     /// </summary>
@@ -76,4 +90,20 @@ public readonly struct LayerInputDomain
 
     /// <summary>True when this domain constrains values to integer indices.</summary>
     public bool IsIndices => Kind == LayerInputDomainKind.IntegerIndices && MaxExclusive > 0;
+
+    /// <summary>Whether this consumer domain accepts values produced under <paramref name="producer"/>.</summary>
+    public bool Accepts(LayerInputDomain producer) =>
+        producer.Kind == LayerInputDomainKind.Unspecified
+        || Kind == LayerInputDomainKind.Continuous
+        || Kind == producer.Kind;
+
+    /// <inheritdoc />
+    public override string ToString() => Kind == LayerInputDomainKind.IntegerIndices
+        ? $"integer indices in [{MinInclusive}, {MaxExclusive})"
+        : Kind switch
+        {
+            LayerInputDomainKind.BooleanMask => "a Boolean mask",
+            LayerInputDomainKind.Unspecified => "an unspecified pass-through domain",
+            _ => "continuous values"
+        };
 }

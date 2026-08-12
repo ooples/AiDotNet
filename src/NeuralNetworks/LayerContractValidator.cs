@@ -42,6 +42,18 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public static class LayerContractValidator
 {
+    /// <summary>One incompatible value-domain edge.</summary>
+    public readonly record struct ValueDomainMismatch(
+        int ProducerIndex,
+        string ProducerName,
+        string ProducerPort,
+        LayerInputDomain Produced,
+        int ConsumerIndex,
+        string ConsumerName,
+        string ConsumerPort,
+        LayerInputDomain Required,
+        string Message);
+
     /// <summary>One layer-to-layer disagreement.</summary>
     /// <param name="ProducerIndex">Index of the layer producing the tensor.</param>
     /// <param name="ProducerName">Type name of the producing layer.</param>
@@ -54,6 +66,68 @@ public static class LayerContractValidator
         int ConsumerIndex,
         string ConsumerName,
         string Message);
+
+    /// <summary>Validates value semantics for adjacent layers in a known sequential run.</summary>
+    public static IReadOnlyList<ValueDomainMismatch> ValidateValueDomains<T>(IReadOnlyList<ILayer<T>> layers)
+    {
+        var found = new List<ValueDomainMismatch>();
+        if (layers is null || layers.Count < 2) return found;
+
+        for (int i = 0; i < layers.Count - 1; i++)
+        {
+            if (layers[i] is not Layers.LayerBase<T> producer
+                || layers[i + 1] is not Layers.LayerBase<T> consumer)
+                continue;
+
+            var producerPort = producer.OutputPorts.Count > 0 ? producer.OutputPorts[0] : null;
+            var consumerPort = consumer.InputPorts.Count > 0 ? consumer.InputPorts[0] : null;
+            if (producerPort is null || consumerPort is null
+                || consumerPort.ValueDomain.Accepts(producerPort.ValueDomain))
+                continue;
+
+            string message = DescribeValueDomainMismatch(
+                producer.GetType().Name, producerPort, consumer.GetType().Name, consumerPort);
+            found.Add(new ValueDomainMismatch(
+                i, producer.GetType().Name, producerPort.Name, producerPort.ValueDomain,
+                i + 1, consumer.GetType().Name, consumerPort.Name, consumerPort.ValueDomain,
+                message));
+        }
+
+        return found;
+    }
+
+    /// <summary>Throws before a traced consumer executes when its actual producer is incompatible.</summary>
+    internal static void EnsureValueDomainCompatible<T>(
+        ILayer<T> producerLayer,
+        ILayer<T> consumerLayer,
+        string? consumerPortName)
+    {
+        if (producerLayer is not Layers.LayerBase<T> producer
+            || consumerLayer is not Layers.LayerBase<T> consumer)
+            return;
+
+        var producerPort = producer.OutputPorts.Count > 0 ? producer.OutputPorts[0] : null;
+        var consumerPort = !string.IsNullOrEmpty(consumerPortName)
+            ? consumer.InputPorts.FirstOrDefault(p => p.Name == consumerPortName)
+            : consumer.InputPorts.FirstOrDefault();
+        if (producerPort is null || consumerPort is null
+            || consumerPort.ValueDomain.Accepts(producerPort.ValueDomain))
+            return;
+
+        throw new InvalidOperationException(DescribeValueDomainMismatch(
+            producer.GetType().Name, producerPort, consumer.GetType().Name, consumerPort));
+    }
+
+    private static string DescribeValueDomainMismatch(
+        string producerName,
+        Layers.LayerPort producerPort,
+        string consumerName,
+        Layers.LayerPort consumerPort)
+        => $"ADNPORT004: {producerName}.{producerPort.Name} produces {producerPort.ValueDomain}, but "
+           + $"{consumerName}.{consumerPort.Name} ({consumerPort.Role}) requires "
+           + $"{consumerPort.ValueDomain}. Independent token/position/codebook/decoder lookups must "
+           + "be declared as generated composite or named graph branches; they cannot be placed in a "
+           + "flat sequential layer list.";
 
     /// <summary>How a layer's declared shape CONTRACT compared to the shape the imperative walk resolved.</summary>
     /// <param name="Agreed">Layers where the contract reproduced the resolved output shape exactly.</param>

@@ -50,8 +50,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelInputShapeConstraint(ExactRank = 1)]
 [ResearchPaper("Memory Networks", "https://arxiv.org/abs/1410.3916", Year = 2015, Authors = "Jason Weston, Sumit Chopra, Antoine Bordes")]
-public class MemoryNetwork<T> : NeuralNetworkBase<T>
+public partial class MemoryNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly MemoryNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -310,10 +311,6 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
 
     private Tensor<T> RunLayers(Tensor<T> input)
     {
-        // Ensure 2D input for memory operations (TensorMatMul requires rank >= 2)
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-
         // Convert memory matrix to tensor for memory-augmented layers
         var memoryTensor = Tensor<T>.FromMatrix(_memory);
 
@@ -324,11 +321,21 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         {
             if (layer is MemoryReadLayer<T> memoryReadLayer)
             {
+                // A custom architecture may start directly with a memory operation. The default
+                // architecture starts with an embedding, where preserving rank-1 token IDs is
+                // essential: EmbeddingLayer promotes them to the rank-2 matrix these operations
+                // need. Reshaping before the embedding creates rank 3 downstream.
+                if (current.Rank == 1)
+                    current = current.Reshape([1, current.Shape[0]]);
+
                 // MemoryReadLayer computes attention and reads from memory internally
                 current = memoryReadLayer.Forward(current, memoryTensor);
             }
             else if (layer is MemoryWriteLayer<T> memoryWriteLayer)
             {
+                if (current.Rank == 1)
+                    current = current.Reshape([1, current.Shape[0]]);
+
                 // MemoryWriteLayer updates memory based on input
                 current = memoryWriteLayer.Forward(current, memoryTensor);
             }

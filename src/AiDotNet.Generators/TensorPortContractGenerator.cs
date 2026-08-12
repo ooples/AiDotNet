@@ -62,6 +62,15 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor GeneratedContractRequiresPartial = new(
+        "ADNPORT006",
+        "Generated tensor contract type must be partial",
+        "'{0}' uses a generated tensor-port or model-input contract and must be declared partial",
+        "AiDotNet.TensorPorts",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Partial types let generated contracts share the model or layer declaration without hand-written overrides.");
+
     private enum Domain
     {
         Unspecified = 0,
@@ -130,6 +139,15 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             if (ports.Count == 0 && rankRoute is null && shapeConstraint is null) continue;
 
             bool invalid = false;
+            if (!IsPartial(type))
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    GeneratedContractRequiresPartial,
+                    type.Locations.FirstOrDefault(),
+                    type.Name));
+                invalid = true;
+            }
+
             foreach (var duplicate in ports.GroupBy(p => (p.Direction, p.Name), PortKeyComparer.Instance)
                          .Where(g => g.Count() > 1))
             {
@@ -170,11 +188,13 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
             int minimumRank = 0;
             int minimumElements = 0;
+            int exactRank = 0;
             string? minimumElementsMember = null;
             if (shapeConstraint is not null)
             {
                 minimumRank = NamedInt(shapeConstraint, "MinimumRank");
                 minimumElements = NamedInt(shapeConstraint, "MinimumElementCount");
+                exactRank = NamedInt(shapeConstraint, "ExactRank");
                 minimumElementsMember = NamedString(shapeConstraint, "MinimumElementCountMember");
                 if (!string.IsNullOrWhiteSpace(minimumElementsMember)
                     && !HasMember(type, minimumElementsMember!))
@@ -264,7 +284,8 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                     : minimumElements.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 sb.AppendLine("    /// <summary>Generated from [ModelInputShapeConstraint].</summary>");
                 sb.Append("    public override global::AiDotNet.NeuralNetworks.ModelInputShapeConstraint GetInputShapeConstraint() => new(")
-                    .Append(minimumRank).Append(", ").Append(elementExpression).AppendLine(");");
+                    .Append(minimumRank).Append(", ").Append(elementExpression).Append(", ")
+                    .Append(exactRank).AppendLine(");");
             }
 
             sb.AppendLine("}");
@@ -391,6 +412,12 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     }
 
     private static bool HasMember(INamedTypeSymbol type, string member) => FindMember(type, member) is not null;
+
+    private static bool IsPartial(INamedTypeSymbol type)
+        => type.DeclaringSyntaxReferences.Length > 0
+           && type.DeclaringSyntaxReferences.All(reference =>
+               reference.GetSyntax() is TypeDeclarationSyntax declaration
+               && declaration.Modifiers.Any(modifier => modifier.ValueText == "partial"));
 
     private static ISymbol? FindMember(INamedTypeSymbol type, string member)
     {

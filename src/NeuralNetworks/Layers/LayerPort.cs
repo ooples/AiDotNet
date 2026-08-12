@@ -1,5 +1,21 @@
 namespace AiDotNet.NeuralNetworks.Layers;
 
+/// <summary>Semantic purpose of a tensor port, used in generated diagnostics and tooling.</summary>
+public enum TensorPortRole
+{
+    Unspecified,
+    Features,
+    TokenIds,
+    PositionIds,
+    TokenTypeIds,
+    Mask,
+    EncoderInput,
+    EncoderMemory,
+    DecoderIds,
+    AudioCodes,
+    Output
+}
+
 /// <summary>
 /// Declares a named input or output port on a layer.
 /// Ports enable multi-input layers (e.g., DiffusionResBlock needs "input" + "time_embed")
@@ -18,12 +34,21 @@ public sealed record LayerPort
     public string Name { get; }
     public IReadOnlyList<int> Shape { get; }
     public bool Required { get; }
+    public LayerInputDomain ValueDomain { get; }
+    public TensorPortRole Role { get; }
 
-    public LayerPort(string Name, int[] Shape, bool Required = true)
+    public LayerPort(
+        string Name,
+        int[] Shape,
+        bool Required = true,
+        LayerInputDomain? ValueDomain = null,
+        TensorPortRole Role = TensorPortRole.Unspecified)
     {
         this.Name = Name ?? throw new ArgumentNullException(nameof(Name));
         // Defensive copy to prevent callers from mutating the layer's shape
         this.Shape = Shape != null ? (int[])Shape.Clone() : throw new ArgumentNullException(nameof(Shape));
         this.Required = Required;
+        this.ValueDomain = ValueDomain ?? LayerInputDomain.Continuous;
+        this.Role = Role;
     }
 }

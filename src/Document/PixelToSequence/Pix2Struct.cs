@@ -74,9 +74,6 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     private readonly int _patchSize;
     private readonly int _maxPatches;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
     private bool _nativeLayersInitialized;
 
     #endregion
@@ -247,7 +244,7 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
             return;
         }
 
-        var (encoderLayers, decoderLayers) = LayerHelper<T>.CreateDefaultPix2StructLayers(
+        Layers.AddRange(LayerHelper<T>.CreateDefaultPix2StructLayers(
             hiddenDim: _hiddenDim,
             numEncoderLayers: _numEncoderLayers,
             numDecoderLayers: _numDecoderLayers,
@@ -255,13 +252,7 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
             vocabSize: _vocabSize,
             patchSize: _patchSize,
             maxPatches: _maxPatches,
-            maxSequenceLength: MaxSequenceLength);
-
-        _encoderLayers.AddRange(encoderLayers);
-        _decoderLayers.AddRange(decoderLayers);
-
-        Layers.AddRange(_encoderLayers);
-        Layers.AddRange(_decoderLayers);
+            maxSequenceLength: MaxSequenceLength));
     }
 
     private void EnsureNativeInitialized()

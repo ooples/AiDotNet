@@ -295,7 +295,11 @@ namespace AiDotNet.NeuralNetworks
             // Words and subwords are both looked up from the SAME table -- Layers[0], the chain's
             // (vocabSize + bucketSize) x dim input matrix -- and averaged into one hidden vector.
             // Both are indexed from the original tokens, never one from the other's output.
-            var wordEmbeds = Layers[0].Forward(inputTensor);
+            if (Layers[0] is not FastTextEmbeddingLayer<T> featureBag)
+                throw new InvalidOperationException(
+                    "FastText's native input layer must be FastTextEmbeddingLayer.");
+
+            var wordEmbeds = featureBag.LookupFeatures(inputTensor);
 
             var sumVector = new Vector<T>(_embeddingDimension);
             int totalComponents = 0;
@@ -326,7 +330,7 @@ namespace AiDotNet.NeuralNetworks
                     }
 
                     var ngramInputTensor = Tensor<T>.FromVector(new Vector<T>(ngramValues), [ngrams.Count]);
-                    var ngramEmbeds = Layers[0].Forward(ngramInputTensor);
+                    var ngramEmbeds = featureBag.LookupFeatures(ngramInputTensor);
 
                     for (int n = 0; n < ngrams.Count; n++)
                     {

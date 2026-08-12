@@ -49,6 +49,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
+    Role = TensorPortRole.TokenIds, MaxExclusiveMember = "_vocabularySize")]
+[TensorPort("output", TensorPortDirection.Output, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features)]
 // An embedding is an index lookup: [Time] or [Batch, Time] in, with one embedding vector appended.
 // Continuous feature projection is deliberately represented by DenseLayer, whose feature-last shape
 // and continuous input-domain contracts are different. Keeping the operations as separate types makes
@@ -210,13 +214,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// Default is 0.0001. Controls L2 regularization strength on embedding weights.
     /// </summary>
     public T AuxiliaryLossWeight { get; set; }
-
-    /// <summary>
-    /// Declares that this layer accepts token indices in <c>[0, vocabularySize)</c>.
-    /// </summary>
-    public override LayerInputDomain GetInputDomain(int[]? inputShape) =>
-        LayerInputDomain.Indices(_vocabularySize);
-
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.

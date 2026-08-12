@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -12,8 +13,72 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 public class LayerPortTests
 {
     [Fact(Timeout = 120000)]
+    public async Task EmbeddingLayer_GeneratedPortPublishesIndexRangeAndRole()
+    {
+        await Task.Yield();
+        var layer = new EmbeddingLayer<double>(31, 8);
+
+        var port = Assert.Single(layer.InputPorts);
+        Assert.Equal("input", port.Name);
+        Assert.Equal(TensorPortRole.TokenIds, port.Role);
+        Assert.Equal(LayerInputDomainKind.IntegerIndices, port.ValueDomain.Kind);
+        Assert.Equal(31, port.ValueDomain.MaxExclusive);
+        Assert.Equal(LayerInputDomainKind.Continuous, Assert.Single(layer.OutputPorts).ValueDomain.Kind);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ValueDomainValidator_RejectsContinuousOutputFeedingLookup()
+    {
+        await Task.Yield();
+        ILayer<double>[] layers =
+        [
+            new DenseLayer<double>(8),
+            new EmbeddingLayer<double>(31, 8)
+        ];
+
+        var mismatch = Assert.Single(LayerContractValidator.ValidateValueDomains(layers));
+        Assert.StartsWith("ADNPORT004", mismatch.Message);
+        Assert.Contains("generated composite or named graph branches", mismatch.Message);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ValueDomainValidator_AcceptsLookupFeedingContinuousLayer()
+    {
+        await Task.Yield();
+        ILayer<double>[] layers =
+        [
+            new EmbeddingLayer<double>(31, 8),
+            new DenseLayer<double>(8)
+        ];
+
+        Assert.Empty(LayerContractValidator.ValidateValueDomains(layers));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EncoderDecoderComposite_RegistersChildrenAndGeneratedPorts()
+    {
+        await Task.Yield();
+        var composite = new TokenConditionedDecoderLayer<double>(
+            encoderLayers: [new EmbeddingLayer<double>(31, 8)],
+            decoderEmbedding: new EmbeddingLayer<double>(17, 8),
+            decoderLayers: [new DenseLayer<double>(8)],
+            outputLayer: new DenseLayer<double>(17),
+            encoderVocabularySize: 31,
+            decoderVocabularySize: 17,
+            maximumDecoderLength: 12);
+
+        Assert.Equal(4, composite.GetSubLayers().Count);
+        Assert.Equal(TensorPortRole.EncoderInput, composite.InputPorts[0].Role);
+        Assert.Equal(TensorPortRole.DecoderIds, composite.InputPorts[1].Role);
+        Assert.False(composite.InputPorts[1].Required);
+        Assert.Equal(31, composite.InputPorts[0].ValueDomain.MaxExclusive);
+        Assert.Equal(17, composite.InputPorts[1].ValueDomain.MaxExclusive);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task DenseLayer_HasSingleInputPort()
     {
+        await Task.Yield();
         var layer = new DenseLayer<double>(8);
         Assert.Single(layer.InputPorts);
         Assert.Equal("input", layer.InputPorts[0].Name);
@@ -22,6 +87,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_HasSingleOutputPort()
     {
+        await Task.Yield();
         var layer = new DenseLayer<double>(8);
         Assert.Single(layer.OutputPorts);
         Assert.Equal("output", layer.OutputPorts[0].Name);
@@ -30,6 +96,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_MultiInputForward_DelegatesToSingleInput()
     {
+        await Task.Yield();
         var layer = new DenseLayer<double>(2);
         var input = new Tensor<double>([1, 4]);
         for (int i = 0; i < 4; i++) input[0, i] = (i + 1) * 0.1;
@@ -54,6 +121,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task AddLayer_HasTwoInputPorts()
     {
+        await Task.Yield();
         var layer = new AddLayer<double>(new int[][] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
         Assert.Equal(2, layer.InputPorts.Count);
         Assert.Equal("input_0", layer.InputPorts[0].Name);
@@ -63,6 +131,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task AddLayer_MultiInputForward_AddsCorrectly()
     {
+        await Task.Yield();
         var layer = new AddLayer<double>(new int[][] { new[] { 3 }, new[] { 3 } }, (IActivationFunction<double>?)null);
         var a = new Tensor<double>([3], new Vector<double>([1.0, 2.0, 3.0]));
         var b = new Tensor<double>([3], new Vector<double>([4.0, 5.0, 6.0]));
@@ -81,6 +150,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DiffusionResBlock_HasTimeEmbedPort_WhenConfigured()
     {
+        await Task.Yield();
         var block = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
             inChannels: 4, outChannels: 4, spatialSize: 8, timeEmbedDim: 64);
 
@@ -93,6 +163,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DiffusionResBlock_SinglePort_WhenNoTimeEmbed()
     {
+        await Task.Yield();
         var block = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
             inChannels: 4, outChannels: 4, spatialSize: 8, timeEmbedDim: 0);
 
@@ -103,6 +174,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task LayerPort_Record_HasCorrectProperties()
     {
+        await Task.Yield();
         var port = new LayerPort("query", [8, 64], Required: true);
 
         Assert.Equal("query", port.Name);
@@ -115,6 +187,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task LayerPort_OptionalPort()
     {
+        await Task.Yield();
         var port = new LayerPort("mask", [8, 8], Required: false);
         Assert.False(port.Required);
     }
@@ -122,17 +195,13 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task DiffusionResBlock_MultiInputForward_IncludesTimeConditioning()
     {
+        await Task.Yield();
         int channels = 4;
         int spatial = 8;
         int timeEmbedDim = 16;
 
-        // Use TWO blocks with identical parameters to compare with/without time embed
-        var block1 = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
+        var block = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
             inChannels: channels, outChannels: channels, spatialSize: spatial, timeEmbedDim: timeEmbedDim);
-        var block2 = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
-            inChannels: channels, outChannels: channels, spatialSize: spatial, timeEmbedDim: timeEmbedDim);
-        // Copy parameters so both blocks are identical
-        block2.SetParameters(block1.GetParameters());
 
         var input = new Tensor<double>([1, channels, spatial, spatial]);
         var timeEmbed = new Tensor<double>([1, timeEmbedDim]);
@@ -140,11 +209,10 @@ public class LayerPortTests
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 0.5;
         for (int i = 0; i < timeEmbed.Length; i++) timeEmbed[i] = rng.NextDouble() * 2.0;
 
-        // block1: Forward with time embed via direct call
-        var outputDirect = block1.Forward(input, timeEmbed);
+        var outputDirect = block.Forward(input, timeEmbed);
+        block.ResetState();
 
-        // block2: Forward WITH time embed via named ports dict
-        var outputWithTime = block2.Forward(new Dictionary<string, Tensor<double>>
+        var outputWithTime = block.Forward(new Dictionary<string, Tensor<double>>
         {
             ["input"] = input,
             ["time_embed"] = timeEmbed
@@ -160,6 +228,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task LayerBase_ForwardGpu_ThrowsOnEmptyArgs()
     {
+        await Task.Yield();
         var layer = new DenseLayer<double>(2);
         // 0 args → throws
         Assert.ThrowsAny<Exception>(() => layer.ForwardGpu());
@@ -170,6 +239,7 @@ public class LayerPortTests
     [Fact(Timeout = 120000)]
     public async Task SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
     {
+        await Task.Yield();
         var layer = new DenseLayer<double>(2);
         var input = new Tensor<double>([1, 4]);
         for (int i = 0; i < 4; i++) input[0, i] = (i + 1) * 0.1;

@@ -55,6 +55,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[RankRoutedInputDomain(2, 12)]
 [ResearchPaper("LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding", "https://doi.org/10.48550/arXiv.2012.14740", Year = 2021, Authors = "Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou")]
 public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
@@ -294,31 +295,6 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     //   [rest]                                                  = multimodal transformer encoder + classification head.
     private const int VisualBackboneLayerCount = 12;
 
-    /// <summary>
-    /// Reports the value domain for a given input rank, which for this model depends on which stream
-    /// the input reaches.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// LayoutLMv2 routes by rank: a rank-1/2 tensor is a sequence of TOKEN IDs for the text stream, and a
-    /// higher-rank tensor is a page image for the conv visual backbone. The base implementation walks
-    /// from <c>Layers[0]</c>, finds the backbone, and therefore answers "continuous" for BOTH -- so a
-    /// caller (and the conformance fixture) filled a token sequence with continuous noise and the
-    /// embedding refused it. Routing is declared by the rank-routed native forward, which only this class knows, so this
-    /// is the only place the question can be answered correctly.
-    /// </para>
-    /// </remarks>
-    public override LayerInputDomain GetInputDomain(int[]? inputShape)
-    {
-        if (inputShape is not null && inputShape.Length <= 2
-            && VisualBackboneLayerCount < Layers.Count
-            && Layers[VisualBackboneLayerCount] is LayerBase<T> textStreamFront)
-        {
-            return textStreamFront.GetInputDomain(inputShape);
-        }
-
-        return base.GetInputDomain(inputShape);
-    }
     // Three, not four: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that
     // used to open this section are now a single LayoutEmbeddingLayer, which also carries the 2D
     // layout terms. The LayerNorm and Dropout after them are unchanged.

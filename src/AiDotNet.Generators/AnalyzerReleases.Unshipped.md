@@ -39,6 +39,12 @@ ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two
 ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
 ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
 ADNSHAPE004 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing (Warning until the #1789 conversion completes; the final slice raises it to Error)
+ADNPORT001 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Integer-index port does not declare its legal upper bound
+ADNPORT002 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Tensor-port contract references a missing member
+ADNPORT003 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Duplicate input or output port name
+ADNPORT004 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Adjacent sequential layers have incompatible value domains
+ADNPORT005 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Model input-shape constraint references a missing member
+ADNPORT006 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Type using a generated tensor/model-input contract is not partial
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
 AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract

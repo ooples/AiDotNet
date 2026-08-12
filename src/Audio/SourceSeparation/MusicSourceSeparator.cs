@@ -49,6 +49,7 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelTask(ModelTask.SourceSeparation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelInputShapeConstraint(MinimumElementCountMember = "MinimumWaveformLength")]
 [ResearchPaper("Demucs: Deep Extractor for Music Sources with extra unlabeled data remixed", "https://doi.org/10.48550/arXiv.1909.01174", Year = 2019, Authors = "Alexandre Défossez, Nicolas Usunier, Léon Bottou, Francis Bach")]
 public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
@@ -78,6 +79,14 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
     private readonly System.Collections.Generic.List<Conv1DTransposeLayer<T>> _demucsDecDeconv = new();
     private LSTMLayer<T>? _demucsBottleneck;
     private int _demucsDepth;
+
+    private int MinimumWaveformLength()
+    {
+        int minimumLength = 1;
+        for (int i = 0; i < _options.DemucsDepth; i++)
+            minimumLength = checked(minimumLength * _options.DemucsStride);
+        return minimumLength;
+    }
 
     /// <summary>Standard source names for 4-stem separation.</summary>
     public static readonly string[] StandardSources = ["vocals", "drums", "bass", "other"];

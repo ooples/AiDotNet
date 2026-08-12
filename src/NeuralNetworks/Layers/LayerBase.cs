@@ -2501,7 +2501,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     private IReadOnlyList<LayerPort>? _cachedInputPorts;
     public virtual IReadOnlyList<LayerPort> InputPorts =>
-        _cachedInputPorts ??= [new LayerPort("input", GetInputShape())];
+        _cachedInputPorts ??=
+        [
+            new LayerPort(
+                "input",
+                GetInputShape(),
+                ValueDomain: GetInputDomain(GetInputShape()),
+                Role: TensorPortRole.Features)
+        ];
 
     /// <summary>
     /// Declares the named output ports this layer produces.
@@ -2509,7 +2516,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     private IReadOnlyList<LayerPort>? _cachedOutputPorts;
     public virtual IReadOnlyList<LayerPort> OutputPorts =>
-        _cachedOutputPorts ??= [new LayerPort("output", GetOutputShape())];
+        _cachedOutputPorts ??=
+        [
+            new LayerPort(
+                "output",
+                GetOutputShape(),
+                ValueDomain: PropagatesInputDomain
+                    ? LayerInputDomain.Unspecified
+                    : LayerInputDomain.Continuous,
+                Role: TensorPortRole.Features)
+        ];
 
     /// <summary>
     /// Multi-input forward pass. Receives inputs by name, enabling layers that
@@ -2521,6 +2537,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTracedPorts(inputs);
+
+        foreach (var pair in inputs)
+        {
+            if (pair.Value is not null) observer.ValidateInput(this, pair.Value, pair.Key);
+        }
 
         var output = ForwardTracedPorts(inputs);
 
@@ -2649,6 +2670,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTraced(input);
+
+        observer.ValidateInput(this, input, InputPorts.Count > 0 ? InputPorts[0].Name : null);
 
         var output = ForwardTraced(input);
         observer.Record(this, input, output);
@@ -3432,15 +3455,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     public Tensor<T> Forward(params Tensor<T>[] inputs)
     {
+        if (inputs is null)
+            throw new ArgumentNullException(nameof(inputs));
+
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTracedMany(inputs);
+
+        for (int i = 0; i < inputs.Length; i++)
+        {
+            if (inputs[i] is null) continue;
+            string? portName = i < InputPorts.Count ? InputPorts[i].Name : null;
+            observer.ValidateInput(this, inputs[i], portName);
+        }
 
         var output = ForwardTracedMany(inputs);
 
         // One record per input, same as the named-port path - N records become N parent edges.
         // Guarded on Length > 1: a single-element call delegates to Forward(Tensor<T>) below,
         // which records it itself, and recording here too would duplicate the edge.
-        if (inputs is not null && inputs.Length > 1)
+        if (inputs.Length > 1)
         {
             foreach (var input in inputs)
             {

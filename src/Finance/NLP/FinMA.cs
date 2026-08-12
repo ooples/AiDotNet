@@ -51,16 +51,6 @@ namespace AiDotNet.Finance.NLP;
 [ResearchPaper("PIXIU: A Large Language Model, Instruction Data and Evaluation Benchmark for Finance", "https://arxiv.org/abs/2306.05443", Year = 2023, Authors = "Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, Jimin Huang")]
 public partial class FinMA<T> : FinancialNLPModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _tokenEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private readonly List<ILayer<T>> _decoderLayers = [];
-    private ILayer<T>? _finalNorm;
-    private ILayer<T>? _outputHead;
-
-    #endregion
-
     #region Shared Fields
 
     private readonly ModelOptions.FinMAOptions<T> _options;
@@ -175,38 +165,7 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
                 numClasses: _options.NumClasses,
                 dropoutRate: _dropout));
 
-            ExtractLayerReferences();
         }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the FinMA architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _tokenEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        idx++; // skip dropout
-
-        _decoderLayers.Clear();
-        for (int i = 0; i < 12; i++)
-        {
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _finalNorm = Layers[idx++];
-        if (idx < Layers.Count) _outputHead = Layers[idx];
     }
 
     #endregion

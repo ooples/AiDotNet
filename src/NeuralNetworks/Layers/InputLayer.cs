@@ -32,6 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Input)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = false, SupportsBackpropagation = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features, PropagatesInputDomain = true)]
+[TensorPort("output", TensorPortDirection.Output, LayerInputDomainKind.Unspecified,
+    Role = TensorPortRole.Features)]
 // ForwardTraced is literally `return input;` - the identity, at any rank.
 [ElementWiseShape(Note = "Identity passthrough marking the network's entry point.")]
 [AutoParameters]
@@ -59,12 +63,6 @@ public partial class InputLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => false;
-
-    /// <summary>
-    /// An input layer is an identity placeholder, so whatever the caller supplies reaches the NEXT
-    /// layer untouched and must satisfy that layer's domain, not this one's.
-    /// </summary>
-    public override bool PropagatesInputDomain => true;
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;

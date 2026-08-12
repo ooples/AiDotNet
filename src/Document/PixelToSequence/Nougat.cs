@@ -76,9 +76,6 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private int _vocabSize;
     private int _patchSize;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _encoderLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
     private bool _nativeLayersInitialized;
 
     #endregion
@@ -249,7 +246,7 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             return;
         }
 
-        var (encoderLayers, decoderLayers) = LayerHelper<T>.CreateDefaultNougatLayers(
+        Layers.AddRange(LayerHelper<T>.CreateDefaultNougatLayers(
             hiddenDim: _hiddenDim,
             numEncoderLayers: _numEncoderLayers,
             numDecoderLayers: _numDecoderLayers,
@@ -257,13 +254,7 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             vocabSize: _vocabSize,
             imageSize: ImageSize,
             patchSize: _patchSize,
-            maxSequenceLength: MaxSequenceLength);
-
-        _encoderLayers.AddRange(encoderLayers);
-        _decoderLayers.AddRange(decoderLayers);
-
-        Layers.AddRange(_encoderLayers);
-        Layers.AddRange(_decoderLayers);
+            maxSequenceLength: MaxSequenceLength));
     }
 
     private void EnsureNativeInitialized()
@@ -278,18 +269,9 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         InvalidateParameterCountCache();
     }
 
-    // Native layers are materialized on first use, deliberately, to keep construction cheap for
-    // metadata and shape probes. But the introspection entry points below were not part of "first
-    // use", so a freshly constructed Nougat answered them from an EMPTY Layers list -- reporting a
-    // model with no learnable parameters and no activations. Route them through the same gate.
-    // Sibling MATCHA already does exactly this; Nougat, Pix2Struct, Dessurt, Donut and TrOCR do not.
-    //
-    // This is the half of the Nougat work that is safe to land. It does NOT address the model's
-    // real defect: Train() drives the flat Layers list, which is not the graph this model runs.
-    // Fixing that needs a teacher-forcing path, because the decoder's EmbeddingLayer expects token
-    // ids and the flat chain hands it continuous encoder features -- running the real forward
-    // end-to-end throws "Index -1 ... out of bounds for embedding table with vocabulary size
-    // 50000". See the task notes; do not try to solve it by re-wiring ForwardForTraining alone.
+    // Native layers are materialized on first use to keep metadata-only construction cheap. The
+    // materialized graph contains one branch-aware encoder-decoder composite, so parameter
+    // introspection, prediction, and tape training all walk the same executable graph.
 
     /// <inheritdoc />
     /// <remarks>
