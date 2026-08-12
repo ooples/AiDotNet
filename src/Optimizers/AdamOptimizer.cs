@@ -490,16 +490,34 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).");
         }
 
-        // Save pre-update state for accurate reverse updates
-        if (_previousM == null || _previousV == null)
+        // Save pre-update state for accurate reverse updates. Allocated once, then copied
+        // into IN PLACE.
+        //
+        // This runs on EVERY step, and `new Vector<T>(_m)` allocated two FULL-LENGTH vectors
+        // each time. At FastText's paper scale -- a (10,000 + 2,000,000) x 100 embedding table,
+        // ~201M parameters -- that is ~3.2 GB allocated and immediately discarded per optimizer
+        // step, and Adam is the default optimizer for most models here, so every large model paid
+        // it. The old comment called it a "vectorized copy"; `new Vector<T>(...)` is an allocation.
+        //
+        // The two allocations in the guard were dead for the same reason: whatever they produced
+        // was overwritten by the next two lines before anything could read it.
+        //
+        // Worse than the allocation: `new Vector<T>(_m)` binds to Vector(IEnumerable<T>), so the
+        // copy ran through an enumerator one element at a time -- 201M interface-dispatched reads
+        // per step at that scale. Span.CopyTo is a single vectorized memmove, so this is faster as
+        // well as allocation-free. skipZeroInit is safe because the CopyTo below overwrites every
+        // element of the buffer it just created.
+        if (_previousM == null || _previousM.Length != _m.Length)
         {
-            _previousM = new Vector<T>(parameters.Length);
-            _previousV = new Vector<T>(parameters.Length);
+            _previousM = new Vector<T>(_m.Length, skipZeroInit: true);
+        }
+        if (_previousV == null || _previousV.Length != _v.Length)
+        {
+            _previousV = new Vector<T>(_v.Length, skipZeroInit: true);
         }
 
-        // Copy _m and _v to _previousM and _previousV (vectorized copy)
-        _previousM = new Vector<T>(_m);
-        _previousV = new Vector<T>(_v);
+        _m.AsWritableSpan().CopyTo(_previousM.AsWritableSpan());
+        _v.AsWritableSpan().CopyTo(_previousV.AsWritableSpan());
         _previousT = _t;
 
         _t++;
