@@ -1309,6 +1309,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// directly so weight allocation always happens after shape resolution.
     /// </summary>
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
+    /// <summary>
+    /// Values restored before this layer knew its shape, replayed once materialization has run.
+    /// </summary>
+    /// <remarks>
+    /// A restore into a lazy layer lands correctly and is then destroyed by the layer's own first
+    /// forward: <c>OnFirstForward</c> initializes weights, and it cannot be skipped because that is
+    /// also where derived configuration resolves -- GRULayer sets <c>_inputSize</c> there, and
+    /// <c>EnsureInitialized</c> throws without it. Measured on a GRU round trip: the parameter
+    /// vectors were bit-identical after Deserialize and differed at index 0 after one Forward.
+    /// So the values are held here and written back after initialization, rather than initialization
+    /// being suppressed.
+    /// </remarks>
+    private Vector<T>? _restoredBeforeShapeResolved;
+
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
         if (!_firstForwardRan && !IsShapeResolved)
@@ -1316,6 +1330,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             OnFirstForward(input);
             _firstForwardRan = true;
             RegisterStreamingWeightsWithPool();
+
+            // Replay AFTER initialization, which is what just overwrote them. Only when the
+            // materialized surface is the size the restore was validated against -- a different
+            // size means the layer resolved to something the checkpoint did not describe, and
+            // quietly pouring the old values into it would be worse than leaving it initialized.
+            var pending = _restoredBeforeShapeResolved;
+            if (pending is not null)
+            {
+                _restoredBeforeShapeResolved = null;
+                if (pending.Length == ParameterCount)
+                {
+                    SetParameters(pending);
+                }
+            }
         }
         EnsureInitialized();
     }
@@ -4701,6 +4729,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // because pre-resolution that length is a placeholder. That is a real failure, not a
         // hypothetical: it cut a 144-value restore down to the 32-element placeholder and
         // MusicSourceSeparator threw "Expected 144 parameters, but got 32" on its first forward.
+        // Hold a copy while the layer has not resolved its shape. Its first forward will initialize
+        // over whatever is written below; EnsureInitializedFromInput replays this afterwards.
+        if (!IsShapeResolved && !_firstForwardRan)
+        {
+            _restoredBeforeShapeResolved = parameters;
+        }
+
         if (!hasRegistry || deferred)
         {
             Parameters = parameters;
