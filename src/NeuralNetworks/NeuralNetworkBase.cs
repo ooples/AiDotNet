@@ -14013,22 +14013,50 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // implicit single-host inference contract. Saturating instead
         // of `checked((int)...)` keeps very-large models running with a
         // suboptimal capacity hint rather than crashing on construction.
-        var flatGradients = new List<T>((int)Math.Min(ParameterCount, int.MaxValue));
+        // Fill ONE destination vector rather than List -> ToArray() -> Vector.
+        // The old form allocated the parameter vector three times per call (the List's
+        // backing array, the ToArray() copy, then the Vector), which an allocation trace
+        // measured at 1.6 MB/step on a 133K-parameter model -- ~3x the 520 KB parameter
+        // vector, and the single largest non-optimizer cost in the backward path.
+        //
+        // Sizing is a separate pass rather than ParameterCount because the two branches
+        // below contribute DIFFERENT lengths: a matched slot contributes grad.Length, an
+        // unmatched (frozen/detached) one contributes paramTensor.Length. Those agree in
+        // practice, but the old List grew to whatever they summed to, so sizing off
+        // ParameterCount would silently change the returned length if they ever diverged.
+        long totalLength = 0;
+        foreach (var paramTensor in GetParameterChunks())
+        {
+            if (paramTensor is null || paramTensor.Length == 0) continue;
+            totalLength += grads.TryGetValue(paramTensor, out var sizingGrad)
+                ? sizingGrad.Length
+                : paramTensor.Length;
+        }
+
+        var flatGradients = new Vector<T>((int)Math.Min(totalLength, int.MaxValue));
+        // Write through the span, not the indexer. Vector<T>'s indexer is virtual and runs
+        // ValidateIndex + EnsureMaterialized per element; at one call per parameter that
+        // measured SLOWER than the List<T>.Add it replaced, giving back in time what the
+        // single allocation won. The span is resolved once and written contiguously.
+        var destination = flatGradients.AsWritableSpan();
+        int writeOffset = 0;
         foreach (var paramTensor in GetParameterChunks())
         {
             if (paramTensor is null || paramTensor.Length == 0) continue;
             if (grads.TryGetValue(paramTensor, out var grad))
             {
                 for (int i = 0; i < grad.Length; i++)
-                    flatGradients.Add(grad[i]);
+                    destination[writeOffset++] = grad[i];
             }
             else
             {
+                // Written explicitly rather than relying on the ctor's zero-init: default(T)
+                // is not guaranteed to be NumOps.Zero for a custom numeric type.
                 for (int i = 0; i < paramTensor.Length; i++)
-                    flatGradients.Add(NumOps.Zero);
+                    destination[writeOffset++] = NumOps.Zero;
             }
         }
-        return new Vector<T>(flatGradients.ToArray());
+        return flatGradients;
     }
 
     /// <summary>
