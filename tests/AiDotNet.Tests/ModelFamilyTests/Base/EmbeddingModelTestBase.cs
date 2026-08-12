@@ -27,11 +27,10 @@ public abstract class EmbeddingModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
-        var input1 = CreateRandomTensor(InputShape, rng);
-        // Create a near-identical input (small perturbation)
-        var input2 = new Tensor<T>(InputShape);
-        for (int i = 0; i < input1.Length; i++)
-            input2[i] = NumOps.Add(input1[i], NumOps.FromDouble(1e-6));
+        var input1 = CreateRandomTensor(EffectiveInputShape, rng);
+        // A continuous input gets an epsilon perturbation. An index/mask input gets one legal
+        // discrete substitution, as declared by the generated model domain contract.
+        var input2 = CreateNearbyInputWithinDomain(input1, EffectiveInputShape);
 
         var emb1 = network.Predict(input1);
         var emb2 = network.Predict(input2);
@@ -70,7 +69,7 @@ public abstract class EmbeddingModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var embedding = network.Predict(input);
 
@@ -99,7 +98,7 @@ public abstract class EmbeddingModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var embedding = network.Predict(input);
 

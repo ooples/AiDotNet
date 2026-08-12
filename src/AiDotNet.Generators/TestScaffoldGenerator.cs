@@ -3929,7 +3929,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
+            if (model.ClassName == "FastText" && model.TypeParameterCount == 1)
+            {
+                // Production retains fastText's paper-faithful 2,000,000 subword buckets. Its dense
+                // embedding gradient and dense Adam moments make even one test update several GB,
+                // so conformance must exercise the SAME shared word/subword matrix topology at a
+                // generated smoke scale. Keeping this here (rather than a manual fixture override)
+                // makes the resource policy part of the scaffold generator and leaves model defaults
+                // untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 32, outputSize: 128), " +
+                    "vocabSize: 128, bucketSize: 1024, embeddingDimension: 16, maxTokens: 32)";
+            }
+            else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                     or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
@@ -13248,7 +13262,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
             // Language-model fixtures use legal token widths; GAN fixtures use their latent/image contracts.
             bool isCausalGanGenerator = model.ClassName == "CausalGANGenerator";
-            int dim = model.ClassName is "EagleLanguageModel" or "FinchLanguageModel"
+            int dim = model.ClassName == "FastText"
+                ? 32 // Generated bounded fixture declares inputSize/maxTokens: 32.
+                : model.ClassName is "EagleLanguageModel" or "FinchLanguageModel"
                 ? 4 // Their bounded constructors above declare inputSize: 4.
                 : model.ClassName == "XLSTMLanguageModel"
                 ? 16
@@ -13264,7 +13280,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else
             {
                 sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
-                sb.AppendLine(model.ClassName == "XLSTMLanguageModel"
+                sb.AppendLine(model.ClassName == "FastText"
+                    ? "    protected override int[] OutputShape => new[] { 128 };"
+                    : model.ClassName == "XLSTMLanguageModel"
                     ? "    protected override int[] OutputShape => new[] { 16, 64 };"
                     : isCausalGanGenerator
                         ? "    protected override int[] OutputShape => new[] { 10 };"
@@ -13282,6 +13300,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        int positions = target.Length / classes;");
                 sb.AppendLine("        for (int p = 0; p < positions; p++)");
                 sb.AppendLine("            target[p * classes + rng.Next(classes)] = 1;");
+                sb.AppendLine("        return target;");
+                sb.AppendLine("    }");
+            }
+
+            if (model.ClassName == "FastText")
+            {
+                // FastText's head is a categorical softmax classifier. Generate one legal class
+                // per output row so every inherited training invariant measures its real objective.
+                string scalarType = useFloat ? "float" : "double";
+                sb.AppendLine();
+                sb.AppendLine($"    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> CreateRandomTargetTensor(int[] shape, System.Random rng)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}>(shape);");
+                sb.AppendLine("        int classes = shape[shape.Length - 1];");
+                sb.AppendLine("        int rows = target.Length / classes;");
+                sb.AppendLine("        for (int row = 0; row < rows; row++)");
+                sb.AppendLine("            target[row * classes + rng.Next(classes)] = 1;");
                 sb.AppendLine("        return target;");
                 sb.AppendLine("    }");
             }

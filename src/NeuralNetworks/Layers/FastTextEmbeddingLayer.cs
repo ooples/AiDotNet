@@ -83,28 +83,36 @@ public partial class FastTextEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     {
         EnsureInitializedFromInput(input);
 
-        // The generic tensor API carries IDs in T. The primary lookup performs the authoritative
-        // integer/range validation. Derive a stable bucket ID from each valid token ID, then run the
-        // two trainable tables as parallel tape-tracked children.
+        // The generic tensor API carries IDs in T. The generated input-domain contract performs the
+        // authoritative integer/range validation before this method. Derive one stable bucket ID for
+        // each valid word ID and pack both feature groups for a single tape-tracked shared lookup.
         if (input.Rank is not (1 or 2))
             throw new ArgumentException(
                 $"FastText feature bags require rank 1 or 2 input; got rank {input.Rank}.",
                 nameof(input));
 
-        var words = _featureEmbedding.Forward(input);
-        var bucketIds = new Tensor<T>(input._shape);
+        int featureCount = input.Shape[input.Rank - 1];
+        int[] packedShape = input.Rank == 1
+            ? [checked(featureCount * 2)]
+            : [input.Shape[0], checked(featureCount * 2)];
+        var packedIds = new Tensor<T>(packedShape);
         for (int i = 0; i < input.Length; i++)
         {
             int tokenId = Convert.ToInt32(NumOps.ToDouble(input[i]));
             uint mixed = unchecked((uint)tokenId * 16777619u + 2166136261u);
             int subwordId = checked(_vocabularySize + (int)(mixed % (uint)_bucketSize));
-            bucketIds.SetFlat(i, NumOps.FromDouble(subwordId));
+            int rowOffset = input.Rank == 1 ? 0 : (i / featureCount) * featureCount * 2;
+            int featureOffset = i % featureCount;
+            packedIds.SetFlat(rowOffset + featureOffset, input.GetFlat(i));
+            packedIds.SetFlat(
+                rowOffset + featureCount + featureOffset,
+                NumOps.FromDouble(subwordId));
         }
 
-        var subwords = _featureEmbedding.Forward(bucketIds);
-        var combined = Engine.TensorMultiplyScalar(
-            Engine.TensorAdd(words, subwords),
-            NumOps.FromDouble(0.5));
+        // A single lookup over the packed bag produces one dense embedding gradient rather than
+        // evaluating the same enormous parameter tensor twice. This matches fastText's input-matrix
+        // operation directly: all word and n-gram feature IDs are looked up together, then averaged.
+        var combined = _featureEmbedding.Forward(packedIds);
         return input.Rank == 1
             ? _unbatchedMean.Forward(combined)
             : _batchedMean.Forward(combined);

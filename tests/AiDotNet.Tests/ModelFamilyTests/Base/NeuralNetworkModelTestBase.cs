@@ -773,6 +773,50 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         return scaled;
     }
 
+    /// <summary>
+    /// Creates the nearest meaningful neighbor of an input without leaving its declared value
+    /// domain. Continuous inputs receive an epsilon perturbation; index and mask inputs receive one
+    /// legal discrete substitution.
+    /// </summary>
+    /// <remarks>
+    /// Local-continuity probes must not manufacture fractional token IDs or mask values. Keeping the
+    /// policy here makes every generated model-family fixture consume the same model-declared domain
+    /// contract instead of requiring per-model test overrides.
+    /// </remarks>
+    protected Tensor<T> CreateNearbyInputWithinDomain(Tensor<T> input, int[] shape, double epsilon = 1e-6)
+    {
+        var nearby = new Tensor<T>(shape);
+        for (int i = 0; i < input.Length && i < nearby.Length; i++)
+            nearby[i] = input[i];
+
+        var domain = InputDomainFor(shape);
+        if (domain.IsIndices)
+        {
+            int span = domain.MaxExclusive - domain.MinInclusive;
+            if (span > 1 && nearby.Length > 0)
+            {
+                int current = Convert.ToInt32(NumOps.ToDouble(nearby[0]));
+                int offset = (current - domain.MinInclusive + 1) % span;
+                if (offset < 0) offset += span;
+                nearby[0] = NumOps.FromDouble(domain.MinInclusive + offset);
+            }
+
+            return nearby;
+        }
+
+        if (domain.Kind == LayerInputDomainKind.BooleanMask)
+        {
+            if (nearby.Length > 0)
+                nearby[0] = NumOps.FromDouble(NumOps.ToDouble(nearby[0]) < 0.5 ? 1.0 : 0.0);
+            return nearby;
+        }
+
+        var delta = NumOps.FromDouble(epsilon);
+        for (int i = 0; i < nearby.Length; i++)
+            nearby[i] = NumOps.Add(nearby[i], delta);
+        return nearby;
+    }
+
     protected LayerInputDomain InputDomainFor(int[] shape)
     {
         if (shape is null || !ShapesEqual(shape, EffectiveInputShape))
