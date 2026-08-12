@@ -17581,7 +17581,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ? $"new {typeName}<double>()"
             : $"new {typeName}<double>()";
 
-        if (category is AlgorithmCategory.ActiveLearning or AlgorithmCategory.Distillation)
+        if (category is AlgorithmCategory.ActiveLearning or AlgorithmCategory.ContinualLearning or AlgorithmCategory.Distillation)
             constructorExpr = $"new {typeName}<float>()";
 
         // The paper's cMLP is a proximal-gradient model whose absent causes are represented by
@@ -17705,9 +17705,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.Models;\n";
                 break;
             case AlgorithmCategory.ContinualLearning:
-                baseClass = "ContinualLearningTestBase";
+                baseClass = "ContinualLearningTestBase<float>";
                 factoryMethod = "CreateStrategy";
-                factoryReturnType = "IContinualLearningStrategy<double>";
+                factoryReturnType = "IContinualLearningStrategy<float>";
                 extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.NeuralNetworks;\n";
                 break;
             case AlgorithmCategory.Distillation:
