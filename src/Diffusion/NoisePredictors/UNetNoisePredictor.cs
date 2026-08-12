@@ -66,6 +66,14 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         TriggerLazyShapeResolution();
     }
+
+    /// <inheritdoc />
+    protected override void EnsureParameterStructureReady()
+    {
+        // Run the real topology in shape-inference mode. This resolves decoder-concat and
+        // attention dimensions without allocating the paper-scale U-Net's weight tensors.
+        ResolveShapesViaForward();
+    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>

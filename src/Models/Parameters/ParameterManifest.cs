@@ -354,6 +354,7 @@ public sealed class ParameterLayoutNotReadyException : InvalidOperationException
     /// <summary>Creates a readiness error for the supplied operation.</summary>
     public ParameterLayoutNotReadyException(string operation, ParameterLayoutSnapshot layout)
         : base($"Cannot {operation} parameters while the layout is {layout.Readiness}. " +
+               $"Unresolved slots: {DescribeUnresolvedSlots(layout)}. " +
                "Resolve model shapes or explicitly materialize parameters first; an unresolved " +
                "layout is not an empty parameter vector.")
     {
@@ -362,4 +363,18 @@ public sealed class ParameterLayoutNotReadyException : InvalidOperationException
 
     /// <summary>The layout that prevented the operation.</summary>
     public ParameterLayoutSnapshot Layout { get; }
+
+    private static string DescribeUnresolvedSlots(ParameterLayoutSnapshot? layout)
+    {
+        if (layout is null) return "<unknown>";
+        var ids = new List<string>();
+        for (int i = 0; i < layout.Slots.Count && ids.Count < 8; i++)
+        {
+            var slot = layout.Slots[i];
+            if (slot.Readiness == ParameterReadiness.ShapeDeferred || !slot.ParameterCount.HasValue)
+                ids.Add(slot.StableId);
+        }
+        if (ids.Count == 0) return "<none>";
+        return string.Join(", ", ids) + (ids.Count < 8 ? string.Empty : ", ...");
+    }
 }

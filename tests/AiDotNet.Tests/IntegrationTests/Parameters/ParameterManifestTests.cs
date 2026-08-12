@@ -362,6 +362,22 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task ExplicitRegistration_DeduplicatesPropertyAndFieldAccessorsToTheSameComponent()
+    {
+        await Task.Yield();
+        var component = new ContractProbeSource(1, new[] { 1d });
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("model/component-property",
+            new ComponentAccessorParameterSource<double>(() => component));
+        registry.Register("model/component-field",
+            new ComponentAccessorParameterSource<double>(() => component));
+
+        Assert.Single(registry.Components);
+        Assert.Single(registry.ParameterLayout.Slots);
+        Assert.Equal(1, registry.ParameterCount);
+    }
+
+    [Fact]
     public async Task NeuralNetworkManifest_DescribesTheCompletePublicSurface()
     {
         await Task.Yield();

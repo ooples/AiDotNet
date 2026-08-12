@@ -131,8 +131,18 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
         for (int i = 0; i < _entries.Count; i++)
         {
-            if (!string.Equals(_entries[i].StableId, stableId, StringComparison.Ordinal)) continue;
-            if (ReferenceEquals(_entries[i].Source, component) && _entries[i].Role == role) return;
+            var existing = _entries[i];
+            if (component is not null && ReferencesSameSource(existing.Source, component))
+            {
+                if (existing.Role == role) return;
+                throw new InvalidOperationException(
+                    $"Parameter component '{stableId}' refers to storage already registered as " +
+                    $"'{existing.StableId}' with role {existing.Role}; the same storage cannot also " +
+                    $"be registered with role {role}.");
+            }
+
+            if (!string.Equals(existing.StableId, stableId, StringComparison.Ordinal)) continue;
+            if (ReferenceEquals(existing.Source, component) && existing.Role == role) return;
             throw new InvalidOperationException(
                 $"Parameter component ID '{stableId}' was registered more than once. Stable IDs " +
                 "must identify exactly one owner; use an Alias role rather than duplicate storage.");

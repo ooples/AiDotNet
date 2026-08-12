@@ -138,6 +138,7 @@ public partial class AudioVAE<T> : VAEModelBase<T>
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -230,10 +231,15 @@ public partial class AudioVAE<T> : VAEModelBase<T>
         _muProjection = (DenseLayer<T>)encoderLayers[0];
         _logVarProjection = (DenseLayer<T>)encoderLayers[1];
 
+        int hiddenDim = _baseChannels * _channelMultipliers[^1];
+        _muProjection.ResolveShapesOnly(new[] { hiddenDim });
+        _logVarProjection.ResolveShapesOnly(new[] { hiddenDim });
+
         // Decoder projection from LayerHelper
         var decoderLayers = LayerHelper<T>.CreateAudioVAEDecoderLayers(
             _melChannels, _latentChannels, _baseChannels, _channelMultipliers).ToList();
         _latentToDecoder = (DenseLayer<T>)decoderLayers[0];
+        _latentToDecoder.ResolveShapesOnly(new[] { _latentChannels });
     }
 
     /// <inheritdoc />

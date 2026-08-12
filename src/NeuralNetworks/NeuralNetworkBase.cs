@@ -708,6 +708,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         void AddLayerSlots(ILayer<T> layer, string stableId)
         {
+            // LayerBase owns the allocation-free declaration contract. Consume it before the
+            // legacy readiness heuristic so a shape-resolved lazy tensor is not mislabeled as
+            // deferred merely because its storage has not been allocated yet.
+            if (layer is AiDotNet.Models.Parameters.IParameterLayoutSource layoutSource)
+            {
+                var declared = layoutSource.GetParameterLayout();
+                for (int i = 0; i < declared.Count; i++)
+                {
+                    var slot = declared[i];
+                    string id = slot.StableId == "$"
+                        ? stableId
+                        : stableId + "/" + slot.StableId;
+                    AddSlot(id, slot.Role, slot.Readiness, slot.ParameterCount);
+                }
+                return;
+            }
+
             var readiness = GetLayerParameterReadiness(layer);
             if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.Materialized &&
                 layer is Layers.LayerBase<T> layerBase)
@@ -2271,8 +2288,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
     /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
     /// The count is derived from the same stable parameter manifest used by the flat and chunked parameter
-    /// APIs. If any lazy shape is still unknown, this property throws instead of reporting a misleading
-    /// partial count.
+    /// APIs. When a future lazy slot is still unknown, the manifest remains explicitly deferred while
+    /// this property reports the exact vector that exists now; it never substitutes a guessed future
+    /// size for the concrete current state.
     /// </remarks>
     public virtual long ParameterCount
     {
@@ -2296,7 +2314,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // consumers; unresolved slots remain explicitly unresolved rather than becoming zero.
             var layout = ParameterLayout;
             if (layout.ParameterCount.HasValue) return layout.ParameterCount.Value;
-            throw new AiDotNet.Models.Parameters.ParameterLayoutNotReadyException("count", layout);
+
+            // A deferred FUTURE layout does not make the CURRENT vector unknowable. Dynamic and
+            // conditional networks legitimately keep branches lazy after a valid forward; forcing a
+            // guessed shape would corrupt them, while throwing here breaks metadata and the streaming
+            // heuristic before training can run. ParameterVectorLength walks the same concrete state
+            // GetParameters emits, so count/vector equality remains exact. Restore still consumes the
+            // deferred manifest and refuses ambiguous slice boundaries.
+            return ParameterVectorLength;
         }
     }
 

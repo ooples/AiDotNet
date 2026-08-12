@@ -36,7 +36,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSource<T>, IDisposable
+public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSource<T>,
+    IParameterLayoutSource, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.
@@ -697,6 +698,126 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected virtual IReadOnlyList<(Tensor<T>? Tensor, TensorShape Expected, PersistentTensorRole Role)>
         DeclaredParameterShapes()
         => System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
+
+    /// <summary>
+    /// Computes this layer's own parameter width from declared shapes without allocating lazy
+    /// tensors. Child layers are intentionally excluded: the owning graph walk visits each child
+    /// once with reference-identity deduplication.
+    /// </summary>
+    internal bool TryGetOwnDeclaredParameterCount(out long count, out bool materialized)
+    {
+        count = Parameters.Length;
+        materialized = true;
+
+        var declared = DeclaredParameterShapes();
+        if (declared is not null && declared.Count > 0)
+        {
+            for (int i = 0; i < declared.Count; i++)
+            {
+                var (tensor, expected, _) = declared[i];
+                if (tensor is not null && tensor.Length > 0 && tensor.Shape.Length > 0)
+                {
+                    count = checked(count + TrainableScalarCount(tensor));
+                    continue;
+                }
+
+                long expectedCount = 1;
+                for (int axis = 0; axis < expected.Length; axis++)
+                {
+                    int dimension = expected[axis];
+                    if (dimension <= 0) return false;
+                    expectedCount = checked(expectedCount * dimension);
+                }
+                count = checked(count + expectedCount);
+                materialized = false;
+            }
+        }
+        else
+        {
+            var trainable = GetTrainableParametersUnmaterialized();
+            if ((trainable is null || trainable.Count == 0) && HasUninitializedParameters)
+                return false;
+            if (trainable is not null)
+            {
+                for (int i = 0; i < trainable.Count; i++)
+                {
+                    var tensor = trainable[i];
+                    if (tensor is null || tensor.Length == 0 || tensor.Shape.Length == 0)
+                    {
+                        if (HasUninitializedParameters) return false;
+                        materialized = false;
+                        continue;
+                    }
+                    count = checked(count + TrainableScalarCount(tensor));
+                }
+            }
+        }
+
+        var buffers = GetRegisteredBuffers();
+        if (buffers is not null)
+        {
+            for (int i = 0; i < buffers.Count; i++)
+            {
+                var tensor = buffers[i].Tensor;
+                if (tensor is not null) count = checked(count + TrainableScalarCount(tensor));
+            }
+        }
+        return true;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        if (!TryGetDeclaredParameterCount(out long count, out bool materialized))
+        {
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+            };
+        }
+
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable,
+                count == 0
+                    ? ParameterReadiness.ParameterFree
+                    : materialized
+                        ? ParameterReadiness.Materialized
+                        : ParameterReadiness.ShapeResolvedUnmaterialized,
+                count)
+        };
+    }
+
+    private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
+    {
+        if (!TryGetOwnDeclaredParameterCount(out count, out materialized)) return false;
+
+        var subs = GetSubLayers();
+        if (subs is null) return true;
+        for (int i = 0; i < subs.Count; i++)
+        {
+            var child = subs[i];
+            if (child is null || IsSubLayerParameterFrozen(child)) continue;
+
+            if (child is LayerBase<T> childBase)
+            {
+                if (!childBase.TryGetDeclaredParameterCount(
+                        out long childCount, out bool childMaterialized))
+                    return false;
+                count = checked(count + childCount);
+                materialized &= childMaterialized;
+                continue;
+            }
+
+            long concreteCount = child.ParameterCount;
+            if (concreteCount < 0) return false;
+            count = checked(count + concreteCount);
+            materialized &= concreteCount == 0 || child.IsShapeResolved;
+        }
+        return true;
+    }
 
     /// <summary>
     /// Keeps parameters that were supplied from outside before this layer initialized, instead of
