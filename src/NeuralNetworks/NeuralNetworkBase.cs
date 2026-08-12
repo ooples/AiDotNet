@@ -12285,9 +12285,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int topLevelCount = Math.Min(_layers.Count, copyBase._layers.Count);
         for (int i = 0; i < topLevelCount; i++)
         {
+            // ANY unresolved lazy top-level layer, not only TransformerDecoderLayer. The condition
+            // that rejects COW is a structural mismatch between the source walk and the fresh
+            // clone's, and every lazy composite produces one -- the decoder was simply the first
+            // found. Naming that one type left every other lazy model taking the eager fallback,
+            // which is the "giant flat GetParameters concatenation" the comment above describes:
+            // 46 of the clone-test failures are 120s timeouts, not wrong answers, and they are
+            // already at float precision so there is no cheaper remedy left than making COW work.
+            //
+            // Safe to widen: resolution is attempted inside a try that swallows ArgumentException,
+            // and the structural guards further down still reject anything that does not line up,
+            // so a layer this cannot resolve simply falls back exactly as it does today.
             if (_layers[i] is not LayerBase<T> srcTop
                 || copyBase._layers[i] is not LayerBase<T> dstTop
-                || dstTop is not TransformerDecoderLayer<T>
                 || dstTop.IsShapeResolved
                 || srcTop.ParameterCount <= 0)
                 continue;
