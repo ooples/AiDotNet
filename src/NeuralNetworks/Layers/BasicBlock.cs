@@ -290,6 +290,11 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
 
         // Replay parameters that arrived via Deserialize → SetParameters
         // before any sub-layer shape was resolved.
+        // Nothing assigned this field, so the replay below never ran. Take the restore the base
+        // held when it arrived before the shape resolved; the children exist by now, so the
+        // per-child split below is possible.
+        _pendingParameters ??= ConsumePendingRestoredParameters();
+
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;

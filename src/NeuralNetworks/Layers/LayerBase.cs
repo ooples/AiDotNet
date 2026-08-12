@@ -1323,6 +1323,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     private Vector<T>? _restoredBeforeShapeResolved;
 
+    /// <summary>
+    /// Takes the values restored before this layer knew its shape, clearing them.
+    /// </summary>
+    /// <returns>The held vector, or <c>null</c> when nothing was held.</returns>
+    /// <remarks>
+    /// For a composite that knows how to split the vector across its children. The base can only
+    /// replay it wholesale through <see cref="SetParameters"/>, which needs the composite's own
+    /// count to already agree; a layer that builds its children inside
+    /// <see cref="OnFirstForward"/> can do better by slicing per child right after it builds them.
+    /// TransitionLayer already contains exactly that code, keyed on a field nothing ever assigned.
+    /// </remarks>
+    protected Vector<T>? ConsumePendingRestoredParameters()
+    {
+        var pending = _restoredBeforeShapeResolved;
+        _restoredBeforeShapeResolved = null;
+        return pending;
+    }
+
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
         if (!_firstForwardRan && !IsShapeResolved)

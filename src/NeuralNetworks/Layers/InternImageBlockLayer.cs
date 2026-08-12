@@ -80,6 +80,11 @@ public sealed partial class InternImageBlockLayer<T> : LayerBase<T>, IShapeContr
         if (!IsShapeResolved)
             ResolveShapes([_channels, x.Shape[2], x.Shape[3]], [_channels, x.Shape[2], x.Shape[3]]);
 
+        // Nothing assigned this field, so the replay below never ran. Take the restore the base
+        // held when it arrived before the shape resolved; the children exist by now, so the
+        // per-child split below is possible.
+        _pendingParameters ??= ConsumePendingRestoredParameters();
+
         if (_pendingParameters is not null)
         {
             // Lazy convolutions need the runtime spatial/channel shape before their

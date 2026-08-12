@@ -264,6 +264,11 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         // Replay parameters that arrived before _bn / _conv shapes were
         // resolved. With both now allocated, slicing matches the
         // GetParameters() ordering above.
+        // Nothing ever assigned _pendingParameters, so this block has always been dead. The base
+        // now holds a restore that arrives before the shape resolves; take it here, where the
+        // children have just been built and the per-child split below is possible.
+        _pendingParameters ??= ConsumePendingRestoredParameters();
+
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;

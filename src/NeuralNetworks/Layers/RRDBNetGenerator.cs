@@ -410,6 +410,11 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
         // before any sub-layer's shape was resolved. With every sub-
         // layer now reporting a real GetParameters().Length, the
         // SubVector cuts in ApplyParameters land on the right data.
+        // Nothing assigned this field, so the replay below never ran. Take the restore the base
+        // held when it arrived before the shape resolved; the children exist by now, so the
+        // per-child split below is possible.
+        _pendingParameters ??= ConsumePendingRestoredParameters();
+
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;
