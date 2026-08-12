@@ -321,6 +321,13 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         if (_accumulatedSquaredGradients == null || _accumulatedSquaredGradients.Length != parameters.Length)
         {
             _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
@@ -342,8 +349,8 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         //   accSqGrad += g*g ;  out = p - (lr / (sqrt(accSqGrad) + eps)) * g
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
 
-        var pSpan = parameters.AsWritableSpan();
-        var gSpan = gradient.AsWritableSpan();
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
         var accSpan = _accumulatedSquaredGradients.AsWritableSpan();
         var outSpan = updatedParams.AsWritableSpan();
         T learningRate = CurrentLearningRate;

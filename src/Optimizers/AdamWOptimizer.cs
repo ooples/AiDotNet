@@ -377,7 +377,14 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <returns>The updated parameter vector.</returns>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _v == null || _m.Length != parameters.Length)
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);
@@ -388,6 +395,10 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             _previousM = new Vector<T>(parameters.Length);
             _previousV = new Vector<T>(parameters.Length);
             _t = 0;
+        }
+        if (_options.UseAMSGrad && (_vMax is null || _vMax.Length != parameters.Length))
+        {
+            _vMax = new Vector<T>(parameters.Length);
         }
 
         // Save pre-update state for accurate reverse updates. Allocated once, then copied into IN
@@ -405,8 +416,8 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             _previousV = new Vector<T>(_v.Length, skipZeroInit: true);
         }
 
-        _m.AsWritableSpan().CopyTo(_previousM.AsWritableSpan());
-        _v.AsWritableSpan().CopyTo(_previousV.AsWritableSpan());
+        _m.AsSpan().CopyTo(_previousM.AsWritableSpan());
+        _v.AsSpan().CopyTo(_previousV.AsWritableSpan());
         _previousT = _t;
 
         _t++;
@@ -436,8 +447,8 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // The decay term uses the ORIGINAL p, not the post-Adam value, exactly as before.
         var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
 
-        var pSpan = parameters.AsWritableSpan();
-        var gSpan = gradient.AsWritableSpan();
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
         var mSpan = _m.AsWritableSpan();
         var vSpan = _v.AsWritableSpan();
         var outSpan = updatedParameters.AsWritableSpan();
@@ -463,8 +474,9 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             if (amsGrad)
             {
-                if (NumOps.GreaterThan(vHat, vMaxSpan[i])) vMaxSpan[i] = vHat;
-                vHat = vMaxSpan[i];
+                // Preserve Engine.Max(vMax, vHat) operand order, including its NaN behavior.
+                vHat = NumOps.GreaterThan(vMaxSpan[i], vHat) ? vMaxSpan[i] : vHat;
+                vMaxSpan[i] = vHat;
             }
 
             T adamUpdate = NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon));

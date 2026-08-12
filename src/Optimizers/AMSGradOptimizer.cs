@@ -244,7 +244,17 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _v == null || _vHat == null || _m.Length != parameters.Length)
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        if (_m == null || _v == null || _vHat == null
+            || _m.Length != parameters.Length
+            || _v.Length != parameters.Length
+            || _vHat.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);
@@ -262,32 +272,39 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T biasCorrectionFactor = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
 
-        // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
-        var beta1TimesM = (Vector<T>)Engine.Multiply(_m, beta1);
-        var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        _m = (Vector<T>)Engine.Add(beta1TimesM, oneMinusBeta1TimesGrad);
+        // Update all three state vectors in place and write the result directly. This retains
+        // AMSGrad's raw-second-moment maximum while eliminating the former vector-op chain.
+        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
+        var mSpan = _m.AsWritableSpan();
+        var vSpan = _v.AsWritableSpan();
+        var vHatSpan = _vHat.AsWritableSpan();
+        var outSpan = updatedParams.AsWritableSpan();
+        T learningRate = CurrentLearningRate;
 
-        // Update biased second raw moment estimate: v = beta2 * v + (1 - beta2) * gradient^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var beta2TimesV = (Vector<T>)Engine.Multiply(_v, beta2);
-        var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
-        _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            T g = gSpan[i];
 
-        // Update maximum of second raw moment estimate: vHat = max(vHat, v)
-        _vHat = (Vector<T>)Engine.Max(_vHat, _v);
+            T m = NumOps.Add(
+                NumOps.Multiply(mSpan[i], beta1),
+                NumOps.Multiply(g, oneMinusBeta1));
+            mSpan[i] = m;
 
-        // Compute bias-corrected first moment estimate: mHat = m / (1 - beta1^t)
-        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrectionFactor);
+            T v = NumOps.Add(
+                NumOps.Multiply(vSpan[i], beta2),
+                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
+            vSpan[i] = v;
 
-        // Compute update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
-        var sqrtVHat = (Vector<T>)Engine.Sqrt(_vHat);
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length));
-        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilonVec);
-        var lrTimesMHat = (Vector<T>)Engine.Multiply(mHat, CurrentLearningRate);
-        var update = (Vector<T>)Engine.Divide(lrTimesMHat, denominator);
+            T vHat = NumOps.GreaterThan(vHatSpan[i], v) ? vHatSpan[i] : v;
+            vHatSpan[i] = vHat;
 
-        // Update parameters: params = params - update
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+            T mHat = NumOps.Divide(m, biasCorrectionFactor);
+            T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
+            T update = NumOps.Divide(NumOps.Multiply(mHat, learningRate), denominator);
+            outSpan[i] = NumOps.Subtract(pSpan[i], update);
+        }
 
         return updatedParams;
     }

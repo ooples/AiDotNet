@@ -305,6 +305,13 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
@@ -312,7 +319,6 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             _t = 0;
         }
 
-        // Save previous state BEFORE updating for ReverseUpdate
         // Save previous state BEFORE updating for ReverseUpdate. Buffers are allocated once and
         // copied into IN PLACE: Clone() allocated two FULL-LENGTH vectors every step (measured as
         // 32 MB/step of AdamW's cost at 2,000,000 parameters before the same fix there).
@@ -324,8 +330,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         {
             _previousV = new Vector<T>(_v.Length, skipZeroInit: true);
         }
-        _m.AsWritableSpan().CopyTo(_previousM.AsWritableSpan());
-        _v.AsWritableSpan().CopyTo(_previousV.AsWritableSpan());
+        _m.AsSpan().CopyTo(_previousM.AsWritableSpan());
+        _v.AsSpan().CopyTo(_previousV.AsWritableSpan());
         _previousT = _t;
 
         _t++;
@@ -355,8 +361,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         //   mHatNesterov = b1*(m/bcM) + nesterovFactor*g
         //   out = p - (mHatNesterov*lr) / (sqrt(v/bcV) + eps)
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsWritableSpan();
-        var gSpan = gradient.AsWritableSpan();
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
         var mSpan = _m.AsWritableSpan();
         var vSpan = _v.AsWritableSpan();
         var outSpan = updatedParams.AsWritableSpan();

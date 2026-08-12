@@ -332,17 +332,19 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null || _accumulatedSquaredGradients.Length != parameters.Length)
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        if (_accumulatedSquaredGradients == null || _accumulatedSquaredUpdates == null
+            || _accumulatedSquaredGradients.Length != parameters.Length
+            || _accumulatedSquaredUpdates.Length != parameters.Length)
         {
             _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
             _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
-            _previousAccumulatedSquaredGradients = new Vector<T>(parameters.Length);
-            _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
-        }
-
-        // Save pre-update state for accurate reverse updates (element-wise copy required for reverse)
-        if (_previousAccumulatedSquaredGradients == null || _previousAccumulatedSquaredUpdates == null)
-        {
             _previousAccumulatedSquaredGradients = new Vector<T>(parameters.Length);
             _previousAccumulatedSquaredUpdates = new Vector<T>(parameters.Length);
         }
@@ -363,9 +365,9 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _previousAccumulatedSquaredUpdates =
                 new Vector<T>(_accumulatedSquaredUpdates.Length, skipZeroInit: true);
         }
-        _accumulatedSquaredGradients.AsWritableSpan()
+        _accumulatedSquaredGradients.AsSpan()
             .CopyTo(_previousAccumulatedSquaredGradients.AsWritableSpan());
-        _accumulatedSquaredUpdates.AsWritableSpan()
+        _accumulatedSquaredUpdates.AsSpan()
             .CopyTo(_previousAccumulatedSquaredUpdates.AsWritableSpan());
 
         // === Vectorized AdaDelta Update using IEngine (Phase B: US-GPU-015) ===
@@ -387,8 +389,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         //   accSqUpd  = rho*accSqUpd + (1-rho)*upd*upd        [UNSCALED upd]
         //   out       = p - upd*lr
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsWritableSpan();
-        var gSpan = gradient.AsWritableSpan();
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
         var accGSpan = _accumulatedSquaredGradients.AsWritableSpan();
         var accUSpan = _accumulatedSquaredUpdates.AsWritableSpan();
         var outSpan = updatedParams.AsWritableSpan();
