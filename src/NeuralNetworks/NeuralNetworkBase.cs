@@ -3818,6 +3818,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// below would silently mis-size a post-concat layer against its
     /// non-concatenated predecessor and crash the first real forward.
     /// </remarks>
+    /// <summary>
+    /// Same-assembly entry point letting a COMPOSITE model resolve a sub-network's lazy shapes
+    /// through that sub-network's OWN architecture. A GAN holds two chains fed by different
+    /// things — the generator by a latent vector, the discriminator by an image — so it cannot
+    /// resolve either from its own <see cref="Architecture"/>, which mirrors only one of them.
+    /// </summary>
+    internal void ResolveLazyLayerShapesFromOwnArchitecture() => ResolveLazyLayerShapes();
+
     protected virtual void ResolveLazyLayerShapes()
     {
         if (_layerShapesResolved) return;
