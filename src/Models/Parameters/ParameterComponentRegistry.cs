@@ -208,10 +208,58 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     {
         get
         {
-            var layout = ParameterLayout;
-            if (layout.ParameterCount.HasValue) return layout.ParameterCount.Value;
-            throw new ParameterLayoutNotReadyException("count", layout);
+            if (TryComputeCount(out long total)) return total;
+            throw new ParameterLayoutNotReadyException("count", ParameterLayout);
         }
+    }
+
+    /// <summary>
+    /// Sums the same slots <see cref="ParameterLayout"/> describes, without materializing them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Applies the identical deferred rule the snapshot applies -- a slot defers the whole model if
+    /// its readiness says <see cref="ParameterReadiness.ShapeDeferred"/> OR it carries no count --
+    /// so this and the snapshot cannot disagree about either the number or whether there is one.
+    /// </para>
+    /// <para>
+    /// Exists because building the snapshot allocates a descriptor per slot, and the surfaces this
+    /// registry replaced were a plain sum that callers read once per training step. The full
+    /// snapshot is still built on the failure path, where the caller wants it for diagnostics.
+    /// </para>
+    /// </remarks>
+    private bool TryComputeCount(out long total)
+    {
+        total = 0;
+        var ordered = OrderedEntries();
+
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            var source = ordered[i].Source;
+            if (source is null) return false;
+
+            if (source is IParameterLayoutSource layoutSource)
+            {
+                var local = layoutSource.GetParameterLayout();
+                for (int j = 0; j < local.Count; j++)
+                {
+                    var slot = local[j];
+                    if (slot.Readiness == ParameterReadiness.ShapeDeferred
+                        || !slot.ParameterCount.HasValue)
+                    {
+                        return false;
+                    }
+
+                    total = checked(total + slot.ParameterCount.Value);
+                }
+            }
+            else
+            {
+                total = checked(total + source.ParameterCount);
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Concatenates the same stable-ID ordered entries described by the manifest.</summary>
@@ -620,6 +668,11 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     private List<Entry> OrderedEntries()
     {
+        // Cached: the order can only change when Register is called, and every read of a count, a
+        // vector or a layout went through here. Re-copying and re-sorting the entry list on each of
+        // those was pure waste in a training loop.
+        if (_orderedCache is not null) return _orderedCache;
+
         var ordered = new List<Entry>(_entries);
         ordered.Sort((left, right) =>
         {
