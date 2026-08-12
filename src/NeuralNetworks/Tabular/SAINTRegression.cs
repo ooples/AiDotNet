@@ -1,4 +1,6 @@
 using AiDotNet.Attributes;
+using System.Collections.Generic;
+using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
@@ -62,7 +64,14 @@ public class SAINTRegression<T> : SAINTBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
+    /// <summary>The final projection this variant adds to the shared backbone.</summary>
+    /// <remarks>
+    /// Was an override that added the head to the COUNT only. The base had no read or
+    /// restore path at all, so the head was counted and never checkpointed; declaring it
+    /// here puts it in all three surfaces at once.
+    /// </remarks>
+    protected override IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
+        => new IParameterSource<T>[] { _regressionHead };
 
     /// <summary>
     /// Initializes a new instance of the SAINTRegression class.

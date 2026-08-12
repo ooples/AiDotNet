@@ -1,4 +1,9 @@
 using AiDotNet.ActivationFunctions;
+using System;
+using System.Collections.Generic;
+using AiDotNet.Models.Parameters;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -27,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class MambularBase<T>
+public abstract class MambularBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -56,30 +61,78 @@ public abstract class MambularBase<T>
     private Tensor<T>? _embeddedFeaturesCache;
     private Tensor<T>? _mambaOutputCache;
 
+    /// <summary>Built once on first parameter access, then reused.</summary>
+    private ParameterComponentRegistry<T>? _parameterRegistry;
+
     /// <summary>
-    /// Gets the total number of trainable parameters.
+    /// Extra trainable layers a subclass contributes, folded after the shared backbone.
     /// </summary>
-    public virtual long ParameterCount
+    /// <remarks>
+    /// The regression and classification variants share this whole backbone and differ only by a
+    /// final projection. Each used to override <see cref="ParameterCount"/> purely to append that
+    /// one layer -- and because this base had no GetParameters or SetParameters at all, the head was
+    /// COUNTED and never read, never restored and never checkpointed. The count grew; the model that
+    /// could be saved did not. Declaring the head here means the subclass states WHAT it adds and
+    /// the registry decides where it goes, so count, vector and restore cannot disagree about it.
+    /// </remarks>
+    protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+
+    /// <summary>
+    /// The single ordered traversal of this model's parameter-bearing components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Count, read and restore all derive from THIS, rather than each restating the component list.
+    /// Three parallel walks are how a count and a vector come to describe different models: they
+    /// agree until someone adds a component to two of them, and nothing reports the disagreement
+    /// because the lengths still look plausible. One enumeration makes that unrepresentable.
+    /// </para>
+    /// <para>
+    /// The stable IDs carry a numeric prefix because the registry orders by identity rather than by
+    /// the order Register happened to be called -- so the prefix, not the call order, is what pins
+    /// serialization order, and it survives a component being added in the middle later.
+    /// </para>
+    /// </remarks>
+    private ParameterComponentRegistry<T> ParameterRegistry
     {
         get
         {
-            int count = _numericalEmbeddings.Length;
+            if (_parameterRegistry is not null) return _parameterRegistry;
 
-            if (_categoricalEmbeddings != null)
+            var registry = new ParameterComponentRegistry<T>();
+            registry.Register("0000/numerical",
+                new TensorFieldParameterSource<T>(() => _numericalEmbeddings));
+            registry.Register("0001/categorical",
+                new TensorCollectionParameterSource<T>(() => _categoricalEmbeddings));
+
+            for (int i = 0; i < _mambaBlocks.Count; i++)
+                registry.Register($"0002/{i:D8}", _mambaBlocks[i]);
+
+            for (int i = 0; i < _mlpLayers.Count; i++)
+                registry.Register($"0003/{i:D8}", _mlpLayers[i]);
+            int extraIndex = 0;
+            foreach (var extra in GetExtraTrainableLayers())
             {
-                foreach (var emb in _categoricalEmbeddings)
-                    count += emb.Length;
+                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
             }
 
-            foreach (var block in _mambaBlocks)
-                count += (int)block.ParameterCount;
-
-            foreach (var layer in _mlpLayers)
-                count += (int)layer.ParameterCount;
-
-            return count;
+            _parameterRegistry = registry;
+            return registry;
         }
     }
+
+    /// <inheritdoc cref="GetParameters"/>
+    public virtual long ParameterCount => ParameterRegistry.ParameterCount;
+
+    /// <summary>
+    /// Reads every parameter in traversal order. <see cref="SetParameters"/> reads it back in the
+    /// same order, and <see cref="ParameterCount"/> is the length of what this returns.
+    /// </summary>
+    public virtual Vector<T> GetParameters() => ParameterRegistry.GetParameters();
+
+    /// <summary>Restores every parameter, in the order <see cref="GetParameters"/> emitted them.</summary>
+    public virtual void SetParameters(Vector<T> parameters) => ParameterRegistry.SetParameters(parameters);
 
     /// <summary>
     /// Initializes a new instance of the MambularBase class.
@@ -323,7 +376,7 @@ public abstract class MambularBase<T>
     /// <summary>
     /// Simplified Mamba block for tabular data.
     /// </summary>
-    private class MambaBlock
+    private class MambaBlock : IParameterSource<T>
     {
         private readonly int _modelDim;
         private readonly int _stateDim;
@@ -345,9 +398,70 @@ public abstract class MambularBase<T>
         // Delta (discretization)
         private readonly Tensor<T> _deltaProj;
 
-        public long ParameterCount =>
-            _A.Length + _B.Length + _C.Length + _D.Length +
-            _inProj.Length + _outProj.Length + _convWeight.Length + _deltaProj.Length;
+        /// <summary>
+        /// The block's tensors in serialization order. Count, read and restore all walk THIS, so a
+        /// tensor added later joins all three at once instead of only the sum.
+        /// </summary>
+        private IEnumerable<Tensor<T>> Tensors()
+        {
+            yield return _A;
+            yield return _B;
+            yield return _C;
+            yield return _D;
+            yield return _inProj;
+            yield return _outProj;
+            yield return _convWeight;
+            yield return _deltaProj;
+        }
+
+        /// <inheritdoc />
+        public long ParameterCount
+        {
+            get
+            {
+                long count = 0;
+                foreach (var tensor in Tensors()) count += tensor.Length;
+                return count;
+            }
+        }
+
+        /// <inheritdoc />
+        public Vector<T> GetParameters()
+        {
+            var result = new Vector<T>(checked((int)ParameterCount));
+            int offset = 0;
+
+            foreach (var tensor in Tensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+            }
+
+            return result;
+        }
+
+        /// <summary>Writes THROUGH the tensors, so the block computes with what was restored.</summary>
+        /// <remarks>
+        /// Rebinding the fields instead would leave any view or gradient buffer sharing the old
+        /// buffer, which is the stale-weights defect: the restore reports success and the block goes
+        /// on computing with its pre-restore values.
+        /// </remarks>
+        public void SetParameters(Vector<T> parameters)
+        {
+            if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+            long expected = ParameterCount;
+            if (parameters.Length != expected)
+            {
+                throw new ArgumentException(
+                    $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+            }
+
+            int offset = 0;
+            foreach (var tensor in Tensors())
+            {
+                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+            }
+        }
 
         public MambaBlock(int modelDim, int stateDim, int innerDim, int convKernelSize, Random random)
         {

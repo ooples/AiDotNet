@@ -1,4 +1,8 @@
 using AiDotNet.ActivationFunctions;
+using System.Collections.Generic;
+using AiDotNet.Models.Parameters;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -30,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class NODEBase<T>
+public abstract class NODEBase<T> : IParameterSource<T>
 {
     protected readonly NODEOptions<T> Options;
     protected readonly int NumFeatures;
@@ -57,30 +61,76 @@ public abstract class NODEBase<T>
     /// </summary>
     public int TreeOutputDimension => Options.TreeOutputDimension;
 
+    /// <summary>Built once on first parameter access, then reused.</summary>
+    private ParameterComponentRegistry<T>? _parameterRegistry;
+
     /// <summary>
-    /// Gets the total number of trainable parameters.
+    /// Extra trainable layers a subclass contributes, folded after the shared backbone.
     /// </summary>
-    public virtual long ParameterCount
+    /// <remarks>
+    /// The regression and classification variants share this whole backbone and differ only by a
+    /// final projection. Each used to override <see cref="ParameterCount"/> purely to append that
+    /// one layer -- and because this base had no GetParameters or SetParameters at all, the head was
+    /// COUNTED and never read, never restored and never checkpointed. The count grew; the model that
+    /// could be saved did not. Declaring the head here means the subclass states WHAT it adds and
+    /// the registry decides where it goes, so count, vector and restore cannot disagree about it.
+    /// </remarks>
+    protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+
+    /// <summary>
+    /// The single ordered traversal of this model's parameter-bearing components.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Count, read and restore all derive from THIS, rather than each restating the component list.
+    /// Three parallel walks are how a count and a vector come to describe different models: they
+    /// agree until someone adds a component to two of them, and nothing reports the disagreement
+    /// because the lengths still look plausible. One enumeration makes that unrepresentable.
+    /// </para>
+    /// <para>
+    /// The stable IDs carry a numeric prefix because the registry orders by identity rather than by
+    /// the order Register happened to be called -- so the prefix, not the call order, is what pins
+    /// serialization order, and it survives a component being added in the middle later.
+    /// </para>
+    /// </remarks>
+    private ParameterComponentRegistry<T> ParameterRegistry
     {
         get
         {
-            int count = 0;
+            if (_parameterRegistry is not null) return _parameterRegistry;
 
-            if (_featurePreprocessing != null)
-                count += (int)_featurePreprocessing.ParameterCount;
+            var registry = new ParameterComponentRegistry<T>();
+            registry.Register("0000/preprocessing", _featurePreprocessing);
 
-            foreach (var weights in _featureSelectionWeights)
-                count += weights.Length;
+            registry.Register("0001/featureSelection",
+                new TensorCollectionParameterSource<T>(() => _featureSelectionWeights));
+            registry.Register("0002/thresholds",
+                new TensorCollectionParameterSource<T>(() => _splitThresholds));
+            registry.Register("0003/leaves",
+                new TensorCollectionParameterSource<T>(() => _leafValues));
+            int extraIndex = 0;
+            foreach (var extra in GetExtraTrainableLayers())
+            {
+                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+            }
 
-            foreach (var thresholds in _splitThresholds)
-                count += thresholds.Length;
-
-            foreach (var leaves in _leafValues)
-                count += leaves.Length;
-
-            return count;
+            _parameterRegistry = registry;
+            return registry;
         }
     }
+
+    /// <inheritdoc cref="GetParameters"/>
+    public virtual long ParameterCount => ParameterRegistry.ParameterCount;
+
+    /// <summary>
+    /// Reads every parameter in traversal order. <see cref="SetParameters"/> reads it back in the
+    /// same order, and <see cref="ParameterCount"/> is the length of what this returns.
+    /// </summary>
+    public virtual Vector<T> GetParameters() => ParameterRegistry.GetParameters();
+
+    /// <summary>Restores every parameter, in the order <see cref="GetParameters"/> emitted them.</summary>
+    public virtual void SetParameters(Vector<T> parameters) => ParameterRegistry.SetParameters(parameters);
 
     /// <summary>
     /// Initializes a new instance of the NODEBase class.

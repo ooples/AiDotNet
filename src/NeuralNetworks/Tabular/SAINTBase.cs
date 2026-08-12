@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class SAINTBase<T>
+public abstract class SAINTBase<T> : IParameterSource<T>
 {
     protected readonly SAINTOptions<T> Options;
     protected readonly int NumNumericalFeatures;
