@@ -3989,10 +3989,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // to tell "wrong data" from "not allocated yet". NeuralNetworkBase already writes a layout
         // for exactly this reason; the standalone layer round trip did not, so a layer saved while
         // materialized could not be loaded into a fresh one.
+        // VALUES READ FIRST, LAYOUT WRITTEN SECOND. WriteParameterLayout records what EXISTS and
+        // deliberately does not materialize; GetParameters is a lazy read that can bring slots into
+        // being. Describing the layer before that read produced a layout for a different set than
+        // the values that followed -- a GRU saved 96 values under a layout describing 192, and the
+        // restore allocated twice what the checkpoint contained.
+        var parameters = GetParameters();
+
         writer.Write(SerializedLayoutMarker);
         WriteParameterLayout(writer);
 
-        var parameters = GetParameters();
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -4710,6 +4716,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // of silently.
         bool deferred = hasRegistry && ParameterCount == 0
                      && (subsForShape is null || subsForShape.Count == 0);
+
+        // A COMPOSITE WHOSE CHILDREN HAVE NOT RESOLVED. Its own count is the sum of what its
+        // children currently declare, so while they are lazy it is short -- BottleneckBlock reports
+        // 344 against a 488-value checkpoint purely because six children have not sized themselves.
+        // Holding is right where parking is not: the values must NOT go into this layer's own
+        // Parameters, because they belong to the children, so the vector is kept and replayed once
+        // the composite's first forward has materialized them.
+        if (hasRegistry && !deferred && parameters.Length != ParameterCount
+            && subsForShape is { Count: > 0 } && !IsShapeResolved && !_firstForwardRan)
+        {
+            _restoredBeforeShapeResolved = parameters;
+            return;
+        }
 
         if (hasRegistry && !deferred && parameters.Length != ParameterCount)
         {
