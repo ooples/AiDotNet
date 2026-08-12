@@ -23975,7 +23975,16 @@ public static class LayerHelper<T>
 
         // Eq 2: Z = LSTM(EMB(H)). Embedding shares the ASR vocabulary space; LSTM contextualises each
         // hotword's character sequence into one representation per hotword.
-        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        //
+        // Width is vocabSize + 1, not vocabSize: SeACo pads every sampled hotword out to the fixed
+        // length with a mask token, and SeACoOptions.ResolveHotwordMaskTokenId() resolves an unset
+        // HotwordMaskTokenId to VocabSize itself -- the appended '#' no-bias slot the paper adds past
+        // the ASR vocabulary, which MergeBiasedProbabilities already sizes as vocab + 1. Sized at
+        // vocabSize the highest legal id is vocabSize - 1, so that mask token was out of range by
+        // exactly one and the padded position threw "requires token indices, but element 1 is 4,
+        // which is not in [0, 4)". This affected every configuration that leaves the mask id unset,
+        // not just small fixtures; the id is simply one past the vocabulary at any size.
+        yield return new EmbeddingLayer<T>(vocabSize + 1, encoderDim);
         yield return new LSTMLayer<T>(encoderDim);
 
         // Eq 3: two attentions over Z — one for the decoder hidden state D, one for the CIF output E.
