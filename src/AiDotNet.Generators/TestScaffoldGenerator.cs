@@ -10981,6 +10981,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // These families are explicitly eligible for float scaffolds. Keep this list and the
             // compiled-output assertions in GeneratedFloatScaffoldSmokeTests in sync.
             "AnomalyDetectorTestBase" or
+            "CausalModelTestBase" or
             "ReinforcementLearningTestBase" or
             "RiskModelTestBase" or
             "VideoDenoisingTestBase" or
