@@ -1330,22 +1330,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             OnFirstForward(input);
             _firstForwardRan = true;
             RegisterStreamingWeightsWithPool();
-
-            // Replay AFTER initialization, which is what just overwrote them. Only when the
-            // materialized surface is the size the restore was validated against -- a different
-            // size means the layer resolved to something the checkpoint did not describe, and
-            // quietly pouring the old values into it would be worse than leaving it initialized.
-            var pending = _restoredBeforeShapeResolved;
-            if (pending is not null)
-            {
-                _restoredBeforeShapeResolved = null;
-                if (pending.Length == ParameterCount)
-                {
-                    SetParameters(pending);
-                }
-            }
         }
         EnsureInitialized();
+
+        // AFTER EnsureInitialized, not before it. OnFirstForward resolves the shape but
+        // EnsureInitialized is what allocates and fills the weights -- replaying between the two
+        // wrote the restored values and then had them overwritten, which looked exactly like the
+        // replay never happening. Only when the materialized surface is the size the restore was
+        // validated against: a different size means the layer resolved to something the checkpoint
+        // did not describe, and pouring the old values in would be worse than leaving it
+        // initialized.
+        var pending = _restoredBeforeShapeResolved;
+        if (pending is not null)
+        {
+            _restoredBeforeShapeResolved = null;
+            if (pending.Length == ParameterCount)
+            {
+                SetParameters(pending);
+            }
+        }
     }
 
     /// <summary>
