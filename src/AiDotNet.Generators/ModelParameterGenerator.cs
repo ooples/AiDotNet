@@ -591,11 +591,12 @@ public class ModelParameterGenerator : IIncrementalGenerator
     {
         // Preserve the fallback before walking the containing-type chain. Keeping the
         // dereference after that nullable traversal confuses null-flow analysis and is
-        // unnecessary: the fallback is always the first parameter declared by the
-        // original model type, never one declared by a containing type.
+        // unnecessary: both fallbacks belong to the original model type, never to a
+        // containing type visited by the traversal.
         string? firstDeclaredTypeParameter = type.TypeParameters.Length > 0
             ? type.TypeParameters[0].Name
             : null;
+        INamedTypeSymbol? firstBaseType = type.BaseType;
 
         for (var c = type; c is not null; c = c.ContainingType)
         {
@@ -612,7 +613,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
         // type is still perfectly well known: it is the base's first type ARGUMENT. Reading it there
         // means a model is automated whether it is generic over its scalar or fixed to one, which is
         // a property future models should not have to know about.
-        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        for (var b = firstBaseType; b is not null; b = b.BaseType)
         {
             var open = b.OriginalDefinition.ToDisplayString();
             if ((open.StartsWith("AiDotNet.Models.ModelBase<", System.StringComparison.Ordinal)
