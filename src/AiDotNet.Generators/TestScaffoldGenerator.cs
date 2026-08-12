@@ -646,6 +646,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // still sit inside Adam's initial overshoot. Measure after warm-up rather than hiding
             // the regression behind a relaxed loss tolerance.
             "DocGCN",
+            // DiffCut's measured FP32 trajectory is 1.1668 untrained, 1.2762 after one
+            // step, and 1.2517 after two: the second step is already descending, but the
+            // 1-vs-2 fixture stops inside AdamW's initial overshoot. Observe the same
+            // strict baseline comparison after the existing 15-step memorization budget.
+            "DiffCutSegmentation",
             "SALMONN",
             "SeACo",
         };
@@ -4768,6 +4773,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DLinearOptions<double> {{ " +
                     "LookbackWindow = 24, ForecastHorizon = 1, MovingAverageKernel = 3, " +
                     "LearningRate = 0.0001, Epochs = 100, BatchSize = 8 })";
+            }
+            else if (model.ClassName == "DGCNN" && model.TypeParameterCount == 1)
+            {
+                // Keep the complete dynamic-graph -> multi-scale concat -> global-pool -> classifier
+                // topology, but make the generated conformance fixture bounded. With N = k + 1 every
+                // point's neighbour set is all other points, so finite differences do not cross the
+                // discrete TopK boundary while perturbing a weight. The production defaults remain
+                // ModelNet40-scale (k=20, 64/64/128/256 channels).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DGCNNOptions {{ " +
+                    "NumClasses = 4, InputFeatureDim = 3, KnnK = 7, " +
+                    "EdgeConvChannels = new[] { 8, 8 }, ClassifierChannels = new[] { 8 }, " +
+                    "UseDropout = false, DropoutRate = 0.0, LearningRate = 0.001 })";
             }
             else if (model.ClassName == "DistilBERTNER" && model.TypeParameterCount == 1)
             {
@@ -12036,8 +12053,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // branch emits [3, spatial, spatial], tripping that guard. Feed a raw point cloud of N
             // points; N must exceed the dynamic k-NN neighbour count (DGCNNOptions.KnnK default 20).
             // Output is the class logits (DGCNNOptions.NumClasses default 40), independent of N.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 128, 3 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 40 };");
+            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 3 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
             // DGCNN is a multi-class classifier trained with CrossEntropyWithLogitsLoss (fused
             // LogSoftmax + NLL). The base CreateRandomTargetTensor yields dense uniform [0,1)
             // floats — an ill-posed target for cross-entropy: the softmax-minus-target gradient
@@ -14322,6 +14339,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
+        }
+
+        if (model.ClassName == "DCCRN")
+        {
+            // DCCRN's public Train method preprocesses raw waveforms, but its differentiable
+            // ForwardForTraining contract deliberately begins at the complex STFT so the tape
+            // stays on the learnable enhancement graph. Gradcheck must exercise that same graph,
+            // not feed the public waveform shape directly into a rank-4 complex convolution.
+            string scalarType = useFloat ? "float" : "double";
+            sb.AppendLine($"    protected override (AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> Input, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> Target) CreateGradientCheckExample(System.Random rng)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        int[] stftShape = new[] { 1, 2, 33, 4 };");
+            sb.AppendLine("        return (CreateRandomTensor(stftShape, rng), CreateRandomTensor(stftShape, rng));");
+            sb.AppendLine("    }");
+        }
+
+        if (model.ClassName == "EoMT")
+        {
+            // EoMT is a mask transformer with an explicit spatial position signal. A constant image
+            // removes texture but not position, so requiring one near-uniform decoded class is not an
+            // architectural invariant. The base test still runs two complete forwards and requires
+            // every value to be finite and exactly reproducible.
+            sb.AppendLine("    protected override bool UniformInputShouldProduceUniformMask => false;");
         }
 
         // MoreData_ShouldNotDegrade trains two same-weight clones on the SAME seeded random task
@@ -17663,7 +17703,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
                 $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
-                "MaxIterations = 25, Seed = 42 }))";
+                // InnerIterations is a public option shared by the continuous causal family; DYNOTEARS
+                // previously ignored it and always ran 200 inner steps. Fifty retains real augmented-
+                // Lagrangian optimization while bounding the generated fixture under shard contention.
+                "MaxIterations = 25, InnerIterations = 50, Seed = 42 }))";
         }
 
         // DECI's variational posterior needs a longer, higher-signal warm-up than

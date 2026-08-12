@@ -1175,6 +1175,27 @@ public partial class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoM
     }
 
     /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        // Layers is structural storage for four separate towers, not a sequential network. The
+        // base implementation fed continuous image pixels through the text-token embedding and
+        // reported an index-domain error instead of any activations. Capture the real image path
+        // used by PredictCore and expose both architecturally meaningful stages.
+        var visionFeatures = ExtractVisionFeatures(input);
+        var perceiverFeatures = _useNativeMode
+            ? ExtractPerceiverFeaturesNative(visionFeatures)
+            : ExtractPerceiverFeaturesOnnx(visionFeatures);
+
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["vision_features"] = visionFeatures.Clone(),
+            ["perceiver_features"] = perceiverFeatures.Clone(),
+        };
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // try/finally: SetTrainingMode(false) used to run only on the success path, so any throw from

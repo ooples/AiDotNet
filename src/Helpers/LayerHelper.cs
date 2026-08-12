@@ -11470,7 +11470,7 @@ public static class LayerHelper<T>
         int maxPatchesPerImage = 4096)
     {
         return (CreateMATCHAEncoderLayers(encoderDim, encoderLayers, numHeads, maxPatchesPerImage),
-                CreateMATCHADecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
+                CreateMATCHADecoderLayers(encoderDim, decoderDim, decoderLayers, numHeads, vocabSize));
     }
 
     private static IEnumerable<ILayer<T>> CreateMATCHAEncoderLayers(int hiddenDim, int numLayers, int numHeads, int maxPatches)
@@ -11503,16 +11503,20 @@ public static class LayerHelper<T>
         }
     }
 
-    private static IEnumerable<ILayer<T>> CreateMATCHADecoderLayers(int hiddenDim, int numLayers, int numHeads, int vocabSize)
+    private static IEnumerable<ILayer<T>> CreateMATCHADecoderLayers(
+        int encoderDim, int hiddenDim, int numLayers, int numHeads, int vocabSize)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int maxSequenceLength = 512;
 
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and MATCHA's decoder
-        // learns its positions -- the dead _decoderPositionEmbeddings field was that table, allocated and never read.
+        // The public model has one image tensor and no separate decoder-token input. Its decoder
+        // therefore receives continuous visual tokens; treating them as vocabulary indices here
+        // rejected legal images. Preserve the remotely-added learned position table, but project
+        // the encoder width instead of inserting a token embedding into this single-input path.
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(hiddenDim, identityActivation);
         yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)

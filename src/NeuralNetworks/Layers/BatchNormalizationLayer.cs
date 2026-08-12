@@ -109,11 +109,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// </remarks>
     private Tensor<T> _runningVariance;
 
-    // Cached inference scale/shift for deterministic forward pass
-    private Tensor<T>? _cachedInferenceScale;
-    private Tensor<T>? _cachedInferenceShift;
-    private bool _inferenceScaleDirty = true;
-
     /// <summary>
     /// The input from the last forward pass.
     /// </summary>
@@ -804,9 +799,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
             }
 
-            // Invalidate cached inference scale/shift since running stats changed
-            _inferenceScaleDirty = true;
-
             // Restore pre-flatten rank if we collapsed leading axes for the
             // features-last transformer path above. Tape-recorded reshape so
             // backward flows through unchanged.
@@ -833,7 +825,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             //      the ~4-op cached-scale broadcast chain (the batch=1 op explosion in #639).
             //   2. Correctness: BatchNormAffine carries an exact backward to x, gamma AND beta
             //      every step. The cached-scale path below can DETACH the gamma/beta gradient
-            //      whenever _cachedInferenceScale/_cachedInferenceShift are reused from a prior
+            //      whenever inference scale/shift are reused from a prior
             //      step (they were built off-tape), silently zeroing the affine-parameter grads.
             // mean/variance are constant running stats here (batch=1 never updates them), so the
             // captured references stay valid across compiled-plan replays.
@@ -876,24 +868,22 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _lastMean = _runningMean;
             _lastVariance = _runningVariance;
 
-            // Cache scale/shift to ensure deterministic forward pass
-            // (recomputing creates new tensor allocations that can cause SIMD alignment differences)
-            if (_inferenceScaleDirty || _cachedInferenceScale is null || _cachedInferenceShift is null)
-            {
-                var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
-                var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
-                var stdDev = Engine.TensorSqrt(variancePlusEps);
-
-                _cachedInferenceScale = Engine.TensorDivide(_gamma, stdDev);
-                var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
-                _cachedInferenceShift = Engine.TensorSubtract(_beta, term2);
-                _inferenceScaleDirty = false;
-            }
+            // Recompute from the live affine parameters. Gamma and beta are optimizer-owned
+            // persistent tensors and are commonly updated IN PLACE, so a cache keyed only by a
+            // local dirty bit cannot observe their mutation. That stale cache made post-training
+            // inference use old parameters and made finite-difference derivatives exactly zero.
+            // Engine ops are deterministic; allocation identity is not a numerical contract.
+            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
+            var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
+            var stdDev = Engine.TensorSqrt(variancePlusEps);
+            var inferenceScale = Engine.TensorDivide(_gamma, stdDev);
+            var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
+            var inferenceShift = Engine.TensorSubtract(_beta, term2);
 
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
-            var result = ApplyInferenceAnyRank(input, _cachedInferenceScale, _cachedInferenceShift);
+            var result = ApplyInferenceAnyRank(input, inferenceScale, inferenceShift);
 
             // Restore pre-flatten rank for the features-last path.
             if (flattenedFeaturesLast && preFlattenShape is not null)
@@ -1050,7 +1040,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _runningVariance = TensorAllocator.RentPinned<T>([featureSize]);
         varVec.AsSpan().CopyTo(_runningVariance.AsWritableSpan());
         RegisterRunningStatisticBuffers();
-        _inferenceScaleDirty = true;
     }
 
     /// <summary>
@@ -1068,7 +1057,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
-        _inferenceScaleDirty = true;
     }
 
     private Tensor<T>? _gammaVelocity;
@@ -1135,16 +1123,12 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
             gpuEngine.SgdMomentumUpdateGpu(_gamma, _gammaGradient, _gammaVelocity, lr, 0.0f, 0.0f);
             gpuEngine.SgdMomentumUpdateGpu(_beta, _betaGradient, _betaVelocity, lr, 0.0f, 0.0f);
-            _inferenceScaleDirty = true;
         }
         else
         {
             // Production-grade: Use Engine operations instead of manual loops
             _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
             _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
-
-            // Invalidate cached inference terms since gamma/beta changed
-            _inferenceScaleDirty = true;
 
             // Notify GPU that tensor data has changed
             Engine.InvalidatePersistentTensor(_gamma);

@@ -278,43 +278,29 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
 
         _lastInput = input3D;
 
-        // Per-time-step outputs collected for a tape-connected concat (the previous
-        // pre-allocated tensor written with SetSlice detached the output from y_t,
-        // so the output-projection weights never received a gradient).
-        var outputList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
-        T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        int headBatch = batchSize * _numHeads;
+        var outputList = new List<Tensor<T>>(seqLen);
+        var qList = new List<Tensor<T>>(seqLen);
+        var kList = new List<Tensor<T>>(seqLen);
+        var vList = new List<Tensor<T>>(seqLen);
+        var iList = new List<Tensor<T>>(seqLen);
+        var fList = new List<Tensor<T>>(seqLen);
+        var oList = new List<Tensor<T>>(seqLen);
+        var hiddenList = new List<Tensor<T>>(seqLen);
 
-        // Matrix cell state per head: C[batch, head, headDim, headDim]
-        var cellState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        // Normalizer state per head: n[batch, head, headDim]
-        var normState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension });
-
-        // Store gates and projections for backward
-        var allInputGates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allForgetGates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allOutputGates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allQ = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allK = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allV = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allHiddenPreProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        var allNormStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension });
-
-        // Per-head stabilizer state m_t (Beck et al. 2024, "xLSTM" Appendix A.2,
-        // stabilized mLSTM). The input gate is exponential; left raw it overflows
-        // (the old code clamped exp to 4.85e8, which lets a single step dominate
-        // the covariance cell and makes training diverge). The running max
-        // m_t = max(log f_t + m_{t-1}, log i_t) rescales both gates into (0, 1] in
-        // log-space, so the cell stays well-conditioned and training is stable.
-        // Initialized to -inf so the first step carries no forget contribution.
-        var mState = new Tensor<T>(new[] { batchSize, _numHeads });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int hi = 0; hi < _numHeads; hi++)
-                mState[new[] { bi, hi }] = NumOps.FromDouble(-1e30);
+        // Keep every recurrent update on the engine graph. The former scalar writes made C_t and
+        // n_t detached values; the residual allowed an input gradient to exist, but it was not the
+        // derivative of the actual mLSTM output and none of the gate/Q/K/V weights could train.
+        var cellState = Tensor<T>.CreateDefault(
+            new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+        var normState = Tensor<T>.CreateDefault(
+            new[] { headBatch, _headDimension, 1 }, NumOps.Zero);
+        var mState = Tensor<T>.CreateDefault(new[] { headBatch, 1, 1 }, NumOps.FromDouble(-1e30));
+        var keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = input3D.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+            var x_t = Engine.TensorSliceAxis(input3D, axis: 1, index: t); // [batch, modelDim]
 
             // Gate computations
             var iGateRaw = Engine.TensorBroadcastAdd(
@@ -327,107 +313,67 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
                 Engine.TensorMatMul(x_t, _outputGateWeights),
                 Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })));
 
-            // Log-domain input-gate pre-activation. The exponential gate is applied in stabilized
-            // log-space below via the m_t running max (Beck et al. 2024, App. A.2); materializing
-            // exp(iGateRaw) here is unstabilized and overflows float to +Inf for iGateRaw > 88.7.
-            // This value only feeds the write-only _lastInputGates cache (never read — the layer has
-            // no Backward override), so keeping it in log domain changes no gradient or output.
-            var iGate = iGateRaw;
-            // Sigmoid forget gate (stabilized)
             var fGate = Engine.Sigmoid(fGateRaw);
-
-            allInputGates.SetSlice(1, t, iGate);
-            allForgetGates.SetSlice(1, t, fGate);
-            allOutputGates.SetSlice(1, t, oGate);
 
             // Q, K, V projections
             var q = Engine.TensorMatMul(x_t, _queryWeights);
             var k = Engine.TensorMultiplyScalar(
-                Engine.TensorMatMul(x_t, _keyWeights), scaleK);
+                Engine.TensorMatMul(x_t, _keyWeights), keyScale);
             var v = Engine.TensorMatMul(x_t, _valueWeights);
 
-            allQ.SetSlice(1, t, q);
-            allK.SetSlice(1, t, k);
-            allV.SetSlice(1, t, v);
+            Tensor<T> AsHeads(Tensor<T> z) => Engine.Reshape(z,
+                new[] { headBatch, _headDimension });
+            var qHead = AsHeads(q);
+            var kHead = AsHeads(k);
+            var vHead = AsHeads(v);
+            var iHead = AsHeads(iGateRaw);
+            var fHead = AsHeads(fGate);
+            var oHead = AsHeads(oGate);
 
-            // Update matrix cell state per head: C = f * C + i * (v * k^T)
-            var h_t = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+            // The paper uses one stabilizer/gate scalar per head; match the historical forward's
+            // first coordinate selection, but use a tape-tracked slice rather than scalar reads.
+            var logI = Engine.Reshape(Engine.TensorSlice(iHead,
+                new[] { 0, 0 }, new[] { headBatch, 1 }), new[] { headBatch, 1, 1 });
+            var fScalar = Engine.Reshape(Engine.TensorSlice(fHead,
+                new[] { 0, 0 }, new[] { headBatch, 1 }), new[] { headBatch, 1, 1 });
+            var logF = Engine.TensorLog(Engine.TensorMax(
+                fScalar, Tensor<T>.CreateDefault(fScalar.Shape.ToArray(), NumOps.FromDouble(1e-30))));
+            var carryLog = Engine.TensorAdd(logF, mState);
+            var mNew = Engine.TensorMax(carryLog, logI);
+            var iScale = Engine.TensorExp(Engine.TensorSubtract(logI, mNew));
+            var fScale = Engine.TensorExp(Engine.TensorSubtract(carryLog, mNew));
+            mState = mNew;
 
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
+            var qCol = Engine.Reshape(qHead, new[] { headBatch, _headDimension, 1 });
+            var kCol = Engine.Reshape(kHead, new[] { headBatch, _headDimension, 1 });
+            var vCol = Engine.Reshape(vHead, new[] { headBatch, _headDimension, 1 });
+            var kRow = Engine.TensorPermute(kCol, new[] { 0, 2, 1 });
+            cellState = Engine.TensorAdd(
+                Engine.TensorBroadcastMultiply(cellState, fScale),
+                Engine.TensorBroadcastMultiply(Engine.BatchMatMul(vCol, kRow), iScale));
+            normState = Engine.TensorAdd(
+                Engine.TensorBroadcastMultiply(normState, fScale),
+                Engine.TensorBroadcastMultiply(kCol, iScale));
 
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Stabilized exponential gating (Beck et al. 2024, mLSTM). Work in
-                    // log-space: m_t = max(log f_t + m_{t-1}, log i_t) rescales the
-                    // exponential input gate and the forget gate into (0, 1], so the
-                    // covariance-cell update never overflows and training stays stable.
-                    // The /max(|n·q|, 1) output normalizer below is exact in this
-                    // stabilized scale, so it is left unchanged.
-                    double logI = NumOps.ToDouble(iGateRaw[new[] { bi, dimStart }]);
-                    double fSig = NumOps.ToDouble(fGate[new[] { bi, dimStart }]);
-                    double logF = Math.Log(Math.Max(fSig, 1e-30));
-                    double mPrev = NumOps.ToDouble(mState[new[] { bi, hi }]);
-                    double mNew = Math.Max(logF + mPrev, logI);
-                    mState[new[] { bi, hi }] = NumOps.FromDouble(mNew);
+            var numerator = Engine.BatchMatMul(cellState, qCol);
+            var denominator = Engine.TensorMax(
+                Engine.TensorAbs(Engine.BatchMatMul(
+                    Engine.TensorPermute(normState, new[] { 0, 2, 1 }), qCol)),
+                Tensor<T>.CreateDefault(new[] { headBatch, 1, 1 }, NumOps.One));
+            var oScalar = Engine.Reshape(Engine.TensorSlice(oHead,
+                new[] { 0, 0 }, new[] { headBatch, 1 }), new[] { headBatch, 1, 1 });
+            var normalized = Engine.TensorDivide(
+                Engine.TensorBroadcastMultiply(numerator, oScalar),
+                Engine.TensorTile(denominator, new[] { 1, _headDimension, 1 }));
+            var h_t = Engine.Reshape(normalized, new[] { batchSize, _modelDimension });
 
-                    T iVal = NumOps.FromDouble(Math.Exp(logI - mNew));
-                    T fVal = NumOps.FromDouble(Math.Exp(logF + mPrev - mNew));
-                    T oVal = oGate[new[] { bi, dimStart }];
-
-                    // Matrix cell update: C = f * C + i * (v outer k)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T vVal = v[new[] { bi, flatDi }];
-                        T nPrev = normState[new[] { bi, hi, di }];
-
-                        // Normalizer update: n = f * n + i * k
-                        T kDi = k[new[] { bi, flatDi }];
-                        T nNew = NumOps.Add(NumOps.Multiply(fVal, nPrev),
-                            NumOps.Multiply(iVal, kDi));
-                        normState[new[] { bi, hi, di }] = nNew;
-
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = k[new[] { bi, flatKi }];
-                            T cPrev = cellState[new[] { bi, hi, di, ki }];
-
-                            // C_new = f * C_prev + i * v * k
-                            T cNew = NumOps.Add(
-                                NumOps.Multiply(fVal, cPrev),
-                                NumOps.Multiply(iVal, NumOps.Multiply(vVal, kVal)));
-                            cellState[new[] { bi, hi, di, ki }] = cNew;
-
-                            // Output: h = o * (C * q) / max(|n^T * q|, 1)
-                            T qVal = q[new[] { bi, flatKi }];
-                            h_t[new[] { bi, flatDi }] = NumOps.Add(
-                                h_t[new[] { bi, flatDi }],
-                                NumOps.Multiply(oVal, NumOps.Multiply(cNew, qVal)));
-                        }
-
-                        // Normalize
-                        T nDotQ = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            nDotQ = NumOps.Add(nDotQ,
-                                NumOps.Multiply(normState[new[] { bi, hi, ki }],
-                                    q[new[] { bi, flatKi }]));
-                        }
-                        double nDotQAbs = Math.Abs(NumOps.ToDouble(nDotQ));
-                        double normFactor = Math.Max(nDotQAbs, 1.0);
-
-                        h_t[new[] { bi, flatDi }] = NumOps.Divide(
-                            h_t[new[] { bi, flatDi }],
-                            NumOps.FromDouble(normFactor));
-                    }
-                }
-            }
-
-            allHiddenPreProj.SetSlice(1, t, h_t);
+            iList.Add(Engine.Reshape(iGateRaw, new[] { batchSize, 1, _modelDimension }));
+            fList.Add(Engine.Reshape(fGate, new[] { batchSize, 1, _modelDimension }));
+            oList.Add(Engine.Reshape(oGate, new[] { batchSize, 1, _modelDimension }));
+            qList.Add(Engine.Reshape(q, new[] { batchSize, 1, _modelDimension }));
+            kList.Add(Engine.Reshape(k, new[] { batchSize, 1, _modelDimension }));
+            vList.Add(Engine.Reshape(v, new[] { batchSize, 1, _modelDimension }));
+            hiddenList.Add(Engine.Reshape(h_t, new[] { batchSize, 1, _modelDimension }));
 
             // Output projection
             var y_t = Engine.TensorMatMul(h_t, _outputProjectionWeights);
@@ -475,15 +421,15 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
         }
         output = Engine.LayerNorm(output, _outputNormGamma, _outputNormBeta, 1e-5, out _, out _);
 
-        _lastCellStates = allCellStates;
-        _lastNormStates = allNormStates;
-        _lastInputGates = allInputGates;
-        _lastForgetGates = allForgetGates;
-        _lastOutputGates = allOutputGates;
-        _lastQ = allQ;
-        _lastK = allK;
-        _lastV = allV;
-        _lastHiddenPreProj = allHiddenPreProj;
+        _lastCellStates = cellState;
+        _lastNormStates = normState;
+        _lastInputGates = Engine.TensorConcatenate(iList.ToArray(), 1);
+        _lastForgetGates = Engine.TensorConcatenate(fList.ToArray(), 1);
+        _lastOutputGates = Engine.TensorConcatenate(oList.ToArray(), 1);
+        _lastQ = Engine.TensorConcatenate(qList.ToArray(), 1);
+        _lastK = Engine.TensorConcatenate(kList.ToArray(), 1);
+        _lastV = Engine.TensorConcatenate(vList.ToArray(), 1);
+        _lastHiddenPreProj = Engine.TensorConcatenate(hiddenList.ToArray(), 1);
 
         var result = ApplyActivation(output);
         _lastOutput = result;

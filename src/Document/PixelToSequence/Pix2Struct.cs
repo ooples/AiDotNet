@@ -276,6 +276,17 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
         InvalidateParameterCountCache();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Native Pix2Struct layers are lazy so metadata-only construction stays cheap. Parameter
+    /// inspection must nevertheless observe the same materialized graph as prediction/training.
+    /// </remarks>
+    protected override void EnsureParametersReady()
+    {
+        if (_useNativeMode)
+            EnsureNativeInitialized();
+    }
+
     #endregion
 
     #region IDocumentQA Implementation
@@ -579,6 +590,25 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return base.ForwardForTraining(PreprocessDocument(input));
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (_useNativeMode)
+        {
+            EnsureNativeInitialized();
+            input = PreprocessDocument(input);
+        }
+
+        return base.GetNamedLayerActivations(input);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -586,13 +616,15 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
 
         EnsureNativeInitialized();
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
-
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
@@ -604,14 +636,6 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     /// reading -- ParameterCount and GetParameters -- stays available either way.
     /// </remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        EnsureNativeInitialized();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
 
     #endregion
 

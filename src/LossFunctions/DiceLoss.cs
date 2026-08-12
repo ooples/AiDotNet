@@ -65,7 +65,7 @@ public class DiceLoss<T> : LossFunctionBase<T>
             sumActual = NumOps.Add(sumActual, actual[i]);
         }
 
-        // Use NumericalStabilityHelper.SafeDiv to prevent division by zero
+        // Use NumericalStabilityHelper.SafeDiv to prevent division by zero.
         T denominator = NumOps.Add(sumPredicted, sumActual);
         T diceCoefficient = NumericalStabilityHelper.SafeDiv(
             NumOps.Multiply(NumOps.FromDouble(2), intersection),
@@ -80,15 +80,20 @@ public class DiceLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // Dice = 1 - (2 * intersection + smooth) / (|pred| + |target| + smooth)
+        // Dice = 1 - (2 * intersection) / (|pred| + |target|). Add only the same tiny
+        // denominator guard used by CalculateLoss: Laplace +1 smoothing changes the public loss
+        // (including no-overlap and fitness scores), while epsilon keeps the empty-mask backward
+        // path finite without a material change for non-empty masks.
         var intersection = Engine.TensorMultiply(predicted, target);
         var allAxes = Enumerable.Range(0, intersection.Shape.Length).ToArray();
         var interSum = Engine.ReduceSum(intersection, allAxes, keepDims: false);
         var predSum = Engine.ReduceSum(predicted, allAxes, keepDims: false);
         var targSum = Engine.ReduceSum(target, allAxes, keepDims: false);
         var twoInter = Engine.TensorMultiplyScalar(interSum, NumOps.FromDouble(2.0));
-        var numerator = Engine.TensorAddScalar(twoInter, NumOps.One);
-        var denominator = Engine.TensorAddScalar(Engine.TensorAdd(predSum, targSum), NumOps.One);
+        var numerator = twoInter;
+        var denominator = Engine.TensorAddScalar(
+            Engine.TensorAdd(predSum, targSum),
+            NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon));
 
         // Divide RANK-1 [1] tensors, not rank-0 scalars. ReduceSum with keepDims: false collapses to
         // rank-0 [], and while the forward divide is fine, its BACKWARD is not: DivideBackward

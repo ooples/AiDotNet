@@ -99,7 +99,10 @@
 	  <!-- Ed25519 (EdDSA) for asymmetric aidn2 license verification — no BCL Ed25519 on any TFM. -->
 	  <PackageReference Include="BouncyCastle.Cryptography" />
 	  <PackageReference Include="Google.Protobuf" />
-	  <PackageReference Include="Microsoft.CSharp" />
+	  <!-- The dynamic binder is part of the modern shared framework. Keeping this package on
+	       net8/net10 makes current SDKs report NU1510 (and this project treats warnings as errors),
+	       while net471 still needs the compatibility package. -->
+	  <PackageReference Include="Microsoft.CSharp" Condition="'$(TargetFramework)' == 'net471'" />
 	  <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
 	  <!-- Microsoft.Data.Sqlite extracted to the opt-in AiDotNet.Storage.Sqlite
 	       metapackage in audit-2026-05 phase 2c (finding #14). Core code used it

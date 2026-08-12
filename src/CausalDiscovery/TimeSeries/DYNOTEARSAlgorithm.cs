@@ -44,6 +44,7 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
     private double _lambda1 = 0.1;
     private double _wThreshold = 0.3;
     private int _maxIterations = 100;
+    private int _innerIterations = 200;
     private double _hTol = 1e-8;
 
     /// <inheritdoc/>
@@ -58,7 +59,13 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         if (options?.SparsityPenalty.HasValue == true) _lambda1 = options.SparsityPenalty.Value;
         if (options?.EdgeThreshold.HasValue == true) _wThreshold = options.EdgeThreshold.Value;
         if (options?.MaxIterations.HasValue == true) _maxIterations = options.MaxIterations.Value;
+        if (options?.InnerIterations.HasValue == true) _innerIterations = options.InnerIterations.Value;
         if (options?.AcyclicityTolerance.HasValue == true) _hTol = options.AcyclicityTolerance.Value;
+
+        if (_maxIterations <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxIterations must be positive.");
+        if (_innerIterations <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "InnerIterations must be positive.");
     }
 
     /// <inheritdoc/>
@@ -223,10 +230,9 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         double rho, double alpha)
     {
         double learningRate = 1e-3;
-        int innerSteps = 200;
         double prevLoss = double.PositiveInfinity;
 
-        for (int step = 0; step < innerSteps; step++)
+        for (int step = 0; step < _innerIterations; step++)
         {
             // Compute residual: R = Xt - Xt*W - Z*A  [n x d]
             var R = new Matrix<T>(n, d);

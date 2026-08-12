@@ -526,9 +526,25 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
+        // Actor/critic Dense layers are shape-lazy. Without a warm-up, GetParameters() is empty
+        // when Clone is called before the first inference and the two policies initialize
+        // independently. Materialize every registered and derived network on both sides before the
+        // parameter snapshot/restore so Clone preserves an untrained policy as well as a trained one.
+        MaterializeNetworks();
         var clone = new DDPGAgent<T>(_options);
+        clone.MaterializeNetworks();
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    private void MaterializeNetworks()
+    {
+        var state = new Tensor<T>([_options.StateSize]);
+        var stateAction = new Tensor<T>([_options.StateSize + _options.ActionSize]);
+        _ = _actorNetwork.Predict(state);
+        _ = _actorTargetNetwork.Predict(state);
+        _ = _criticNetwork.Predict(stateAction);
+        _ = _criticTargetNetwork.Predict(stateAction);
     }
 
     /// <inheritdoc/>

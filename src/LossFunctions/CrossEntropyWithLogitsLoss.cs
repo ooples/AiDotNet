@@ -357,8 +357,15 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses, int classAxis, int[] oneHotShape)
     {
         var indicesShape = indices.Shape.ToArray();
+        if (!ShapeMatchesWithAxisRemoved(oneHotShape, indicesShape, classAxis))
+        {
+            throw new ArgumentException(
+                $"Class-index target shape [{string.Join(", ", indicesShape)}] must equal logits " +
+                $"shape [{string.Join(", ", oneHotShape)}] with class axis {classAxis} removed.",
+                nameof(indices));
+        }
+
         var oneHot = new Tensor<T>(oneHotShape.ToArray());
-        var indicesStrides = ComputeStrides(indicesShape);
         var oneHotStrides = ComputeStrides(oneHotShape);
         var indicesSpan = indices.Data.Span;
         var oneHotSpan = oneHot.Data.Span;
@@ -369,23 +376,21 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             int classIdx = (int)Math.Round(NumOps.ToDouble(indicesSpan[i]));
             if (classIdx >= 0 && classIdx < numClasses)
             {
+                // The flattened target ordinal enumerates all non-class coordinates in row-major
+                // order. Decode it directly against those logits axes, inserting the class
+                // coordinate afterward. This avoids indexing an independently computed target
+                // stride array and works for both last-axis sequence labels and channel-first NCHW.
                 int remaining = i;
-                int indexAxis = 0;
                 int oneHotOffset = 0;
 
-                for (int axis = 0; axis < oneHotShape.Length; axis++)
+                for (int axis = oneHotShape.Length - 1; axis >= 0; axis--)
                 {
                     if (axis == classAxis)
                         continue;
 
-                    int coord = indicesShape.Length == 0
-                        ? 0
-                        : remaining / indicesStrides[indexAxis];
-                    if (indicesShape.Length > 0)
-                        remaining %= indicesStrides[indexAxis];
-
+                    int coord = remaining % oneHotShape[axis];
+                    remaining /= oneHotShape[axis];
                     oneHotOffset += coord * oneHotStrides[axis];
-                    indexAxis++;
                 }
 
                 oneHotSpan[oneHotOffset + classIdx * oneHotStrides[classAxis]] = NumOps.One;

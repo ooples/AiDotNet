@@ -802,8 +802,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         EnsureNativeInitialized();
         SetTrainingMode(true);
         TrainWithTape(input, expectedOutput, _optimizer);
-
-        UpdateParameters(CollectGradients());
         SetTrainingMode(false);
     }
 
@@ -812,15 +810,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     // GetParameters folds, which this model already exposes correctly. The throw existed
     // because the member was ABSTRACT and demanded an answer -- 572 models answered it the
     // same way.
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        EnsureNativeInitialized();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
-
     #endregion
 
     #region Disposal

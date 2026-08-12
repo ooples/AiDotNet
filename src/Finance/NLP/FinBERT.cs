@@ -103,6 +103,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     #region Native Mode Fields
     private EmbeddingLayer<T>? _tokenEmbedding;
     private EmbeddingLayer<T>? _positionEmbedding;
+    private BertEmbeddingLayer<T>? _bertEmbedding;
     private LayerNormalizationLayer<T>? _embeddingNorm;
     private List<MultiHeadAttentionLayer<T>>? _attentionLayers;
     private List<DenseLayer<T>>? _feedForwardLayers;
@@ -329,6 +330,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
+        _bertEmbedding = Layers.OfType<BertEmbeddingLayer<T>>().FirstOrDefault();
         var embeddings = Layers.OfType<EmbeddingLayer<T>>().ToList();
         _tokenEmbedding = embeddings.FirstOrDefault();
         _positionEmbedding = embeddings.Skip(1).FirstOrDefault();
@@ -669,9 +671,11 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         SetTrainingMode(false);
 
         // Get token embeddings from embedding layer
-        var embeddings = _tokenEmbedding is not null
-            ? _tokenEmbedding.Forward(tokenIds)
-            : tokenIds;
+        var embeddings = _bertEmbedding is not null
+            ? _bertEmbedding.Forward(tokenIds)
+            : _tokenEmbedding is not null
+                ? _tokenEmbedding.Forward(tokenIds)
+                : tokenIds;
 
         return embeddings;
     }

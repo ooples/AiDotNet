@@ -110,7 +110,11 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
         var numOps = NumOps;
         var random = Random;
         double stddev = Math.Sqrt(2.0 / _inputChannels);
-        var span = _weights.Data.Span;
+        // Data.Span is a read-oriented projection and may materialize detached
+        // storage for copy-on-write/view-backed tensors. Initialization must go
+        // through the tensor's writable-storage contract or the registered live
+        // parameter can remain all zeros (most visibly in seeded DGCNN builds).
+        var span = _weights.AsWritableSpan();
         for (int i = 0; i < span.Length; i++)
             span[i] = numOps.FromDouble(random.NextGaussian(0, stddev));
     }

@@ -216,12 +216,15 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
         _bn1Out = _bn1.Forward(x);
-        _relu1Out = _relu.Activate(_bn1Out);
+        // Scalar activation objects operate eagerly and therefore detach the value from the
+        // active GradientTape. Keep the DenseNet pre-activation on the engine graph so gradients
+        // reach BN1 and every layer before this block.
+        _relu1Out = Engine.ReLU(_bn1Out);
         _conv1Out = _conv1x1.Forward(_relu1Out);
 
         // BN-ReLU-Conv3x3
         _bn2Out = _bn2.Forward(_conv1Out);
-        _relu2Out = _relu.Activate(_bn2Out);
+        _relu2Out = Engine.ReLU(_bn2Out);
         var output = _conv3x3.Forward(_relu2Out);
 
         // Remove batch dim if we added it
