@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -313,8 +313,19 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         }
 
         // Save previous state BEFORE updating for ReverseUpdate
-        _previousM = _m.Clone();
-        _previousV = _v.Clone();
+        // Save previous state BEFORE updating for ReverseUpdate. Buffers are allocated once and
+        // copied into IN PLACE: Clone() allocated two FULL-LENGTH vectors every step (measured as
+        // 32 MB/step of AdamW's cost at 2,000,000 parameters before the same fix there).
+        if (_previousM == null || _previousM.Length != _m.Length)
+        {
+            _previousM = new Vector<T>(_m.Length, skipZeroInit: true);
+        }
+        if (_previousV == null || _previousV.Length != _v.Length)
+        {
+            _previousV = new Vector<T>(_v.Length, skipZeroInit: true);
+        }
+        _m.AsWritableSpan().CopyTo(_previousM.AsWritableSpan());
+        _v.AsWritableSpan().CopyTo(_previousV.AsWritableSpan());
         _previousT = _t;
 
         _t++;
@@ -330,36 +341,50 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
-        var beta1TimesM = (Vector<T>)Engine.Multiply(_m, beta1);
-        var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        _m = (Vector<T>)Engine.Add(beta1TimesM, oneMinusBeta1TimesGrad);
+        // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW/Adagrad/Lion, same reason.
+        //
+        // Replaces 16 Engine calls that each RETURNED a fresh full-length vector, including
+        // `new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length))` -- a full-length constant
+        // vector built through an ENUMERATOR, one element at a time, to hold a single scalar.
+        // Measured on Adam's near-identical chain at 2,000,000 double parameters: 701.9 MB/step and
+        // ~290 ms/step before, 15.3 MB and 17.0 ms after.
+        //
+        // Per-element operand and association order preserved exactly (Dozat 2016), including the
+        // Nesterov term built from the bias-corrected mHat and the raw gradient:
+        //   m = b1*m + (1-b1)*g ;  v = b2*v + ((g*g)*(1-b2))
+        //   mHatNesterov = b1*(m/bcM) + nesterovFactor*g
+        //   out = p - (mHatNesterov*lr) / (sqrt(v/bcV) + eps)
+        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var pSpan = parameters.AsWritableSpan();
+        var gSpan = gradient.AsWritableSpan();
+        var mSpan = _m.AsWritableSpan();
+        var vSpan = _v.AsWritableSpan();
+        var outSpan = updatedParams.AsWritableSpan();
+        T learningRate = CurrentLearningRate;
 
-        // Update biased second raw moment estimate: v = beta2 * v + (1 - beta2) * gradient^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var beta2TimesV = (Vector<T>)Engine.Multiply(_v, beta2);
-        var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
-        _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            T g = gSpan[i];
 
-        // Compute bias-corrected first moment estimate: mHat = m / (1 - beta1^t)
-        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrectionM);
+            T m = NumOps.Add(NumOps.Multiply(mSpan[i], beta1), NumOps.Multiply(g, oneMinusBeta1));
+            mSpan[i] = m;
 
-        // Compute bias-corrected second raw moment estimate: vHat = v / (1 - beta2^t)
-        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrectionV);
+            T v = NumOps.Add(
+                NumOps.Multiply(vSpan[i], beta2),
+                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
+            vSpan[i] = v;
 
-        // Compute the Nesterov momentum term: mHatNesterov = beta1 * mHat + nesterovFactor * gradient
-        var beta1TimesMHat = (Vector<T>)Engine.Multiply(mHat, beta1);
-        var nesterovGrad = (Vector<T>)Engine.Multiply(gradient, nesterovFactor);
-        var mHatNesterov = (Vector<T>)Engine.Add(beta1TimesMHat, nesterovGrad);
+            T mHat = NumOps.Divide(m, biasCorrectionM);
+            T vHat = NumOps.Divide(v, biasCorrectionV);
 
-        // Update parameters: update = (lr * mHatNesterov) / (sqrt(vHat) + epsilon)
-        var sqrtVHat = (Vector<T>)Engine.Sqrt(vHat);
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length));
-        var denominator = (Vector<T>)Engine.Add(sqrtVHat, epsilonVec);
-        var lrTimesMHatNesterov = (Vector<T>)Engine.Multiply(mHatNesterov, CurrentLearningRate);
-        var update = (Vector<T>)Engine.Divide(lrTimesMHatNesterov, denominator);
+            T mHatNesterov = NumOps.Add(
+                NumOps.Multiply(mHat, beta1),
+                NumOps.Multiply(g, nesterovFactor));
 
-        // params = params - update
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+            T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
+            T update = NumOps.Divide(NumOps.Multiply(mHatNesterov, learningRate), denominator);
+            outSpan[i] = NumOps.Subtract(pSpan[i], update);
+        }
 
         return updatedParams;
     }

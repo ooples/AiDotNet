@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -330,31 +330,52 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
         // Interpolate: c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
+        // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW/Adagrad, same reason.
+        //
+        // Replaces up to 11 Engine calls that each RETURNED a fresh full-length vector. Measured on
+        // Adam's near-identical chain at 2,000,000 double parameters: 701.9 MB/step and ~290 ms/step
+        // before, 15.3 MB and 17.0 ms after.
+        //
+        // ORDER MATTERS HERE and is preserved exactly (Chen et al. 2023): the interpolation AND the
+        // momentum update both read the PREVIOUS m, so m is read once per element before being
+        // overwritten -- interpolating against an already-updated m would be a different algorithm.
+        //   c = sign(b1*m + (1-b1)*g)                      [+ wd*p when weight decay is on]
+        //   out = p - c*lr
+        //   m   = b2*m + (1-b2)*g                          [uses the SAME old m]
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
-        var beta1TimesM = (Vector<T>)Engine.Multiply(_m, _currentBeta1);
-        var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        var interpolated = (Vector<T>)Engine.Add(beta1TimesM, oneMinusBeta1TimesGrad);
-
-        // Compute sign
-        var signVec = (Vector<T>)Engine.Sign(interpolated);
-
-        // Update with weight decay
-        var update = signVec;
-        if (!NumOps.Equals(weightDecay, NumOps.Zero))
-        {
-            var weightDecayTerm = (Vector<T>)Engine.Multiply(parameters, weightDecay);
-            update = (Vector<T>)Engine.Add(update, weightDecayTerm);
-        }
-
-        // Update parameters
-        var lrTimesUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, lrTimesUpdate);
-
-        // Update momentum: m_t = beta2 * m_{t-1} + (1 - beta2) * g_t
         var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
-        var beta2TimesM = (Vector<T>)Engine.Multiply(_m, _currentBeta2);
-        var oneMinusBeta2TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta2);
-        _m = (Vector<T>)Engine.Add(beta2TimesM, oneMinusBeta2TimesGrad);
+        bool hasWeightDecay = !NumOps.Equals(weightDecay, NumOps.Zero);
+
+        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var pSpan = parameters.AsWritableSpan();
+        var gSpan = gradient.AsWritableSpan();
+        var mSpan = _m.AsWritableSpan();
+        var outSpan = updatedParams.AsWritableSpan();
+        T learningRate = CurrentLearningRate;
+
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            T g = gSpan[i];
+            T p = pSpan[i];
+            T mOld = mSpan[i];
+
+            T interpolated = NumOps.Add(
+                NumOps.Multiply(mOld, _currentBeta1),
+                NumOps.Multiply(g, oneMinusBeta1));
+
+            T update = NumOps.GreaterThan(interpolated, NumOps.Zero) ? NumOps.One
+                     : NumOps.LessThan(interpolated, NumOps.Zero) ? NumOps.Negate(NumOps.One)
+                     : NumOps.Zero;
+
+            if (hasWeightDecay)
+                update = NumOps.Add(update, NumOps.Multiply(p, weightDecay));
+
+            outSpan[i] = NumOps.Subtract(p, NumOps.Multiply(update, learningRate));
+
+            mSpan[i] = NumOps.Add(
+                NumOps.Multiply(mOld, _currentBeta2),
+                NumOps.Multiply(g, oneMinusBeta2));
+        }
 
         return updatedParams;
     }
