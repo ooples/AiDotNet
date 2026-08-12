@@ -10983,6 +10983,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool isResourceBoundShard = (shardInitial >= 'A' && shardInitial <= 'I')
                                  || (shardInitial >= 'N' && shardInitial <= 'Z');
         bool supportsFloatScaffold = baseClassName is
+            // These five are generic already and were simply never listed, so 74 suites emitted at
+            // double for no reason other than the omission -- AnomalyDetectorTestBase alone is 51.
+            // Verified against the block below rather than by grepping the file, which gives false
+            // hits: these names appear elsewhere in it.
+            "AnomalyDetectorTestBase" or
+            "ReinforcementLearningTestBase" or
+            "RiskModelTestBase" or
+            "VideoDenoisingTestBase" or
+            "VideoInpaintingTestBase" or
+            "VideoStabilizationTestBase" or
             "AudioClassifierTestBase" or
             "AudioNNModelTestBase" or
             "DocumentNNModelTestBase" or
