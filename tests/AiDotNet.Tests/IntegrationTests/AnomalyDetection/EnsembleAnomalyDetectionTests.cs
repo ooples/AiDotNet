@@ -32,6 +32,19 @@ public class EnsembleAnomalyDetectionTests
         return new Matrix<double>(data);
     }
 
+    private static Matrix<double> CreateNormalTrainingData()
+    {
+        var data = new double[30, 3];
+        for (int i = 0; i < data.GetLength(0); i++)
+        {
+            data[i, 0] = 1.0 + 0.1 * (i % 5);
+            data[i, 1] = 2.0 + 0.1 * (i % 7);
+            data[i, 2] = 0.5 + 0.05 * (i % 3);
+        }
+
+        return new Matrix<double>(data);
+    }
+
     private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
     {
         double outlierScore = scores[outlierIdx];
@@ -140,6 +153,21 @@ public class EnsembleAnomalyDetectionTests
         Assert.Equal(isolatedScore, mixedScore, precision: 12);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task Maximum_SeparateSingleRowBatchesUseTrainingScale()
+    {
+        var detector = new MaximumDetector<double>();
+        detector.Fit(CreateNormalTrainingData());
+
+        var normalScore = detector.ScoreAnomalies(
+            new Matrix<double>(new[,] { { 1.2, 2.1, 0.55 } }))[0];
+        var outlierScore = detector.ScoreAnomalies(
+            new Matrix<double>(new[,] { { 100.0, 100.0, 100.0 } }))[0];
+
+        Assert.True(outlierScore > normalScore,
+            $"Separately scored outlier ({outlierScore:F4}) should exceed normal ({normalScore:F4}).");
+    }
+
     #endregion
 
     #region FeatureBaggingDetector Tests
@@ -238,6 +266,31 @@ public class EnsembleAnomalyDetectionTests
         detector.Fit(data);
         var predictions = detector.Predict(data);
         AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SUOD_SeparateSingleRowBatchesUseTrainingScale()
+    {
+        var detector = new SUODDetector<double>();
+        detector.Fit(CreateNormalTrainingData());
+
+        var normalScore = detector.ScoreAnomalies(
+            new Matrix<double>(new[,] { { 1.2, 2.1, 0.55 } }))[0];
+        var outlierScore = detector.ScoreAnomalies(
+            new Matrix<double>(new[,] { { 100.0, 100.0, 100.0 } }))[0];
+
+        Assert.True(outlierScore > normalScore,
+            $"Separately scored outlier ({outlierScore:F4}) should exceed normal ({normalScore:F4}).");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SUOD_NoProjectionFitHasResolvedParameterLayout()
+    {
+        var detector = new SUODDetector<double>(useRandomProjection: true, nProjectedFeatures: 10);
+        detector.Fit(CreateNormalTrainingData());
+
+        Assert.NotEmpty(detector.GetParameters());
+        Assert.Equal(detector.ParameterCount, detector.GetParameters().Length);
     }
 
     #endregion
