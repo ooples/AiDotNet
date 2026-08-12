@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -12839,7 +12839,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// network before copying the data into it.
     /// </para>
     /// </remarks>
-    protected abstract IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Every concrete model used to be forced to write this, and 1147 of them
+    /// did -- each one a hand-copied list of constructor arguments that a new option could fall out
+    /// of without anything failing. The clone plan records that constructor at compile time instead,
+    /// so the base can rebuild the type and a model only overrides this when the generator says it
+    /// cannot: a constructor parameter with nothing holding its value, which the build reports by
+    /// name rather than leaving to be discovered by a clone that comes back subtly different.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => (IFullModel<T, Tensor<T>, Tensor<T>>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
     /// <summary>
     /// Sets which input features should be considered active in the neural network.

@@ -126,7 +126,11 @@ public static class CloneRegistry
             }
         }
 
-        return new ClonePlan(closed, entries);
+        // The recorded constructor travels with the plan. Dropping it here would be invisible and
+        // total: every model and every layer is generic, so a plan that loses its constructor on
+        // closing falls back to demanding a parameterless constructor -- which is precisely the
+        // constructor these types do not have.
+        return new ClonePlan(closed, entries, open.ConstructorParameters);
     }
 
     private static int _generatedLoaded;

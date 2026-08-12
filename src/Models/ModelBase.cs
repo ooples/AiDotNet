@@ -260,7 +260,28 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     // --- ICloneable ---
 
     /// <inheritdoc/>
-    public abstract IFullModel<T, TInput, TOutput> DeepCopy();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Configuration is rebuilt from the compile-time clone plan, which records
+    /// the constructor the type was built with; learned state is carried through the model's own
+    /// public Serialize and Deserialize, so a model that persists something extra keeps it. The
+    /// persistence guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// <para>
+    /// A model overrides this only when the generator reports that it cannot rebuild the type --
+    /// a constructor parameter with no member holding its value -- and the build names which one.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] state = Serialize();
+            var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            copy.Deserialize(state);
+            return copy;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual IFullModel<T, TInput, TOutput> Clone() => DeepCopy();

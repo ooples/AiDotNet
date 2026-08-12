@@ -1773,7 +1773,29 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     #region ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>> Implementation
 
     /// <inheritdoc />
-    public abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Declaring it abstract here is what produced 267 hand-written DeepCopy and
+    /// Clone pairs across this family -- one per model, each re-listing the constructor arguments
+    /// its type happens to take. The clone plan records that constructor at compile time, so the
+    /// rebuild is the same code for every model and a new argument cannot be forgotten in 266 places.
+    /// </para>
+    /// <para>
+    /// Configuration is rebuilt, learned state is carried through the model's own Serialize and
+    /// Deserialize -- the public, overridable pair, so a model that persists something extra keeps
+    /// it. The guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] state = Serialize();
+            var copy = (NoisePredictorBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            copy.Deserialize(state);
+            return copy;
+        }
+    }
 
     /// <inheritdoc />
     IFullModel<T, Tensor<T>, Tensor<T>> ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>>.Clone()
@@ -1785,7 +1807,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// Creates a deep copy of the noise predictor.
     /// </summary>
     /// <returns>A new instance with the same parameters.</returns>
-    public abstract INoisePredictor<T> Clone();
+    public virtual INoisePredictor<T> Clone() => (INoisePredictor<T>)DeepCopy();
 
     #endregion
 

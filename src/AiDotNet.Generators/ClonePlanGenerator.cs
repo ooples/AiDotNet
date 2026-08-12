@@ -76,6 +76,13 @@ public class ClonePlanGenerator : IIncrementalGenerator
     {
         if (!IsNameableFromGeneratedCode(symbol)) return false;
 
+        // Anything the library treats as a model. The base-name list below predates this and covers
+        // options classes, whose root is not an interface; models are reached by interface instead so
+        // that a family added later -- or a model written in a consumer's own assembly -- is included
+        // without anyone editing this list. Every model family's root already declares IFullModel,
+        // which is what makes it the membership test rather than a convention about class names.
+        if (symbol.AllInterfaces.Any(i => i.Name == "IFullModel")) return true;
+
         for (var b = symbol.BaseType; b is not null; b = b.BaseType)
         {
             switch (b.Name)
@@ -195,7 +202,14 @@ public class ClonePlanGenerator : IIncrementalGenerator
     private static void EmitRegistration(StringBuilder sb, INamedTypeSymbol type)
     {
         var entries = CollectConfiguration(type);
-        if (entries.Count == 0) return;
+        var constructor = CollectConstructorParameters(
+            type, type.AllInterfaces.Any(i => i.Name == "IFullModel"));
+
+        // A type with no settable configuration is still worth a plan when its constructor was
+        // recorded. That is the normal shape of a model: the arguments it was built from live in
+        // private fields, so the property scan finds nothing, and skipping it here is what left
+        // every model without a plan and forced a hand-written CreateNewInstance.
+        if (entries.Count == 0 && constructor is null) return;
 
         // An open generic cannot be reified here; typeof(Foo<>) is the runtime handle the registry
         // keys on, and a closed instantiation resolves through it.
@@ -211,8 +225,15 @@ public class ClonePlanGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"            Add(e, t, \"{name}\", CloneCopyKind.{kind});");
         }
-
-        sb.AppendLine("            CloneRegistry.Register(new ClonePlan(t, e));");
+        if (constructor is null)
+        {
+            sb.AppendLine("            CloneRegistry.Register(new ClonePlan(t, e));");
+        }
+        else
+        {
+            var names = string.Join(", ", constructor.Select(n => $"\"{n}\""));
+            sb.AppendLine($"            CloneRegistry.Register(new ClonePlan(t, e, new[] {{ {names} }}));");
+        }
         sb.AppendLine("        }");
         sb.AppendLine();
     }
@@ -297,4 +318,159 @@ public class ClonePlanGenerator : IIncrementalGenerator
 
         return "ByReference";
     }
+
+    /// <summary>
+    /// Records the constructor a clone should call, when calling one is the only way to rebuild.
+    /// </summary>
+    /// <param name="type">The type being planned.</param>
+    /// <returns>
+    /// The constructor's parameters, in order, named by the member that supplies each; or
+    /// <see langword="null"/> when the type is rebuilt by allocating and assigning instead.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Only when there is no parameterless constructor.</b> A type that can be allocated bare was
+    /// already cloning correctly through assignment, and recording a constructor for it would change
+    /// working behaviour for no gain. Models are the types this exists for: a diffusion model takes
+    /// its scheduler and its noise predictor as arguments and offers no bare constructor at all, so
+    /// before this the only way to rebuild one was to hand-write a <c>CreateNewInstance</c> override
+    /// -- which is the 1147 overrides this removes.
+    /// </para>
+    /// <para>
+    /// <b>Every parameter must map, or none are recorded.</b> A partially satisfiable constructor is
+    /// worse than no constructor: it would compile, run, and quietly leave the unmapped arguments at
+    /// their defaults, producing a clone that differs from its original in a way no property
+    /// comparison detects. When the match fails the type keeps the assignment path and, if it has no
+    /// bare constructor either, <c>CloneEngine</c> says so by name at runtime rather than guessing.
+    /// </para>
+    /// <para>
+    /// <b>The widest satisfiable constructor wins.</b> A constructor derives things from its
+    /// arguments -- buffers sized from a layer count, sub-models built from a depth setting -- and
+    /// re-deriving them is what keeps a clone self-consistent. Passing fewer arguments and assigning
+    /// the rest afterwards would leave those derived structures built from defaults.
+    /// </para>
+    /// </remarks>
+    private static List<string>? CollectConstructorParameters(INamedTypeSymbol type, bool isModel)
+    {
+        var constructors = type.InstanceConstructors
+            .Where(c => c.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal)
+            .Where(c => !c.IsStatic)
+            .Where(c => c.Parameters.Length > 0)
+            .ToList();
+
+        if (constructors.Count == 0) return null;
+
+        // A type that can be allocated bare kept working through assignment, so leave it alone --
+        // unless it is a model, whose configuration lives in fields that assignment cannot reach.
+        if (!isModel && type.InstanceConstructors.Any(c => c.Parameters.Length == 0)) return null;
+
+        // ONLY the widest constructor is a candidate. A narrower one is usually a convenience
+        // overload that forwards to it with defaults filled in -- DDPMModel's two-argument form
+        // forwards architecture, options, channels and imageSize as defaults -- so recording it
+        // would rebuild the clone at those defaults while every property comparison still passed.
+        // Refusing is the safe answer: the type keeps its hand-written override, and the parameters
+        // that blocked it are named rather than silently worked around.
+        var widest = constructors.Max(c => c.Parameters.Length);
+
+        foreach (var constructor in constructors.Where(c => c.Parameters.Length == widest))
+        {
+            var mapped = new List<string>(constructor.Parameters.Length);
+            var satisfied = true;
+
+            foreach (var parameter in constructor.Parameters)
+            {
+                // ref/out cannot be reproduced from reading a stored value.
+                if (parameter.RefKind != RefKind.None) { satisfied = false; break; }
+
+                var member = FindSource(type, parameter);
+
+                if (member is null) { satisfied = false; break; }
+
+                mapped.Add(member);
+            }
+
+            if (satisfied) return mapped;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the member that holds what was passed for a constructor parameter.
+    /// </summary>
+    /// <param name="type">The type being planned.</param>
+    /// <param name="parameter">The constructor parameter to source.</param>
+    /// <returns>The member's name, or <see langword="null"/> when nothing holds the value.</returns>
+    /// <remarks>
+    /// <para>
+    /// Fields are searched, not only properties, because that is where a model keeps what it was
+    /// built from. <c>DDPMModel</c> takes a scheduler and a U-Net and stores them in <c>_unet</c>
+    /// and a base-class property; a property-only scan finds one of the two and gives up, which is
+    /// why models had no plan at all before this.
+    /// </para>
+    /// <para>
+    /// The naming rule is the one <c>LayerStateGenerator</c> already proved on the layers: the
+    /// parameter name itself, an underscore prefix, or the PascalCase form. It is deliberately not a
+    /// search for "a field of the right type" -- two constructor parameters of the same type would
+    /// then bind in whichever order the members happened to be declared, and the clone would silently
+    /// swap them.
+    /// </para>
+    /// <para>
+    /// The type must match, which is what makes a name coincidence harmless: a field that happens to
+    /// share a parameter's name but not its type is rejected and the constructor goes unrecorded.
+    /// </para>
+    /// </remarks>
+    private static string? FindSource(INamedTypeSymbol type, IParameterSymbol parameter)
+    {
+        var candidates = new[]
+        {
+            parameter.Name,
+            "_" + parameter.Name,
+            char.ToUpperInvariant(parameter.Name[0]) + parameter.Name.Substring(1),
+        };
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var candidate in candidates)
+            {
+                foreach (var member in current.GetMembers(candidate))
+                {
+                    switch (member)
+                    {
+                        case IPropertySymbol { IsStatic: false, IsIndexer: false } property
+                            when property.GetMethod is not null
+                                 && IsCarriedAs(property.Type, parameter.Type):
+                            return property.Name;
+
+                        case IFieldSymbol { IsStatic: false, IsConst: false } field
+                            when IsCarriedAs(field.Type, parameter.Type):
+                            return field.Name;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// </remarks>
+    private static bool IsCarriedAs(ITypeSymbol property, ITypeSymbol parameter)
+    {
+        var from = property.WithNullableAnnotation(NullableAnnotation.None);
+        var to = parameter.WithNullableAnnotation(NullableAnnotation.None);
+
+        if (SymbolEqualityComparer.Default.Equals(from, to)) return true;
+
+        for (var b = (from as INamedTypeSymbol)?.BaseType; b is not null; b = b.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(b.WithNullableAnnotation(NullableAnnotation.None), to))
+            {
+                return true;
+            }
+        }
+
+        return from.AllInterfaces.Any(i =>
+            SymbolEqualityComparer.Default.Equals(i.WithNullableAnnotation(NullableAnnotation.None), to));
+    }
+
 }

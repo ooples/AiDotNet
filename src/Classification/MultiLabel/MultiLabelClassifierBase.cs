@@ -247,7 +247,18 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <summary>
     /// Creates a new instance of this model type.
     /// </summary>
-    protected abstract IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Every concrete model used to be forced to write this, and 1147 of them
+    /// did -- each one a hand-copied list of constructor arguments that a new option could fall out
+    /// of without anything failing. The clone plan records that constructor at compile time instead,
+    /// so the base can rebuild the type and a model only overrides this when the generator says it
+    /// cannot: a constructor parameter with nothing holding its value, which the build reports by
+    /// name rather than leaving to be discovered by a clone that comes back subtly different.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
+        => (IFullModel<T, Matrix<T>, Matrix<T>>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
     /// <inheritdoc />
     public virtual IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)

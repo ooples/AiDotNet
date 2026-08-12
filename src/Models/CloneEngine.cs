@@ -154,32 +154,48 @@ public static class CloneEngine
         // constructor derives things from its arguments -- weight buffers sized from InputSize,
         // sub-layers built from a depth setting -- and re-deriving them is what keeps a clone
         // consistent. Copying those structures instead would carry a stale derived value forward.
-        //
-        // The generator only records parameters when it proved every one maps to a carried
-        // property, so this cannot be partially satisfied: either the constructor is a pure
+        // The generator only records parameters when it proved every one is supplied by a member of
+        // the type -- a property, or the private field the constructor stored it in -- so this cannot
+        // be partially satisfied: either the constructor is a pure function of state the instance
+        // still holds, or nothing was recorded and the parameterless path below applies.
         // function of carried configuration, or the build already failed.
         if (plan.ConstructorParameters.Count > 0)
         {
-            var byName = new Dictionary<string, ClonePlanEntry>(StringComparer.Ordinal);
-            foreach (var entry in plan.Entries) byName[entry.Property.Name] = entry;
-
             var arguments = new object?[plan.ConstructorParameters.Count];
             for (int i = 0; i < arguments.Length; i++)
             {
-                if (!byName.TryGetValue(plan.ConstructorParameters[i], out var entry))
+                if (!TryReadMember(type, plan.ConstructorParameters[i], source, out arguments[i]))
                 {
                     throw new InvalidOperationException(
                         $"{type.Name} records constructor parameter '{plan.ConstructorParameters[i]}' "
-                        + "but no carried property supplies it. The generated plan and the runtime "
+                        + "but no member of that name supplies it. The generated plan and the runtime "
                         + "type disagree, which means the assembly was built against a different "
                         + "version of this type.");
                 }
-
-                arguments[i] = entry.Property.GetValue(source);
             }
 
+            // Matched on parameter NAMES, not on how many there are. Overloads of equal arity are
+            // ordinary -- a model taking (options, regularization) beside one taking
+            // (options, lossFunction) -- and picking by count alone would pass each value to
+            // whichever overload reflection happened to return first. The plan records the property
+            // that supplies each position, and those property names are the parameter names the
+            // generator matched, so comparing them identifies the constructor it actually planned.
             var withArgs = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                .FirstOrDefault(c => c.GetParameters().Length == arguments.Length);
+                .FirstOrDefault(c =>
+                {
+                    var parameters = c.GetParameters();
+                    if (parameters.Length != arguments.Length) return false;
+
+                    for (int i = 0; i < parameters.Length; i++)
+                    {
+                        if (!NamesTheSameValue(parameters[i].Name, plan.ConstructorParameters[i]))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                });
 
             if (withArgs is not null)
             {
@@ -273,4 +289,65 @@ public static class CloneEngine
 
         return typed;
     }
+
+    /// <summary>
+    /// Reads the value a recorded constructor parameter was built from.
+    /// </summary>
+    /// <param name="type">The runtime type being rebuilt.</param>
+    /// <param name="member">The member name the plan recorded.</param>
+    /// <param name="source">The instance being cloned.</param>
+    /// <param name="value">Receives the value, or null when no such member exists.</param>
+    /// <returns><see langword="true"/> when the member was found and read.</returns>
+    /// <remarks>
+    /// Private fields are in scope. A constructor argument that is not also exposed as a property is
+    /// the normal case for a model -- a diffusion model's U-Net lives in <c>_unet</c> and nowhere
+    /// else -- and refusing to read it would mean the only rebuildable models are the ones that
+    /// happen to re-expose everything they were built from.
+    /// </remarks>
+    private static bool TryReadMember(Type type, string member, object source, out object? value)
+    {
+        const BindingFlags Flags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            var property = current.GetProperty(member, Flags | BindingFlags.DeclaredOnly);
+            if (property is not null && property.CanRead)
+            {
+                value = property.GetValue(source);
+                return true;
+            }
+
+            var field = current.GetField(member, Flags | BindingFlags.DeclaredOnly);
+            if (field is not null)
+            {
+                value = field.GetValue(source);
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Determines whether a constructor parameter and a recorded member name denote the same value.
+    /// </summary>
+    /// <param name="parameter">The constructor parameter's name.</param>
+    /// <param name="member">The member name the plan recorded.</param>
+    /// <returns><see langword="true"/> when they correspond.</returns>
+    /// <remarks>
+    /// The recorded name is the member that holds the value, which is usually the parameter with a
+    /// leading underscore. Comparing the two raw would reject <c>_unet</c> against <c>unet</c> and
+    /// silently drop back to demanding a parameterless constructor, so the underscore is stripped
+    /// before comparing.
+    /// </remarks>
+    private static bool NamesTheSameValue(string? parameter, string member)
+    {
+        if (parameter is null) return false;
+
+        var trimmed = member.StartsWith("_", StringComparison.Ordinal) ? member.Substring(1) : member;
+        return string.Equals(parameter, trimmed, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
