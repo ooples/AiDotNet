@@ -61,7 +61,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // activations, caches, datasets and buffers, so treating its CLR type or nullability as a
         // role silently corrupts the parameter graph.
         var autoParamsSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.AutoParametersAttribute");
-        var scratchSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.ScratchAttribute");
         var bufferSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.BufferAttribute");
         // Bail only if NO discovery route exists. This used to return whenever
         // TrainableParameterAttribute was missing, which also disabled register-call discovery,
@@ -111,16 +110,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var subLayerFields = new List<SubLayerFieldInfo>();
 
             var bufferFields = new List<(string Field, string Name, string Role, string StateRole)>();
-
-            // A field handed to RegisterBuffer IS a buffer, whether or not it also carries
-            // [Buffer]. Without this, inverted discovery promoted BatchNormalization's _runningMean
-            // and _runningVariance to TRAINABLE -- counted once as parameters and again through the
-            // buffer registry (144 against a saved 96), and, far worse, handed to the optimizer.
-            // Running statistics are estimates of the data, not weights; a gradient step on them is
-            // silent corruption of every subsequent inference.
-            var imperativeBuffers = new HashSet<string>();
-            foreach (var (bufName, _) in DiscoverFromRegisterCalls(classSymbol, "RegisterBuffer"))
-                imperativeBuffers.Add(bufName);
 
             foreach (var member in classSymbol.GetMembers())
             {

@@ -46,10 +46,6 @@ namespace AiDotNet.Generators;
 [Generator]
 public class ModelParameterGenerator : IIncrementalGenerator
 {
-    private const string ScratchAttributeName = "AiDotNet.Attributes.ScratchAttribute";
-    private const string BufferAttributeName = "AiDotNet.Attributes.BufferAttribute";
-    private const string ParameterAliasAttributeName = "AiDotNet.Attributes.ParameterAliasAttribute";
-    private const string TrainableParameterAttributeName = "AiDotNet.Attributes.TrainableParameterAttribute";
     private const string TensorTypeName = "AiDotNet.Tensors.LinearAlgebra.Tensor";
     private const string MatrixTypeName = "AiDotNet.Tensors.LinearAlgebra.Matrix";
     private const string VectorTypeName = "AiDotNet.Tensors.LinearAlgebra.Vector";
@@ -78,11 +74,6 @@ public class ModelParameterGenerator : IIncrementalGenerator
                                 SourceProductionContext context)
     {
         if (classes.IsDefaultOrEmpty) return;
-
-        var scratchSymbol = compilation.GetTypeByMetadataName(ScratchAttributeName);
-        var bufferSymbol = compilation.GetTypeByMetadataName(BufferAttributeName);
-        var aliasSymbol = compilation.GetTypeByMetadataName(ParameterAliasAttributeName);
-        var trainableParameterSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
 
         var processed = new HashSet<string>();
 
@@ -271,23 +262,6 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private static string HintName(INamedTypeSymbol t) =>
         t.ToDisplayString().Replace('.', '_').Replace('<', '_').Replace('>', '_');
-
-    /// <summary>Field-level gates shared by both emission paths.</summary>
-    private static bool IsRegisterableField(IFieldSymbol f,
-                                            INamedTypeSymbol? scratchSymbol,
-                                            INamedTypeSymbol? bufferSymbol,
-                                            INamedTypeSymbol? aliasSymbol)
-    {
-        if (f.IsStatic || f.IsConst) return false;
-        // Auto-property backing fields have names that are not valid C# to emit.
-        if (f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) return false;
-        if (HasAttr(f, scratchSymbol) || HasAttr(f, aliasSymbol)) return false;
-        // A gradient accumulator is sized like a weight and is not one. The layer path uses the
-        // same suffix convention.
-        if (f.Name.EndsWith("Gradient", System.StringComparison.Ordinal) ||
-            f.Name.EndsWith("Gradients", System.StringComparison.Ordinal)) return false;
-        return true;
-    }
 
     private static ITypeSymbol? MemberType(ISymbol m) => m switch
     {
@@ -843,12 +817,6 @@ public class ModelParameterGenerator : IIncrementalGenerator
         value = named.TypeArguments[1];
         return true;
     }
-
-
-    private static bool HasAttr(IFieldSymbol field, INamedTypeSymbol? attr) =>
-        attr is not null && field.GetAttributes()
-            .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attr));
-
     private static bool IsPersistentState(ParameterMemberSemanticModel.Kind kind) => kind is
         ParameterMemberSemanticModel.Kind.Trainable
         or ParameterMemberSemanticModel.Kind.Fitted
