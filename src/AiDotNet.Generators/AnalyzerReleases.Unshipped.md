@@ -45,6 +45,7 @@ ADNPORT003 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Duplica
 ADNPORT004 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Adjacent sequential layers have incompatible value domains
 ADNPORT005 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Model input-shape constraint references a missing member
 ADNPORT006 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Type using a generated tensor/model-input contract is not partial
+ADNPORT007 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Generated rank-routing or model-input geometry contains impossible values
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
 AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract

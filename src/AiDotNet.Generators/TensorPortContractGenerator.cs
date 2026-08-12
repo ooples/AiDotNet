@@ -23,7 +23,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor IntegerRangeRequired = new(
         "ADNPORT001",
         "Integer-index port has no range",
-        "Port '{0}' on '{1}' accepts integer indices but declares neither MaxExclusiveMember nor MaxExclusiveResolver",
+        "Port '{0}' on '{1}' accepts integer indices but declares neither MaxExclusiveMember nor MaxExclusiveResolver. Set one to the vocabulary/range owner so generated callers can create legal IDs",
         "AiDotNet.TensorPorts",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -32,7 +32,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor MissingContractMember = new(
         "ADNPORT002",
         "Tensor-port contract member does not exist",
-        "Port '{0}' on '{1}' refers to member '{2}', but that field, property or method does not exist",
+        "Port '{0}' on '{1}' refers to member '{2}', but that field, property or method does not exist. Declare the member or correct the attribute name",
         "AiDotNet.TensorPorts",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -40,7 +40,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor DuplicatePort = new(
         "ADNPORT003",
         "Duplicate tensor-port declaration",
-        "'{0}' declares more than one {1} port named '{2}'",
+        "'{0}' declares more than one {1} port named '{2}'. Remove the duplicate or give each semantic port a unique stable name",
         "AiDotNet.TensorPorts",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -57,7 +57,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor InvalidShapeConstraint = new(
         "ADNPORT005",
         "Invalid model input-shape constraint",
-        "'{0}' declares MinimumElementCountMember '{1}', but that field, property or method does not exist",
+        "'{0}' declares MinimumElementCountMember '{1}', but that field, property or method does not exist. Declare the member or correct the attribute name",
         "AiDotNet.TensorPorts",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -65,11 +65,20 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor GeneratedContractRequiresPartial = new(
         "ADNPORT006",
         "Generated tensor contract type must be partial",
-        "'{0}' uses a generated tensor-port or model-input contract and must be declared partial",
+        "'{0}' uses a generated tensor-port or model-input contract and must be declared partial. Add the partial modifier so the generator can emit the contract without hand-written overrides",
         "AiDotNet.TensorPorts",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Partial types let generated contracts share the model or layer declaration without hand-written overrides.");
+
+    private static readonly DiagnosticDescriptor InvalidContractValues = new(
+        "ADNPORT007",
+        "Generated tensor contract contains impossible values",
+        "'{0}' has an invalid generated tensor contract: {1}. Correct the attribute values; ranks must be positive when set, layer indexes cannot be negative, and ExactRank cannot be smaller than MinimumRank",
+        "AiDotNet.TensorPorts",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Impossible rank and geometry declarations are rejected during compilation instead of failing a generated fixture or model forward pass.");
 
     private enum Domain
     {
@@ -148,6 +157,27 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                 invalid = true;
             }
 
+            if (rankRoute is not null)
+            {
+                int maximumIndexRank = rankRoute.ConstructorArguments[0].Value is int maximum ? maximum : 0;
+                int layerIndex = rankRoute.ConstructorArguments[1].Value is int index ? index : -1;
+                string? reason = maximumIndexRank <= 0
+                    ? $"MaximumIndexRank is {maximumIndexRank}; it must be greater than zero"
+                    : layerIndex < 0
+                        ? $"LayerIndex is {layerIndex}; it must be zero or greater"
+                        : null;
+                if (reason is not null)
+                {
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        InvalidContractValues,
+                        rankRoute.ApplicationSyntaxReference?.GetSyntax().GetLocation()
+                            ?? type.Locations.FirstOrDefault(),
+                        type.Name,
+                        reason));
+                    invalid = true;
+                }
+            }
+
             foreach (var duplicate in ports.GroupBy(p => (p.Direction, p.Name), PortKeyComparer.Instance)
                          .Where(g => g.Count() > 1))
             {
@@ -196,6 +226,25 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                 minimumElements = NamedInt(shapeConstraint, "MinimumElementCount");
                 exactRank = NamedInt(shapeConstraint, "ExactRank");
                 minimumElementsMember = NamedString(shapeConstraint, "MinimumElementCountMember");
+                string? invalidValueReason = minimumRank < 0
+                    ? $"MinimumRank is {minimumRank}; it cannot be negative"
+                    : exactRank < 0
+                        ? $"ExactRank is {exactRank}; it cannot be negative"
+                        : minimumElements < 0
+                            ? $"MinimumElementCount is {minimumElements}; it cannot be negative"
+                            : exactRank > 0 && minimumRank > exactRank
+                                ? $"MinimumRank {minimumRank} exceeds ExactRank {exactRank}"
+                                : null;
+                if (invalidValueReason is not null)
+                {
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        InvalidContractValues,
+                        shapeConstraint.ApplicationSyntaxReference?.GetSyntax().GetLocation()
+                            ?? type.Locations.FirstOrDefault(),
+                        type.Name,
+                        invalidValueReason));
+                    invalid = true;
+                }
                 if (!string.IsNullOrWhiteSpace(minimumElementsMember)
                     && !HasMember(type, minimumElementsMember!))
                 {

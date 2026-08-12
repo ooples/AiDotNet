@@ -210,4 +210,36 @@ public class Layer<T> : LayerBase<T> { }";
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("must be declared partial", diagnostic.GetMessage());
     }
+
+    [Fact]
+    public async Task ContradictoryShapeConstraint_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks;
+[ModelInputShapeConstraint(MinimumRank = 3, ExactRank = 2)]
+public partial class Model<T> : NeuralNetworkBase<T> { }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT007"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("MinimumRank 3 exceeds ExactRank 2", diagnostic.GetMessage());
+        Assert.Contains("Correct the attribute values", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task InvalidRankRoute_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks;
+[RankRoutedInputDomain(2, -1)]
+public partial class Model<T> : NeuralNetworkBase<T> { }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT007"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("LayerIndex is -1", diagnostic.GetMessage());
+        Assert.Contains("Correct the attribute values", diagnostic.GetMessage());
+    }
 }
