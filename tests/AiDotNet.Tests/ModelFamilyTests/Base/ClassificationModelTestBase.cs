@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
@@ -10,8 +11,45 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for classification models. Tests deep mathematical invariants
 /// that any correctly implemented classifier must satisfy.
 /// </summary>
-public abstract class ClassificationModelTestBase : System.IDisposable
+/// <remarks>
+/// Fixtures and assertion math remain in double precision so class-label checks and accuracy
+/// thresholds keep their original meaning. Only the model boundary is converted to <typeparamref name="T"/>.
+/// </remarks>
+public abstract class ClassificationModelTestBase<T> : System.IDisposable
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    protected static Matrix<T> ToT(Matrix<double> matrix)
+    {
+        if (typeof(T) == typeof(double)) return (Matrix<T>)(object)matrix;
+
+        var converted = new Matrix<T>(matrix.Rows, matrix.Columns);
+        for (int row = 0; row < matrix.Rows; row++)
+            for (int column = 0; column < matrix.Columns; column++)
+                converted[row, column] = NumOps.FromDouble(matrix[row, column]);
+        return converted;
+    }
+
+    protected static Vector<T> ToT(Vector<double> vector)
+    {
+        if (typeof(T) == typeof(double)) return (Vector<T>)(object)vector;
+
+        var converted = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+            converted[i] = NumOps.FromDouble(vector[i]);
+        return converted;
+    }
+
+    protected static Vector<double> ToD(Vector<T> vector)
+    {
+        if (typeof(T) == typeof(double)) return (Vector<double>)(object)vector;
+
+        var converted = new Vector<double>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+            converted[i] = NumOps.ToDouble(vector[i]);
+        return converted;
+    }
+
     /// <summary>
     /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
     /// test-class instance per test and calls Dispose() afterward, so this clears the
@@ -40,7 +78,7 @@ public abstract class ClassificationModelTestBase : System.IDisposable
     {
     }
 
-    protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
 
     protected virtual int TrainSamples => 120;
     protected virtual int TestSamples => 30;
@@ -76,8 +114,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -108,8 +146,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         double accuracy = ModelTestHelpers.CalculateAccuracy(testY, predictions);
         double chanceLevel = 1.0 / NumClasses;
@@ -133,8 +171,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         double accuracy = ModelTestHelpers.CalculateAccuracy(testY, predictions);
         Assert.True(accuracy > 0.8,
@@ -157,9 +195,9 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        var trainPred = model.Predict(trainX);
-        var testPred = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var trainPred = ToD(model.Predict(ToT(trainX)));
+        var testPred = ToD(model.Predict(ToT(testX)));
 
         double trainAcc = ModelTestHelpers.CalculateAccuracy(trainY, trainPred);
         double testAcc = ModelTestHelpers.CalculateAccuracy(testY, testPred);
@@ -190,11 +228,11 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var rngTest = ModelTestHelpers.CreateSeededRandom(99);
         var (testX, testY) = GenerateData(50, Features, NumClasses, rngTest);
 
-        model1.Train(trainX1, trainY1);
-        model2.Train(trainX2, trainY2);
+        model1.Train(ToT(trainX1), ToT(trainY1));
+        model2.Train(ToT(trainX2), ToT(trainY2));
 
-        var pred1 = model1.Predict(testX);
-        var pred2 = model2.Predict(testX);
+        var pred1 = ToD(model1.Predict(ToT(testX)));
+        var pred2 = ToD(model2.Predict(ToT(testX)));
 
         double acc1 = ModelTestHelpers.CalculateAccuracy(testY, pred1);
         double acc2 = ModelTestHelpers.CalculateAccuracy(testY, pred2);
@@ -228,11 +266,11 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var trainX_noisy = ModelTestHelpers.AddNoiseFeature(trainX_real, rngNoise);
         var testX_noisy = ModelTestHelpers.AddNoiseFeature(testX_real, rngNoise);
 
-        model1.Train(trainX_real, trainY);
-        model2.Train(trainX_noisy, trainY);
+        model1.Train(ToT(trainX_real), ToT(trainY));
+        model2.Train(ToT(trainX_noisy), ToT(trainY));
 
-        var pred1 = model1.Predict(testX_real);
-        var pred2 = model2.Predict(testX_noisy);
+        var pred1 = ToD(model1.Predict(ToT(testX_real)));
+        var pred2 = ToD(model2.Predict(ToT(testX_noisy)));
 
         double accClean = ModelTestHelpers.CalculateAccuracy(testY, pred1);
         double accNoisy = ModelTestHelpers.CalculateAccuracy(testY, pred2);
@@ -259,8 +297,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(60, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         var predictedClasses = new HashSet<int>();
         for (int i = 0; i < predictions.Length; i++)
@@ -287,8 +325,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(60, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
 
         // Build confusion matrix
         var cm = new int[NumClasses, NumClasses];
@@ -331,9 +369,9 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        var pred1 = model.Predict(testX);
-        var pred2 = model.Predict(testX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var pred1 = ToD(model.Predict(ToT(testX)));
+        var pred2 = ToD(model.Predict(ToT(testX)));
 
         for (int i = 0; i < pred1.Length; i++)
             Assert.Equal(pred1[i], pred2[i]);
@@ -349,8 +387,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        Assert.Equal(TestSamples, model.Predict(testX).Length);
+        model.Train(ToT(trainX), ToT(trainY));
+        Assert.Equal(TestSamples, model.Predict(ToT(testX)).Length);
     }
 
     [Fact(Timeout = 60000)]
@@ -363,10 +401,10 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         var cloned = model.Clone();
-        var pred1 = model.Predict(testX);
-        var pred2 = cloned.Predict(testX);
+        var pred1 = ToD(model.Predict(ToT(testX)));
+        var pred2 = ToD(cloned.Predict(ToT(testX)));
 
         for (int i = 0; i < pred1.Length; i++)
             Assert.Equal(pred1[i], pred2[i]);
@@ -381,7 +419,7 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
+        model.Train(ToT(trainX), ToT(trainY));
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -395,8 +433,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
-        model.Train(trainX, trainY);
-        if (model is not IParameterizable<double, Matrix<double>, Vector<double>> paramModel)
+        model.Train(ToT(trainX), ToT(trainY));
+        if (model is not IParameterizable<T, Matrix<T>, Vector<T>> paramModel)
         {
             // Tree/ensemble classifiers don't implement IParameterizable — skip
             return;
@@ -431,8 +469,8 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         using var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, 2, rng);
 
-        model.Train(trainX, trainY);
-        var predictions = model.Predict(trainX);
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(trainX)));
 
         if (ModelTestHelpers.AllFinite(predictions))
         {
@@ -480,16 +518,16 @@ public abstract class ClassificationModelTestBase : System.IDisposable
             imbY[i] = i < majorityCount ? 0.0 : 1.0;
         }
 
-        model1.Train(balX, balY);
-        model2.Train(imbX, imbY);
+        model1.Train(ToT(balX), ToT(balY));
+        model2.Train(ToT(imbX), ToT(imbY));
 
         var testX = new Matrix<double>(20, Features);
         for (int i = 0; i < 20; i++)
             for (int j = 0; j < Features; j++)
                 testX[i, j] = rng1.NextDouble() * 10.0;
 
-        var pred1 = model1.Predict(testX);
-        var pred2 = model2.Predict(testX);
+        var pred1 = ToD(model1.Predict(ToT(testX)));
+        var pred2 = ToD(model2.Predict(ToT(testX)));
 
         if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
         {
@@ -517,9 +555,9 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
 
-        var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(CreateModel())
             .BuildAsync()
@@ -537,18 +575,21 @@ public abstract class ClassificationModelTestBase : System.IDisposable
         var rng = ModelTestHelpers.CreateSeededRandom();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
-        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(ToT(trainX), ToT(trainY));
 
-        var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiDotNet.AiModelBuilder<T, Matrix<T>, Vector<T>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(CreateModel())
             .BuildAsync()
             .GetAwaiter()
             .GetResult();
 
-        var predictions = result.Predict(testX);
+        var predictions = ToD(result.Predict(ToT(testX)));
         double accuracy = ModelTestHelpers.CalculateAccuracy(testY, predictions);
         Assert.True(accuracy > 1.0 / NumClasses,
             $"Builder pipeline accuracy = {accuracy:F4}, chance = {1.0 / NumClasses:F4}.");
     }
 }
+
+/// <summary>Double-precision compatibility shim for existing classification fixtures.</summary>
+public abstract class ClassificationModelTestBase : ClassificationModelTestBase<double> { }
