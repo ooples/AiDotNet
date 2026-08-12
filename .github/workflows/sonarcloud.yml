@@ -755,12 +755,22 @@ jobs:
           # CANCELLED before finishing (dense with heavy segmentation/foundation models,
           # e.g. Mask2Former). Split G-M → G-I + J-M so each serial half finishes under the
           # timeout. Gap-free + non-overlapping: union == G-M.
-          - name: ModelFamily - Generated Layers G-I
+          # SPLIT FROM "G-I", which reached the 45-minute job ceiling and uploaded no TRX. It
+          # carried 35 layer types (G 19, H 10, I 6) plus the generated model scaffolds on the same
+          # prefixes -- against healthy shards like C and D at 25 and 22. This is the one of the
+          # four reported shards where breadth genuinely was the problem; U (6 types) and Vo-VR
+          # (1 type) are small and fail for a different reason, so they are NOT split here.
+          - name: ModelFamily - Generated Layers G
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.G
+          - name: ModelFamily - Generated Layers H-I
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
+              (FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
           # J-M in turn never once COMPLETED: every run either OOMed (MiniGPT-v2 / Llama-3.2-Vision /
           # Kimi-VL, all bounded now) or ran out the 45-min budget. It carries 183 generated classes,
           # and the last CI run covered only 44 of them in 14.4 min of execution before dying —
@@ -1212,7 +1222,8 @@ jobs:
             'ModelFamily - Generated Layers B',
             'ModelFamily - Generated Layers C',
             'ModelFamily - Generated Layers D-F',
-            'ModelFamily - Generated Layers G-I',
+            'ModelFamily - Generated Layers G',
+            'ModelFamily - Generated Layers H-I',
             'ModelFamily - Generated Layers J-L',
             'ModelFamily - Generated Layers M A-Medi',
             'ModelFamily - Generated Layers M MedS-Meta',
