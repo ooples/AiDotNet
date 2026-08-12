@@ -124,10 +124,13 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "CNNBiLSTMCRFTests");
         Assert.Contains(floatScaffolds, t => t.Name == "OnlineSGDRegressorTests");
         Assert.Contains(floatScaffolds, t => t.Name == "OnlineSGDClassifierTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "PCAlgorithmTests");
 
         Assert.Contains(doubleScaffolds, t => t.Name == "GraFPrintTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "SambaLanguageModelTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "TabPFNNetworkTests");
+        Assert.Contains(doubleScaffolds, t => t.Name == "UniVSTModelTests");
+        Assert.Contains(doubleScaffolds, t => t.Name == "GraNDAGAlgorithmTests");
     }
 
     [Fact]

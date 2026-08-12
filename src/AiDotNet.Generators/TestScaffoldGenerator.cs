@@ -17583,12 +17583,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(symbol.ToDisplayString());
-        string constructorExpr = symbol.TypeParameters.Length <= 1
-            ? $"new {typeName}<double>()"
-            : $"new {typeName}<double>()";
-
-        if (category is AlgorithmCategory.ActiveLearning or AlgorithmCategory.ContinualLearning or AlgorithmCategory.Distillation)
-            constructorExpr = $"new {typeName}<float>()";
+        // GraN-DAG remains an explicit FP64 exception: the genuine FP32 scaffold passes 13/14
+        // causal invariants but learns no true edge in the strong-signal recovery fixture. Keep the
+        // entire generated type chain at one precision; mixing a double factory into a float base
+        // would only hide the failed conversion behind an adapter.
+        bool useDoublePrecision = category == AlgorithmCategory.CausalDiscovery &&
+            testClassName == "GraNDAGAlgorithmTests";
+        string numericType = useDoublePrecision ? "double" : "float";
+        string constructorExpr = $"new {typeName}<{numericType}>()";
 
         // The paper's cMLP is a proximal-gradient model whose absent causes are represented by
         // EXACTLY-zero first-layer groups. The production constructor retains its research-scale
@@ -17597,7 +17599,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // within CI's per-test limit.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "NeuralGrangerAlgorithmTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "HiddenUnits = 10, MaxLag = 3, LearningRate = 0.05, MaxEpochs = 120, " +
                 "SparsityPenalty = 0.1, EdgeThreshold = 0.1 })";
         }
@@ -17609,12 +17611,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // identity-factor initialization.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "NOTEARSLowRankTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "MaxRank = 2 })";
         }
 
         // DAGMA Linear's paper default remains its 30k/60k central-path schedule. The generated
-        // causal scaffold owns double-valued synthetic data, so use the FP32 boundary adapter and
+        // causal scaffold keeps synthetic fixture math in double and converts at its typed boundary;
         // bound each inner stage through the public MaxIterations option. The FP64 5,000-step
         // fixture recovered the true edges but its two-discovery MoreData invariant hit 60 seconds
         // under 4-way runner contention. FP32 at 5,000 steps completes MoreData in under 10 seconds;
@@ -17623,39 +17625,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // defaults and the mathematical assertions remain unchanged.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DAGMALinearTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
-                "EdgeThreshold = 0.01, MaxIterations = 5000, Seed = 42 }))";
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "EdgeThreshold = 0.01, MaxIterations = 5000, Seed = 42 })";
         }
 
-        // The causal invariant base owns double-valued synthetic data, so the neural-model FP32
-        // roster above cannot float this algorithm fixture. Convert only at the scaffold boundary
-        // and run DAGMA nonlinear itself at FP32. Its public MaxIterations cap bounds the paper
+        // The generic causal invariant base converts its double-valued fixtures at the algorithm
+        // boundary, so DAGMA nonlinear itself runs at FP32. Its public MaxIterations cap bounds the paper
         // central-path schedule, and HiddenUnits shrinks the generated fixture's MLP from 10 to 4.
         // A Release-DLL invariant sweep under concurrent shard load proved 250 iterations green
         // (including the two-discovery MoreData probe in 2.7 seconds); omitting either option still
         // preserves the published production defaults.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DAGMANonlinearTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "EdgeThreshold = 0.05, SparsityPenalty = 0.01, HiddenUnits = 4, " +
-                "MaxIterations = 250, Seed = 42 }))";
+                "MaxIterations = 250, Seed = 42 })";
         }
 
         // DYNOTEARS performs 200 inner gradient steps for every outer augmented-Lagrangian
         // iteration. Its paper/default 100-iteration schedule therefore made the generated
         // two-discovery MoreData invariant exceed 60 seconds under four-worker contention.
         // Keep that production default intact; run the deterministic four-variable fixture in
-        // FP32 through the causal boundary adapter and cap only its public outer iteration count.
+        // FP32 through the generic causal boundary and cap only its public outer iteration count.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DYNOTEARSAlgorithmTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 // InnerIterations is a public option shared by the continuous causal family; DYNOTEARS
                 // previously ignored it and always ran 200 inner steps. Fifty retains real augmented-
                 // Lagrangian optimization while bounding the generated fixture under shard contention.
-                "MaxIterations = 25, InnerIterations = 50, Seed = 42 }))";
+                "MaxIterations = 25, InnerIterations = 50, Seed = 42 })";
         }
 
         // DECI's variational posterior needs a longer, higher-signal warm-up than
@@ -17665,9 +17663,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // defaults intact while exercising its public tuning surface at a bounded scale.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DECIAlgorithmTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
-                "HiddenUnits = 16, LearningRate = 0.01, MaxEpochs = 200, EdgeThreshold = 0.1, Seed = 42 }))";
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "HiddenUnits = 16, LearningRate = 0.01, MaxEpochs = 200, EdgeThreshold = 0.1, Seed = 42 })";
         }
 
         // GOLEM exposes MaxIterations through the shared causal options. Keep
@@ -17676,7 +17673,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // observed in the deterministic smoke data.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "GOLEMAlgorithmTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "MaxIterations = 5000, EdgeThreshold = 0.5, Seed = 42 })";
         }
 
@@ -17686,7 +17683,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (category == AlgorithmCategory.CausalDiscovery &&
             testClassName is "NOTEARSNonlinearTests" or "NOTEARSSobolevTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "MaxIterations = 2, HiddenUnits = 4, Seed = 42 })";
         }
 
@@ -17699,9 +17696,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         switch (category)
         {
             case AlgorithmCategory.CausalDiscovery:
-                baseClass = "CausalDiscoveryTestBase";
+                baseClass = $"CausalDiscoveryTestBase<{numericType}>";
                 factoryMethod = "CreateAlgorithm";
-                factoryReturnType = "ICausalDiscoveryAlgorithm<double>";
+                factoryReturnType = $"ICausalDiscoveryAlgorithm<{numericType}>";
                 extraUsings = "using AiDotNet.CausalDiscovery;\n";
                 break;
             case AlgorithmCategory.ActiveLearning:
