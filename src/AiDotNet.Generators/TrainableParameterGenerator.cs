@@ -243,7 +243,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: false));
+                    var sliShape = field.GetAttributes()
+                        .FirstOrDefault(a => a.AttributeClass?.Name == "SubLayerInputAttribute")
+                        ?.ConstructorArguments.FirstOrDefault().Value as string;
+                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: false, InputShape: sliShape));
                 }
                 // ...and sub-layers held in a COLLECTION. A composite that keeps its children in a
                 // List<> got no registration at all, so GetSubLayers() returned nothing for them and
@@ -424,6 +427,58 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+
+        // DeclaredSubLayerShapes — emitted from [SubLayerInput("...")] on the sub-layer fields.
+        //
+        // A composite's children do not all receive the composite's own input, and only the
+        // composite knows which gets what. Declaring it on the field lets the generator supply that
+        // fact to LayerBase.BringUpDeclaredSubLayers, so no composite implements the method.
+        var shapedSubLayers = subLayerFields
+            .Where(sl => !sl.IsCollection && !string.IsNullOrWhiteSpace(sl.InputShape))
+            .ToList();
+        if (shapedSubLayers.Count > 0)
+        {
+            string tpS = GetTypeParamName(classSymbol);
+            string subTuple = $"(LayerBase<{tpS}>? Child, AiDotNet.Tensors.LinearAlgebra.TensorShape InputShape)";
+            string subArray = $"(LayerBase<{tpS}>?, AiDotNet.Tensors.LinearAlgebra.TensorShape)";
+
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// The input shape each sub-layer receives from this composite.");
+            sb.AppendLine("    /// Auto-generated — do not modify. Edit the [SubLayerInput(\"...\")] arguments instead.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    /// <remarks>");
+            sb.AppendLine("    /// Empty while any declared child is still null or any axis is still negative: a composite");
+            sb.AppendLine("    /// builds its children inside its initializer, so both are ordinary states before that runs.");
+            sb.AppendLine("    /// Cached, because the initializer deliberately re-enters.");
+            sb.AppendLine("    /// </remarks>");
+            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{subTuple}> DeclaredSubLayerShapes()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        if (__declaredSubLayerShapes is not null) return __declaredSubLayerShapes;");
+            foreach (var sl in shapedSubLayers)
+            {
+                sb.AppendLine($"        if ({sl.Name} is null) return System.Array.Empty<{subArray}>();");
+            }
+            sb.AppendLine($"        var __sub = new {subArray}[]");
+            sb.AppendLine("        {");
+            foreach (var sl in shapedSubLayers)
+            {
+                var axes = string.Join(", ", sl.InputShape!.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0));
+                sb.AppendLine($"            ({sl.Name}, ShapeOf({axes})),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine("        for (int __i = 0; __i < __sub.Length; __i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var __s = __sub[__i].Item2;");
+            sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
+            sb.AppendLine($"                if (__s[__d] < 0) return System.Array.Empty<{subArray}>();");
+            sb.AppendLine("        }");
+            sb.AppendLine("        __declaredSubLayerShapes = __sub;");
+            sb.AppendLine("        return __declaredSubLayerShapes;");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine($"    private {subArray}[]? __declaredSubLayerShapes;");
+            sb.AppendLine();
+        }
 
         // DeclaredParameterShapes — emitted from [TrainableParameter(Shape = "...")].
         //
@@ -1146,5 +1201,5 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
     private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false, bool Nullable = false, string? Shape = null);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
-    private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection);
+    private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection, string? InputShape = null);
 }

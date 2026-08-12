@@ -198,6 +198,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// refers to "the ball" rather than "the dog" by attending strongly to the word "ball".
     /// </para>
     /// </remarks>
+    [SubLayerInput("1, _embeddingSize")]
     private MultiHeadAttentionLayer<T> _selfAttention;
 
     /// <summary>
@@ -219,6 +220,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// it prevents sudden spikes or drops that might disrupt the learning process.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private LayerNormalizationLayer<T> _norm1;
 
     /// <summary>
@@ -240,6 +242,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// making final decisions about what features to extract from each position.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private FeedForwardLayer<T> _feedForward1;
 
     /// <summary>
@@ -249,6 +252,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Projects the expanded representation back to the original embedding size.
     /// A proper transformer FFN has two layers: expansion and projection.
     /// </remarks>
+    [SubLayerInput("_feedForwardDim")]
     private FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
@@ -270,6 +274,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// or for use by a decoder in the complete transformer model.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private LayerNormalizationLayer<T> _norm2;
 
     /// <summary>
@@ -525,35 +530,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         ResolveShapes(resolved, declaredOutput);
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// The children take the embedding width, except the second feed-forward, which consumes the
-    /// feed-forward width the first one projected up to, and self-attention, which wants a
-    /// sequence axis in front. That asymmetry is the only thing about the deferral that this layer
-    /// knows and the base cannot derive, so it is the only thing declared here.
-    /// </remarks>
-    protected override IReadOnlyList<(LayerBase<T>? Child, TensorShape InputShape)> DeclaredSubLayerShapes()
-    {
-        // BUILT ONCE. The declaration is a constant of this layer once _embeddingSize is known, and
-        // EnsureInitialized re-enters (construction resolves shapes, a later caller allocates), so
-        // rebuilding it per call would allocate the shapes and the list again every time for a
-        // description that cannot have changed.
-        if (_declaredSubLayerShapes is not null) return _declaredSubLayerShapes;
 
-        var embed = ShapeOf(_embeddingSize);
-        _declaredSubLayerShapes = new (LayerBase<T>?, TensorShape)[]
-        {
-            (_selfAttention, ShapeOf(1, _embeddingSize)),
-            (_norm1,         embed),
-            (_feedForward1,  embed),
-            (_feedForward2,  ShapeOf(_feedForwardDim)),
-            (_norm2,         embed),
-        };
-        return _declaredSubLayerShapes;
-    }
-
-    /// <summary>Cached <see cref="DeclaredSubLayerShapes"/>; the children and their widths never change once built.</summary>
-    private (LayerBase<T>? Child, TensorShape InputShape)[]? _declaredSubLayerShapes;
 
     protected override void EnsureInitialized()
     {

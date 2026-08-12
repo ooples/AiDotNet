@@ -53,9 +53,13 @@ public partial class TimeMoEBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _numExperts;
     private readonly int _topK;
 
+    [SubLayerInput("_hiddenDim")]
     private readonly LayerNormalizationLayer<T> _norm1;
+    [SubLayerInput("1, _hiddenDim")]
     private readonly MultiHeadAttentionLayer<T> _selfAttention;
+    [SubLayerInput("_hiddenDim")]
     private readonly LayerNormalizationLayer<T> _norm2;
+    [SubLayerInput("_hiddenDim")]
     private readonly MixtureOfExpertsLayer<T> _moe;
 
     /// <summary>
@@ -169,46 +173,7 @@ public partial class TimeMoEBlockLayer<T> : LayerBase<T>, IShapeContract
         RegisterSubLayer(_moe);
     }
 
-    /// <summary>
-    /// Sizes the four sub-layers from <c>_hiddenDim</c>, which is the only thing that determines
-    /// their weights.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is the one fact about the block that cannot be derived: its children are sized by the
-    /// block's HIDDEN width, not by the shape of the tensor arriving at its input, and nothing
-    /// outside the block knows that. It used to live inside a hand-written
-    /// <c>SetParameters</c> — so a restore materialized the children, while <c>ParameterCount</c>
-    /// asked the same unmaterialized children and answered a smaller number. The saved and loaded
-    /// blocks then disagreed by 2,424 values.
-    /// </para>
-    /// <para>
-    /// Stating it here instead makes it a SHAPE fact, declared once, and count / read / restore
-    /// all inherit it — none of them has to re-derive the parameter layout, which is what the
-    /// three hand-written surfaces were really for.
-    /// </para>
-    /// <para>
-    /// MultiHeadAttention requires rank >= 2 (sequence + features), so it gets a length-1
-    /// sequence; its weight count depends only on <c>_hiddenDim</c> either way.
-    /// </para>
-    /// </remarks>
-    protected override IReadOnlyList<(LayerBase<T>? Child, TensorShape InputShape)> DeclaredSubLayerShapes()
-    {
-        if (_declaredSubLayerShapes is not null) return _declaredSubLayerShapes;
 
-        var hidden = ShapeOf(_hiddenDim);
-        _declaredSubLayerShapes = new (LayerBase<T>?, TensorShape)[]
-        {
-            (_norm1,         hidden),
-            (_selfAttention, ShapeOf(1, _hiddenDim)),
-            (_norm2,         hidden),
-            (_moe,           hidden),
-        };
-        return _declaredSubLayerShapes;
-    }
-
-    /// <summary>Cached <see cref="DeclaredSubLayerShapes"/>; the children and _hiddenDim never change.</summary>
-    private (LayerBase<T>? Child, TensorShape InputShape)[]? _declaredSubLayerShapes;
 
     protected override void EnsureInitialized()
     {
