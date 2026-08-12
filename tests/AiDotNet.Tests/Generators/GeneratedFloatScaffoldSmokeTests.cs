@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Tests.ModelFamilyTests.Base;
 using Xunit;
 
 namespace AiDotNet.Tests.Generators;
@@ -105,10 +106,22 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "AVIDTests");
         Assert.Contains(floatScaffolds, t => t.Name == "DIFRINTTests");
         Assert.Contains(floatScaffolds, t => t.Name == "DQNAgentTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "ActivationLayerTests");
 
         Assert.Contains(doubleScaffolds, t => t.Name == "GraFPrintTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "SambaLanguageModelTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "TabPFNNetworkTests");
+    }
+
+    [Fact]
+    public void FloatLayerBase_DiscoversFloatActivationImplementations()
+    {
+        var names = LayerTestBase<float>.DiscoveredActivationNames
+            .Select(values => Assert.IsType<string>(values[0]))
+            .ToList();
+
+        Assert.NotEmpty(names);
+        Assert.Contains("ReLUActivation", names);
     }
 
     [Fact]

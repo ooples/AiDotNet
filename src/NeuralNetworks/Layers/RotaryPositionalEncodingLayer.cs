@@ -311,7 +311,22 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int rank = input.Shape.Length;
-        int seqLen = rank >= 2 ? input.Shape[rank - 2] : input.Shape[0];
+        if (rank < 2)
+        {
+            throw new ArgumentException(
+                $"RoPE input rank must be at least 2 ([..., sequence, head dimension]); got rank {rank}.",
+                nameof(input));
+        }
+
+        int headDim = input.Shape[rank - 1];
+        if (headDim != _headDimension)
+        {
+            throw new ArgumentException(
+                $"RoPE expected head dimension {_headDimension}, got {headDim}.",
+                nameof(input));
+        }
+
+        int seqLen = input.Shape[rank - 2];
         EnsureCacheLength(seqLen);
 
         return Engine.ApplyRoPEInterleaved(input, _cosCache, _sinCache, startPosition: 0);
