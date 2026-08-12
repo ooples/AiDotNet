@@ -1291,8 +1291,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
         finally
         {
-            ArrayPool<T>.Shared.Return(mBlock, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
-            ArrayPool<T>.Shared.Return(vBlock, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+            ArrayPool<T>.Shared.Return(mBlock, clearArray: true);
+            ArrayPool<T>.Shared.Return(vBlock, clearArray: true);
             ArrayPool<double>.Shared.Return(absoluteValues);
         }
 
