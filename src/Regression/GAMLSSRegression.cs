@@ -859,12 +859,6 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return vec;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GAMLSSRegression<T>(_options, Regularization);
-    }
-
     /// <summary>
     /// Creates a deep copy via serialization to preserve private coefficient state.
     /// </summary>

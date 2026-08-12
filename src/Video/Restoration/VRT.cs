@@ -527,20 +527,6 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         _ = reader.ReadInt32(); // inputWidth
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VRT<T>(
-            Architecture,
-            null,
-            _lossFunction,
-            _embedDim,
-            _numFrames,
-            _numBlocks,
-            _scaleFactor,
-            new VRTOptions(_options));
-    }
-
     #endregion
 
     #region Base Class Abstract Methods

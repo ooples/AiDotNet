@@ -233,9 +233,6 @@ public class IQVFI<T> : FrameInterpolationBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new IQVFI<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

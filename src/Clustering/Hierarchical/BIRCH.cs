@@ -83,19 +83,6 @@ public class BIRCH<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new BIRCH<T>(new BIRCHOptions<T>
-        {
-            Threshold = _options.Threshold,
-            BranchingFactor = _options.BranchingFactor,
-            NumClusters = _options.NumClusters,
-            ComputeLabels = _options.ComputeLabels,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (BIRCH<T>)CreateNewInstance();

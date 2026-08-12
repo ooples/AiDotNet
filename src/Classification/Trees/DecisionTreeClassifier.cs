@@ -545,21 +545,6 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DecisionTreeClassifier<T>(new DecisionTreeClassifierOptions<T>
-        {
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            Criterion = Options.Criterion,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new DecisionTreeClassifier<T>(new DecisionTreeClassifierOptions<T>

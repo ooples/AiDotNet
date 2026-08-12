@@ -543,10 +543,4 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
             _trees.Add(tree);
         }
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DARTClassifier<T>(_options, Regularization);
-    }
 }

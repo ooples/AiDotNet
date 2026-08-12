@@ -285,12 +285,6 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Mamba2<T>(Architecture, new Mamba2Options<T>(_options), _numFeatures);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

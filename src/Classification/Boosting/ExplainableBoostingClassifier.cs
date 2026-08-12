@@ -981,10 +981,4 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
             _interactionTerms[(f1, f2)] = term;
         }
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ExplainableBoostingClassifier<T>(_options, Regularization);
-    }
 }

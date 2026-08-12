@@ -1145,17 +1145,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>,
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioVisualCorrespondenceNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _audioSampleRate,
-            _videoFrameRate,
-            _numEncoderLayers);
-    }
-
     // No DeepCopy override. The one that used to live here constructed exactly what
     // CreateNewInstance above constructs — same five arguments, same reason for leaving the
     // optimizer and loss out — and then called copy.SetParameters(GetParameters()) on it. That

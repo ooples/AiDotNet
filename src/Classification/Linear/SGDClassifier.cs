@@ -271,23 +271,6 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SGDClassifier<T>(new LinearClassifierOptions<T>
-        {
-            LearningRate = Options.LearningRate,
-            MaxIterations = Options.MaxIterations,
-            Tolerance = Options.Tolerance,
-            FitIntercept = Options.FitIntercept,
-            Alpha = Options.Alpha,
-            Shuffle = Options.Shuffle,
-            Penalty = Options.Penalty,
-            Loss = Options.Loss,
-            Seed = Options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (SGDClassifier<T>)CreateNewInstance();

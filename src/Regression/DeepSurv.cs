@@ -803,12 +803,6 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DeepSurv<T>(_options, Regularization);
-    }
-
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new DeepSurv<T>(_options, Regularization);

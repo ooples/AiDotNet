@@ -731,34 +731,4 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         return maxIndex;
     }
-
-    /// <summary>
-    /// Creates a new instance of the capsule network model.
-    /// </summary>
-    /// <returns>A new instance of the capsule network model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the capsule network model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data. The new instance will have the same architecture and loss function as the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
-    ///
-    /// Think of it like creating a blueprint of the capsule network:
-    /// - It copies the same overall design (architecture)
-    /// - It uses the same loss function to measure performance
-    /// - But it doesn't copy any of the learned values or weights
-    ///
-    /// This is primarily used when saving or loading models, creating a framework that the saved parameters
-    /// can be loaded into later. It's like creating an empty duplicate of the network's structure
-    /// that can later be filled with the knowledge from the original network.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CapsuleNetwork<T>(
-            Architecture,
-            _lossFunction
-        );
-    }
 }

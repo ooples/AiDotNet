@@ -804,12 +804,6 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return tree;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DARTRegression<T>(_options, Regularization);
-    }
-
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new DARTRegression<T>(_options, Regularization);

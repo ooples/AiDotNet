@@ -1472,12 +1472,4 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             Config.CommunicationBackend.Barrier();
         }
     }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new PipelineParallelModel<T, TInput, TOutput>(
-            WrappedModel.Clone(), Config, _microBatchCount,
-            _partitionStrategy, _schedule, _checkpointConfig);
-    }
 }

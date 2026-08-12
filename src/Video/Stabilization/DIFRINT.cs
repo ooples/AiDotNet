@@ -596,9 +596,6 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
         for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new DIFRINT<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numIterations);
-
     #endregion
 
     #region Base Class Abstract Methods

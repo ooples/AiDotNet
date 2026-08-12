@@ -634,20 +634,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new DCRNN instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the DCRNN model, CreateNewInstance builds and wires up model components. This sets up the DCRNN architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DCRNN<T>(Architecture, _options, _adjacencyMatrix);
-    }
-
-    /// <summary>
     /// Serializes DCRNN-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>

@@ -658,19 +658,6 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NHiTSFinance model, CreateNewInstance builds and wires up model components. This sets up the NHiTSFinance architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NHiTSFinance<T>(Architecture, new NHiTSOptions<T>(_options));
-    }
-
-    /// <summary>
     /// Writes N-HiTS-specific configuration during serialization.
     /// </summary>
     /// <remarks>

@@ -459,24 +459,6 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GradientBoostingClassifier<T>(new GradientBoostingClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            LearningRate = Options.LearningRate,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            Subsample = Options.Subsample,
-            MaxFeatures = Options.MaxFeatures,
-            Loss = Options.Loss,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new GradientBoostingClassifier<T>(new GradientBoostingClassifierOptions<T>

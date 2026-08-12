@@ -85,23 +85,6 @@ public class MeanShift<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new MeanShift<T>(new MeanShiftOptions<T>
-        {
-            Bandwidth = _options.Bandwidth,
-            BandwidthQuantile = _options.BandwidthQuantile,
-            ClusterMergeThreshold = _options.ClusterMergeThreshold,
-            BinSeeding = _options.BinSeeding,
-            ClusterAll = _options.ClusterAll,
-            MinBinFrequency = _options.MinBinFrequency,
-            Algorithm = _options.Algorithm,
-            LeafSize = _options.LeafSize,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (MeanShift<T>)CreateNewInstance();

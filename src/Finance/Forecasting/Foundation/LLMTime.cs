@@ -300,24 +300,6 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LLMTime<T>(Architecture, new LLMTimeOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            NumDecimalPlaces = _numDecimalPlaces,
-            NumSamples = _numSamples,
-            Temperature = _temperature
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

@@ -320,9 +320,6 @@ public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new SpeakerLM<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

@@ -347,8 +347,6 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         if (_useNativeMode) _optimizer = CreateDefaultOptimizer();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new SCNet<T>(Architecture, new SCNetOptions(_options));
-
     #endregion
 
     #region Helpers

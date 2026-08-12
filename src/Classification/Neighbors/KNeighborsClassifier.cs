@@ -353,20 +353,6 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new KNeighborsClassifier<T>(new KNeighborsOptions<T>
-        {
-            NNeighbors = Options.NNeighbors,
-            Metric = Options.Metric,
-            Weights = Options.Weights,
-            P = Options.P,
-            Algorithm = Options.Algorithm,
-            LeafSize = Options.LeafSize
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new KNeighborsClassifier<T>(new KNeighborsOptions<T>

@@ -843,9 +843,6 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
             _fusionLayers.Add(Layers[i]);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new SlowFast<T>(Architecture, _numClasses, _optimizer, _lossFunction, _probabilityActivation, _customFastLayers, _customFusionLayers, _slowFrames, _slowChannels, _fastChannels, _alpha);
-
     #endregion
 
     #region IDisposable

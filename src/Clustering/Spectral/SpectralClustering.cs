@@ -82,22 +82,6 @@ public class SpectralClustering<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SpectralClustering<T>(new SpectralOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            Affinity = _options.Affinity,
-            Gamma = _options.Gamma,
-            NumNeighbors = _options.NumNeighbors,
-            EigenSolver = _options.EigenSolver,
-            Normalization = _options.Normalization,
-            AssignLabels = _options.AssignLabels,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (SpectralClustering<T>)CreateNewInstance();

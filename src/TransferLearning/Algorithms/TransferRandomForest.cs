@@ -422,15 +422,6 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        return new MappedRandomForestModel<T>(
-            BaseModel.DeepCopy(),
-            _mapper,
-            _targetFeatures);
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();

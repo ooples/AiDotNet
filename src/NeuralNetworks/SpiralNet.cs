@@ -701,16 +701,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <returns>New SpiralNet instance.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SpiralNet<T>(_options, _optimizer, _lossFunction);
-    }
-
-    /// <summary>
     /// Computes class probabilities for a single mesh using softmax.
     /// </summary>
     /// <param name="meshFeatures">Vertex features tensor.</param>

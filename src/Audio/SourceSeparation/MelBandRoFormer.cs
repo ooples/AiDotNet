@@ -217,8 +217,6 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new MelBandRoFormer<T>(Architecture, _options);
-
     #endregion
 
     #region Helpers

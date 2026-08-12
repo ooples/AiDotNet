@@ -611,16 +611,6 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new CSDI<T>(Architecture, new CSDIOptions<T>
-        {
-            SequenceLength = _sequenceLength, NumFeatures = _numFeatures,
-            HiddenDimension = _hiddenDimension, NumResidualLayers = _numResidualLayers,
-            NumDiffusionSteps = _numDiffusionSteps, NumHeads = _numHeads,
-            TimeEmbeddingDim = _timeEmbeddingDim, DropoutRate = _dropout,
-            BetaStart = _betaStart, BetaEnd = _betaEnd
-        });
-
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_sequenceLength); writer.Write(_numFeatures);

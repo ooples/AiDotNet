@@ -426,40 +426,6 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the Random Forest regression model with the same options.
-    /// </summary>
-    /// <returns>A new instance of the model with the same configuration but no trained parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Random Forest regression model with the same configuration
-    /// options and regularization method as the current instance, but without copying the trained trees
-    /// or other learned parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
-    /// any learned parameters.
-    /// 
-    /// Think of it like getting a blank forest template with the same settings, 
-    /// but without any of the trained trees. The new model has the same:
-    /// - Number of trees setting
-    /// - Maximum depth setting
-    /// - Minimum samples split setting
-    /// - Maximum features ratio
-    /// - Split criterion (how nodes decide which feature to split on)
-    /// - Regularization method
-    /// 
-    /// But it doesn't have any of the actual trained trees that were learned from data.
-    /// 
-    /// This is mainly used internally when doing things like cross-validation or 
-    /// creating ensembles of similar models with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        return new RandomForestRegression<T>(_options, Regularization);
-    }
-
-    /// <summary>
     /// Deep copy via serialization to preserve the private _trees list.
     /// </summary>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()

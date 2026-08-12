@@ -228,16 +228,6 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ComplementNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors
-        }, null, _normalize);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new ComplementNaiveBayes<T>(new NaiveBayesOptions<T>

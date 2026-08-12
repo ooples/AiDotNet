@@ -718,35 +718,4 @@ public partial class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
 
         return metadata;
     }
-
-    /// <summary>
-    /// Creates a new instance of the Siamese network with the same architecture.
-    /// </summary>
-    /// <returns>A new instance of the Siamese network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new Siamese network with the same architecture as the current instance.
-    /// The new instance has freshly initialized parameters and is ready for training.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a brand new Siamese network with the same structure.
-    /// 
-    /// Think of it like creating a copy of your current network's blueprint:
-    /// - It has the same subnetwork structure for processing inputs
-    /// - It processes the same types of inputs (like images of the same size)
-    /// - But it starts with fresh, untrained parameters
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh network but keep the same design
-    /// - Create multiple networks with identical structures for comparison
-    /// - Train networks with different data but the same architecture
-    /// 
-    /// The new network will need to be trained from scratch, as it doesn't
-    /// inherit any of the "knowledge" from the original network.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SiameseNetwork<T>(Architecture, lossFunction: LossFunction);
-    }
 }

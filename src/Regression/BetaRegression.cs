@@ -875,12 +875,6 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return v;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new BetaRegression<T>(_options, Regularization);
-    }
-
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new BetaRegression<T>(_options, Regularization);

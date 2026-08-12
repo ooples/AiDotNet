@@ -671,23 +671,6 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32(); // attentionType
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeSformer<T>(
-            Architecture,
-            numClasses: _numClasses,
-            optimizer: null,
-            lossFunction: _lossFunction,
-            embedDim: _embedDim,
-            numHeads: _numHeads,
-            numLayers: _numLayers,
-            numFrames: _numFrames,
-            patchSize: _patchSize,
-            attentionType: _attentionType,
-            options: _options);
-    }
-
     #endregion
 }
 

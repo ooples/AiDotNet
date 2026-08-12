@@ -346,19 +346,6 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LinearSupportVectorClassifier<T>(new SVMOptions<T>
-        {
-            C = Options.C,
-            Kernel = KernelType.Linear,
-            Tolerance = Options.Tolerance,
-            MaxIterations = Options.MaxIterations,
-            Seed = Options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new LinearSupportVectorClassifier<T>(new SVMOptions<T>

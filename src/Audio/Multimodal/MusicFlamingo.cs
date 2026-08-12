@@ -241,9 +241,6 @@ public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new MusicFlamingo<T>(Architecture, _options);
-
     #endregion
 
     #region Private Helpers

@@ -91,21 +91,6 @@ public class KMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new KMeans<T>(new KMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumInitializations = _options.NumInitializations,
-            InitMethod = _options.InitMethod,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (KMeans<T>)CreateNewInstance();

@@ -215,8 +215,6 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new HTDemucs<T>(Architecture, _options);
-
     #endregion
 
     #region Helpers

@@ -86,19 +86,6 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ConsensusClustering<T>(new ConsensusClusteringOptions<T>
-        {
-            NumBaseClusterings = _options.NumBaseClusterings,
-            Method = _options.Method,
-            FinalAlgorithm = _options.FinalAlgorithm,
-            NumClusters = _options.NumClusters,
-            Seed = _options.Seed
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (ConsensusClustering<T>)CreateNewInstance();

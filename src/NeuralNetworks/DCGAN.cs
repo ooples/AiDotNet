@@ -199,36 +199,6 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
-    /// Constructs a fresh DCGAN with the same paper-faithful hyperparameters
-    /// so Clone / DeepCopy produces a deep-independent network whose layer
-    /// list isn't shared with the original. The base
-    /// <see cref="GenerativeAdversarialNetwork{T}.CreateNewInstance"/> passes
-    /// the existing <c>Generator.Architecture</c> and
-    /// <c>Discriminator.Architecture</c> straight through to the GAN ctor,
-    /// which wraps them in fresh
-    /// <see cref="ConvolutionalNeuralNetwork{T}"/> shells whose
-    /// <c>InitializeLayers</c> calls <c>ValidateCustomLayers</c> against
-    /// layer instances that already had their shape state resolved by the
-    /// original network's forward pass — and that validation rejects the
-    /// resolved shape chain. Going through DCGAN's own ctor instead rebuilds
-    /// both architectures (and their layer lists) from scratch.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Pass the current LossFunction through so cloning a model trained
-        // with a custom objective doesn't silently downgrade to the default.
-        return new DCGAN<T>(
-            _latentSize,
-            _imageChannels,
-            _imageHeight,
-            _imageWidth,
-            _generatorFeatureMaps,
-            _discriminatorFeatureMaps,
-            lossFunction: LossFunction,
-            options: _options);
-    }
-
-    /// <summary>
     /// Creates the architecture for the DCGAN generator following the original paper's guidelines.
     /// </summary>
     /// <param name="latentSize">The size of the latent vector.</param>

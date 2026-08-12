@@ -372,12 +372,6 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LogNormalAFT<T>(MaxIterations, Tolerance);
-    }
-
-    /// <inheritdoc />
 
     /// <inheritdoc />
     public override byte[] Serialize()

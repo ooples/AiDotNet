@@ -259,8 +259,6 @@ public class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new RNNTransducer<T>(Architecture, _options);
-
     #endregion
 
     #region Private Helpers

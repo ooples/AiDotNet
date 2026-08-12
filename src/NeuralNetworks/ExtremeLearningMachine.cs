@@ -530,31 +530,4 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         // STEP 3: Update only the last layer (output layer) with the calculated weights
         UpdateOutputLayerWeights(outputWeights);
     }
-
-    /// <summary>
-    /// Creates a new instance of the ExtremeLearningMachine with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new ExtremeLearningMachine instance with the same architecture and hidden layer size as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the ExtremeLearningMachine with the same architecture and hidden layer size
-    /// as the current instance. This is useful for model cloning, ensemble methods, or cross-validation scenarios where
-    /// multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the ELM's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of ELM with identical settings:
-    /// - This method creates a new, empty ELM with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new ELM has the same structure but no trained data
-    /// - This is useful for techniques that need multiple models, like ensemble methods
-    /// 
-    /// For example, when training multiple ELMs on different subsets of data,
-    /// you'd want each one to have the same architecture and hidden layer size.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ExtremeLearningMachine<T>(Architecture, _hiddenLayerSize);
-    }
 }

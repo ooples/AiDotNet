@@ -288,8 +288,6 @@ public class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new BasicPitch<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

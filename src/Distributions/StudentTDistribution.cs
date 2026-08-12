@@ -259,12 +259,6 @@ internal class StudentTDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override IParametricDistribution<T> Clone()
-    {
-        return new StudentTDistribution<T>(_location, _scale, _degreesOfFreedom);
-    }
-
-    /// <inheritdoc/>
     public override T Sample(Random random)
     {
         double nu = NumOps.ToDouble(_degreesOfFreedom);

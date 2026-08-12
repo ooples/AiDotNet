@@ -526,20 +526,6 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new ScoreGrad instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the ScoreGrad model, CreateNewInstance builds and wires up model components. This sets up the ScoreGrad architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ScoreGrad<T>(Architecture, _options, _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes ScoreGrad-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>

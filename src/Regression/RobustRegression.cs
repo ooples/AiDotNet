@@ -377,37 +377,4 @@ public class RobustRegression<T> : RegressionBase<T>
 
         return newModel;
     }
-
-    /// <summary>
-    /// Creates a new instance of the robust regression model with the same options.
-    /// </summary>
-    /// <returns>A new instance of the robust regression model with the same configuration but no trained parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the robust regression model with the same configuration
-    /// options and regularization method as the current instance, but without copying the trained
-    /// coefficients or intercept.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
-    /// any learned parameters.
-    /// 
-    /// Think of it like getting a blank template with the same settings, 
-    /// but without any of the values that were learned from training data. The new model has the same:
-    /// - Weight function (how outliers are handled)
-    /// - Tuning constant (how sensitive the model is to outliers)
-    /// - Maximum iterations (how many times it will try to improve)
-    /// - Tolerance (when it decides it's "good enough")
-    /// - Regularization settings (how it prevents overfitting)
-    /// 
-    /// But it doesn't have any of the coefficients or intercept values that were learned from data.
-    /// 
-    /// This is mainly used internally when doing things like cross-validation or 
-    /// creating multiple similar models with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        return new RobustRegression<T>(_options, Regularization);
-    }
 }

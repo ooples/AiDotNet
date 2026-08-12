@@ -844,13 +844,5 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         return copy;
     }
 
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
-    }
-
     #endregion
 }

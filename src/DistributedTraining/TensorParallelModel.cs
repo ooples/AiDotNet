@@ -586,10 +586,4 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
             Config.CommunicationBackend.Barrier();
         }
     }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new TensorParallelModel<T, TInput, TOutput>(WrappedModel.Clone(), Config);
-    }
 }

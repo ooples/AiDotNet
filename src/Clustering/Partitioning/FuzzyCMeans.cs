@@ -85,19 +85,6 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new FuzzyCMeans<T>(new FuzzyCMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            Fuzziness = _options.Fuzziness,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (FuzzyCMeans<T>)CreateNewInstance();

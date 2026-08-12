@@ -574,20 +574,6 @@ public partial class TSDiff<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new TSDiff instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TSDiff model, CreateNewInstance builds and wires up model components. This sets up the TSDiff architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TSDiff<T>(Architecture, _options, _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes TSDiff-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>

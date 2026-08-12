@@ -667,20 +667,6 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new TemporalGCN instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TemporalGCN model, CreateNewInstance builds and wires up model components. This sets up the TemporalGCN architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TemporalGCN<T>(Architecture, _options, _adjacencyMatrix);
-    }
-
-    /// <summary>
     /// Serializes TemporalGCN-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>

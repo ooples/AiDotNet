@@ -538,12 +538,6 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         return new AdaptiveRandomForestClassifier<T>(_options);
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new AdaptiveRandomForestClassifier<T>(_options);
-    }
-
     /// <summary>
     /// Serializes the trained ARF ensemble including all Hoeffding trees and metadata.
     /// </summary>

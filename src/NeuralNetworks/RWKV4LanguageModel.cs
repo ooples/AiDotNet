@@ -235,13 +235,5 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RWKV4LanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, _options);
-    }
-
     #endregion
 }

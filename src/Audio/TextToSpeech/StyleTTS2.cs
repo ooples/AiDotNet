@@ -281,8 +281,6 @@ public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new StyleTTS2<T>(Architecture, _options);
-
     #endregion
 
     #region Private Helpers

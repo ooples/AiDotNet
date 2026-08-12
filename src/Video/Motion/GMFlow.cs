@@ -729,9 +729,6 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new GMFlow<T>(Architecture, _numFeatures, _numTransformerLayers, _numHeads);
-
     #endregion
 
     #region Base Class Abstract Methods

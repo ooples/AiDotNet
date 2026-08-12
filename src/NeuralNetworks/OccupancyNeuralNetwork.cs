@@ -669,41 +669,4 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             _internalSensorHistory.Enqueue(reading);
         }
     }
-
-    /// <summary>
-    /// Creates a new instance of the OccupancyNeuralNetwork with the same architecture and temporal configuration.
-    /// </summary>
-    /// <returns>A new instance of the occupancy neural network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new occupancy neural network with the same architecture and temporal
-    /// data processing configuration as the current instance. The new instance starts with fresh layers
-    /// and an empty sensor history buffer, making it useful for creating multiple networks with identical
-    /// configurations or for resetting a network while preserving its structure.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a brand new occupancy detection network with the same settings.
-    /// 
-    /// Think of it like creating a copy of your current network's blueprint:
-    /// - It has the same structure (layers and neurons)
-    /// - It uses the same approach to time-based analysis (if enabled)
-    /// - It looks at the same number of past readings when analyzing patterns
-    /// 
-    /// However, the new network starts fresh with:
-    /// - Newly initialized weights and parameters
-    /// - An empty history buffer (no past sensor readings)
-    /// 
-    /// This is useful when you want to start over with a clean network that has
-    /// the same design but hasn't learned anything yet, or when you need multiple
-    /// identical networks for different spaces or comparison purposes.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new OccupancyNeuralNetwork<T>(
-            Architecture,
-            _includeTemporalData,
-            _historyWindowSize,
-            LossFunction);
-    }
 }

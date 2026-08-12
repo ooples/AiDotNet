@@ -576,22 +576,6 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TFC<T>(Architecture, new TFCOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            ProjectionDimension = _projectionDimension,
-            NumTimeLayers = _numTimeLayers,
-            NumFreqLayers = _numFreqLayers,
-            DropoutRate = _dropout,
-            ContrastiveTemperature = _contrastiveTemperature
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

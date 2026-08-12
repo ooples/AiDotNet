@@ -98,22 +98,6 @@ public class CLIQUE<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CLIQUE<T>(new CLIQUEOptions<T>
-        {
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumIntervals = _options.NumIntervals,
-            DensityThreshold = _options.DensityThreshold,
-            MinPoints = _options.MinPoints,
-            MaxSubspaceDimensions = _options.MaxSubspaceDimensions,
-            UseAprioriPruning = _options.UseAprioriPruning
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />

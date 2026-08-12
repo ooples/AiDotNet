@@ -729,12 +729,6 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
         => new HoeffdingTreeClassifier<T>(_options);
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new HoeffdingTreeClassifier<T>(_options);
-    }
-
     /// <summary>
     /// Serializes the trained Hoeffding tree including all nodes and statistics.
     /// </summary>

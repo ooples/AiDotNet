@@ -327,12 +327,6 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new TimeSeriesForestClassifier<T>(_options);
-    }
-
-    /// <inheritdoc />
     public override byte[] Serialize()
     {
         var metadata = GetModelMetadata();

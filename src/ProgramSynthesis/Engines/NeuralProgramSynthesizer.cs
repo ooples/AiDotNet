@@ -706,11 +706,6 @@ public partial class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgra
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NeuralProgramSynthesizer<T>(_architecture, _codeModel, LossFunction, _optimizer, _executionEngine);
-    }
-
     // Helper methods
     private Tensor<T> EncodeSpecification(ProgramInput<T> input)
     {

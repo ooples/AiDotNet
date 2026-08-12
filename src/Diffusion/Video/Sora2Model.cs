@@ -153,20 +153,6 @@ public partial class Sora2Model<T> : VideoDiffusionModelBase<T>
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    public override IDiffusionModel<T> Clone()
-    {
-                return new Sora2Model<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner, // Conditioners are typically stateless; shared reference is safe
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS,
-            seed: _seed);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

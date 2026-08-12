@@ -463,9 +463,6 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
         // the model randomly initialized.
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new FastDVDNet<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames);
-
     #endregion
 
     #region Base Class Abstract Methods

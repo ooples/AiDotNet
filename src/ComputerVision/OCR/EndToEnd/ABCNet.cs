@@ -830,8 +830,4 @@ public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
         Guard.NotNull(reader);
         for (int i = 0; i < 8; i++) _ = reader.ReadInt32();
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new ABCNet<T>(_options, Architecture, _optimizer, _lossFunction);
 }

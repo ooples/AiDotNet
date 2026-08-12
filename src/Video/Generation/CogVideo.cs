@@ -834,17 +834,5 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         // the model randomly initialized.
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CogVideo<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            _embedDim,
-            _numLayers,
-            _numFrames);
-    }
-
     #endregion
 }

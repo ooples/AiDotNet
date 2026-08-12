@@ -775,15 +775,6 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
         return newModel;
     }
 
-    /// <summary>
-    /// Creates a new instance of the same type as this classifier.
-    /// </summary>
-    /// <returns>A new instance of the same classifier type.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OrdinalRegression<T>(_options, Regularization);
-    }
-
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {

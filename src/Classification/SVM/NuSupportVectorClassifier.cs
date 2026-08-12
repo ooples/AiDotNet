@@ -542,21 +542,6 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new NuSupportVectorClassifier<T>(new SVMOptions<T>
-        {
-            Kernel = Options.Kernel,
-            Gamma = Options.Gamma,
-            Degree = Options.Degree,
-            Coef0 = Options.Coef0,
-            Tolerance = Options.Tolerance,
-            MaxIterations = Options.MaxIterations,
-            Seed = Options.Seed
-        }, null, _nu);
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new NuSupportVectorClassifier<T>(new SVMOptions<T>

@@ -574,16 +574,6 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
         _ = reader.ReadInt32();   // NumLanguages
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VoxLingua107Identifier<T>(
-            Architecture,
-            _options,
-            optimizer: null,
-            _lossFunction);
-    }
-
     #endregion
 
     #region Private Methods

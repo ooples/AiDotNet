@@ -146,19 +146,6 @@ public partial class Veo3Model<T> : VideoDiffusionModelBase<T>
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    public override IDiffusionModel<T> Clone()
-    {
-                return new Veo3Model<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

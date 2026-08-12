@@ -759,19 +759,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new MultiScalePINN<T>(
-                Architecture,
-                _multiScalePDE,
-                _boundaryConditions,
-                _initialCondition,
-                _numCollocationPointsPerScale,
-                _trainingOptions,
-                _optimizer);
-        }
-
-        /// <inheritdoc/>
         public override bool SupportsTraining => true;
     }
 }

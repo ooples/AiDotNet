@@ -594,20 +594,6 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new DiffusionTS instance with identical settings.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh model with the same architecture
-    /// and options but without trained weights. Useful for ensemble methods.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DiffusionTS<T>(Architecture, _options, _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes DiffusionTS-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer for serialization.</param>

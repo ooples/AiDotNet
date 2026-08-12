@@ -538,15 +538,6 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LinearDiscriminantAnalysis<T>(new DiscriminantAnalysisOptions<T>
-        {
-            RegularizationParam = Options.RegularizationParam
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (LinearDiscriminantAnalysis<T>)CreateNewInstance();

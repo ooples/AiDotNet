@@ -309,8 +309,6 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new MadmomBeatTracker<T>(Architecture, _options);
-
     #endregion
 
     #region Private Helpers

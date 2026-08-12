@@ -582,20 +582,6 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the CSDI model with the same configuration.
-    /// </summary>
-    /// <returns>A new CSDI instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the CSDI model, CreateNewInstance builds and wires up model components. This sets up the CSDI architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CSDI<T>(Architecture, _options, _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes CSDI-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer to serialize data to.</param>

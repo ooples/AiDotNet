@@ -98,23 +98,6 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new MiniBatchKMeans<T>(new MiniBatchKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumInitializations = _options.NumInitializations,
-            BatchSize = _options.BatchSize,
-            InitMethod = _options.InitMethod,
-            MaxNoImprovement = _options.MaxNoImprovement,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (MiniBatchKMeans<T>)CreateNewInstance();

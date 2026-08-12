@@ -313,16 +313,6 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new RidgeClassifier<T>(new LinearClassifierOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitIntercept = Options.FitIntercept
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (RidgeClassifier<T>)CreateNewInstance();

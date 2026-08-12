@@ -977,13 +977,6 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RIFE<T>(
-            Architecture, _numFeatures, _numFlowBlocks, new RIFEOptions(_options));
-    }
-
     #endregion
 
     #region Base Class Abstract Methods

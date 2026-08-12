@@ -87,20 +87,6 @@ public class COPKMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new COPKMeans<T>(new COPKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MustLink = _options.MustLink,
-            CannotLink = _options.CannotLink,
-            UseTransitiveClosure = _options.UseTransitiveClosure,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (COPKMeans<T>)CreateNewInstance();

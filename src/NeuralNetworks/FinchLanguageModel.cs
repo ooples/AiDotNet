@@ -175,12 +175,5 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FinchLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options, _learningRate);
-    }
-
     #endregion
 }

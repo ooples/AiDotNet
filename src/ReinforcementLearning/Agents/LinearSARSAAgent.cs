@@ -288,8 +288,6 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
             _lastAction = Convert.ToInt32(state.LastAction);
         }
     }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearSARSAAgent<T>(_options);
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

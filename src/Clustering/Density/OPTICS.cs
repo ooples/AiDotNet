@@ -100,22 +100,6 @@ public class OPTICS<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OPTICS<T>(new OPTICSOptions<T>
-        {
-            MinSamples = _options.MinSamples,
-            MaxEpsilon = _options.MaxEpsilon,
-            ExtractionMethod = _options.ExtractionMethod,
-            Xi = _options.Xi,
-            ClusterEpsilon = _options.ClusterEpsilon,
-            Algorithm = _options.Algorithm,
-            LeafSize = _options.LeafSize,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (OPTICS<T>)CreateNewInstance();

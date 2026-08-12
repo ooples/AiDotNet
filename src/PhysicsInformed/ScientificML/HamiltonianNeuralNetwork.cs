@@ -418,15 +418,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New Hamiltonian network instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new HamiltonianNeuralNetwork<T>(Architecture, _stateDim, _optimizer);
-        }
-
-        /// <summary>
         /// Indicates whether this model supports training.
         /// </summary>
         public override bool SupportsTraining => true;

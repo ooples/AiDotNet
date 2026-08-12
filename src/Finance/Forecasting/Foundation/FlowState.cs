@@ -286,23 +286,6 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FlowState<T>(Architecture, new FlowStateOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            StateDimension = _stateDimension,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            SSMRank = _ssmRank,
-            UseDiscretization = _useDiscretization,
-            ModelSize = _modelSize
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

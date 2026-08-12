@@ -93,20 +93,6 @@ public class Denclue<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new Denclue<T>(new DenclueOptions<T>
-        {
-            Bandwidth = _options.Bandwidth,
-            MinDensity = _options.MinDensity,
-            ConvergenceThreshold = _options.ConvergenceThreshold,
-            AttractorMergeThreshold = _options.AttractorMergeThreshold,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (Denclue<T>)CreateNewInstance();

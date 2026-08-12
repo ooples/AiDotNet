@@ -94,22 +94,6 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SelfOrganizingMap<T>(new SOMOptions<T>
-        {
-            GridWidth = _options.GridWidth,
-            GridHeight = _options.GridHeight,
-            InitialLearningRate = _options.InitialLearningRate,
-            InitialNeighborhoodRadius = _options.InitialNeighborhoodRadius,
-            NeighborhoodType = _options.NeighborhoodType,
-            Topology = _options.Topology,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />

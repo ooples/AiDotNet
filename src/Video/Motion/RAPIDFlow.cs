@@ -495,10 +495,4 @@ public partial class RAPIDFlow<T> : OpticalFlowBase<T>
         _flowHead = Layers[decoderStart + 2] as DeconvolutionalLayer<T>
             ?? throw new InvalidDataException($"Layer {decoderStart + 2} is not a DeconvolutionalLayer.");
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RAPIDFlow<T>(Architecture, _numRefinementIterations, _options);
-    }
 }

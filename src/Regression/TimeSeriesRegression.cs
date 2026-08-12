@@ -768,34 +768,4 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             _useOLS = reader.ReadBoolean();
         }
     }
-
-    /// <summary>
-    /// Creates a new instance of the time series regression model with the same configuration.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="TimeSeriesRegression{T}"/> with the same configuration as the current instance.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new time series regression model that has the same configuration as the current instance.
-    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
-    /// 
-    /// It's like creating a blueprint copy of your model that can be used to:
-    /// - Save your model's settings
-    /// - Create a new identical model
-    /// - Transfer your model's configuration to another system
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple similar models
-    /// - Save a model's configuration for later use
-    /// - Reset a model while keeping its settings
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create and return a new instance with the same configuration
-        return new TimeSeriesRegression<T>(_options, _regularization);
-    }
 }

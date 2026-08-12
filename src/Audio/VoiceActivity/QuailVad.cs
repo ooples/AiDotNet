@@ -329,9 +329,6 @@ public class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new QuailVad<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

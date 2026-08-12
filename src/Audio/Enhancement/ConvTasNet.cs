@@ -1222,22 +1222,6 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         SetParameters(parameters);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ConvTasNet<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            encoderDim: _encoderDim,
-            kernelSize: _kernelSize,
-            bottleneckDim: _bottleneckDim,
-            hiddenDim: _hiddenDim,
-            numBlocks: _numBlocks,
-            numRepeats: _numRepeats,
-            tcnKernelSize: _tcnKernelSize,
-            numSources: _numSources);
-    }
-
     #endregion
 
     #region Nested Types

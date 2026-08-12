@@ -1160,21 +1160,6 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         ReadComplexKernels(reader, _decWi);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DCCRN<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            numStages: _numStages,
-            baseChannels: _baseChannels,
-            lstmHiddenDim: _lstmHiddenDim,
-            numLstmLayers: _numLstmLayers,
-            fftSize: _fftSize,
-            hopSize: _hopSize,
-            useComplexMask: _useComplexMask);
-    }
-
     #endregion
 
     #region IDisposable

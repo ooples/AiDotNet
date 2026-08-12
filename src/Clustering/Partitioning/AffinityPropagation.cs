@@ -85,20 +85,6 @@ public class AffinityPropagation<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new AffinityPropagation<T>(new AffinityPropagationOptions<T>
-        {
-            Damping = _options.Damping,
-            Preference = _options.Preference,
-            MaxIterations = _options.MaxIterations,
-            ConvergenceIterations = _options.ConvergenceIterations,
-            AffinityType = _options.AffinityType,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (AffinityPropagation<T>)CreateNewInstance();

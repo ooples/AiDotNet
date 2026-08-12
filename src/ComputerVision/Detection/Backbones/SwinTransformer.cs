@@ -296,14 +296,6 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Constructs a fresh Swin Transformer with the same variant, window size, and
-    /// input-channel configuration.
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new SwinTransformer<T>(_variant, _windowSize, _inChannels);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,

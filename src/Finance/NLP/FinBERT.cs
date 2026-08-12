@@ -509,20 +509,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new FinBERT instance.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh model with the same architecture
-    /// and options but randomly reinitialized weights.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FinBERT<T>(Architecture, _options);
-    }
-
-    /// <summary>
     /// Serializes FinBERT-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>

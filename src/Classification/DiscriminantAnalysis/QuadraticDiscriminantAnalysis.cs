@@ -592,15 +592,6 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new QuadraticDiscriminantAnalysis<T>(new DiscriminantAnalysisOptions<T>
-        {
-            RegularizationParam = Options.RegularizationParam
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (QuadraticDiscriminantAnalysis<T>)CreateNewInstance();

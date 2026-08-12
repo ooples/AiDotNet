@@ -174,12 +174,5 @@ public class Zamba2LanguageModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Zamba2LanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _stateDimension,
-            _numHeads, _attentionInterval, _maxSeqLength, LossFunction, _options);
-    }
-
     #endregion
 }

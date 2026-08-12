@@ -1081,22 +1081,6 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         EnhancementStrength = reader.ReadDouble();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DeepFilterNet<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            numErbBands: _numErbBands,
-            hiddenDim: _hiddenDim,
-            dfOrder: _dfOrder,
-            dfBins: _dfBins,
-            numGruLayers: _numGruLayers,
-            fftSize: _fftSize,
-            hopSize: _hopSize,
-            lookahead: _lookahead);
-    }
-
     #endregion
 
     #region IDisposable

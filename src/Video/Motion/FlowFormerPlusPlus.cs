@@ -254,10 +254,4 @@ public partial class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
         _outputConv = Layers[_numLayers + 1] as ConvolutionalLayer<T>
             ?? throw new InvalidDataException("FlowFormerPlusPlus output layer is missing or has the wrong type.");
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FlowFormerPlusPlus<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

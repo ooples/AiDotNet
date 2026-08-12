@@ -603,19 +603,4 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
 
         _baseClassifier = ClassifierRegistry<T>.DeserializeClassifier(baseTypeName, baseData);
     }
-
-    /// <summary>
-    /// Creates a new instance of this classifier.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SelfTrainingClassifier<T>(
-            (IClassifier<T>)_baseClassifier.Clone(),
-            _confidenceThreshold,
-            _maxIterations,
-            _maxSamplesPerIteration,
-            _selectionCriterion,
-            Options,
-            Regularization);
-    }
 }

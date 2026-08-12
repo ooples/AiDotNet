@@ -304,8 +304,6 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
     }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearQLearningAgent<T>(_options);
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

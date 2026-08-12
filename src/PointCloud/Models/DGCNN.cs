@@ -553,23 +553,6 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DGCNN<T>(
-            new DGCNNOptions
-            {
-                NumClasses = _numClasses,
-                InputFeatureDim = _inputFeatureDim,
-                KnnK = _knnK,
-                EdgeConvChannels = _edgeConvChannels,
-                ClassifierChannels = _classifierChannels,
-                UseDropout = _useDropout,
-                DropoutRate = _dropoutRate,
-                LearningRate = NumOps.ToDouble(_learningRate)
-            },
-            LossFunction);
-    }
-
     private static int[] ValidatePositiveArray(int[]? values, string paramName)
     {
         if (values == null)

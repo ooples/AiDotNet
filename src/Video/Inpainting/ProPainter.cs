@@ -1029,12 +1029,6 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
             DistributeLayersToSubLists();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ProPainter<T>(Architecture, _numFeatures, _numTransformerBlocks, _numHeads);
-    }
-
     #endregion
 
     #region Base Class Abstract Methods

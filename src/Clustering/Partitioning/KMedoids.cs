@@ -80,19 +80,6 @@ public class KMedoids<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new KMedoids<T>(new KMedoidsOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Init = _options.Init,
-            Algorithm = _options.Algorithm,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (KMedoids<T>)CreateNewInstance();

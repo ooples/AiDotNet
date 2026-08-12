@@ -1210,36 +1210,4 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         // Copy to the public property from base class so ensemble methods can access it
         FeatureImportances = _featureImportances;
     }
-
-    /// <summary>
-    /// Creates a new instance of the decision tree regression model with the same options.
-    /// </summary>
-    /// <returns>A new instance of the model with the same configuration but no trained parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the decision tree regression model with the same configuration
-    /// options and regularization method as the current instance, but without copying the trained parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
-    /// any learned parameters.
-    /// 
-    /// Think of it like getting a blank notepad with the same paper quality and size, 
-    /// but without any writing on it yet. The new model has the same:
-    /// - Maximum depth setting
-    /// - Minimum samples split setting
-    /// - Split criterion (how nodes decide which feature to split on)
-    /// - Random seed (if specified)
-    /// - Regularization method
-    /// 
-    /// But it doesn't have any of the actual tree structure that was learned from data.
-    /// 
-    /// This is mainly used internally when doing things like cross-validation or 
-    /// creating ensembles of similar models with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        return new DecisionTreeRegression<T>(_options, _regularization);
-    }
 }

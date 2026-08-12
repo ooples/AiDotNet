@@ -701,14 +701,6 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         }
     }
 
-    /// <summary>
-    /// Creates a new instance for deserialization.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioEventDetector<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Helper Methods

@@ -84,19 +84,6 @@ public class XMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new XMeans<T>(new XMeansOptions<T>
-        {
-            MinClusters = _options.MinClusters,
-            MaxClusters = _options.MaxClusters,
-            Criterion = _options.Criterion,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (XMeans<T>)CreateNewInstance();

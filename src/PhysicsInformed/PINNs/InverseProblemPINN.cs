@@ -865,19 +865,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new InverseProblemPINN<T>(
-                Architecture,
-                _inverseProblem,
-                _boundaryConditions,
-                _initialCondition,
-                _numCollocationPoints,
-                _options,
-                _optimizer);
-        }
-
-        /// <inheritdoc/>
         public override bool SupportsTraining => true;
     }
 }

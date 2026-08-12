@@ -375,12 +375,6 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RWKVForecaster<T>(Architecture, new RWKVForecastingOptions<T>(_options), _numFeatures);
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

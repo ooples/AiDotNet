@@ -240,12 +240,6 @@ public class VFIformer<T> : FrameInterpolationBase<T>
         _options.DropoutRate = reader.ReadDouble();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VFIformer<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(VFIformer<T>));

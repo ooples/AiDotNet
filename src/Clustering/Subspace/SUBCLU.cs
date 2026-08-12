@@ -91,21 +91,6 @@ public class SUBCLU<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SUBCLU<T>(new SUBCLUOptions<T>
-        {
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            Epsilon = _options.Epsilon,
-            MinPoints = _options.MinPoints,
-            MaxSubspaceDimensions = _options.MaxSubspaceDimensions,
-            MinClusterSize = _options.MinClusterSize
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />

@@ -671,29 +671,6 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PointNetPlusPlus<T>(
-            new PointNetPlusPlusOptions
-            {
-                NumClasses = _numClasses,
-                InputFeatureDim = _inputFeatureDim,
-                SamplingRates = _samplingRates,
-                SearchRadii = _searchRadii,
-                NeighborSamples = _neighborSamples,
-                MlpDimensions = _mlpDimensions,
-                UseMultiScaleGrouping = _useMultiScaleGrouping,
-                MultiScaleRadii = _multiScaleRadii,
-                MultiScaleMlpDimensions = _multiScaleMlpDimensions,
-                MultiScaleNeighborSamples = _multiScaleNeighborSamples,
-                ClassifierChannels = _classifierChannels,
-                UseDropout = _useDropout,
-                DropoutRate = _dropoutRate,
-                LearningRate = NumOps.ToDouble(_learningRate)
-            },
-            LossFunction);
-    }
-
     private static int[] ValidatePositiveArray(int[]? values, string paramName)
     {
         if (values == null)

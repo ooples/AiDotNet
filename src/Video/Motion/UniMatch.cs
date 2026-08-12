@@ -232,10 +232,4 @@ public partial class UniMatch<T> : OpticalFlowBase<T>
         // [featureExtract, ...processingBlocks, outputConv].
         RelinkOpticalFlowLayers(_numLayers, "UniMatch", out _featureExtract, _processingBlocks, out _outputConv);
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UniMatch<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

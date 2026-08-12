@@ -189,21 +189,6 @@ public class PerceptronClassifier<T> : LinearClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new PerceptronClassifier<T>(new LinearClassifierOptions<T>
-        {
-            LearningRate = Options.LearningRate,
-            MaxIterations = Options.MaxIterations,
-            FitIntercept = Options.FitIntercept,
-            Alpha = Options.Alpha,
-            Shuffle = Options.Shuffle,
-            Penalty = Options.Penalty,
-            Seed = Options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (PerceptronClassifier<T>)CreateNewInstance();

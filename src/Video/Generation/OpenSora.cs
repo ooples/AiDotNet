@@ -1228,8 +1228,5 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         ExtractLayerReferences();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new OpenSora<T>(Architecture, _numFrames, _hiddenDim, _numLayers, _numInferenceSteps, _guidanceScale);
-
     #endregion
 }

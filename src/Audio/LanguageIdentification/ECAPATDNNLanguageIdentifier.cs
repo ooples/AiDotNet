@@ -531,17 +531,6 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ECAPATDNNLanguageIdentifier<T>(
-            Architecture,
-            _languageIdToCode.Values.ToList(),
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
-
     #endregion
 
     #region Private Methods

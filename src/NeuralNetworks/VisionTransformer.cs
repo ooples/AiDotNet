@@ -658,26 +658,6 @@ public partial class VisionTransformer<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the Vision Transformer.
-    /// </summary>
-    /// <returns>A new Vision Transformer instance with the same configuration.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VisionTransformer<T>(
-            Architecture,
-            _imageHeight,
-            _imageWidth,
-            _channels,
-            _patchSize,
-            _numClasses,
-            _hiddenDim,
-            _numLayers,
-            _numHeads,
-            _mlpDim,
-            LossFunction);
-    }
-
-    /// <summary>
     /// Clone via fresh-construct + UpdateParameters rather than the default
     /// serialize/deserialize roundtrip. The serialize path drives the
     /// patch-embedding / transformer / classification-head layers through

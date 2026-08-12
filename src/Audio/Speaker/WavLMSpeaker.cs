@@ -296,8 +296,6 @@ public partial class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifi
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new WavLMSpeaker<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

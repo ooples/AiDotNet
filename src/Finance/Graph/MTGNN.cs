@@ -744,20 +744,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new MTGNN instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MTGNN model, CreateNewInstance builds and wires up model components. This sets up the MTGNN architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new MTGNN<T>(Architecture, _options, _predefinedAdjacency);
-    }
-
-    /// <summary>
     /// Serializes MTGNN-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>

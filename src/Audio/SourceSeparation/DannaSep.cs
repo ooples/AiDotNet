@@ -291,9 +291,6 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new DannaSep<T>(Architecture, _options);
-
     #endregion
 
     #region Private Helpers

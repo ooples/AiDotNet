@@ -475,37 +475,4 @@ public partial class GeneticAlgorithmRegression<T> : RegressionBase<T>
         // Update coefficients and intercept
         UpdateCoefficientsAndIntercept();
     }
-
-    /// <summary>
-    /// Creates a new instance of the GeneticAlgorithmRegression with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new GeneticAlgorithmRegression instance with the same options and components as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the GeneticAlgorithmRegression model with the same configuration options,
-    /// regularization settings, and preprocessing components as the current instance. This is useful for model cloning,
-    /// ensemble methods, or cross-validation scenarios where multiple instances of the same model with identical
-    /// configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of model with identical settings:
-    /// - This method creates a new, empty model with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new model has the same settings but no trained data
-    /// - This is useful for techniques that need multiple models, like cross-validation
-    /// 
-    /// For example, when testing your model on different subsets of data,
-    /// you'd want each test to use a model with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GeneticAlgorithmRegression<T>(
-            Options,
-            _gaOptions,
-            Regularization,
-            _outlierRemoval,
-            _preprocessingPipeline);
-    }
 }

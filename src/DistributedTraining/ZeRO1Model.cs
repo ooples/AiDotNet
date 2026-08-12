@@ -252,10 +252,4 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
             Config.CommunicationBackend.Barrier();
         }
     }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new ZeRO1Model<T, TInput, TOutput>(WrappedModel.Clone(), Config);
-    }
 }

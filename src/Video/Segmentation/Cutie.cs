@@ -856,16 +856,5 @@ public class Cutie<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32(); // memorySize
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Cutie<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            _numFeatures,
-            _memorySize);
-    }
-
     #endregion
 }

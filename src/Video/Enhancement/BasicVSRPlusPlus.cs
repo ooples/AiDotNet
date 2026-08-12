@@ -1012,18 +1012,6 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         return new Vector<T>(parameters);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new BasicVSRPlusPlus<T>(
-            Architecture,
-            _scaleFactor,
-            _numFeatures,
-            _numResidualBlocks,
-            _numPropagations,
-            _learningRate);
-    }
-
     #endregion
 
     #region Base Class Abstract Methods

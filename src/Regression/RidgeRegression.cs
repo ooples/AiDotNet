@@ -210,15 +210,6 @@ public class RidgeRegression<T> : RegressionBase<T>
 
 
     /// <summary>
-    /// Creates a new instance of Ridge Regression with the same configuration.
-    /// </summary>
-    /// <returns>A new instance with the same options.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new RidgeRegression<T>(Options, Regularization);
-    }
-
-    /// <summary>
     /// Serializes the Ridge Regression model to a byte array.
     /// </summary>
     /// <returns>A byte array containing the serialized model.</returns>

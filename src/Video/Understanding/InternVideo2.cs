@@ -524,19 +524,5 @@ public class InternVideo2<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32(); // imageSize
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new InternVideo2<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            _embedDim,
-            _numHeads,
-            _numEncoderLayers,
-            _numFrames,
-            _patchSize);
-    }
-
     #endregion
 }

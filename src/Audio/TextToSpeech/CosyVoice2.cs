@@ -279,9 +279,6 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new CosyVoice2<T>(Architecture, _options);
-
     #endregion
 
     #region Private Helpers

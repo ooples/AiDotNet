@@ -589,14 +589,4 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         }
         return clone;
     }
-
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <returns>New MeshCNN instance.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new MeshCNN<T>(_options, _optimizer, _lossFunction);
-    }
 }

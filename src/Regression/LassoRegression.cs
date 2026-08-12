@@ -307,15 +307,6 @@ public class LassoRegression<T> : RegressionBase<T>
 
 
     /// <summary>
-    /// Creates a new instance of Lasso Regression with the same configuration.
-    /// </summary>
-    /// <returns>A new instance with the same options.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LassoRegression<T>(Options, Regularization);
-    }
-
-    /// <summary>
     /// Serializes the Lasso Regression model to a byte array.
     /// </summary>
     /// <returns>A byte array containing the serialized model.</returns>

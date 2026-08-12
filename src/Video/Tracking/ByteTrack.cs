@@ -408,9 +408,6 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
         _ = reader.ReadDouble(); _ = reader.ReadDouble(); _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new ByteTrack<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numClasses, _highThreshold, _lowThreshold, _maxAge);
-
     #endregion
 }
 

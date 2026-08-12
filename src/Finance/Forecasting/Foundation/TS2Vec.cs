@@ -298,22 +298,6 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TS2Vec<T>(Architecture, new TS2VecOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            OutputDimension = _outputDimension,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            TemporalContrastiveWeight = _temporalContrastiveWeight,
-            InstanceContrastiveWeight = _instanceContrastiveWeight
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

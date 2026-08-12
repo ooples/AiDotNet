@@ -635,18 +635,6 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         ImageSize = imageSize;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DocBank<T>(
-            Architecture,
-            ImageSize,
-            _backboneChannels,
-            _numClasses,
-            _hiddenDim,
-            _useTextFeatures);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation

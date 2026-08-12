@@ -323,15 +323,6 @@ public class ElasticNetRegression<T> : RegressionBase<T>
 
 
     /// <summary>
-    /// Creates a new instance of Elastic Net Regression with the same configuration.
-    /// </summary>
-    /// <returns>A new instance with the same options.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ElasticNetRegression<T>(Options, Regularization);
-    }
-
-    /// <summary>
     /// Serializes the Elastic Net Regression model to a byte array.
     /// </summary>
     /// <returns>A byte array containing the serialized model.</returns>

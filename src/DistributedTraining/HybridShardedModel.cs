@@ -570,12 +570,4 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             Config.CommunicationBackend.Barrier();
         }
     }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new HybridShardedModel<T, TInput, TOutput>(
-            WrappedModel.Clone(), Config,
-            _pipelineParallelSize, _tensorParallelSize, _dataParallelSize);
-    }
 }

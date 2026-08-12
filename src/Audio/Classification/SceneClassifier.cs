@@ -722,14 +722,6 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         ClassLabels = labels;
     }
 
-    /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SceneClassifier<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Feature Extraction

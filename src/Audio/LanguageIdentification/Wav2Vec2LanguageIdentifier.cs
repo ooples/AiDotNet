@@ -515,17 +515,6 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Wav2Vec2LanguageIdentifier<T>(
-            Architecture,
-            _languageIdToCode.Values.ToList(),
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
-
     #endregion
 
     #region Private Methods

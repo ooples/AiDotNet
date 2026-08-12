@@ -222,9 +222,6 @@ public class TTVSR<T> : VideoSuperResolutionBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new TTVSR<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

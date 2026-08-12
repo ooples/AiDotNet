@@ -93,20 +93,6 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineKMeans<T>(new OnlineKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            LearningRate = _options.LearningRate,
-            DecayLearningRate = _options.DecayLearningRate,
-            MinLearningRate = _options.MinLearningRate,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />

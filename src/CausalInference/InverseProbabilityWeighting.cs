@@ -709,14 +709,6 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new InverseProbabilityWeighting<T>(_trimMin, _trimMax, _stabilizedWeights);
-    }
-
-    /// <summary>
     /// Gets additional model data for serialization.
     /// </summary>
     protected override Dictionary<string, object> GetAdditionalModelData()

@@ -350,24 +350,6 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeGrad<T>(Architecture, new TimeGradOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumRnnLayers = _numRnnLayers,
-            NumDiffusionSteps = _numDiffusionSteps,
-            DenoisingNetworkDim = _denoisingNetworkDim,
-            NumSamples = _numSamples,
-            DropoutRate = _dropout,
-            BetaStart = _betaStart,
-            BetaEnd = _betaEnd
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

@@ -449,11 +449,5 @@ public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
         return new Vocabulary(entries, NerTextEncoder.UnkToken);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new WordCharBiLSTMCRF<T>(Architecture, _encoder, new BiLSTMCRFOptions(_options));
-    }
-
     #endregion
 }

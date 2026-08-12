@@ -459,15 +459,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
 
     #region Cloning
 
-    /// <summary>
-    /// Creates a deep copy of the layer with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the <see cref="Upsample3DLayer{T}"/> with identical configuration.</returns>
-    public override LayerBase<T> Clone()
-    {
-        return new Upsample3DLayer<T>(ScaleDepth, ScaleHeight, ScaleWidth);
-    }
-
     #endregion
 
     #region Serialization

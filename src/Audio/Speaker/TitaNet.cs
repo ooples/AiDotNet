@@ -349,8 +349,6 @@ public partial class TitaNet<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new TitaNet<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

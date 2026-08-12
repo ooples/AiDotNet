@@ -1292,12 +1292,6 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         return b;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DeepHit<T>(_options, Regularization);
-    }
-
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new DeepHit<T>(_options, Regularization);

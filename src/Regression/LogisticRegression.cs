@@ -403,25 +403,4 @@ public class LogisticRegression<T> : RegressionBase<T>
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();
     }
-
-    /// <summary>
-    /// Creates a new instance of the logistic regression model.
-    /// </summary>
-    /// <returns>A new instance of the logistic regression model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the logistic regression model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization to create a new instance of the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
-    /// 
-    /// It's like creating a new, empty notebook with the same number of pages and section dividers as your current notebook,
-    /// but without copying any of the notes you've written. This is useful when you want to create a similar model
-    /// or when loading a saved model from a file.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LogisticRegression<T>(_options, Regularization);
-    }
 }

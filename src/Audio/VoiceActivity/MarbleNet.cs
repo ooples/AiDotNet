@@ -317,8 +317,6 @@ public class MarbleNet<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new MarbleNet<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

@@ -106,21 +106,6 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GaussianMixtureModel<T>(new GMMOptions<T>
-        {
-            NumComponents = _options.NumComponents,
-            CovarianceType = _options.CovarianceType,
-            Tolerance = _options.Tolerance,
-            MaxIterations = _options.MaxIterations,
-            NumInitializations = _options.NumInitializations,
-            InitMethod = _options.InitMethod,
-            RegularizationCovariance = _options.RegularizationCovariance
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (GaussianMixtureModel<T>)CreateNewInstance();

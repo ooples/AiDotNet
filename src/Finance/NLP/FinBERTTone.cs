@@ -186,19 +186,6 @@ public partial class FinBERTTone<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, CreateNewInstance builds and wires up model components. This sets up the FinBERTTone architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FinBERTTone<T>(
-            Architecture, new ModelOptions.FinBERTToneOptions<T>(_options), _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the FinBERTTone.

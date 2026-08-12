@@ -742,12 +742,6 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ExplainableBoostingMachineRegression<T>(_options, Regularization);
-    }
-
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new ExplainableBoostingMachineRegression<T>(_options, Regularization);

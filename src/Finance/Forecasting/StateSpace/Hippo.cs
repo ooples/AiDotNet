@@ -508,20 +508,6 @@ public partial class Hippo<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the HiPPO model with the same configuration.
-    /// </summary>
-    /// <returns>A new HiPPO instance.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh copy of the model with
-    /// randomly initialized weights but the same architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Hippo<T>(Architecture, new HippoOptions<T>(_options), _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes HiPPO-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer to serialize data to.</param>

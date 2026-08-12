@@ -279,26 +279,6 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeBridge<T>(Architecture, new TimeBridgeOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            BridgeDimension = _bridgeDimension,
-            UseStationarityGating = _useStationarityGating,
-            LearningRate = _options.LearningRate
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

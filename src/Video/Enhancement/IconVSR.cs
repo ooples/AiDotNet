@@ -207,9 +207,6 @@ public class IconVSR<T> : VideoSuperResolutionBase<T>
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new IconVSR<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

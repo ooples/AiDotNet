@@ -810,21 +810,6 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         }
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SileroVad<T>(
-            Architecture,
-            SampleRate,
-            _frameSize,
-            _threshold,
-            _minSpeechDurationMs,
-            _minSilenceDurationMs,
-            _convFilters,
-            _lstmHiddenDim,
-            _numLstmLayers);
-    }
-
     #endregion
 
     #region State Management

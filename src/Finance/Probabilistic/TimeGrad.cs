@@ -562,20 +562,6 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the TimeGrad model with the same configuration.
-    /// </summary>
-    /// <returns>A new TimeGrad instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TimeGrad model, CreateNewInstance builds and wires up model components. This sets up the TimeGrad architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeGrad<T>(Architecture, _options);
-    }
-
-    /// <summary>
     /// Serializes TimeGrad-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer to serialize data to.</param>

@@ -468,30 +468,6 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PointNet<T>(
-            new PointNetOptions
-            {
-                NumClasses = _numClasses,
-                InputFeatureDim = _inputFeatureDim,
-                InputTransformDim = _inputTransformDim,
-                UseInputTransform = _useInputTransform,
-                UseFeatureTransform = _useFeatureTransform,
-                InputMlpChannels = _inputMlpChannels,
-                FeatureMlpChannels = _featureMlpChannels,
-                ClassifierChannels = _classifierChannels,
-                InputTransformMlpChannels = _inputTransformMlpChannels,
-                InputTransformFcChannels = _inputTransformFcChannels,
-                FeatureTransformMlpChannels = _featureTransformMlpChannels,
-                FeatureTransformFcChannels = _featureTransformFcChannels,
-                UseDropout = _useDropout,
-                DropoutRate = _dropoutRate,
-                LearningRate = NumOps.ToDouble(_learningRate)
-            },
-            LossFunction);
-    }
-
     private static int[] ValidateChannelArray(int[]? values, string paramName)
     {
         if (values == null)

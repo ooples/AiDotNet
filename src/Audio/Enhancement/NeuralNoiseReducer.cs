@@ -1005,22 +1005,6 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NeuralNoiseReducer<T>(
-            Architecture,
-            SampleRate,
-            _fftSize,
-            _hopSize,
-            NumChannels,
-            _numStages,
-            _baseFilters,
-            _bottleneckDim,
-            EnhancementStrength,
-            _lossFunction);
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

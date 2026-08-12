@@ -94,21 +94,6 @@ public class HDBSCAN<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new HDBSCAN<T>(new HDBSCANOptions<T>
-        {
-            MinClusterSize = _options.MinClusterSize,
-            MinSamples = _options.MinSamples,
-            ClusterSelection = _options.ClusterSelection,
-            AllowSingleCluster = _options.AllowSingleCluster,
-            ClusterSelectionEpsilon = _options.ClusterSelectionEpsilon,
-            Alpha = _options.Alpha,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override bool SupportsParameterInitialization => false;
 
     /// <inheritdoc />

@@ -390,10 +390,6 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new SelfOrganizingMap<T>(Architecture, _totalEpochs, LossFunction);
-
-    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>

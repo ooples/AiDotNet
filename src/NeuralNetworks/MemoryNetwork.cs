@@ -1031,37 +1031,4 @@ finally
     {
         return Predict(question);
     }
-
-    /// <summary>
-    /// Creates a new instance of the Memory Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Memory Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Memory Network with the same architecture and memory configuration
-    /// as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the Memory Network with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - It has the same memory size and embedding size
-    /// - But it's a completely separate instance with its own memory matrix
-    /// - The memory starts fresh (empty) rather than copying the current memory contents
-    /// 
-    /// This is useful when you want to:
-    /// - Train multiple versions of the same memory network architecture
-    /// - Start with a clean memory but the same network structure
-    /// - Compare how different training approaches affect learning with the same configuration
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a new instance of MemoryNetwork with the same architecture and memory configuration
-        return new MemoryNetwork<T>(
-            this.Architecture,
-            _memorySize,
-            _embeddingSize);
-    }
 }

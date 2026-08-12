@@ -364,9 +364,6 @@ public class MiDaS<T> : NeuralNetworkBase<T>
         for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new MiDaS<T>(Architecture, _optimizer, _lossFunction, _embedDim, _numLayers, _variant);
-
     #endregion
 }
 

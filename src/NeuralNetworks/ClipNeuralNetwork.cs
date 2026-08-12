@@ -232,19 +232,6 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         _textSession = new InferenceSession(_textEncoderPath, sessionOptions);
     }
 
-    protected override IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> CreateNewInstance()
-    {
-        return new ClipNeuralNetwork<T>(
-            Architecture,
-            _imageEncoderPath,
-            _textEncoderPath,
-            _tokenizer,
-            LossFunction,
-            _embeddingDimension,
-            _maxSequenceLength,
-            _imageSize);
-    }
-
     /// <inheritdoc/>
     public Vector<T> EncodeText(string text)
     {

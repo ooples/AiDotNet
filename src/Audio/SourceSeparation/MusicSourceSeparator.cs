@@ -860,14 +860,6 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         }
     }
 
-    /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new MusicSourceSeparator<T>(Architecture, _options);
-    }
-
     #endregion
 
     #region Separation Methods

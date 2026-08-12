@@ -287,9 +287,6 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new Canary<T>(Architecture, _options);
-
     #endregion
 
     #region Private Helpers

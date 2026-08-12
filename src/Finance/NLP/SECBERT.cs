@@ -187,19 +187,6 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, CreateNewInstance builds and wires up model components. This sets up the SECBERT architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SECBERT<T>(
-            Architecture, new ModelOptions.SECBERTOptions<T>(_options), _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the SECBERT.

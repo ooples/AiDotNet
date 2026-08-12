@@ -397,12 +397,6 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new WeibullAFT<T>(MaxIterations, Tolerance);
-    }
-
-    /// <inheritdoc />
 
     /// <inheritdoc />
     public override byte[] Serialize()

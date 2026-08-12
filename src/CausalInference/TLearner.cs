@@ -348,12 +348,6 @@ public class TLearner<T> : CausalModelBase<T>
         return copy;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new TLearner<T>(MaxIterations, LearningRate, Lambda);
-    }
-
     /// <summary>
     /// Persists the two fitted linear sub-models (treated + control weights and biases) so
     /// <see cref="CausalModelBase{T}.DeepCopy"/> / <c>Clone</c> and Serialize/Deserialize reconstruct

@@ -211,12 +211,5 @@ public class GriffinLanguageModel<T> : NeuralNetworkBase<T>
         }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GriffinLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, new GriffinOptions(_options), optimizer: null);
-    }
-
     #endregion
 }

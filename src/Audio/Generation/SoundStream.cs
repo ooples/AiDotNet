@@ -304,8 +304,6 @@ public class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new SoundStream<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

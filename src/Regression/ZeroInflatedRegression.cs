@@ -836,12 +836,6 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return v;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ZeroInflatedRegression<T>(_options, Regularization);
-    }
-
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new ZeroInflatedRegression<T>(_options, Regularization);

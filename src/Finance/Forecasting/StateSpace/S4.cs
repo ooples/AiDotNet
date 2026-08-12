@@ -474,20 +474,6 @@ public partial class S4<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the S4 model with the same configuration.
-    /// </summary>
-    /// <returns>A new S4 instance.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh copy of the model with
-    /// randomly initialized weights but the same architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new S4<T>(Architecture, _options);
-    }
-
-    /// <summary>
     /// Serializes S4-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer to serialize data to.</param>

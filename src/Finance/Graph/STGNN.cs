@@ -519,20 +519,6 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new STGNN instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the STGNN model, CreateNewInstance builds and wires up model components. This sets up the STGNN architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new STGNN<T>(Architecture, _options, _adjacencyMatrix);
-    }
-
-    /// <summary>
     /// Serializes STGNN-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>

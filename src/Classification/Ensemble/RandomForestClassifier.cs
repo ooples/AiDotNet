@@ -386,28 +386,6 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new RandomForestClassifier<T>(new RandomForestClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
-            // silently retrained the clone by the rule instead of the caller's explicit count.
-            MaxFeatureCount = Options.MaxFeatureCount,
-            Criterion = Options.Criterion,
-            Bootstrap = Options.Bootstrap,
-            OobScore = Options.OobScore,
-            NJobs = Options.NJobs,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new RandomForestClassifier<T>(new RandomForestClassifierOptions<T>

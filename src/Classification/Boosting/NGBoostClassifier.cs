@@ -643,10 +643,4 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             _trees.Add(iterTrees);
         }
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new NGBoostClassifier<T>(_options, Regularization);
-    }
 }

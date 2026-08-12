@@ -350,7 +350,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// the rest afterwards would leave those derived structures built from defaults.
     /// </para>
     /// </remarks>
-    private static List<string>? CollectConstructorParameters(INamedTypeSymbol type, bool isModel)
+    internal static List<string>? CollectConstructorParameters(INamedTypeSymbol type, bool isModel)
     {
         var constructors = type.InstanceConstructors
             .Where(c => c.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal)
@@ -420,7 +420,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// share a parameter's name but not its type is rejected and the constructor goes unrecorded.
     /// </para>
     /// </remarks>
-    private static string? FindSource(INamedTypeSymbol type, IParameterSymbol parameter)
+    internal static string? FindSource(INamedTypeSymbol type, IParameterSymbol parameter)
     {
         var candidates = new[]
         {

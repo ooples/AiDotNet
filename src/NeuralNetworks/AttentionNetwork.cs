@@ -532,30 +532,4 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         return diagnostics;
     }
-
-    /// <summary>
-    /// Creates a new instance of the attention network model.
-    /// </summary>
-    /// <returns>A new instance of the attention network model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the attention network model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
-    /// 
-    /// Think of it like creating a blueprint of the network's architecture:
-    /// - It includes the same structure (layers, connections, sizes)
-    /// - It preserves the configuration settings (sequence length, embedding size)
-    /// - It doesn't copy over any of the learned knowledge (weights, biases)
-    /// 
-    /// This is particularly useful when you want to save or load models, as it provides the framework
-    /// that learned parameters can be loaded into.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AttentionNetwork<T>(Architecture, _sequenceLength, _embeddingSize, _lossFunction);
-    }
 }

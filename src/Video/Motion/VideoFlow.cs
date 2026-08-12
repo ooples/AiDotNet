@@ -238,10 +238,4 @@ public partial class VideoFlow<T> : OpticalFlowBase<T>
         // [featureExtract, ...processingBlocks, outputConv].
         RelinkOpticalFlowLayers(_numLayers, "VideoFlow", out _featureExtract, _processingBlocks, out _outputConv);
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VideoFlow<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

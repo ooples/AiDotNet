@@ -567,19 +567,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New VPINN instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new VariationalPINN<T>(
-                Architecture,
-                _weakFormResidual,
-                _numQuadraturePoints,
-                _numTestFunctions);
-        }
-
-        /// <summary>
         /// Indicates whether this model supports training.
         /// </summary>
         public override bool SupportsTraining => true;

@@ -592,21 +592,6 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new N-BEATS model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NBEATSFinance<T>(Architecture, new NBEATSModelOptions<T>(_options));
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
         bool clipGradients = _options.GradientClipNorm > 0.0;

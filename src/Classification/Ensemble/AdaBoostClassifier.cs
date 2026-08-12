@@ -386,18 +386,6 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new AdaBoostClassifier<T>(new AdaBoostClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            LearningRate = Options.LearningRate,
-            Algorithm = Options.Algorithm,
-            Seed = Options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new AdaBoostClassifier<T>(new AdaBoostClassifierOptions<T>

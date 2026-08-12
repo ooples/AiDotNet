@@ -290,12 +290,6 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new MiniRocketClassifier<T>(_options);
-    }
-
-    /// <inheritdoc />
     public override byte[] Serialize()
     {
         var metadata = GetModelMetadata();

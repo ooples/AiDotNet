@@ -87,23 +87,6 @@ public class BisectingKMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new BisectingKMeans<T>(new BisectingKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumBisectionTrials = _options.NumBisectionTrials,
-            ClusterSelection = _options.ClusterSelection,
-            MinClusterSizeForBisection = _options.MinClusterSizeForBisection,
-            BuildHierarchy = _options.BuildHierarchy,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (BisectingKMeans<T>)CreateNewInstance();

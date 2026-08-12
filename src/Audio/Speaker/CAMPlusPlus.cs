@@ -294,8 +294,6 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new CAMPlusPlus<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

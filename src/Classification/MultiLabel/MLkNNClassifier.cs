@@ -415,10 +415,4 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
-    {
-        return new MLkNNClassifier<T>(_options);
-    }
 }

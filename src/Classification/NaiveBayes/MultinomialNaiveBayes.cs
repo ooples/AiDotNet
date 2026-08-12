@@ -221,21 +221,6 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>A new MultinomialNaiveBayes instance.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new MultinomialNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors,
-            ClassPriors = Options.ClassPriors,
-            MinVariance = Options.MinVariance
-        });
-    }
-
-    /// <summary>
     /// Creates a deep clone of this model.
     /// </summary>
     /// <returns>A cloned MultinomialNaiveBayes instance.</returns>

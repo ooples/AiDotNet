@@ -190,12 +190,6 @@ public class PWStableNet<T> : VideoStabilizationBase<T>
         _options.DropoutRate = reader.ReadDouble();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PWStableNet<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PWStableNet<T>));

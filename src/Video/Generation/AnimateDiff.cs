@@ -516,17 +516,5 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32(); // featureWidth
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AnimateDiff<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            _inputChannels,
-            _numLayers,
-            _numFrames);
-    }
-
     #endregion
 }

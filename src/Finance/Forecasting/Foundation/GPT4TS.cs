@@ -288,24 +288,6 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GPT4TS<T>(Architecture, new GPT4TSOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            Task = _task,
-            FreezeBackbone = _freezeBackbone
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

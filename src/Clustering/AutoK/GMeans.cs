@@ -76,19 +76,6 @@ public class GMeans<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GMeans<T>(new GMeansOptions<T>
-        {
-            MinClusters = _options.MinClusters,
-            MaxClusters = _options.MaxClusters,
-            SignificanceLevel = _options.SignificanceLevel,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (GMeans<T>)CreateNewInstance();

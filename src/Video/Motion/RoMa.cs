@@ -214,10 +214,4 @@ public partial class RoMa<T> : OpticalFlowBase<T>
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RoMa<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

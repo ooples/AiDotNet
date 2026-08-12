@@ -90,18 +90,6 @@ public class CLARANS<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CLARANS<T>(new CLARANSOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxNeighbor = _options.MaxNeighbor,
-            NumLocal = _options.NumLocal,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (CLARANS<T>)CreateNewInstance();

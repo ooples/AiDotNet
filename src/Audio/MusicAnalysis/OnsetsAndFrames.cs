@@ -299,8 +299,6 @@ public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T
             _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new OnsetsAndFrames<T>(Architecture, _options);
-
     #endregion
 
     #region Disposal

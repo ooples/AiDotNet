@@ -275,25 +275,6 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeMoE<T>(Architecture, new TimeMoEOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            NumExperts = _numExperts,
-            NumActiveExperts = _numActiveExperts
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

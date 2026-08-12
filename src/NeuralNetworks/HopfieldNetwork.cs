@@ -756,33 +756,4 @@ public partial class HopfieldNetwork<T> : NeuralNetworkBase<T>
         double capacity = _size / (4.0 * Math.Log(_size));
         return (int)Math.Floor(capacity);
     }
-
-    /// <summary>
-    /// Creates a new instance of the Hopfield Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Hopfield Network instance with the same architecture and size.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Hopfield Network with the same architecture and size
-    /// as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the network with the same setup.
-    /// 
-    /// Think of it like creating a blank version of the network:
-    /// - The new network has the same size (number of neurons)
-    /// - It has the same architecture (configuration)
-    /// - But it starts with no stored patterns - it's a fresh network
-    /// - The weight matrix is initialized to zeros
-    /// 
-    /// This is useful when you want to:
-    /// - Start with a clean network with the same structure
-    /// - Train it on different patterns
-    /// - Compare results between different training approaches
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new HopfieldNetwork<T>(this.Architecture, _size);
-    }
 }

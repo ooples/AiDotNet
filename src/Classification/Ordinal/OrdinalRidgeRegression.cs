@@ -585,18 +585,6 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>New instance with same hyperparameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates an untrained copy with the same settings.</para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OrdinalRidgeRegression<T>(_alpha, _fitIntercept);
-    }
-
-    /// <summary>
     /// Computes gradients for the model parameters.
     /// </summary>
     /// <param name="input">Input feature matrix.</param>

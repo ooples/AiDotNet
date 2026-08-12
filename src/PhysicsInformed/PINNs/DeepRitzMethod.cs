@@ -513,20 +513,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New Deep Ritz instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new DeepRitzMethod<T>(
-                Architecture,
-                _energyFunctional,
-                _boundaryCheck,
-                _boundaryValue,
-                _numQuadraturePoints);
-        }
-
-        /// <summary>
         /// Indicates whether this model supports training.
         /// </summary>
         public override bool SupportsTraining => true;

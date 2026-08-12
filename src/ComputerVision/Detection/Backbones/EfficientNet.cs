@@ -241,13 +241,6 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Constructs a fresh EfficientNet with the same variant and input-channel configuration.
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new EfficientNet<T>(_variant, _inChannels, _activation);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,

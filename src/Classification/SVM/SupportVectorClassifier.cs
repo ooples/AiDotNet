@@ -573,26 +573,6 @@ public partial class SupportVectorClassifier<T> : SVMBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SupportVectorClassifier<T>(new SVMOptions<T>
-        {
-            C = Options.C,
-            Kernel = Options.Kernel,
-            Gamma = Options.Gamma,
-            Degree = Options.Degree,
-            Coef0 = Options.Coef0,
-            Tolerance = Options.Tolerance,
-            MaxIterations = Options.MaxIterations,
-            Shrinking = Options.Shrinking,
-            Probability = Options.Probability,
-            Seed = Options.Seed,
-            OneVsRest = Options.OneVsRest,
-            CacheSize = Options.CacheSize
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (SupportVectorClassifier<T>)CreateNewInstance();

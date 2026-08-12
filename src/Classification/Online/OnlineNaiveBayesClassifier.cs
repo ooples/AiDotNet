@@ -448,12 +448,6 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
         return clone;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineNaiveBayesClassifier<T>(_options);
-    }
-
     /// <summary>
     /// Serializes the trained model state including per-class statistics.
     /// </summary>

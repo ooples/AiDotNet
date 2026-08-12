@@ -681,19 +681,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, CreateNewInstance builds and wires up model components. This sets up the GraphWaveNet architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphWaveNet<T>(Architecture, _options, _predefinedAdjacency);
-    }
-
-    /// <summary>
     /// Serializes model-specific data.
     /// </summary>
     /// <remarks>

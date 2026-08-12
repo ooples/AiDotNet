@@ -397,14 +397,6 @@ public partial class VisionMambaModel<T> : NeuralNetworkBase<T>
         _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VisionMambaModel<T>(
-            Architecture, _imageHeight, _imageWidth, _patchSize, _channels,
-            _modelDimension, _numLayers, _numClasses, _stateDimension,
-            _scanPattern, LossFunction, _options);
-    }
-
     #endregion
 
     #region Private Helpers

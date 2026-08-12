@@ -544,24 +544,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TOTEM<T>(Architecture, new TOTEMOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            CodebookSize = _codebookSize,
-            CodebookDimension = _codebookDimension,
-            NumCodebooks = _numCodebooks,
-            DropoutRate = _dropout,
-            CommitmentWeight = _commitmentWeight
-        });
-    }
-
-    /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_contextLength);

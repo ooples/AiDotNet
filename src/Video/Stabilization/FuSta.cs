@@ -194,12 +194,6 @@ public class FuSta<T> : VideoStabilizationBase<T>
         _options.DropoutRate = reader.ReadDouble();
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FuSta<T>(Architecture, _options);
-    }
-
     private void ThrowIfDisposed()
     {
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FuSta<T>));

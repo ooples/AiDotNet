@@ -313,9 +313,6 @@ public class EDVR<T> : VideoSuperResolutionBase<T>
         for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new EDVR<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numFrames, _numBlocks, _scaleFactor);
-
     #endregion
 
     #region Base Class Abstract Methods

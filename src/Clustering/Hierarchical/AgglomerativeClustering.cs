@@ -92,19 +92,6 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new AgglomerativeClustering<T>(new HierarchicalOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            Linkage = _options.Linkage,
-            DistanceThreshold = _options.DistanceThreshold,
-            ComputeFullTree = _options.ComputeFullTree,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (AgglomerativeClustering<T>)CreateNewInstance();

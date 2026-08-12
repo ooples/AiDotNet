@@ -277,26 +277,6 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ExtraTreesClassifier<T>(new ExtraTreesClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
-            // silently retrained the clone by the rule instead of the caller's explicit count.
-            MaxFeatureCount = Options.MaxFeatureCount,
-            Criterion = Options.Criterion,
-            Bootstrap = Options.Bootstrap,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new ExtraTreesClassifier<T>(new ExtraTreesClassifierOptions<T>

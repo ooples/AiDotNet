@@ -784,15 +784,4 @@ public partial class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         }
         return copy;
     }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DeepBeliefNetwork<T>(
-            Architecture,
-            _epochs,
-            _batchSize,
-            _optimizer,
-            _lossFunction
-        );
-    }
 }

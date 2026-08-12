@@ -938,28 +938,6 @@ namespace AiDotNet.AutoML
             return copy;
         }
 
-        public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-        {
-            return new DiffusionAutoMLModel<T>(
-                _noisePredictor,
-                _vae,
-                _scheduler,
-                _conditioner,
-                _config,
-                _seed);
-        }
-
-        public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        {
-            return new DiffusionAutoMLModel<T>(
-                (UNetNoisePredictor<T>)_noisePredictor.DeepCopy(),
-                (StandardVAE<T>)_vae.DeepCopy(),
-                _scheduler,
-                _conditioner,
-                _config,
-                _seed);
-        }
-
         /// <summary>
         /// Returns empty because diffusion models operate on latent space noise, not
         /// named tabular features, so per-feature importance is not meaningful.

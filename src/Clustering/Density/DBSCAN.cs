@@ -122,21 +122,6 @@ public class DBSCAN<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DBSCAN<T>(new DBSCANOptions<T>
-        {
-            Epsilon = _options.Epsilon,
-            MinPoints = _options.MinPoints,
-            Algorithm = _options.Algorithm,
-            LeafSize = _options.LeafSize,
-            P = _options.P,
-            DistanceMetric = _options.DistanceMetric,
-            NumJobs = _options.NumJobs
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />

@@ -356,10 +356,6 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
         _threshold = reader.ReadDouble();
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new AdversarialImageEvaluator<T>(_threshold);
-
     private static double ComputeHighFrequencyAnomalyScore(ReadOnlySpan<T> span, int[] shape)
     {
         // Compute energy in high-frequency components using Laplacian approximation.

@@ -226,10 +226,4 @@ public partial class DKM<T> : OpticalFlowBase<T>
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DKM<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

@@ -231,21 +231,6 @@ public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>A new GaussianNaiveBayes instance.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GaussianNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors,
-            ClassPriors = Options.ClassPriors,
-            MinVariance = Options.MinVariance
-        });
-    }
-
-    /// <summary>
     /// Creates a deep clone of this model.
     /// </summary>
     /// <returns>A cloned GaussianNaiveBayes instance.</returns>

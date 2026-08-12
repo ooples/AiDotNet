@@ -90,24 +90,6 @@ public class CURE<T> : ClusteringBase<T>
     public override bool SupportsParameterInitialization => false;
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CURE<T>(new CUREOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumRepresentatives = _options.NumRepresentatives,
-            ShrinkFactor = _options.ShrinkFactor,
-            SampleFraction = _options.SampleFraction,
-            UsePartitioning = _options.UsePartitioning,
-            NumPartitions = _options.NumPartitions,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (CURE<T>)CreateNewInstance();

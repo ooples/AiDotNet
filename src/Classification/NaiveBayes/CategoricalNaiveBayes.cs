@@ -202,16 +202,6 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CategoricalNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new CategoricalNaiveBayes<T>(new NaiveBayesOptions<T>

@@ -425,15 +425,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New UDE instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new UniversalDifferentialEquation<T>(Architecture, _stateDim, _knownDynamics, _optimizer);
-        }
-
-        /// <summary>
         /// Indicates whether this model supports training.
         /// </summary>
         public override bool SupportsTraining => true;

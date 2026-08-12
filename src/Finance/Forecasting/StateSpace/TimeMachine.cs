@@ -487,20 +487,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the TimeMachine model with the same configuration.
-    /// </summary>
-    /// <returns>A new TimeMachine instance.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh copy of the model with
-    /// randomly initialized weights but the same architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeMachine<T>(Architecture, new TimeMachineOptions<T>(_options), _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes TimeMachine-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer to serialize data to.</param>
