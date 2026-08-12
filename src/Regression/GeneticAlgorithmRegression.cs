@@ -82,6 +82,7 @@ public partial class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// <summary>
     /// The best model found by the genetic algorithm.
     /// </summary>
+    [Scratch]
     private IFullModel<T, Matrix<T>, Vector<T>>? _bestModel;
 
     /// <summary>

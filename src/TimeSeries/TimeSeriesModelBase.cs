@@ -1276,8 +1276,6 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                 {
                     parameterSnapshot[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
-                ModelParameters = parameterSnapshot.Clone();
-
                 // Deserialize evaluation metrics
                 int metricsCount = reader.ReadInt32();
                 LastEvaluationMetrics.Clear();
@@ -1302,18 +1300,33 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             // Validate and restore the manifest before model-specific state. Specialized serializers
             // may retain higher-precision internal storage (for example double fields in a float
             // model), so their exact values intentionally win when DeserializeCore runs next.
-            if (parameterSnapshot is not null && Components.Count > 0)
+            if (parameterSnapshot is not null)
             {
-                var readiness = _parameterRegistry.ParameterLayout.Readiness;
-                if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred ||
-                    readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized ||
-                    _parameterRegistry.ParameterCount != parameterSnapshot.Length)
+                var components = Components;
+                if (components.Count == 0)
                 {
-                    restoreParametersAfterCore = true;
+                    ModelParameters = parameterSnapshot.Clone();
                 }
                 else
                 {
-                    _parameterRegistry.SetParameters(parameterSnapshot);
+                    // A migrated manifest may keep ModelParameters as an auxiliary packed view.
+                    // The compatibility tail, however, points AT ModelParameters; preloading that
+                    // tail with the entire flat checkpoint would count every generated buffer a
+                    // second time after DeserializeCore materializes it.
+                    if (!_legacyModelParametersRegistered)
+                        ModelParameters = parameterSnapshot.Clone();
+
+                    var readiness = _parameterRegistry.ParameterLayout.Readiness;
+                    if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred ||
+                        readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized ||
+                        _parameterRegistry.ParameterCount != parameterSnapshot.Length)
+                    {
+                        restoreParametersAfterCore = true;
+                    }
+                    else
+                    {
+                        _parameterRegistry.SetParameters(parameterSnapshot);
+                    }
                 }
             }
 
@@ -1464,6 +1477,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
     private readonly AiDotNet.Models.Parameters.ParameterComponentRegistry<T> _parameterRegistry = new();
     private bool _componentsRegistered;
+    private bool _legacyModelParametersRegistered;
 
     /// <summary>
     /// Declares a component whose parameters belong to this model's surface. Caller metadata gives
@@ -1485,9 +1499,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     protected void RegisterParameterComponent(
         string stableId,
         IParameterSource<T>? component,
-        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+        AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+        AiDotNet.Models.Parameters.ParameterAvailability availability =
+            AiDotNet.Models.Parameters.ParameterAvailability.Construction)
     {
-        _parameterRegistry.Register(stableId, component, role);
+        _parameterRegistry.Register(stableId, component, role, availability);
     }
 
     /// <summary>
@@ -1520,6 +1536,24 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             {
                 RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
+
+                // During the pre-1.0 migration, some time-series models still keep their learned
+                // coefficients in ModelParameters while the generator already discovered an
+                // auxiliary buffer. The presence of that buffer must not hide the live legacy
+                // coefficients. Register one centrally managed deferred tail until those models
+                // acquire semantic field declarations of their own.
+                if (_parameterRegistry.HasComponents
+                    && !_parameterRegistry.HasPrimaryParameterComponents)
+                {
+                    _parameterRegistry.Register(
+                        "AiDotNet.TimeSeries.TimeSeriesModelBase::model-parameters",
+                        new AiDotNet.Models.Parameters.VectorFieldParameterSource<T>(
+                            () => ModelParameters,
+                            value => ModelParameters = value),
+                        AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                        AiDotNet.Models.Parameters.ParameterAvailability.ShapeResolution);
+                    _legacyModelParametersRegistered = true;
+                }
                 _componentsRegistered = true;
             }
             return _parameterRegistry.Components;

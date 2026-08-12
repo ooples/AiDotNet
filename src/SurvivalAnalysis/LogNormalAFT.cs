@@ -59,11 +59,23 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
     /// <remarks>Intercept, scale, then the covariate coefficients, the same layout as WeibullAFT -- the two differ in their error distribution, not in what they fit.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(new ScalarParameterSource<T>(() => Intercept, v => Intercept = v));
-        RegisterParameterComponent(new ScalarParameterSource<T>(() => Scale, v => Scale = v));
-        RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => Coefficients,
-            value => Coefficients = value));
+        RegisterParameterComponent(
+            "parameters/00000000-intercept",
+            new ScalarParameterSource<T>(() => Intercept, v => Intercept = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000001-scale",
+            new ScalarParameterSource<T>(() => Scale, v => Scale = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000002-coefficients",
+            new VectorFieldParameterSource<T>(
+                () => Coefficients,
+                value => Coefficients = value),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
     }
     /// <summary>
     /// Gets the regression coefficients (β).

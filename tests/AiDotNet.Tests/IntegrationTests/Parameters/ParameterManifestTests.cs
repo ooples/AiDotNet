@@ -170,6 +170,92 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task Restore_GivesAnUnresolvedDeclaredVectorTailTheUnambiguousRemainder()
+    {
+        await Task.Yield();
+        Vector<double>? tail = null;
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("fixed", new ContractProbeSource(2, new[] { 1d, 2d }));
+        registry.Register(
+            "tail",
+            new VectorFieldParameterSource<double>(() => tail, replacement => tail = replacement),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+
+        Assert.Null(registry.ParameterLayout.ParameterCount);
+
+        registry.SetParameters(new Vector<double>(new[] { 10d, 20d, 30d, 40d }));
+
+        Assert.Equal(new[] { 30d, 40d }, tail!.ToArray());
+        Assert.Equal(4, registry.ParameterCount);
+    }
+
+    [Fact]
+    public async Task Restore_ReplaceableVectorLearnsItsWidthOnceThenEnforcesItExactly()
+    {
+        await Task.Yield();
+        var value = Vector<double>.Empty();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register(
+            "deferred",
+            new VectorFieldParameterSource<double>(() => value, replacement => value = replacement),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+
+        registry.SetParameters(new Vector<double>(new[] { 1d, 2d, 3d }));
+
+        Assert.Equal(new[] { 1d, 2d, 3d }, value.ToArray());
+        Assert.Equal(3, registry.ParameterCount);
+        Assert.Throws<ArgumentException>(() =>
+            registry.SetParameters(new Vector<double>(new[] { 4d, 5d })));
+    }
+
+    [Fact]
+    public async Task SemanticRolesRatherThanNumericCountControlOptimizerEligibility()
+    {
+        await Task.Yield();
+        var learnedStateOnly = new ParameterComponentRegistry<double>();
+        learnedStateOnly.Register(
+            "threshold",
+            new ContractProbeSource(1, new[] { 0.5d }),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+
+        Assert.True(learnedStateOnly.HasPrimaryParameterComponents);
+        Assert.False(learnedStateOnly.HasOptimizerUpdatableComponents);
+        Assert.False(learnedStateOnly.CanInitializeOptimizerParameters);
+
+        learnedStateOnly.Register(
+            "weights",
+            new ContractProbeSource(2, new[] { 1d, 2d }),
+            ParameterSlotRole.Trainable);
+
+        Assert.True(learnedStateOnly.HasOptimizerUpdatableComponents);
+        Assert.True(learnedStateOnly.CanInitializeOptimizerParameters);
+    }
+
+    [Fact]
+    public async Task OptimizerEligibility_RequiresResolvedTrainableShape()
+    {
+        await Task.Yield();
+        Vector<double>? deferred = null;
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register(
+            "weights",
+            new VectorFieldParameterSource<double>(
+                () => deferred,
+                replacement => deferred = replacement),
+            ParameterSlotRole.Trainable,
+            ParameterAvailability.ShapeResolution);
+
+        Assert.True(registry.HasOptimizerUpdatableComponents);
+        Assert.False(registry.CanInitializeOptimizerParameters);
+
+        deferred = new Vector<double>(3);
+        Assert.True(registry.CanInitializeOptimizerParameters);
+    }
+
+    [Fact]
     public async Task Restore_EmptyVariableTail_RejectsAMissingShapeResolvedPrefix()
     {
         await Task.Yield();
@@ -194,18 +280,22 @@ public class ParameterManifestTests
     }
 
     [Fact]
-    public async Task Restore_RejectsAVariableComponentThatIsNotLastInStableOrder()
+    public async Task Restore_CanonicallyPlacesVariableComponentAfterFixedStableIds()
     {
         await Task.Yield();
+        double[] restoredTail = Array.Empty<double>();
         var registry = new ParameterComponentRegistry<double>();
         registry.Register("a-variable", new VariableLengthParameterSource<double>(
-            () => 0, () => new Vector<double>(0), _ => { }));
+            () => restoredTail.Length,
+            () => new Vector<double>(restoredTail),
+            values => restoredTail = values.ToArray()));
         registry.Register("z-fixed", new ContractProbeSource(1, new[] { 1d }));
 
-        var error = Assert.Throws<InvalidOperationException>(() =>
-            registry.SetParameters(new Vector<double>(new[] { 1d })));
+        Assert.Equal(new[] { "z-fixed", "a-variable" },
+            registry.ParameterLayout.Slots.Select(slot => slot.StableId));
 
-        Assert.Contains("must be last", error.Message, StringComparison.Ordinal);
+        registry.SetParameters(new Vector<double>(new[] { 1d, 2d, 3d }));
+        Assert.Equal(new[] { 2d, 3d }, restoredTail);
     }
 
     [Fact]
@@ -221,7 +311,7 @@ public class ParameterManifestTests
         var error = Assert.Throws<InvalidOperationException>(() =>
             registry.SetParameters(new Vector<double>(0)));
 
-        Assert.Contains("at most one", error.Message, StringComparison.Ordinal);
+        Assert.Contains("at most one resizable", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -264,6 +354,180 @@ public class ParameterManifestTests
         Assert.Matches("^[a-f0-9]{64}$", original.Fingerprint);
         Assert.NotEqual(original.Fingerprint, renamed.Fingerprint);
         Assert.NotEqual(original.Fingerprint, resized.Fingerprint);
+    }
+
+    [Fact]
+    public async Task LayoutFingerprint_DistinguishesEqualCountDifferentShapeAndElementType()
+    {
+        await Task.Yield();
+        var twoBySix = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 12,
+                shape: new[] { 2, 6 }, elementType: "System.Double")
+        });
+        var threeByFour = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 12,
+                shape: new[] { 3, 4 }, elementType: "System.Double")
+        });
+        var floats = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 12,
+                shape: new[] { 2, 6 }, elementType: "System.Single")
+        });
+
+        Assert.NotEqual(twoBySix.Fingerprint, threeByFour.Fingerprint);
+        Assert.NotEqual(twoBySix.Fingerprint, floats.Fingerprint);
+    }
+
+    [Fact]
+    public async Task LayoutFingerprint_DistinguishesOrthogonalStateSemantics()
+    {
+        await Task.Yield();
+        static ParameterLayoutSnapshot Snapshot(
+            ParameterUpdatePolicy update,
+            ParameterPersistence persistence,
+            ParameterOwnership ownership,
+            ParameterAvailability availability) => new(new[]
+        {
+            new ParameterSlotDescriptor(
+                "state", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 4,
+                shape: new[] { 2, 2 }, elementType: "System.Double",
+                updatePolicy: update, persistence: persistence, ownership: ownership,
+                availability: availability)
+        });
+
+        var baseline = Snapshot(ParameterUpdatePolicy.Optimizer,
+            ParameterPersistence.Persistent, ParameterOwnership.Owned,
+            ParameterAvailability.Construction);
+
+        Assert.NotEqual(baseline.Fingerprint, Snapshot(ParameterUpdatePolicy.Fit,
+            ParameterPersistence.Persistent, ParameterOwnership.Owned,
+            ParameterAvailability.Construction).Fingerprint);
+        Assert.NotEqual(baseline.Fingerprint, Snapshot(ParameterUpdatePolicy.Optimizer,
+            ParameterPersistence.Transient, ParameterOwnership.Owned,
+            ParameterAvailability.Construction).Fingerprint);
+        Assert.NotEqual(baseline.Fingerprint, Snapshot(ParameterUpdatePolicy.Optimizer,
+            ParameterPersistence.Persistent, ParameterOwnership.Alias,
+            ParameterAvailability.Construction).Fingerprint);
+        Assert.NotEqual(baseline.Fingerprint, Snapshot(ParameterUpdatePolicy.Optimizer,
+            ParameterPersistence.Persistent, ParameterOwnership.Owned,
+            ParameterAvailability.ShapeResolution).Fingerprint);
+    }
+
+    [Fact]
+    public async Task Registry_PreservesChildShapeTypeAndDeclaredAvailability()
+    {
+        await Task.Yield();
+        Tensor<double>? tensor = new(new[] { 2, 3 });
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register(
+            "model/weight",
+            new TensorFieldParameterSource<double>(() => tensor),
+            ParameterSlotRole.Trainable,
+            ParameterAvailability.ShapeResolution);
+
+        var slot = Assert.Single(registry.ParameterLayout.Slots);
+        Assert.Equal(new[] { 2, 3 }, slot.Shape);
+        Assert.Equal(typeof(double).FullName, slot.ElementType);
+        Assert.Equal(ParameterAvailability.ShapeResolution, slot.Availability);
+        Assert.Equal(ParameterUpdatePolicy.Optimizer, slot.UpdatePolicy);
+        Assert.Equal(ParameterPersistence.Persistent, slot.Persistence);
+        Assert.Equal(ParameterOwnership.Owned, slot.Ownership);
+    }
+
+    [Fact]
+    public async Task Lifecycle_SeparatesShapeFitConditionalAndAbsentBufferState()
+    {
+        await Task.Yield();
+        Tensor<double>? shapeValue = null;
+        Tensor<double>? fitValue = null;
+        Tensor<double>? optionalValue = null;
+        Tensor<double>? bufferValue = null;
+
+        var shape = new ParameterComponentRegistry<double>();
+        shape.Register("shape", new TensorFieldParameterSource<double>(() => shapeValue),
+            ParameterSlotRole.Trainable, ParameterAvailability.ShapeResolution);
+        Assert.Equal(ParameterReadiness.ShapeDeferred, shape.ParameterLayout.Readiness);
+        Assert.Throws<ParameterLayoutNotReadyException>(() => _ = shape.ParameterCount);
+
+        var fitted = new ParameterComponentRegistry<double>();
+        fitted.Register("fit", new TensorFieldParameterSource<double>(() => fitValue),
+            ParameterSlotRole.LearnedState, ParameterAvailability.Fit);
+        Assert.Equal(ParameterReadiness.FitDeferred, fitted.ParameterLayout.Readiness);
+        var fitError = Assert.Throws<ParameterLayoutNotReadyException>(() => fitted.GetParameters());
+        Assert.Contains("fit", fitError.Message, StringComparison.Ordinal);
+
+        var optional = new ParameterComponentRegistry<double>();
+        optional.Register("optional", new TensorFieldParameterSource<double>(() => optionalValue),
+            ParameterSlotRole.Trainable, ParameterAvailability.Conditional);
+        Assert.Equal(ParameterReadiness.ConditionalAbsent, optional.ParameterLayout.Readiness);
+        Assert.Equal(0, optional.ParameterCount);
+        Assert.Empty(optional.GetParameters());
+        optional.SetParameters(new Vector<double>(0));
+
+        var buffer = new ParameterComponentRegistry<double>();
+        buffer.Register("training-data", new TensorFieldParameterSource<double>(() => bufferValue),
+            ParameterSlotRole.Buffer, ParameterAvailability.Fit);
+        Assert.Equal(ParameterReadiness.FitDeferred, buffer.ParameterLayout.Readiness);
+        Assert.Null(buffer.ParameterLayout.ParameterCount);
+        Assert.Throws<ParameterLayoutNotReadyException>(() => _ = buffer.ParameterCount);
+        Assert.Throws<ParameterLayoutNotReadyException>(() => buffer.GetParameters());
+    }
+
+    [Fact]
+    public async Task TensorFieldRestore_RejectsShortLongAndNullDestinations()
+    {
+        await Task.Yield();
+        Tensor<double>? tensor = new(new[] { 2, 2 });
+        var source = new TensorFieldParameterSource<double>(() => tensor);
+
+        Assert.Throws<ArgumentException>(() => source.SetParameters(new Vector<double>(3)));
+        Assert.Throws<ArgumentException>(() => source.SetParameters(new Vector<double>(5)));
+
+        tensor = null;
+        Assert.Throws<ParameterLayoutNotReadyException>(() =>
+            source.SetParameters(new Vector<double>(4)));
+    }
+
+    [Fact]
+    public async Task MatrixAndVectorFieldRestore_RequireExactLengths()
+    {
+        await Task.Yield();
+        Matrix<double>? matrix = new(2, 3);
+        Vector<double>? vector = new(4);
+        var matrixSource = new MatrixFieldParameterSource<double>(() => matrix);
+        var vectorSource = new VectorFieldWriteThroughSource<double>(() => vector);
+
+        Assert.Throws<ArgumentException>(() => matrixSource.SetParameters(new Vector<double>(5)));
+        Assert.Throws<ArgumentException>(() => matrixSource.SetParameters(new Vector<double>(7)));
+        Assert.Throws<ArgumentException>(() => vectorSource.SetParameters(new Vector<double>(3)));
+        Assert.Throws<ArgumentException>(() => vectorSource.SetParameters(new Vector<double>(5)));
+
+        matrix = null;
+        vector = null;
+        Assert.Throws<ParameterLayoutNotReadyException>(() =>
+            matrixSource.SetParameters(new Vector<double>(6)));
+        Assert.Throws<ParameterLayoutNotReadyException>(() =>
+            vectorSource.SetParameters(new Vector<double>(4)));
+    }
+
+    [Fact]
+    public async Task ComponentCollectionRestore_ValidatesTotalBeforeMutatingAnyMember()
+    {
+        await Task.Yield();
+        var first = new ContractProbeSource(2, new[] { 1d, 2d });
+        var second = new ContractProbeSource(1, new[] { 3d });
+        var members = new IParameterSource<double>[] { first, second };
+        var source = new ComponentCollectionParameterSource<double>(() => members);
+
+        Assert.Throws<ArgumentException>(() => source.SetParameters(new Vector<double>(2)));
+
+        Assert.Null(first.LastRestored);
+        Assert.Null(second.LastRestored);
     }
 
     [Fact]
@@ -495,6 +759,7 @@ internal sealed class ContractProbeSource : IParameterSource<double>, IParameter
 
 internal partial class GeneratedAndManualParameterModel<T> : ModelBase<T, Vector<T>, Vector<T>>
 {
+    [TrainableParameter]
     private readonly Matrix<T> _generated = new(1, 2);
 
     [ParameterAlias("manual-component")]

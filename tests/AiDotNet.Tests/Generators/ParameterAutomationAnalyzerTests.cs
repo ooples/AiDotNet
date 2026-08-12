@@ -1,0 +1,253 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Xunit;
+
+namespace AiDotNet.Tests.Generators;
+
+/// <summary>Locks the B1 rule that raw numeric storage never invents its own semantics.</summary>
+public class ParameterAutomationAnalyzerTests
+{
+    private const string Infrastructure = @"
+namespace AiDotNet.Attributes
+{
+    using System;
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class TrainableParameterAttribute : Attribute
+    {
+        public bool Optional { get; set; }
+        public int Availability { get; set; }
+    }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FittedParameterAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FrozenParameterAttribute : Attribute { public int Availability { get; set; } }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class BufferAttribute : Attribute { public int Availability { get; set; } }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class ScratchAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class ExternalStateAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class ParameterAliasAttribute : Attribute
+    {
+        public ParameterAliasAttribute(string target) { }
+    }
+}
+namespace AiDotNet.Tensors.LinearAlgebra
+{
+    public sealed class Tensor<T> { }
+    public sealed class Matrix<T> { }
+    public sealed class Vector<T> { }
+}
+namespace AiDotNet.NeuralNetworks.Layers
+{
+    public abstract class LayerBase<T> { }
+}";
+
+    private static ImmutableArray<MetadataReference> BaseReferences()
+    {
+        var references = new List<MetadataReference>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location) || !seen.Add(assembly.Location))
+                continue;
+            references.Add(MetadataReference.CreateFromFile(assembly.Location));
+        }
+        return references.ToImmutableArray();
+    }
+
+    private static ImmutableArray<Diagnostic> Run(string source)
+    {
+        var compilation = CSharpCompilation.Create(
+            "AiDotNet",
+            new[] { CSharpSyntaxTree.ParseText(Infrastructure), CSharpSyntaxTree.ParseText(source) },
+            BaseReferences(),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new AiDotNet.Generators.ParameterAutomationAnalyzer());
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
+        return diagnostics;
+    }
+
+    [Fact]
+    public async Task NonNullableTensor_DoesNotImplyTrainable()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class CacheLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _lastInput = new();
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN088"));
+        Assert.Contains("_lastInput", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExistingRegistrationApi_IsAnExplicitSemanticDeclaration()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class RegisteredLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _running = new();
+
+    private void Configure()
+    {
+        RegisterTrainableParameter(_weight);
+        RegisterBuffer(_running);
+    }
+}";
+
+        Assert.DoesNotContain(Run(source), item => item.Id == "AIDN088");
+    }
+
+    [Fact]
+    public async Task RegistrationAndAttributeWithDifferentRoles_AreCompileError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ConflictingRegistrationLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [Buffer] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+    private void Configure() => RegisterTrainableParameter(_weight);
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN089"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
+    public async Task NullableTensor_DoesNotImplyScratchOrOptional()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class MaybeLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _maybe;
+}";
+
+        Assert.Single(Run(source).Where(item => item.Id == "AIDN088"));
+    }
+
+    [Fact]
+    public async Task EachExplicitSemanticRole_IsAccepted()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ClassifiedLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [TrainableParameter] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+    [FittedParameter] private AiDotNet.Tensors.LinearAlgebra.Vector<double>? _fit;
+    [FrozenParameter] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _frozen = new();
+    [Buffer] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _running = new();
+    [Scratch] private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _cache;
+    [ExternalState] private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _external;
+    [ParameterAlias(nameof(_weight))] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _alias = new();
+}";
+
+        Assert.DoesNotContain(Run(source), item => item.Id is "AIDN088" or "AIDN089");
+    }
+
+    [Fact]
+    public async Task ConflictingRoles_AreCompileError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class InvalidLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [TrainableParameter, Scratch]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _state = new();
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN089"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+    }
+
+    [Fact]
+    public async Task AbstractBase_IsClassifiedBecauseItsStateIsInherited()
+    {
+        await Task.Yield();
+        const string source = @"
+public abstract class SharedLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _shared = new();
+}";
+
+        Assert.Single(Run(source).Where(item => item.Id == "AIDN088"));
+    }
+
+    [Fact]
+    public async Task ConventionGradient_IsAcceptedOnlyWhenItMatchesDeclaredParameter()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class GradientLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [TrainableParameter] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _weightGradient;
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _orphanGradient;
+}";
+
+        var diagnostics = Run(source).Where(item => item.Id == "AIDN088").ToArray();
+        var diagnostic = Assert.Single(diagnostics);
+        Assert.Contains("_orphanGradient", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NumericProperty_UsesTheSameExhaustiveClassification()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class PropertyLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    public AiDotNet.Tensors.LinearAlgebra.Tensor<double> State { get; } = new();
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN088"));
+        Assert.Contains("State", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NullableTrainable_RequiresDeclaredLifecycle()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class DeferredLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [TrainableParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _ambiguous;
+
+    [TrainableParameter(Optional = true)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _conditional;
+
+    [TrainableParameter(Availability = 1)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>? _shapeDeferred;
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN090"));
+        Assert.Contains("_ambiguous", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Alias_MustNameOneCompatibleOwnedMember()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class AliasLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [TrainableParameter] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+    [ParameterAlias(""_missing"")] private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _alias = new();
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN091"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("_missing", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+}

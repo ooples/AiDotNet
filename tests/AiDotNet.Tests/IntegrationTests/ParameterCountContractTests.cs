@@ -96,8 +96,32 @@ public class ParameterCountContractTests
     /// </remarks>
     public const int ShardCount = 8;
 
-    public static IEnumerable<object[]> Shards =>
-        Enumerable.Range(0, ShardCount).Select(i => new object[] { i });
+    /// <summary>
+    /// Optional local/CI selector for running one shard in an isolated test-host process.
+    /// When unset, discovery returns every shard exactly as before.
+    /// </summary>
+    public const string ShardSelectorEnvironmentVariable = "AIDOTNET_PARAMETER_COUNT_SHARD";
+
+    public static IEnumerable<object[]> Shards
+    {
+        get
+        {
+            var selectedText = Environment.GetEnvironmentVariable(ShardSelectorEnvironmentVariable);
+            if (string.IsNullOrWhiteSpace(selectedText))
+            {
+                return Enumerable.Range(0, ShardCount).Select(i => new object[] { i });
+            }
+
+            if (!int.TryParse(selectedText, out var selected) || selected < 0 || selected >= ShardCount)
+            {
+                throw new InvalidOperationException(
+                    $"{ShardSelectorEnvironmentVariable} must be an integer from 0 through {ShardCount - 1}; " +
+                    $"received '{selectedText}'.");
+            }
+
+            return new[] { new object[] { selected } };
+        }
+    }
 
     [Theory(Timeout = 1800000)]
     [MemberData(nameof(Shards))]

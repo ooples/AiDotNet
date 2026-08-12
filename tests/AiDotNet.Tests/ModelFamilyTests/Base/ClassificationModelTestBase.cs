@@ -390,7 +390,6 @@ public abstract class ClassificationModelTestBase : System.IDisposable
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        if (!HasFlatParameters) return; // Meta/ensemble/tree models delegate to sub-models
 
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
@@ -402,6 +401,15 @@ public abstract class ClassificationModelTestBase : System.IDisposable
             // Tree/ensemble classifiers don't implement IParameterizable — skip
             return;
         }
+
+        if (!paramModel.SupportsParameterInitialization)
+        {
+            // A non-initializable surface can still contain fitted persistent state
+            // or generated child-component state. It is not an optimizer parameter
+            // surface, so this learnable-parameter assertion does not apply.
+            return;
+        }
+
         Assert.True(paramModel.GetParameters().Length > 0, "Trained classifier should have learnable parameters.");
     }
 

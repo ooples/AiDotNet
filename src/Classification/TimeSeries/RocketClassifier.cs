@@ -86,18 +86,13 @@ namespace AiDotNet.Classification.TimeSeries;
 public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>{
 
-    /// <inheritdoc />
-    /// <remarks>The ridge weights over the random kernels, as in MiniRocketClassifier.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => _internalWeights,
-            value => _internalWeights = value));
-    }
     private readonly List<RocketKernel> _kernels;
     private readonly RocketOptions<T> _rocketOptions;
     private readonly Random _random;
+    [Scratch]
     private RidgeClassifier<T>? _internalClassifier;
+
+    [FittedParameter]
     private Vector<T>? _internalWeights;
 
     /// <summary>

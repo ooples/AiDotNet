@@ -59,11 +59,23 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
     /// <remarks>Intercept, scale, then the covariate coefficients -- the layout the hand-written pair used. The coefficients are registered LAST because they are the piece whose width the data decides: a fresh model has none and reports just the two scalars, and a restore sizes them from whatever follows those two.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(new ScalarParameterSource<T>(() => Intercept, v => Intercept = v));
-        RegisterParameterComponent(new ScalarParameterSource<T>(() => Scale, v => Scale = v));
-        RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => Coefficients,
-            value => Coefficients = value));
+        RegisterParameterComponent(
+            "parameters/00000000-intercept",
+            new ScalarParameterSource<T>(() => Intercept, v => Intercept = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000001-scale",
+            new ScalarParameterSource<T>(() => Scale, v => Scale = v),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
+        RegisterParameterComponent(
+            "parameters/00000002-coefficients",
+            new VectorFieldParameterSource<T>(
+                () => Coefficients,
+                value => Coefficients = value),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
     }
     /// <summary>
     /// Gets the regression coefficients (β).

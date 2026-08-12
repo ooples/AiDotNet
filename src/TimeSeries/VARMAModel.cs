@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -67,12 +68,13 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// <summary>
     /// Matrix of Moving Average (MA) coefficients that capture the dependency on past error terms.
     /// </summary>
+    [FittedParameter]
     private Matrix<T> _maCoefficients;
 
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Matrix<T> _residuals;
 
     /// <summary>

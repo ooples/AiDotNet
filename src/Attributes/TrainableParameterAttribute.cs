@@ -42,7 +42,7 @@ namespace AiDotNet.Attributes;
 /// }
 /// </code>
 /// </example>
-[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class TrainableParameterAttribute : Attribute
 {
     /// <summary>
@@ -82,6 +82,14 @@ public sealed class TrainableParameterAttribute : Attribute
     /// </para>
     /// </remarks>
     public bool Optional { get; set; }
+
+    /// <summary>
+    /// Gets or sets when the parameter is expected to become available. This declaration is
+    /// independent of nullability: a nullable tensor does not tell the generator whether it waits
+    /// for shape resolution, fitting, or a conditional architecture branch.
+    /// </summary>
+    public AiDotNet.Models.Parameters.ParameterAvailability Availability { get; set; }
+        = AiDotNet.Models.Parameters.ParameterAvailability.Construction;
 
     /// <summary>
     /// Gets or sets the shape this parameter must have once the layer's own shapes are resolved,

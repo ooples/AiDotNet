@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace AiDotNet.Generators;
 
 /// <summary>
-/// Registers a model's weight-bearing FIELDS with its parameter component registry, so a model
+/// Registers a model's explicitly classified numeric state with its parameter component registry, so a model
 /// author writes no parameter plumbing at all -- the same automation layers already get from
 /// <see cref="TrainableParameterGenerator"/>.
 /// </summary>
@@ -30,11 +30,9 @@ namespace AiDotNet.Generators;
 /// algorithm-level weight on save. This closes that by construction.
 /// </para>
 /// <para>
-/// <b>Inverted default, as with layers.</b> An unmarked weight-capable field IS a parameter.
-/// <c>[Scratch]</c> (rebuilt every forward) and <c>[Buffer]</c> (persistent, never optimized) are
-/// the opt-outs. Getting the default the other way round is what allowed a weight to go missing
-/// silently; getting an opt-out wrong is at least visible, and <c>ScratchFieldsAreTransientTests</c>
-/// checks the <c>[Scratch]</c> claim mechanically.
+/// Numeric storage has no inferred default. The declaration supplies exactly one semantic role;
+/// the shared semantic model is consumed by this generator and by compiler diagnostics, so a
+/// nullable tensor, a field name, or a CLR type can never silently make state trainable.
 /// </para>
 /// <para>
 /// <b>Gated on the hook, not on a base-class name.</b> The type must actually inherit both
@@ -123,23 +121,31 @@ public class ModelParameterGenerator : IIncrementalGenerator
             {
                 var tensors = new List<string>();
                 var layerGroups = new List<string>();
-                var persistentFields = new List<(string Name, string SourceExpression, string Role)>();
+                var persistentFields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
                 foreach (var member in classSymbol.GetMembers())
                 {
                     if (member is IFieldSymbol tf)
                     {
-                        if (!IsRegisterableField(tf, scratchSymbol, bufferSymbol, aliasSymbol)) continue;
-                        bool isBuffer = HasAttr(tf, bufferSymbol);
-                        if (isBuffer && hasRegistry)
+                        if (tf.IsStatic || tf.IsConst || tf.IsImplicitlyDeclared || tf.AssociatedSymbol is not null)
+                            continue;
+                        var classification = ParameterMemberSemanticModel.Classify(tf);
+                        if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
-                            var persistentSource = SourceExpressionFor(tf, elem, allowPrimitive: true);
+                            var persistentSource = SourceExpressionFor(
+                                tf, elem, allowPrimitive: true,
+                                allowDeferredVectorReplacement: HasFitAvailability(
+                                    tf, classification.Kind));
                             if (persistentSource is not null)
                             {
-                                persistentFields.Add((tf.Name, persistentSource, RoleExpression(isBuffer: true)));
+                                persistentFields.Add((tf.Name, persistentSource,
+                                    RoleExpression(classification.Kind),
+                                    AvailabilityExpression(tf, classification.Kind)));
                                 continue;
                             }
                         }
-                        var tensorAccessor = TensorAccessorFor(tf.Type, tf.Name, elem);
+                        var tensorAccessor = classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
+                            ? TensorAccessorFor(tf.Type, tf.Name, elem)
+                            : null;
                         if (tensorAccessor is not null)
                         {
                             if (emitTensors) tensors.Add(tensorAccessor);
@@ -155,7 +161,31 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         // Discriminator, StyleGAN's MappingNetwork). Fields alone would miss them.
                         if (!emitLayers) continue;
                         if (tp.IsStatic || tp.IsImplicitlyDeclared || tp.GetMethod is null) continue;
-                        if (HasAttr2(tp, scratchSymbol) || HasAttr2(tp, bufferSymbol) || HasAttr2(tp, aliasSymbol)) continue;
+                        var classification = ParameterMemberSemanticModel.Classify(tp);
+                        if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
+                        {
+                            var persistentSource = SourceExpressionFor(
+                                tp, elem,
+                                allowDeferredVectorReplacement: HasFitAvailability(
+                                    tp, classification.Kind));
+                            if (persistentSource is not null)
+                            {
+                                persistentFields.Add((tp.Name, persistentSource,
+                                    RoleExpression(classification.Kind),
+                                    AvailabilityExpression(tp, classification.Kind)));
+                                continue;
+                            }
+                        }
+                        if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable)
+                        {
+                            var tensorAccessor = TensorAccessorFor(tp.Type, tp.Name, elem);
+                            if (tensorAccessor is not null && emitTensors)
+                            {
+                                tensors.Add(tensorAccessor);
+                                continue;
+                            }
+                        }
+                        if (classification.IsDeclared) continue;
                         var acc = LayerAccessorFor(tp.Type, tp.Name, elem);
                         if (acc is not null) layerGroups.Add(acc);
                     }
@@ -172,13 +202,13 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     context.AddSource(
                         HintName(classSymbol) + ".ModelPersistentState.g.cs",
                         GenerateSource(classSymbol, elem, persistentFields,
-                            new List<(string Name, string SourceExpression, string Role)>()));
+                            new List<(string Name, string SourceExpression, string Role, string Availability)>()));
                 }
                 continue;
             }
 
-            var fields = new List<(string Name, string SourceExpression, string Role)>();
-            var components = new List<(string Name, string SourceExpression, string Role)>();
+            var fields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
+            var components = new List<(string Name, string SourceExpression, string Role, string Availability)>();
             foreach (var member in classSymbol.GetMembers())
             {
                 // A member that IS a parameterized component, or a collection of them. Every
@@ -186,38 +216,50 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 // so an ensemble, a mixture of experts or a stacked model needs no adapter, only
                 // discovery. The collection form is re-read on each access rather than snapshotted,
                 // because members are routinely added after the one lazy registration has run.
+                var classification = ParameterMemberSemanticModel.Classify(member);
                 if (member is IFieldSymbol or IPropertySymbol
                     && !member.IsStatic && !member.IsImplicitlyDeclared
-                    && !HasAttr2(member, scratchSymbol) && !HasAttr2(member, bufferSymbol)
-                    && !HasAttr2(member, aliasSymbol))
+                    && classification.Kind is not ParameterMemberSemanticModel.Kind.Scratch
+                        and not ParameterMemberSemanticModel.Kind.Alias
+                        and not ParameterMemberSemanticModel.Kind.External
+                        and not ParameterMemberSemanticModel.Kind.Conflicting)
                 {
                     var kind = ComponentKindFor(MemberType(member), elem);
                     if (kind == "one")
                     {
                         components.Add((member.Name,
                             $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
-                            RoleExpression(HasAttr2(member, bufferSymbol))));
+                            RoleExpression(classification.Kind),
+                            AvailabilityExpression(member, classification.Kind)));
                         continue;
                     }
                     if (kind == "many")
                     {
                         components.Add((member.Name,
                             $"new ComponentCollectionParameterSource<{elem}>(() => {member.Name})",
-                            RoleExpression(HasAttr2(member, bufferSymbol))));
+                            RoleExpression(classification.Kind),
+                            AvailabilityExpression(member, classification.Kind)));
                         continue;
                     }
                 }
 
-                if (member is not IFieldSymbol f) continue;
-                if (!IsRegisterableField(f, scratchSymbol, bufferSymbol, aliasSymbol)) continue;
+                if (member is not IFieldSymbol and not IPropertySymbol) continue;
+                if (member.IsStatic || member.IsImplicitlyDeclared || !classification.IsDeclared
+                    || !IsPersistentState(classification.Kind)) continue;
+                if (member is IFieldSymbol field && (field.IsConst || field.AssociatedSymbol is not null)) continue;
+                if (member is IPropertySymbol property && property.GetMethod is null) continue;
 
                 // Primitive CLR storage is ambiguous: a double may be a trainable bias, a threshold,
                 // a tolerance, or a hyperparameter. Unlike Tensor/Matrix/Vector fields, it is only
                 // automated when the author supplies an explicit semantic role.
-                bool allowPrimitive = HasAttr(f, trainableParameterSymbol) || HasAttr(f, bufferSymbol);
-                var sourceExpression = SourceExpressionFor(f, elem, allowPrimitive);
+                bool allowPrimitive = true;
+                var sourceExpression = SourceExpressionFor(
+                    member, elem, allowPrimitive,
+                    allowDeferredVectorReplacement: HasFitAvailability(
+                        member, classification.Kind));
                 if (sourceExpression is null) continue;
-                fields.Add((f.Name, sourceExpression, RoleExpression(HasAttr(f, bufferSymbol))));
+                fields.Add((member.Name, sourceExpression, RoleExpression(classification.Kind),
+                    AvailabilityExpression(member, classification.Kind)));
             }
 
             if (fields.Count == 0 && components.Count == 0) continue;
@@ -654,41 +696,93 @@ public class ModelParameterGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static string? SourceExpressionFor(IFieldSymbol field, string elem, bool allowPrimitive = false)
+    private static string? SourceExpressionFor(
+        ISymbol member,
+        string elem,
+        bool allowPrimitive = false,
+        bool allowDeferredVectorReplacement = false)
     {
-        var scalar = SourceFor(field.Type, elem);
-        if (scalar is not null) return $"new {scalar}<{elem}>(() => {field.Name})";
+        var type = MemberType(member);
+        if (type is null) return null;
+        string name = member.Name;
+        var scalar = SourceFor(type, elem);
+        if (scalar is not null)
+        {
+            if (allowDeferredVectorReplacement
+                && scalar == "VectorFieldWriteThroughSource"
+                && CanAssign(member))
+            {
+                return $"new VectorFieldParameterSource<{elem}>(() => {name}, value => {name} = value)";
+            }
+            return $"new {scalar}<{elem}>(() => {name})";
+        }
 
         if (allowPrimitive)
         {
-            var bare = field.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            if (bare.ToDisplayString() == elem && CanAssign(member))
+                return $"new ScalarParameterSource<{elem}>(() => {name}, value => {name} = value)";
             if (bare.SpecialType == SpecialType.System_Double)
             {
-                if (field.IsReadOnly) return null;
-                return $"new DoubleScalarParameterSource<{elem}>(() => {field.Name}, value => {field.Name} = value)";
+                bool writable = member switch
+                {
+                    IFieldSymbol field => !field.IsReadOnly,
+                    IPropertySymbol property => property.SetMethod is not null,
+                    _ => false
+                };
+                if (!writable) return null;
+                return $"new DoubleScalarParameterSource<{elem}>(() => {name}, value => {name} = value)";
             }
             if (bare is IArrayTypeSymbol array && array.ElementType.SpecialType == SpecialType.System_Double)
-                return $"new DoubleArrayParameterSource<{elem}>(() => {field.Name})";
+                return $"new DoubleArrayParameterSource<{elem}>(() => {name})";
             if (bare is IArrayTypeSymbol outer && outer.ElementType is IArrayTypeSymbol inner &&
                 inner.ElementType.SpecialType == SpecialType.System_Double)
-                return $"new DoubleJaggedParameterSource<{elem}>(() => {field.Name})";
+                return $"new DoubleJaggedParameterSource<{elem}>(() => {name})";
         }
 
-        var element = CollectionElementType(field.Type);
+        var element = CollectionElementType(type);
         var family = element is null ? null : NumericFamilyFor(element, elem);
         if (family is not null)
-            return $"new {family}CollectionParameterSource<{elem}>(() => {field.Name})";
+            return $"new {family}CollectionParameterSource<{elem}>(() => {name})";
 
-        if (DictionaryTypes(field.Type, out var key, out var value))
+        if (DictionaryTypes(type, out var key, out var value))
         {
             family = NumericFamilyFor(value!, elem);
             if (family is not null)
             {
                 var keyType = key!.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
-                return $"new Keyed{family}CollectionParameterSource<{elem}, {keyType}>(() => {field.Name})";
+                return $"new Keyed{family}CollectionParameterSource<{elem}, {keyType}>(() => {name})";
             }
         }
         return null;
+    }
+
+    private static bool CanAssign(ISymbol member) => member switch
+    {
+        IFieldSymbol field => !field.IsReadOnly,
+        IPropertySymbol property => property.SetMethod is { IsInitOnly: false },
+        _ => false
+    };
+
+    private static bool HasFitAvailability(
+        ISymbol member,
+        ParameterMemberSemanticModel.Kind kind)
+    {
+        if (kind == ParameterMemberSemanticModel.Kind.Fitted) return true;
+        foreach (var attribute in member.GetAttributes())
+        {
+            if (!ParameterMemberSemanticModel.TryGetKind(attribute, out var declaredKind)
+                || declaredKind != kind) continue;
+            foreach (var argument in attribute.NamedArguments)
+            {
+                // ParameterAvailability.Fit is the third enum member (value 2). Comparing the
+                // typed constant keeps this generator independent of the runtime assembly.
+                if (argument.Key == "Availability" && argument.Value.Value is int value
+                    && value == 2)
+                    return true;
+            }
+        }
+        return false;
     }
 
     private static string? TensorAccessorFor(ITypeSymbol type, string name, string elem)
@@ -755,13 +849,53 @@ public class ModelParameterGenerator : IIncrementalGenerator
         attr is not null && field.GetAttributes()
             .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attr));
 
-    private static string RoleExpression(bool isBuffer) => isBuffer
-        ? "global::AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState"
-        : "global::AiDotNet.Models.Parameters.ParameterSlotRole.Trainable";
+    private static bool IsPersistentState(ParameterMemberSemanticModel.Kind kind) => kind is
+        ParameterMemberSemanticModel.Kind.Trainable
+        or ParameterMemberSemanticModel.Kind.Fitted
+        or ParameterMemberSemanticModel.Kind.Frozen
+        or ParameterMemberSemanticModel.Kind.Buffer;
+
+    private static bool IsNonOptimizerPersistentState(ParameterMemberSemanticModel.Kind kind) => kind is
+        ParameterMemberSemanticModel.Kind.Fitted
+        or ParameterMemberSemanticModel.Kind.Frozen
+        or ParameterMemberSemanticModel.Kind.Buffer;
+
+    private static string RoleExpression(ParameterMemberSemanticModel.Kind kind) => kind switch
+    {
+        ParameterMemberSemanticModel.Kind.Fitted =>
+            "global::AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState",
+        ParameterMemberSemanticModel.Kind.Frozen =>
+            "global::AiDotNet.Models.Parameters.ParameterSlotRole.Frozen",
+        ParameterMemberSemanticModel.Kind.Buffer =>
+            "global::AiDotNet.Models.Parameters.ParameterSlotRole.Buffer",
+        _ => "global::AiDotNet.Models.Parameters.ParameterSlotRole.Trainable"
+    };
+
+    private static string AvailabilityExpression(
+        ISymbol member,
+        ParameterMemberSemanticModel.Kind kind)
+    {
+        foreach (var attribute in member.GetAttributes())
+        {
+            if (!ParameterMemberSemanticModel.TryGetKind(attribute, out var declaredKind)
+                || declaredKind != kind) continue;
+            foreach (var argument in attribute.NamedArguments)
+            {
+                if (argument.Key == "Optional" && argument.Value.Value is bool optional && optional)
+                    return "global::AiDotNet.Models.Parameters.ParameterAvailability.Conditional";
+                if (argument.Key == "Availability" && argument.Value.Value is int value)
+                    return $"(global::AiDotNet.Models.Parameters.ParameterAvailability){value}";
+            }
+        }
+
+        return kind == ParameterMemberSemanticModel.Kind.Fitted
+            ? "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit"
+            : "global::AiDotNet.Models.Parameters.ParameterAvailability.Construction";
+    }
 
     private static string GenerateSource(INamedTypeSymbol classSymbol, string elem,
-                                         List<(string Name, string SourceExpression, string Role)> fields,
-                                         List<(string Name, string SourceExpression, string Role)> components)
+                                         List<(string Name, string SourceExpression, string Role, string Availability)> fields,
+                                         List<(string Name, string SourceExpression, string Role, string Availability)> components)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
         var typeParams = classSymbol.TypeParameters.Length > 0
@@ -811,11 +945,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
         string ownerId = classSymbol.ToDisplayString().Replace("\\", "\\\\").Replace("\"", "\\\"");
         foreach (var f in fields.OrderBy(item => item.Name, System.StringComparer.Ordinal))
         {
-            sb.AppendLine($"        registry.Register(\"{ownerId}::{f.Name}\", {f.SourceExpression}, {f.Role});");
+            sb.AppendLine($"        registry.Register(\"{ownerId}::{f.Name}\", {f.SourceExpression}, {f.Role}, {f.Availability});");
         }
         foreach (var c in components.OrderBy(item => item.Name, System.StringComparer.Ordinal))
         {
-            sb.AppendLine($"        registry.Register(\"{ownerId}::{c.Name}\", {c.SourceExpression}, {c.Role});");
+            sb.AppendLine($"        registry.Register(\"{ownerId}::{c.Name}\", {c.SourceExpression}, {c.Role}, {c.Availability});");
         }
         sb.AppendLine("    }");
         sb.AppendLine("}");

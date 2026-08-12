@@ -397,6 +397,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Hebbian/STDP connection weights, precomputed frequency tensors.</para>
     /// </remarks>
     private readonly List<(string Name, Tensor<T> Tensor)> _registeredBuffers = new();
+    private readonly Dictionary<string, ParameterSlotRole> _registeredBufferStateRoles
+        = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Gets or sets the initialization strategy for this layer.
@@ -4747,7 +4749,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 string bufferId = string.IsNullOrWhiteSpace(name) ? $"buffer-{i:D8}" : name;
                 yield return new ParameterChunk<T>(
                     stablePrefix + "/buffers/" + bufferId,
-                    ParameterSlotRole.LearnedState,
+                    GetRegisteredBufferStateRole(name),
                     AsStoredScalarChunk(tensor));
             }
         }
@@ -5737,7 +5739,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// needs to be saved and loaded with the model, but it's not something the optimizer
     /// should try to change. Use RegisterBuffer for these kinds of tensors.</para>
     /// </remarks>
-    protected void RegisterBuffer(Tensor<T> tensor, string name, PersistentTensorRole role = PersistentTensorRole.Constant)
+    protected void RegisterBuffer(
+        Tensor<T> tensor,
+        string name,
+        PersistentTensorRole role = PersistentTensorRole.Constant,
+        ParameterSlotRole stateRole = ParameterSlotRole.Buffer)
     {
         if (tensor is null)
             throw new ArgumentNullException(nameof(tensor));
@@ -5754,20 +5760,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 continue;
 
             var previous = _registeredBuffers[i].Tensor;
-            if (ReferenceEquals(previous, tensor))
+            if (ReferenceEquals(previous, tensor)
+                && _registeredBufferStateRoles.TryGetValue(name, out var existingStateRole)
+                && existingStateRole == stateRole)
                 return;
+
+            if (ReferenceEquals(previous, tensor))
+                throw new InvalidOperationException(
+                    $"Persistent state '{name}' is already registered as " +
+                    $"{_registeredBufferStateRoles[name]} and cannot also be {stateRole}.");
 
             Engine.UnregisterPersistentTensor(previous);
             Engine.RegisterPersistentTensor(tensor, role);
             _registeredBuffers[i] = (name, tensor);
+            _registeredBufferStateRoles[name] = stateRole;
             BumpParameterEpoch();
             return;
         }
 
         Engine.RegisterPersistentTensor(tensor, role);
         _registeredBuffers.Add((name, tensor));
+        _registeredBufferStateRoles.Add(name, stateRole);
         BumpParameterEpoch();
     }
+
+    private ParameterSlotRole GetRegisteredBufferStateRole(string name)
+        => _registeredBufferStateRoles.TryGetValue(name, out var role)
+            ? role
+            : ParameterSlotRole.Buffer;
 
     /// <summary>
     /// Gets all registered buffers (non-trainable persistent tensors) for this layer.

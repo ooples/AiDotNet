@@ -75,18 +75,10 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("MiniRocket: A Very Fast (Almost) Deterministic Transform for Time Series Classification", "https://arxiv.org/abs/2012.08791", Year = 2021, Authors = "Angus Dempster, Daniel F. Schmidt, Geoffrey I. Webb")]
-public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
+public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The ridge weights fitted over the random convolutional kernels. The kernels themselves are random and fixed, so the weights are the whole of what is learned.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => _weights,
-            value => _weights = value));
-    }
     private readonly MiniRocketOptions<T> _options;
 
     /// <inheritdoc/>
@@ -95,6 +87,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     private double[][]? _kernels;
     private int[]? _dilations;
     private double[][]? _biases;
+    [FittedParameter]
     private Vector<T>? _weights;
     private bool _isFitted;
 

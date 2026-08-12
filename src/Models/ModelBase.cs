@@ -88,8 +88,9 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     protected void RegisterParameterComponent(
         string stableId,
         IParameterSource<T>? component,
-        ParameterSlotRole role = ParameterSlotRole.Trainable)
-        => _parameterRegistry.Register(stableId, component, role);
+        ParameterSlotRole role = ParameterSlotRole.Trainable,
+        ParameterAvailability availability = ParameterAvailability.Construction)
+        => _parameterRegistry.Register(stableId, component, role, availability);
 
     /// <summary>
     /// Declare this model's trainable components here with <see cref="RegisterParameterComponent"/>.
@@ -241,7 +242,16 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     }
 
     /// <inheritdoc/>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization
+    {
+        get
+        {
+            _ = Components;
+            return _parameterRegistry.HasComponents
+                ? _parameterRegistry.CanInitializeOptimizerParameters
+                : ParameterCount > 0;
+        }
+    }
 
     /// <inheritdoc/>
     /// <remarks>

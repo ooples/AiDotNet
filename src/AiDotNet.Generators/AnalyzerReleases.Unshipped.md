@@ -50,3 +50,7 @@ ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model canno
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
 AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract
 AIDN087 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, ParameterCount compared against zero as a readiness test (Warning while the backlog is non-zero; promote to Error at zero per the ADNSHAPE006/007 ladder)
+AIDN088 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Numeric state requires an explicit semantic classification
+AIDN089 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Numeric state has conflicting semantic classifications
+AIDN090 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Nullable persistent state requires an explicit availability lifecycle
+AIDN091 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Parameter alias target is invalid

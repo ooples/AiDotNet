@@ -107,8 +107,9 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
             memberName, componentExpression, component);
 
     protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
-        ParameterSlotRole role = ParameterSlotRole.Trainable)
-        => _parameterRegistry.Register(stableId, component, role);
+        ParameterSlotRole role = ParameterSlotRole.Trainable,
+        ParameterAvailability availability = ParameterAvailability.Construction)
+        => _parameterRegistry.Register(stableId, component, role, availability);
 
     /// <summary>
     /// Declare the trainable components of this model here with
@@ -174,7 +175,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     public virtual long ParameterCount
         => Registry.HasComponents ? Registry.ParameterCount : NumFeatures;
     /// <inheritdoc/>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization => Registry.CanInitializeOptimizerParameters;
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 

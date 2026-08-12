@@ -752,7 +752,7 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// Whether this classifier supports parameter initialization.
     /// Used by subclasses that implement IParameterizable.
     /// </summary>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization => Registry.CanInitializeOptimizerParameters;
 
     /// <summary>
     /// Sanitizes parameters to ensure they satisfy model constraints.

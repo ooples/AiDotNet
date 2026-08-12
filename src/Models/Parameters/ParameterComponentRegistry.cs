@@ -14,16 +14,19 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 {
     private sealed class Entry
     {
-        public Entry(string stableId, IParameterSource<T>? source, ParameterSlotRole role)
+        public Entry(string stableId, IParameterSource<T>? source, ParameterSlotRole role,
+            ParameterAvailability availability)
         {
             StableId = stableId;
             Source = source;
             Role = role;
+            Availability = availability;
         }
 
         public string StableId { get; }
         public IParameterSource<T>? Source { get; }
         public ParameterSlotRole Role { get; }
+        public ParameterAvailability Availability { get; }
     }
 
     private sealed class CapturedEntry
@@ -73,6 +76,45 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     /// <summary>True once at least one component identity has been registered.</summary>
     public bool HasComponents => _entries.Count > 0;
+
+    /// <summary>
+    /// True when the manifest contains state that defines the model itself rather than auxiliary
+    /// buffers. Used by compatibility bases while their remaining packed state is migrated.
+    /// </summary>
+    public bool HasPrimaryParameterComponents => _entries.Any(entry => entry.Role is
+        ParameterSlotRole.Trainable or ParameterSlotRole.LearnedState or ParameterSlotRole.Frozen);
+
+    /// <summary>
+    /// True only when the manifest explicitly contains optimizer-updatable state.
+    /// </summary>
+    /// <remarks>
+    /// Count is deliberately not used as a proxy. Learned thresholds, frozen weights and replay
+    /// buffers are persistent numbers, but randomizing them as trainable parameters is a semantic
+    /// error even when their count is non-zero.
+    /// </remarks>
+    public bool HasOptimizerUpdatableComponents =>
+        _entries.Any(entry => entry.Role == ParameterSlotRole.Trainable);
+
+    /// <summary>
+    /// True when optimizer-owned state exists and the complete flat layout is resolved now.
+    /// </summary>
+    /// <remarks>
+    /// This is the capability gate consumed by model bases. It deliberately combines semantic
+    /// ownership with lifecycle readiness: a fitted coefficient is not optimizer-owned, and an
+    /// optimizer-owned slot whose shape is still deferred cannot safely accept an initialization
+    /// vector yet. Neither fact can be inferred from a raw numeric count.
+    /// </remarks>
+    public bool CanInitializeOptimizerParameters
+    {
+        get
+        {
+            var layout = CaptureLayout().Snapshot;
+            if (!layout.ParameterCount.HasValue) return false;
+            return layout.Slots.Any(slot =>
+                slot.Role == ParameterSlotRole.Trainable
+                && slot.ParameterCount.GetValueOrDefault() > 0);
+        }
+    }
 
     /// <summary>
     /// Registers a legacy component using its source type as a deterministic identity seed.
@@ -125,7 +167,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     /// <summary>Registers a component by durable identity and semantic role.</summary>
     public void Register(string stableId, IParameterSource<T>? component,
-                         ParameterSlotRole role = ParameterSlotRole.Trainable)
+                         ParameterSlotRole role = ParameterSlotRole.Trainable,
+                         ParameterAvailability availability = ParameterAvailability.Construction)
     {
         ParameterStableId.Validate(stableId, nameof(stableId));
 
@@ -134,21 +177,23 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             var existing = _entries[i];
             if (component is not null && ReferencesSameSource(existing.Source, component))
             {
-                if (existing.Role == role) return;
+                if (existing.Role == role && existing.Availability == availability) return;
                 throw new InvalidOperationException(
                     $"Parameter component '{stableId}' refers to storage already registered as " +
-                    $"'{existing.StableId}' with role {existing.Role}; the same storage cannot also " +
-                    $"be registered with role {role}.");
+                    $"'{existing.StableId}' with role {existing.Role} and availability " +
+                    $"{existing.Availability}; the same storage cannot also be registered with " +
+                    $"role {role} and availability {availability}.");
             }
 
             if (!string.Equals(existing.StableId, stableId, StringComparison.Ordinal)) continue;
-            if (ReferenceEquals(existing.Source, component) && existing.Role == role) return;
+            if (ReferenceEquals(existing.Source, component) && existing.Role == role
+                && existing.Availability == availability) return;
             throw new InvalidOperationException(
                 $"Parameter component ID '{stableId}' was registered more than once. Stable IDs " +
                 "must identify exactly one owner; use an Alias role rather than duplicate storage.");
         }
 
-        _entries.Add(new Entry(stableId, component, role));
+        _entries.Add(new Entry(stableId, component, role, availability));
     }
 
     /// <inheritdoc />
@@ -186,6 +231,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             var source = item.Entry.Source;
             if (source is null) continue;
             int expected = checked((int)item.ParameterCount!.Value);
+            if (expected == 0) continue;
             var part = source.GetParameters();
             if (part.Length != expected)
                 throw new ParameterContractViolationException(
@@ -214,6 +260,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             var source = entry.Source;
             if (source is null) continue;
             int expected = checked((int)item.ParameterCount!.Value);
+            if (expected == 0) continue;
 
             if (source is IParameterChunkSource<T> chunkSource)
             {
@@ -290,8 +337,9 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
         var captured = CaptureLayout();
         int variableIndex = FindVariableEntryIndex(captured.Entries);
-        if (variableIndex >= 0 && captured.Snapshot.ParameterCount.HasValue &&
-            parameters.Length != captured.Snapshot.ParameterCount.Value)
+        if (variableIndex >= 0 &&
+            (!captured.Snapshot.ParameterCount.HasValue ||
+             parameters.Length != captured.Snapshot.ParameterCount.Value))
         {
             // A variable tail gets whatever remains after every fixed component. Materialize fixed
             // neural networks first so their checkpoint spans are known before the remainder is
@@ -322,11 +370,25 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             }
         }
         var layout = captured.Snapshot;
-        if (!layout.ParameterCount.HasValue)
-            throw new ParameterLayoutNotReadyException("restore", layout);
-        long fixedParameterCount = variableIndex < 0
-            ? layout.ParameterCount.Value
-            : layout.ParameterCount.Value - captured.Entries[variableIndex].ParameterCount!.Value;
+        long fixedParameterCount;
+        if (variableIndex < 0)
+        {
+            if (!layout.ParameterCount.HasValue)
+                throw new ParameterLayoutNotReadyException("restore", layout);
+            fixedParameterCount = layout.ParameterCount.Value;
+        }
+        else
+        {
+            fixedParameterCount = 0;
+            for (int i = 0; i < captured.Entries.Count; i++)
+            {
+                if (i == variableIndex) continue;
+                if (!captured.Entries[i].ParameterCount.HasValue)
+                    throw new ParameterLayoutNotReadyException("restore", layout);
+                fixedParameterCount = checked(
+                    fixedParameterCount + captured.Entries[i].ParameterCount!.Value);
+            }
+        }
         if (variableIndex < 0 && parameters.Length != fixedParameterCount)
             throw new ArgumentException(
                 $"Expected {fixedParameterCount} parameters, got {parameters.Length}.",
@@ -348,6 +410,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             int count = i == variableIndex
                 ? checked(parameters.Length - offset)
                 : checked((int)item.ParameterCount!.Value);
+            if (count == 0) continue;
             var slice = new Vector<T>(count);
             parameters.AsSpan().Slice(offset, count).CopyTo(slice.AsWritableSpan());
             offset += count;
@@ -424,6 +487,32 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             {
                 var localSlot = local[j] ?? throw new InvalidOperationException(
                     $"Parameter component '{entry.StableId}' returned a null layout slot.");
+                var normalizedReadiness = localSlot.Readiness;
+                long? normalizedCount = localSlot.ParameterCount;
+                if (!normalizedCount.HasValue)
+                {
+                    if (entry.Availability == ParameterAvailability.Fit)
+                    {
+                        // A fit-produced buffer is not an optional architecture branch. Treating
+                        // all absent buffers as ConditionalAbsent made fresh fitted models look
+                        // like concrete zero-parameter models and let gates pass vacuously.
+                        normalizedReadiness = ParameterReadiness.FitDeferred;
+                    }
+                    else if (entry.Availability == ParameterAvailability.Conditional
+                        || entry.Role == ParameterSlotRole.Buffer)
+                    {
+                        // An absent optional/buffer slot contributes no values to this concrete
+                        // snapshot. It may appear in a later snapshot, but must not block unrelated
+                        // parameter reads as though a trainable shape were missing.
+                        normalizedReadiness = ParameterReadiness.ConditionalAbsent;
+                        normalizedCount = 0;
+                    }
+                    else if (entry.Availability == ParameterAvailability.External)
+                    {
+                        normalizedReadiness = ParameterReadiness.External;
+                        normalizedCount = 0;
+                    }
+                }
                 string id = localSlot.StableId == "$"
                     ? entry.StableId
                     : entry.StableId + "/" + localSlot.StableId;
@@ -436,13 +525,19 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     ? entry.Role
                     : localSlot.Role;
                 slots.Add(new ParameterSlotDescriptor(
-                    id, role, localSlot.Readiness, localSlot.ParameterCount,
-                    offsetKnown ? offset : (long?)null));
+                    id, role, normalizedReadiness, normalizedCount,
+                    offsetKnown ? offset : (long?)null,
+                    localSlot.Shape,
+                    localSlot.ElementType,
+                    role == localSlot.Role ? localSlot.UpdatePolicy : null,
+                    role == localSlot.Role ? localSlot.Persistence : null,
+                    role == localSlot.Role ? localSlot.Ownership : null,
+                    entry.Availability));
 
-                if (localSlot.ParameterCount.HasValue)
+                if (normalizedCount.HasValue)
                 {
-                    entryCount = checked(entryCount + localSlot.ParameterCount.Value);
-                    if (offsetKnown) offset = checked(offset + localSlot.ParameterCount.Value);
+                    entryCount = checked(entryCount + normalizedCount.Value);
+                    if (offsetKnown) offset = checked(offset + normalizedCount.Value);
                 }
                 else
                 {
@@ -455,7 +550,6 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
 
         var capturedEntries = captured.AsReadOnly();
-        _ = FindVariableEntryIndex(capturedEntries);
         return new CapturedLayout(new ParameterLayoutSnapshot(slots), capturedEntries);
     }
 
@@ -491,10 +585,15 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         int found = -1;
         for (int i = 0; i < entries.Count; i++)
         {
-            if (entries[i].Entry.Source is not IVariableLengthParameterSource<T>) continue;
+            if (entries[i].Entry.Source is not IVariableLengthParameterSource<T> variable) continue;
+            // A replaceable vector stops being a variable restore target once materialized. It
+            // remains in the marker family so its canonical order never changes across lifecycle
+            // states, but it is now an ordinary exact-width component. More than one such fixed
+            // vector is therefore harmless; more than one ACTIVE variable target is ambiguous.
+            if (!variable.CanResizeOnRestore) continue;
             if (found >= 0)
                 throw new InvalidOperationException(
-                    "A parameter manifest may contain at most one variable-length component.");
+                    "A parameter manifest may contain at most one resizable variable-length component.");
             found = i;
         }
 
@@ -522,7 +621,16 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     private List<Entry> OrderedEntries()
     {
         var ordered = new List<Entry>(_entries);
-        ordered.Sort((left, right) => CompareStableIds(left.StableId, right.StableId));
+        ordered.Sort((left, right) =>
+        {
+            // A restore cannot know where a variable-width component ends unless it owns the
+            // tail. Enforce that centrally instead of requiring every author and generator to
+            // encode this mechanical rule into an otherwise semantic stable ID.
+            bool leftVariable = left.Source is IVariableLengthParameterSource<T>;
+            bool rightVariable = right.Source is IVariableLengthParameterSource<T>;
+            if (leftVariable != rightVariable) return leftVariable ? 1 : -1;
+            return CompareStableIds(left.StableId, right.StableId);
+        });
         return ordered;
     }
 

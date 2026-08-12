@@ -273,8 +273,9 @@ public class TimeSeriesIntegrationTests
     [Theory]
     [InlineData(new double[] { 0.5, 0.3 })]
     [InlineData(new double[] { 0.5, 0.3, 0.2 })]
-    public void ExponentialSmoothingModel_SetParameters_WithUntrainedModel_InitializesParameters(double[] paramValues)
+    public async Task ExponentialSmoothingModel_SetParameters_WithUntrainedModel_InitializesParameters(double[] paramValues)
     {
+        await Task.Yield();
         // Arrange: Create an untrained model (ModelParameters.Length = 0)
         var options = new ExponentialSmoothingOptions<double>();
         var model = new ExponentialSmoothingModel<double>(options);
@@ -298,6 +299,7 @@ public class TimeSeriesIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ExponentialSmoothingModel_SetParameters_WithTrainedModel_UpdatesParameterValues()
     {
+        await Task.Yield();
         // Arrange: Create a model and set initial parameters
         var options = new ExponentialSmoothingOptions<double>();
         var model = new ExponentialSmoothingModel<double>(options);
@@ -320,6 +322,7 @@ public class TimeSeriesIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ExponentialSmoothingModel_SetParameters_WithMismatchedLength_ThrowsException()
     {
+        await Task.Yield();
         // Arrange: Create a model and set initial parameters
         var options = new ExponentialSmoothingOptions<double>();
         var model = new ExponentialSmoothingModel<double>(options);
@@ -335,6 +338,7 @@ public class TimeSeriesIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ARModel_SetParameters_WithUntrainedModel_Succeeds()
     {
+        await Task.Yield();
         // Arrange
         var options = new ARModelOptions<double> { AROrder = 3 };
         var model = new ARModel<double>(options);
