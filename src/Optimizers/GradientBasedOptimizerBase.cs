@@ -2895,8 +2895,27 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <returns>The updated parameters.</returns>
     public virtual Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         var learningRate = NumOps.FromDouble(_currentLearningRate);
-        return parameters.Subtract(gradient.Multiply(learningRate));
+        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var parameterSpan = parameters.AsSpan();
+        var gradientSpan = gradient.AsSpan();
+        var updatedSpan = updatedParameters.AsWritableSpan();
+
+        for (int i = 0; i < updatedSpan.Length; i++)
+        {
+            updatedSpan[i] = NumOps.Subtract(
+                parameterSpan[i],
+                NumOps.Multiply(gradientSpan[i], learningRate));
+        }
+
+        return updatedParameters;
     }
 
     /// <summary>
