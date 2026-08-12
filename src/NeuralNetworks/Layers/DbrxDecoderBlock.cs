@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -54,6 +54,9 @@ public partial class DbrxDecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>The model (input/output) feature dimension.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Construction state: the 'layerNormEpsilon' the layer was built with.</summary>
+    private readonly double _layerNormEpsilon;
+
     /// <summary>Creates a DBRX LayerNorm MoE decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="attention">Pre-constructed self-attention sublayer.</param>
@@ -62,6 +65,7 @@ public partial class DbrxDecoderBlock<T> : LayerBase<T>, IShapeContract
     public DbrxDecoderBlock(int hiddenSize, LayerBase<T> attention, MoEFeedForwardLayer<T> moe, double layerNormEpsilon = 1e-5)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _layerNormEpsilon = layerNormEpsilon;
         Guard.NotNull(attention);
         Guard.NotNull(moe);
         _hiddenSize = hiddenSize;

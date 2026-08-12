@@ -213,6 +213,12 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int DownsampleFactor => (int)Math.Pow(2, _channelMults.Length - 1);
 
+    /// <summary>Construction state: the 'inputSpatialSize' the layer was built with.</summary>
+    private readonly int _inputSpatialSize;
+
+    /// <summary>Construction state: the 'numResBlocks' the layer was built with.</summary>
+    private readonly int _numResBlocks;
+
     /// <summary>
     /// Initializes a new instance of the VAEEncoder class.
     /// </summary>
@@ -235,6 +241,8 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
             CalculateInputShape(inputChannels, inputSpatialSize),
             CalculateOutputShape(latentChannels, inputSpatialSize, channelMults?.Length ?? 4))
     {
+        _numResBlocks = numResBlocks;
+        _inputSpatialSize = inputSpatialSize;
         if (inputChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputChannels));
         if (latentChannels <= 0)

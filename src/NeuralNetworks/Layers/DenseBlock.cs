@@ -164,6 +164,9 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     /// </summary>
     public int OutputChannels => _inputChannels < 0 ? -1 : _inputChannels + _numLayers * _growthRate;
 
+    /// <summary>Construction state: the 'bnMomentum' the layer was built with.</summary>
+    private readonly double _bnMomentum;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DenseBlock{T}"/> class.
     /// </summary>
@@ -188,6 +191,7 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
             inputShape: [-1, -1, -1],
             outputShape: [-1, -1, -1])
     {
+        _bnMomentum = bnMomentum;
         if (numLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
         if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
 

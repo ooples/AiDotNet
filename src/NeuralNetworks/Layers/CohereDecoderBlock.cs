@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -7,7 +7,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Cohere (Command-R) decoder block with a <em>parallel</em> residual: a single LayerNorm feeds both the
-/// attention and the gated-SwiGLU FFN, whose outputs are added together to the residual —
+/// attention and the gated-SwiGLU FFN, whose outputs are added together to the residual â€”
 /// <c>x = x + Attn(norm(x)) + FFN(norm(x))</c>.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -66,6 +66,9 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'ffnDim' the layer was built with.</summary>
     private readonly int _ffnDim;
 
+    /// <summary>Construction state: the 'layerNormEpsilon' the layer was built with.</summary>
+    private readonly double _layerNormEpsilon;
+
     /// <summary>Creates a Cohere parallel-residual decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="ffnDim">FFN inner dimension.</param>
@@ -74,6 +77,7 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
     public CohereDecoderBlock(int hiddenSize, int ffnDim, LayerBase<T> attention, double layerNormEpsilon = 1e-5)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _layerNormEpsilon = layerNormEpsilon;
         _ffnDim = ffnDim;
         Guard.NotNull(attention);
         _hiddenSize = hiddenSize;

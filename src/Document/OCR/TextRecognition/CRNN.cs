@@ -55,7 +55,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An End-to-End Trainable Neural Network for Image-based Sequence Recognition and Its Application to Scene Text Recognition", "https://doi.org/10.48550/arXiv.1507.05717", Year = 2017, Authors = "Baoguang Shi, Xiang Bai, Cong Yao")]
-public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly CRNNOptions _options;
 
@@ -73,7 +73,6 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private int _rnnLayers;
     private string _charset;
 
-    [Scratch]
     private Tensor<T>? _lastCharacterProbs;
 
     // Native mode layers
@@ -662,12 +661,16 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             var source = Layers[i];
             var destination = copy.Layers[i];
             int[] inputShape = source.GetInputShape();
+
+            // The base helper, not a local copy of the test it used to run here. The old guard was
+            // "destination is unresolved AND every declared axis is positive", and both halves are
+            // permanently false for a layer carrying the -1 free-axis sentinel, so it skipped
+            // precisely the layers that needed resolving. MaterializeDestinationLayer falls back to
+            // a forward probe with the free axes filled in.
             if (destination is LayerBase<T> destinationBase &&
-                !destinationBase.IsShapeResolved &&
-                inputShape.Length > 0 &&
-                Array.TrueForAll(inputShape, dimension => dimension > 0))
+                destinationBase.ParameterCount != source.ParameterCount)
             {
-                destinationBase.ResolveFromShape(inputShape);
+                MaterializeDestinationLayer(destinationBase, inputShape);
             }
 
             destination.SetParameters(source.GetParameters());
@@ -758,18 +761,19 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
-    /// <summary>
-    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
-    /// belong to that graph, not to this instance.
-    /// </summary>
-    /// <remarks>
-    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
-    /// on every mutating entry point rather than the one member the throw happened to guard, and
-    /// reading -- ParameterCount and GetParameters -- stays available either way.
-    /// </remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+        var currentParams = GetParameters();
+        T lr = NumOps.FromDouble(0.0001);
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
+        SetParameters(currentParams);
+    }
+
     #endregion
 
     #region Disposal

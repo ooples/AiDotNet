@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -105,7 +105,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// The reference (RWKV-LM RWKV-v7) makes the data-dependent part of the decay both LOW-RANK and
     /// tanh-BOUNDED, and initialises this factor to ZERO so the decay starts exactly at the w0 ramp
     /// and the projection only earns influence through training. A full-rank unbounded projection
-    /// initialised to noise — which is what this layer used to have — perturbs the ramp from the
+    /// initialised to noise â€” which is what this layer used to have â€” perturbs the ramp from the
     /// first step and lets the decay logit drift without limit, which is how a state with
     /// near-1.0 retention channels runs away.
     /// </remarks>
@@ -134,10 +134,10 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly int _loraRank;
 
-    /// <summary>Gate LoRA rank: <c>max(32, round(5*sqrt(C)/32)*32)</c> — wider than the decay/ICL rank.</summary>
+    /// <summary>Gate LoRA rank: <c>max(32, round(5*sqrt(C)/32)*32)</c> â€” wider than the decay/ICL rank.</summary>
     private readonly int _gateLoraRank;
 
-    /// <summary>Value-residual LoRA rank: <c>max(32, round(1.7*sqrt(C)/32)*32)</c> — the narrowest of the three.</summary>
+    /// <summary>Value-residual LoRA rank: <c>max(32, round(1.7*sqrt(C)/32)*32)</c> â€” the narrowest of the three.</summary>
     private readonly int _mvLoraRank;
 
     /// <summary>Bias of the value-residual gate, <c>v0</c>. Init <c>0.73 - linear*0.4</c>.</summary>
@@ -171,7 +171,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// <remarks>
     /// Exposed for gradient tests, which must move it off zero first. While it is zero the whole
     /// time-mixing branch contributes nothing, so <c>dL/dW = normed^T (dL/dout) W_out^T = 0</c> for
-    /// EVERY parameter upstream of it. That zero is correct, not a defect — but it means a gradient
+    /// EVERY parameter upstream of it. That zero is correct, not a defect â€” but it means a gradient
     /// test run at initialization measures nothing at all.
     /// </remarks>
     internal Tensor<T> OutputProjectionWeights => _outputWeights;
@@ -187,7 +187,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// the group norm (arXiv:2503.14456).
     /// </summary>
     /// <remarks>
-    /// A direct current-token path that bypasses the recurrent state entirely — the head's own r·k
+    /// A direct current-token path that bypasses the recurrent state entirely â€” the head's own rÂ·k
     /// agreement, scaled per channel, gates a copy of v straight into the output. Omitting it does
     /// not break shapes, so it compiles and trains while quietly removing one of the two routes
     /// information can take through the block. Reference init: zeros(H, N) - 0.04.
@@ -354,12 +354,15 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
     /// <summary>
     /// The paper's clamping lower bound <c>u = exp(-e^(-1/2))</c> on the decay multiplier
-    /// (arXiv:2503.14456, Eq. 12 and Appendix C, Theorem 1 — quoted there as 0.5452...).
+    /// (arXiv:2503.14456, Eq. 12 and Appendix C, Theorem 1 â€” quoted there as 0.5452...).
     /// </summary>
     private static readonly double DecayClampLowerBound = Math.Exp(-Math.Exp(-0.5));
 
     /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
     private readonly int _sequenceLength;
+
+    /// <summary>Construction state: the 'ffnMultiplier' the layer was built with.</summary>
+    private readonly double _ffnMultiplier;
 
     /// <summary>
     /// Creates a new RWKV-7 block.
@@ -382,6 +385,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _ffnMultiplier = ffnMultiplier;
         _sequenceLength = sequenceLength;
         // Theorem 1 (arXiv 2503.14456, Appendix C) is stated for c in (0, 1 + u); outside that range
         // the eigenvalue bound it proves no longer applies, so reject rather than silently accept.
@@ -533,7 +537,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // v7: State evolution projections - initialized for stable decay
         // Decay LoRA. w1 is ZERO so the data-dependent term starts at exactly tanh(0) = 0 and the
         // decay begins precisely at the w0 ramp below; w2 is orthogonal with gain 0.1. This is the
-        // reference scheme, and the zero start is the load-bearing part — the previous full-rank
+        // reference scheme, and the zero start is the load-bearing part â€” the previous full-rank
         // InitializeProjection(_aWeights) injected noise into the decay logit before a single step.
         _w1.Fill(NumOps.Zero);
         new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_w2, _loraRank, _modelDimension);
@@ -546,11 +550,11 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         //
         // This replaces a flat Fill(-1.0), whose comment claimed "sigmoid(-1) ~ 0.27 retention". That
         // was true of the OLD kernel, which used sigmoid(d) directly as the retention; under Eq. 17
-        // the same value gives ~0.85 on EVERY channel — uniform, long, and outside the spread the
+        // the same value gives ~0.85 on EVERY channel â€” uniform, long, and outside the spread the
         // architecture relies on to mix short- and long-range memory.
         //
         // ratio_0_to_1 is layer_id/(n_layer-1) in the reference. This block does not receive a layer
-        // index, so the exponent uses ratio_0_to_1 = 0 (exponent 1, a linear ramp) — the reference's
+        // index, so the exponent uses ratio_0_to_1 = 0 (exponent 1, a linear ramp) â€” the reference's
         // first-layer schedule. Threading a layer index through would let later layers use the
         // steeper curve the reference gives them.
         for (int n = 0; n < _modelDimension; n++)
@@ -563,7 +567,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
             _aBias[n] = NumOps.FromDouble(-6.0 + 6.0 * frac + 0.5 + zigzag * 2.5);
         }
 
-        // ICL-rate LoRA, same scheme. No tanh on this path in the reference — the sigmoid applied to
+        // ICL-rate LoRA, same scheme. No tanh on this path in the reference â€” the sigmoid applied to
         // the sum bounds it.
         _a1.Fill(NumOps.Zero);
         new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_a2, _loraRank, _modelDimension);
@@ -650,15 +654,15 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     private LayerWorkspace<T> Ws => Workspace
         ?? throw new InvalidOperationException("RWKV7Block workspace not initialized.");
 
-    // Workspace buffer indices — TimeMixing timestep buffers
+    // Workspace buffer indices â€” TimeMixing timestep buffers
     private const int TsRInput = 0, TsKInput = 1, TsVInput = 2;
     private const int TsAInput = 3, TsBInput = 4, TsWkvOut = 5;
-    // Workspace buffer indices — ChannelMixing timestep buffers
+    // Workspace buffer indices â€” ChannelMixing timestep buffers
     private const int TsCmRInput = 7, TsCmKInput = 8, TsCmKSiLU = 9;
-    // Workspace buffer indices — TimeMixing sequence buffers
+    // Workspace buffer indices â€” TimeMixing sequence buffers
     private const int SqAllR = 0, SqAllK = 1, SqAllV = 2, SqAllA = 3;
     private const int SqAllB = 4, SqAllWkv = 5, SqAllWkvPre = 6, SqAllWkvGated = 7;
-    // Workspace buffer indices — ChannelMixing sequence buffers
+    // Workspace buffer indices â€” ChannelMixing sequence buffers
     private const int SqCmAllRGate = 8, SqCmAllVProj = 9;
     // FFN-dimension sequence buffers (separate indices since different shape suffix)
     private const int SqCmAllSiLU = 10, SqCmAllKProj = 11;
@@ -680,8 +684,8 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// <returns>The block output, and the v_first to hand to the next block.</returns>
     /// <remarks>
     /// v_first travels as an ordinary VALUE through the call chain rather than through shared mutable
-    /// state. That is what keeps it a normal edge on the tape — the same reason PyTorch expresses it
-    /// as a plain tuple return — and it removes any question of which block is "first" at clone or
+    /// state. That is what keeps it a normal edge on the tape â€” the same reason PyTorch expresses it
+    /// as a plain tuple return â€” and it removes any question of which block is "first" at clone or
     /// deserialize time: whoever is handed <c>null</c> is first.
     /// </remarks>
     internal (Tensor<T> Output, Tensor<T> VFirst) ForwardWithValueResidual(Tensor<T> input, Tensor<T>? vFirst)
@@ -752,7 +756,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // State: [batch, numHeads, headDim, headDim] - matrix-valued per head.
         // Statefulness is for autoregressive streaming inference only; in training each
         // sequence is independent, so start from a fresh zero state every Forward (otherwise
-        // repeated forwards over the same input are not idempotent — carried state poisons
+        // repeated forwards over the same input are not idempotent â€” carried state poisons
         // finite-difference gradient checks). Streaming callers run in inference mode.
         var state = (!IsTrainingMode && _recurrentState != null)
             ? _recurrentState
@@ -761,7 +765,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
             ? _prevToken
             : new Tensor<T>(new[] { batchSize, _modelDimension });
 
-        // Cache intermediate values for backward — zero allocation via workspace
+        // Cache intermediate values for backward â€” zero allocation via workspace
         var allR = Ws.Sequence(SqAllR);
         var allK = Ws.Sequence(SqAllK);
         var allV = Ws.Sequence(SqAllV);
@@ -774,16 +778,16 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // Token-shift mix coefficients as [1, modelDim] rows for broadcasting over
         // batch. Computed once (tape-connected to the mix vectors) and reused each
         // timestep. Expressing the lerp mix*x_t + (1-mix)*x_prev in Engine ops means
-        // (a) every matmul input is a FRESH tensor — the prior code wrote each
+        // (a) every matmul input is a FRESH tensor â€” the prior code wrote each
         // timestep's r/k/v/a/b input into a single reused workspace buffer, so the
         // tape (which saves references, not snapshots) read only the LAST timestep's
-        // values during backward and produced wrong projection-weight gradients — and
+        // values during backward and produced wrong projection-weight gradients â€” and
         // (b) the mix coefficients stay on the autodiff graph.
         // ---- #1464 throughput: token-shift + the r/k/v/a/b projections do NOT depend on the
         // recurrent WKV state, so they are computed for the WHOLE sequence in ONE batched GEMM each
         // (over [batch*seqLen, modelDim]) instead of seqLen separate per-timestep GEMMs. Only the
         // WKV state recurrence below stays sequential. Every op is still on the autodiff tape, so
-        // the projection-weight gradients are identical to the per-step formulation — clone-parity
+        // the projection-weight gradients are identical to the per-step formulation â€” clone-parity
         // and training results are unchanged; this is purely a per-step-overhead reduction.
         var ones1D = Tensor<T>.CreateDefault(new[] { _modelDimension }, NumOps.One);
         // Mix coefficients as [1, 1, modelDim] so they broadcast over [batch, seqLen, modelDim].
@@ -874,7 +878,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // readout) runs in ONE fused, differentiable engine op instead of ~10 tape micro-ops per
         // timestep. The kernel applies the r/a/b sigmoids internally and records a single tape node
         // whose backward is the BPTT adjoint of the recurrence, so the projection-weight gradients
-        // are identical to the per-step formulation (clone-parity preserved) — it just removes the
+        // are identical to the per-step formulation (clone-parity preserved) â€” it just removes the
         // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
         //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
         //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
@@ -918,7 +922,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
         var wkvAll = Engine.Rwkv7SequenceForward(Rall, kappa, kTilde, Vall, Aall, iclRateTransition, _numHeads);
 
-        // Group-normalize (per head, per position) and project to the output — both batched over all
+        // Group-normalize (per head, per position) and project to the output â€” both batched over all
         // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
         var wkv2d = Engine.Reshape(wkvAll, new[] { bsl, _modelDimension });
         var normed2d = ApplyGroupNorm(wkv2d, bsl);
@@ -942,7 +946,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
         // Output gate: g = sigmoid(x_g @ g1) @ g2, applied multiplicatively before the projection.
         // g1 is zero-initialised, so sigmoid(0) = 0.5 and g starts as a constant 0.5 @ g2 rather
-        // than at zero — the gate is live from step one, unlike the decay/ICL LoRAs.
+        // than at zero â€” the gate is live from step one, unlike the decay/ICL LoRAs.
         var gate2d = Engine.TensorMatMul(
             Engine.Sigmoid(Engine.TensorMatMul(Engine.Reshape(gIn, new[] { bsl, _modelDimension }), _g1)),
             _g2);
@@ -958,7 +962,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
             new[] { batchSize, seqLen, _modelDimension });
 
         // Recurrent-state persistence. In TRAINING each sequence is independent and the carried state is
-        // never read back (the read gate above is `!IsTrainingMode`), so we skip the recurrence entirely —
+        // never read back (the read gate above is `!IsTrainingMode`), so we skip the recurrence entirely â€”
         // keeping the #1464 per-step-overhead win. In INFERENCE the autoregressive streaming contract
         // requires the final WKV state S_T so the next call can continue the sequence; the fused
         // Rwkv7SequenceForward returns only the gated outputs (not S_T), so compute S_T from the same
@@ -967,7 +971,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // seeded from the prior state (`state`) so token-by-token streaming accumulates correctly.
         if (IsTrainingMode)
         {
-            // Training sequences are independent — clear ALL carried state,
+            // Training sequences are independent â€” clear ALL carried state,
             // including the token-shift caches. Leaving _prevToken /
             // _prevChannelToken live would mix the first inference token with
             // the last training token if the block is reused for streaming
@@ -1001,7 +1005,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// inference. Mirrors the recurrence the fused <c>Rwkv7SequenceForward</c> kernel applies internally:
     /// <c>S_t[h,di,vi] = sigmoid(A_t)[h,di]*S_{t-1}[h,di,vi] + sigmoid(B_t)[h,di]*K_t[h,di]*V_t[h,vi]</c>,
     /// per head. Runs off the autodiff tape (scalar arithmetic over the projected A/B/K/V values) since the
-    /// streaming state carries no gradient — it only seeds the next inference call.
+    /// streaming state carries no gradient â€” it only seeds the next inference call.
     /// </summary>
     /// <param name="seed">The prior state to continue from (zeros on the first call), [batch, heads, headDim, headDim].</param>
     /// <param name="aAll">Decay projection A over the sequence, [batch, seqLen, modelDim].</param>
@@ -1053,9 +1057,9 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     {
         // ---- #1464: channel mixing is purely position-wise (token-shift + a SiLU-gated FFN, NO
         // recurrence), so the whole sub-layer runs as batched GEMMs over [batch*seqLen, modelDim]
-        // — no per-timestep loop. The previous per-step loop issued ~8 Engine dispatches × seqLen ×
-        // numLayers (≈16K dispatches/forward at seqLen=512, 4 layers); that per-op DISPATCH overhead
-        // — NOT GEMM FLOPs (the GEMMs run at 30–90 GFLOP/s) — dominated the forward (~9.5s measured
+        // â€” no per-timestep loop. The previous per-step loop issued ~8 Engine dispatches Ã— seqLen Ã—
+        // numLayers (â‰ˆ16K dispatches/forward at seqLen=512, 4 layers); that per-op DISPATCH overhead
+        // â€” NOT GEMM FLOPs (the GEMMs run at 30â€“90 GFLOP/s) â€” dominated the forward (~9.5s measured
         // for one Predict) and the training step. The tape backs the gradients automatically (the
         // layer has no manual backward), so weights/activations are identical to the per-step form.
         int bsl = batchSize * seqLen;
@@ -1076,7 +1080,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         var rIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixR3), Engine.TensorMultiply(xShifted, invR3));
         var kIn = Engine.TensorAdd(Engine.TensorMultiply(x, mixK3), Engine.TensorMultiply(xShifted, invK3));
 
-        // r = sigmoid(W_r · rIn); k = W_k · kIn; SiLU(k); v = W_v · SiLU(k); out = sigmoid(r) · v.
+        // r = sigmoid(W_r Â· rIn); k = W_k Â· kIn; SiLU(k); v = W_v Â· SiLU(k); out = sigmoid(r) Â· v.
         var rGate = Engine.Sigmoid(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _channelReceptanceWeights)); // [bsl, modelDim]
         var kProj = Engine.TensorMatMul(Engine.Reshape(kIn, new[] { bsl, _modelDimension }), _channelKeyWeights); // [bsl, ffnDim]
         var kSiLU = Engine.TensorMultiply(kProj, Engine.Sigmoid(kProj));
@@ -1107,12 +1111,12 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // channels share a (mean, variance), with independent gamma/beta per
         // channel. That's exactly Engine.GroupNorm with numGroups=numHeads over
         // a [batchSize, modelDimension, 1, 1] 4D reshape. The previous manual
-        // loop did 4 × batchSize × numHeads × headDimension scalar NumOps calls
+        // loop did 4 Ã— batchSize Ã— numHeads Ã— headDimension scalar NumOps calls
         // (mean + variance + normalize + scale/bias passes); this is one fused
         // call.
         int modelDim = _numHeads * _headDimension;
         var input4D = Engine.Reshape(input, new[] { batchSize, modelDim, 1, 1 });
-        // eps = 64e-5, per the reference (nn.GroupNorm(H, C, eps=64e-5)) — NOT the 1e-6 that was here.
+        // eps = 64e-5, per the reference (nn.GroupNorm(H, C, eps=64e-5)) â€” NOT the 1e-6 that was here.
         // The WKV readout can leave a head with near-zero variance, and 1/sqrt(var + 1e-6) then
         // amplifies that head enormously; 64e-5 is ~640x larger and deliberately damps it. This is a
         // stability choice in the architecture, not a rounding detail.

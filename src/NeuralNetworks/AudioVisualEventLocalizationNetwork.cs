@@ -1439,35 +1439,14 @@ public partial class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<
             _supportedCategories);
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var copy = new AudioVisualEventLocalizationNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _temporalResolution,
-            _numEncoderLayers,
-            _supportedCategories,
-            _optimizer,
-            _lossFunction);
-
-        // Copy trained weights PER LAYER from the (materialized) source rather than via the
-        // model-level SetParameters(GetParameters()). The freshly-constructed copy's layers are lazy
-        // (ParameterCount == 0 until first forward), and the model-level SetParameters slices the flat
-        // vector by each target layer's ParameterCount — which is 0 for a lazy layer, so every slice was
-        // empty, `offset` never advanced, and NO weights were applied (the clone re-randomized on its
-        // first forward). Each source layer is materialized, so copying its parameter vector directly
-        // into the matching copy layer lets that layer self-materialize (DenseLayer/MultiHeadAttention
-        // resolve their shape from the vector length). copy.Layers[i] is the same object the cached
-        // field references (_audioInputProjection, etc.) point at, so they are materialized in place.
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            var src = Layers[i];
-            if (src.ParameterCount > 0)
-                copy.Layers[i].SetParameters(src.GetParameters());
-        }
-        return copy;
-    }
+    // No DeepCopy override. The one that used to live here rebuilt the model with the same
+    // arguments CreateNewInstance above uses (plus the optimizer and loss function, which a copy
+    // should NOT share — the sibling AudioVisualCorrespondenceNetwork says so in as many words)
+    // and then looped the source's layers copying each parameter vector into the matching
+    // destination layer. That loop is the base large-copy path with one step left out: it never
+    // resolved the destination against the source, so a lazy destination layer reported zero and
+    // SetParameters threw "Expected 0 parameters, but got 66048 (layer DenseLayer)". The base
+    // does the resolve, so inheriting it fixes the copy rather than reimplementing it.
 
     #endregion
 }

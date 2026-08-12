@@ -178,6 +178,9 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int NumGroups => _numGroups;
 
+    /// <summary>Construction state: the 'spatialSize' the layer was built with.</summary>
+    private readonly int _spatialSize;
+
     /// <summary>
     /// Initializes a new instance of the VAEResBlock class.
     /// </summary>
@@ -200,6 +203,7 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     public VAEResBlock(int inChannels, int outChannels, int numGroups = 32, int spatialSize = 32)
         : base(CalculateInputShape(inChannels, spatialSize), CalculateOutputShape(outChannels, spatialSize))
     {
+        _spatialSize = spatialSize;
         if (inChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(inChannels), "Input channels must be positive.");
         if (outChannels <= 0)

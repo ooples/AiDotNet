@@ -313,4 +313,16 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             ["mutual_information"] = zeros
         };
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// PRESENT BECAUSE THE INHERITED ONE IS WRONG, not to vary from it. <see cref="NeuralNetwork{T}"/>
+    /// returns <c>new NeuralNetwork&lt;T&gt;(Architecture)</c> — its own type, hardcoded — so every
+    /// <c>DeepCopy</c> of this model came back as a plain <c>NeuralNetwork&lt;T&gt;</c> with
+    /// <c>_numSamples</c> reset to the default and the uncertainty behaviour gone. The model sweep
+    /// caught it as "copy is NeuralNetwork`1"; nothing else did, because a copy of the wrong type
+    /// still trains and still predicts — it just is not a Bayesian network any more.
+    /// </remarks>
+    protected override AiDotNet.Interfaces.IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new BayesianNeuralNetwork<T>(Architecture, _numSamples);
 }

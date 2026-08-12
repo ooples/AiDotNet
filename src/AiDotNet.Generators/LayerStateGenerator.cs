@@ -59,6 +59,29 @@ public class LayerStateGenerator : IIncrementalGenerator
         "'{0}' marks parameter '{1}' of type '{2}' as [LayerState], but only int, long, float, double, bool, "
             + "string, enum, int[] and interface values can round-trip through layer metadata",
         "AiDotNet.Serialization", DiagnosticSeverity.Error, true);
+    // INFO, not a warning. Pinning is often correct -- an optional argument nobody varies really is
+    // its default forever -- so this must not fail a build or drown the log. What it must do is stop
+    // being INVISIBLE. Until now the generator silently substituted the literal default for any
+    // optional parameter it could not read back, so a layer whose clone quietly reverts a
+    // hyperparameter looked exactly like one that round-trips perfectly, and the only way to find out
+    // which was to sweep every model and read the wreckage. ContinuumMemorySystemLayer is the worked
+    // example: numFrequencyLevels was pinned to 3 while updateFrequencies WAS recorded, so a layer
+    // built with five levels came back as (3 levels, 5 frequencies) and its own constructor rejected
+    // the pair -- HopeNetwork could not be cloned at all, and nothing said so until a sweep did.
+    private static readonly DiagnosticDescriptor PinnedDefault = new(
+        "ADN0057",
+        "Optional constructor parameter is pinned to its default in the generated factory",
+        "'{0}' pins optional constructor parameter '{1}' to its declared default, so a rebuilt layer "
+            + "will not preserve a non-default value. Store it in a field named '{1}', '_{1}' or its "
+            + "PascalCase form and the generator will round-trip it",
+        // INFO, and it has to be. This project builds with warnings-as-errors, so shipping this at
+        // Warning turned 80 pinned parameters into 84 build ERRORS and failed the build outright --
+        // a reporting diagnostic must not be able to do that. Info does not surface at normal
+        // verbosity, and detailed verbosity is not an option (it logs all 72k discovered cases and
+        // has filled the system drive), so the way to COUNT them is to flip this one word to
+        // Warning, build, and grep ADN0057. That is how 80 -> 38 was measured.
+        "AiDotNet.Serialization", DiagnosticSeverity.Info, true);
+
 
     private static readonly DiagnosticDescriptor Unsuppliable = new(
         "ADN0053",
@@ -313,6 +336,11 @@ public class LayerStateGenerator : IIncrementalGenerator
                 // Taken from the symbol, so the emitted argument is the value the
                 // constructor signature actually promises.
                 info.DefaultExpression = RenderDefault(p);
+
+                // Say so. Pinning is a real loss of construction state whenever the value was not
+                // the default, and it used to happen with nothing in the build to show for it.
+                model.Diagnostics.Add(new PendingDiagnostic(
+                    PinnedDefault, SpanFor(p, model), type.Name, p.Name));
             }
             else
             {

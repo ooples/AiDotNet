@@ -57,6 +57,11 @@ public class AllLayersCloneTests
         var failed = new List<string>();
         var notConstructed = new List<string>();
 
+        // COUNTED AND REPORTED, because the first attempt at forwarding silently did nothing and
+        // produced a number identical to the unforwarded run. If this reads 0, the probe never
+        // fired and the coverage figure below is measuring unresolved layers again.
+        var forwarded = new List<string>();
+
         foreach (var open in candidates)
         {
             Type closed;
@@ -79,7 +84,14 @@ public class AllLayersCloneTests
 
             try
             {
-                var clone = LayerCloning.Clone((LayerBase<double>)instance);
+                // FORWARD FIRST. Cloning an unforwarded layer compares two unresolved layers that
+                // trivially agree at zero parameters, which is why this sweep read 119/0 while the
+                // trained-layer proof was failing. A layer that has been USED is the case worth
+                // measuring.
+                var typed = (LayerBase<double>)instance;
+                if (Forward(typed)) forwarded.Add(open.Name);
+
+                var clone = LayerCloning.Clone(typed);
                 if (clone is null)
                 {
                     failed.Add($"{open.Name}: clone returned null");
@@ -106,10 +118,33 @@ public class AllLayersCloneTests
         _output.WriteLine($"cloned OK          : {cloned.Count}");
         _output.WriteLine($"clone FAILED       : {failed.Count}");
         _output.WriteLine($"not constructed    : {notConstructed.Count} (harness limit, not a clone result)");
+        _output.WriteLine($"forwarded first    : {forwarded.Count} of {cloned.Count + failed.Count} attempted");
         _output.WriteLine(string.Empty);
 
         foreach (var f in failed.Take(40)) _output.WriteLine("  FAIL  " + f);
         foreach (var n in notConstructed.Take(15)) _output.WriteLine("  skip  " + n);
+
+        // A REPORT FILE, not just ITestOutputHelper. xunit surfaces the helper only on a failing
+        // test or under `verbosity=detailed`, and detailed logs all 72,235 discovered cases -- 18MB
+        // per run to read five lines out of. Nine parallel runs of that filled the system drive to
+        // zero bytes free. Writing the summary here means the run needs no console logger at all.
+        // AIDOTNET_SWEEP_DIR redirects it off the system drive when that drive is short.
+        var dir = Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_DIR");
+        if (string.IsNullOrEmpty(dir)) dir = System.IO.Path.GetTempPath();
+
+        var report = new List<string>
+        {
+            $"layer types        : {candidates.Count}",
+            $"cloned OK          : {cloned.Count}",
+            $"clone FAILED       : {failed.Count}",
+            $"not constructed    : {notConstructed.Count} (harness limit, not a clone result)",
+            $"forwarded first    : {forwarded.Count} of {cloned.Count + failed.Count} attempted",
+            string.Empty,
+        };
+        report.AddRange(failed.Select(f => $"FAIL  {f}"));
+        report.AddRange(notConstructed.Select(n => $"skip  {n}"));
+        System.IO.File.WriteAllLines(
+            System.IO.Path.Combine(dir, "aidotnet-layer-clone-sweep.txt"), report);
 
         // The sweep is a measurement first. Asserting only that SOMETHING was exercised keeps a
         // harness that constructs nothing from reporting success, without pinning a number that
@@ -139,6 +174,59 @@ public class AllLayersCloneTests
     /// unconstructible layer out of the failure count, since being unable to build a layer here
     /// says nothing about whether it clones.
     /// </remarks>
+    /// <summary>Pushes one probe through the layer so a lazy width resolves. True if it ran.</summary>
+    /// <remarks>
+    /// <para>
+    /// The declared shape CANNOT be used as the probe. A lazy layer declares <c>[-1]</c> for the
+    /// axis it has not resolved yet, so a guard of <c>shape[0] > 0</c> skips precisely the layers
+    /// that needed forwarding, and the sweep reports on unresolved layers while appearing to have
+    /// forwarded them. That mistake cost two runs -- the same wrong assumption that made
+    /// <c>ResolveShapesOnly</c> a no-op.
+    /// </para>
+    /// <para>
+    /// So every non-positive axis becomes a small concrete size, and both shape conventions are
+    /// tried: layers whose declared shape excludes the batch axis, and layers whose shape includes
+    /// it. The first probe that does not throw wins.
+    /// </para>
+    /// </remarks>
+    private static bool Forward(LayerBase<double> layer)
+    {
+        int[] declared;
+        try
+        {
+            declared = layer.GetInputShape();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        if (declared is null || declared.Length == 0) return false;
+
+        var concrete = new int[declared.Length];
+        for (var i = 0; i < declared.Length; i++) concrete[i] = declared[i] > 0 ? declared[i] : 4;
+
+        // Batch-prefixed first: GetInputShape describes ONE sample for most layers here.
+        var batched = new int[concrete.Length + 1];
+        batched[0] = 1;
+        Array.Copy(concrete, 0, batched, 1, concrete.Length);
+
+        foreach (var probe in new[] { batched, concrete })
+        {
+            try
+            {
+                layer.Forward(new Tensor<double>(probe));
+                return true;
+            }
+            catch (Exception)
+            {
+                // Try the other convention; a layer that refuses both is measured unforwarded.
+            }
+        }
+
+        return false;
+    }
+
     private static object? TryConstruct(Type closed)
     {
         var attribute = closed.GetCustomAttributes(inherit: false)

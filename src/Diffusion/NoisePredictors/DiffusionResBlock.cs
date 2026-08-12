@@ -106,6 +106,9 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'numGroups' the layer was built with.</summary>
+    private readonly int _numGroups;
+
     /// <summary>
     /// Creates a new diffusion residual block per the DDPM/Stable Diffusion paper.
     /// </summary>
@@ -124,6 +127,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
             [1, inChannels, spatialSize, spatialSize],
             [1, outChannels, spatialSize, spatialSize])
     {
+        _numGroups = numGroups;
         _inChannels = inChannels;
         _outChannels = outChannels;
         _spatialSize = spatialSize;

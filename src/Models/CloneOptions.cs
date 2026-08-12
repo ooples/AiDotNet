@@ -67,6 +67,46 @@ public sealed record CloneOptions
         IncludeOptimizerState = false,
         IncludeBuffers = false,
     };
+    /// <summary>
+    /// Gets a copy that shares each weight tensor's storage until either side writes to it.
+    /// </summary>
+    /// <value>Everything <see cref="Full"/> carries, taken by copy-on-write rather than eagerly.</value>
+    /// <remarks>
+    /// Observationally identical to <see cref="Full"/> and O(1) until the first write, which then
+    /// splits the two. This is not a new behaviour: it is what the library already did by default,
+    /// decided by the <c>AIDOTNET_COW_DEEPCOPY</c> environment variable. A per-process switch is the
+    /// wrong place for a per-call decision, so it is a value here.
+    /// </remarks>
+    public static CloneOptions CopyOnWrite { get; } = new() { Mode = CloneMode.CopyOnWrite };
+
+    /// <summary>
+    /// Gets an ALIAS: the copy points at the same parameters as the original.
+    /// </summary>
+    /// <value>Everything <see cref="Full"/> carries, shared rather than copied.</value>
+    /// <remarks>
+    /// <para>
+    /// <b>Training this copy trains the original.</b> This is not a copy in any safe sense; it is a
+    /// second handle on one model, for read-only fan-out such as evaluating the same weights on
+    /// several inputs at once.
+    /// </para>
+    /// <para>
+    /// Deliberately not reachable from a friendly-sounding preset. If you are unsure which of these
+    /// you want, you want <see cref="Full"/> or <see cref="CopyOnWrite"/>.
+    /// </para>
+    /// </remarks>
+    public static CloneOptions Shared { get; } = new() { Mode = CloneMode.Shared };
+
+    /// <summary>
+    /// Gets how much of the original's storage the copy is allowed to share.
+    /// </summary>
+    /// <value>Defaults to <see cref="CloneMode.Deep"/>.</value>
+    /// <remarks>
+    /// Orthogonal to <see cref="IncludeParameters"/> and the rest: those decide WHAT is carried,
+    /// this decides whether what is carried is copied or shared. <see cref="CloneMode.Shared"/> with
+    /// <see cref="IncludeParameters"/> off is meaningless, since there is nothing left to share.
+    /// </remarks>
+    public CloneMode Mode { get; init; } = CloneMode.Deep;
+
 
     /// <summary>
     /// Gets a value indicating whether configuration is carried. Always <see langword="true"/>.

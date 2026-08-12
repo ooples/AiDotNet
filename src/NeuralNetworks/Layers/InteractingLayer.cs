@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
 
@@ -87,6 +87,9 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'initScale' the layer was built with.</summary>
+    private readonly double _initScale;
+
     /// <summary>
     /// Initializes an interacting layer.
     /// </summary>
@@ -103,6 +106,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
         double initScale = 0.02)
         : base([embeddingDim], [embeddingDim])
     {
+        _initScale = initScale;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _attentionDim = attentionDim ?? embeddingDim;

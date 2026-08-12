@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -183,6 +183,9 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
     private readonly int _sequenceLength;
 
+    /// <summary>Construction state: the 'temperature' the layer was built with.</summary>
+    private readonly double _temperature;
+
     /// <summary>
     /// Creates a new Rodimus layer with data-dependent tempered selection.
     /// </summary>
@@ -218,6 +221,7 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _temperature = temperature;
         _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 

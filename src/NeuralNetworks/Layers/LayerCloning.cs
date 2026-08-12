@@ -1,7 +1,7 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using AiDotNet.Models;
-using AiDotNet.Models.Parameters;
 using AiDotNet.Serialization;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -64,50 +64,25 @@ public static class LayerCloning
         if (source is null) throw new ArgumentNullException(nameof(source));
 
         var settings = options ?? CloneOptions.Full;
-        RefuseUnimplementedOptions(settings);
         var clone = Reconstruct(source);
+
+        // The clone derives its own stream unless asked to reuse the original's. A layer with no
+        // seed set has opted out of reproducibility, and copying null keeps it opted out.
+        if (settings.ShareRandomState) clone.RandomSeed = source.RandomSeed;
 
         if (settings.IncludeParameters)
         {
-            var parameters = source.GetParameters();
-            if (parameters.Length > 0)
-            {
-                // Rebuilding from the same construction state must produce the same parameter
-                // shape. A mismatch means a value the constructor needs is not recorded, and the
-                // copy would silently differ from the original -- so it is reported rather than
-                // written through. This is the backstop for what the build cannot prove: a
-                // constructor that reads state from somewhere other than its arguments.
-                // Compare LAYOUTS where both sides publish one, and only fall back to scalar
-                // counts where they do not. A rebuilt layer has not run a forward pass, so a
-                // deferred slot makes ParameterCount throw ParameterLayoutNotReadyException rather
-                // than return a different number -- the scalar comparison cannot even be evaluated
-                // there, let alone trusted. Slot-wise comparison also catches a same-total
-                // reordering, which the scalar test passes and which would restore each
-                // component's values into its neighbour.
-                if (clone is IParameterManifestProvider cloneLayout
-                    && source is IParameterManifestProvider sourceLayout)
-                {
-                    var expected = sourceLayout.ParameterLayout;
-                    var actual = cloneLayout.ParameterLayout;
-                    if (!actual.DescribesSameLayoutAs(expected))
-                    {
-                        throw new InvalidOperationException(
-                            $"{source.GetType().Name} rebuilt with a different parameter layout: "
-                            + $"{actual.DescribeDifferenceFrom(expected)}. A constructor argument "
-                            + "that determines size is not marked [LayerState], so the copy is a "
-                            + "different shape from the original.");
-                    }
-                }
-                else if (clone.ParameterCount != source.ParameterCount)
-                {
-                    throw new InvalidOperationException(
-                        $"{source.GetType().Name} rebuilt with {clone.ParameterCount} parameters but "
-                        + $"the original has {source.ParameterCount}. A constructor argument that "
-                        + "determines size is not marked [LayerState], so the copy is a different "
-                        + "shape from the original.");
-                }
+            InstallInto(source, clone, settings);
 
-                clone.UpdateParameters(parameters);
+            // AFTER the install, not before. Checking first measured an empty clone against a
+            // resolved original and reported every lazy layer as broken.
+            if (clone.ParameterCount != source.ParameterCount)
+            {
+                throw new InvalidOperationException(
+                    $"{source.GetType().Name} rebuilt with {clone.ParameterCount} parameters but "
+                    + $"the original has {source.ParameterCount}. A constructor argument that "
+                    + "determines size is not recorded, so the copy is a different shape from "
+                    + "the original.");
             }
         }
 
@@ -115,53 +90,193 @@ public static class LayerCloning
     }
 
     /// <summary>
-    /// Refuses the options this clone path does not yet honour, rather than ignoring them.
+    /// Copies one layer's learned tensors into another, then does the same for its sub-layers.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The default of each is "carry everything", which reconstruction plus
-    /// <c>GetParameters</c>/<c>UpdateParameters</c> genuinely does — the whole state vector moves,
-    /// buffers included. It is the NON-default request that is unimplemented: asking to leave
-    /// optimizer state or buffers behind, or to share the random stream, currently changes nothing.
-    /// </para>
-    /// <para>
-    /// A flag that silently ignores its argument is worse than one that is absent. A caller who
-    /// sets <c>IncludeBuffers = false</c> to get a clone that evaluates from fresh statistics
-    /// receives the original's running means instead, and nothing anywhere says so. Refusing makes
-    /// the gap visible at the call site instead of in a downstream metric.
-    /// </para>
-    /// <para>
-    /// Implementing them means restoring by role rather than by flat vector:
-    /// <c>ParameterSlotRole.LearnedState</c> is exactly the buffer set, and
-    /// <c>ParameterSlotRole.Gradient</c> the optimizer's. The chunk walk already carries those
-    /// roles; the flat <c>UpdateParameters</c> contract is what cannot express the distinction.
-    /// </para>
+    /// Recursive because <see cref="LayerBase{T}.GetTrainableParameters"/> reports only a layer's
+    /// OWN tensors. A composite therefore installed nothing into its children, which kept whatever
+    /// the constructor gave them — <c>SwinTransformerBlockLayer</c> rebuilt 98 parameters against
+    /// the original's 130, its six registered children never filled.
     /// </remarks>
-    private static void RefuseUnimplementedOptions(CloneOptions settings)
+    private static void InstallInto<T>(LayerBase<T> source, LayerBase<T> clone, CloneOptions settings)
     {
-        if (!settings.IncludeBuffers)
+        // RESOLVE THE CLONE BEFORE INSTALLING. A lazy layer materializes its weights on its first
+        // forward, and that initialization overwrites anything installed beforehand: the clone came
+        // back structurally right but carrying fresh random weights, and the DenseLayer round trip
+        // read "original 0, clone 0.36892061820885858". Resolving here means the install writes into
+        // tensors that already exist, so the first forward has nothing left to initialize. Only
+        // meaningful when the SOURCE is resolved -- cloning an untouched layer should stay untouched.
+        int[]? declared = null;
+        try
         {
-            throw new NotSupportedException(
-                "CloneOptions.IncludeBuffers = false is not implemented: the clone restores through "
-                + "a flat parameter vector, which cannot separate ParameterSlotRole.LearnedState "
-                + "buffers from trainable weights. The copy would carry the buffers regardless, so "
-                + "the request is refused rather than silently ignored.");
+            declared = source.GetInputShape();
+        }
+        catch (Exception)
+        {
+            // A layer that will not describe its input cannot be probed; the install below still
+            // runs and the count assertion still reports any shortfall.
         }
 
-        if (!settings.IncludeOptimizerState)
+        // EXACT means every axis is concrete. Only then may the clone be RESOLVED from it, because
+        // ResolveFromShape pins the axes it is given and pinning one to a guess would contradict
+        // whatever length the layer is actually used at later.
+        var exact = declared is not null && Array.TrueForAll(declared, d => d > 0) ? declared : null;
+
+        if (exact is not null && !clone.IsShapeResolved)
         {
-            throw new NotSupportedException(
-                "CloneOptions.IncludeOptimizerState = false is not implemented: optimizer state is "
-                + "not part of a layer's parameter surface, so this clone path neither copies nor "
-                + "omits it. The request is refused rather than silently ignored.");
+            // Two shape conventions, same reason the sweep probes both: GetInputShape describes
+            // one sample for most layers and the full input for others.
+            foreach (var candidate in new[] { exact, WithBatchAxis(exact) })
+            {
+                try { clone.ResolveFromShape(candidate); break; }
+                catch (ArgumentException) { /* try the other; install as-is if neither fits */ }
+                catch (InvalidOperationException) { }
+            }
         }
 
-        if (settings.ShareRandomState)
+        CopyOwnTensors(source, clone, settings);
+        CopyChildren(source, clone, settings);
+
+        if (clone.ParameterCount == source.ParameterCount || declared is null) return;
+
+        // A SECOND PASS BEHIND A FORWARD, because there are two different ways a composite arrives
+        // under-filled and neither mechanism covers the other.
+        //
+        // SwinTransformerBlockLayer registers its six children in the constructor, so they exist on
+        // both sides and CopyChildren pairs them off; a forward probe cannot help it at all, since
+        // GetInputShape reports [dim] while the block actually consumes a spatial input and every
+        // candidate shape throws. CitrinetBlockLayer, ContextNetBlockLayer, HiFiGANResBlockLayer and
+        // WaveNetResidualBlockLayer are the mirror image: the generated EnsureSubLayersRegistered()
+        // runs during shape resolution, so a clone that never resolved has NO children for
+        // CopyChildren to pair with and came back holding 0 parameters against the original's 401.
+        // A forward is what brings those into existence.
+        //
+        // Those four also explain why this cannot wait for IsShapeResolved. They declare
+        // [channels, -1] and the -1 is a genuinely free axis, so the flag reads false even on a
+        // layer that HAS been forwarded and has materialized all nine children -- gating on it
+        // skipped precisely the layers that needed the probe. A free axis therefore has to be
+        // filled with a guess to forward at all, and that is safe here for the same reason it is
+        // free: the layer does not pin it (IsShapeResolved is still false afterwards) and it
+        // contributes no parameters. Should either assumption fail, the guessed shape produces the
+        // wrong count and the assertion in Clone reports it rather than returning a quiet mis-copy.
+        //
+        // The probe runs only once the cheap paths have been tried and the counts still disagree --
+        // a forward has side effects, and ResetState clears what it leaves behind before the retry
+        // writes the real weights over the fresh random ones the probe just initialized.
+        foreach (var candidate in ProbeShapes(declared))
         {
-            throw new NotSupportedException(
-                "CloneOptions.ShareRandomState = true is not implemented: the rebuilt layer "
-                + "constructs its own random stream and nothing re-seeds it from the original. The "
-                + "request is refused rather than silently ignored.");
+            try
+            {
+                clone.Forward(new Tensor<T>(candidate));
+                clone.ResetState();
+                break;
+            }
+            catch (Exception)
+            {
+                // A layer that refuses this probe keeps whatever it managed to resolve; the count
+                // assertion after the install still reports the shortfall.
+            }
+        }
+
+        CopyOwnTensors(source, clone, settings);
+        CopyChildren(source, clone, settings);
+    }
+
+    /// <summary>Prepends a size-1 batch axis to a shape.</summary>
+    internal static int[] WithBatchAxis(int[] shape)
+    {
+        var batched = new int[shape.Length + 1];
+        batched[0] = 1;
+        Array.Copy(shape, 0, batched, 1, shape.Length);
+
+        return batched;
+    }
+
+    /// <summary>
+    /// Concrete shapes to try forwarding through a clone, derived from a declared input shape.
+    /// </summary>
+    /// <remarks>
+    /// Free axes come back as <c>-1</c> and are filled with a concrete length; both the with-batch
+    /// and without-batch conventions are offered because <c>GetInputShape</c> describes one sample
+    /// for some layers and the full input for others. Two fill sizes rather than one: a strided
+    /// block consumes length, so <c>CitrinetBlockLayer</c> (kernel 3, stride 2) has nothing left to
+    /// convolve at length 4 and only the longer probe survives.
+    /// </remarks>
+    internal static IEnumerable<int[]> ProbeShapes(int[] declared)
+    {
+        // 16 before 4, and NOT 1. Trying a length-1 fill first was measured and rejected: it made
+        // DeepCopy neutral-to-worse (CanaryQwen 6,341 -> 6,953 ms, F5TTS 1,783 -> 2,413 ms) even
+        // though it succeeded on the first candidate every time, so the extra attempt was not the
+        // cost. What that rules out is the assumption behind it -- the probe's expense is not the
+        // sequence-length arithmetic, it is materializing the layer's weights, and that is sized by
+        // the layer rather than by the probe. Shortening the free axis cannot make it cheaper, which
+        // means the probe cost is work the clone has to do anyway rather than overhead to remove.
+        foreach (var fill in new[] { 16, 4 })
+        {
+            var concrete = new int[declared.Length];
+            for (var i = 0; i < declared.Length; i++) concrete[i] = declared[i] > 0 ? declared[i] : fill;
+
+            yield return WithBatchAxis(concrete);
+            yield return concrete;
+
+            // A shape that was already concrete does not vary with the fill, so the second pass
+            // over it would repeat four throwing probes for nothing.
+            if (Array.TrueForAll(declared, d => d > 0)) yield break;
+        }
+    }
+
+    /// <summary>Writes a layer's own learned tensors into another layer of the same type.</summary>
+    private static void CopyOwnTensors<T>(LayerBase<T> source, LayerBase<T> clone, CloneOptions settings)
+    {
+        // INSTALL TENSORS, NOT A FLAT VECTOR. A tensor carries its own shape, so installing one
+        // resolves a clone whose input width is lazy; a flat Vector<T> carries no shape, and pushing
+        // 16 values into a DenseLayer rebuilt from `outputSize` alone threw "Expected 0 parameters,
+        // but got 16". That is why cloning a layer which had been USED failed while cloning a fresh
+        // one appeared to work: both sides were unresolved and agreed at zero.
+        var tensors = source.GetTrainableParameters();
+        if (tensors.Count == 0) return;
+
+        var installed = new Tensor<T>[tensors.Count];
+        for (var i = 0; i < tensors.Count; i++)
+        {
+            // Shared hands over the ORIGINAL tensors, so both handles are one set of weights and
+            // training either trains both.
+            //
+            // Deep and CopyOnWrite both take CloneShared views. They are observationally identical
+            // by construction -- the first write on either side splits them -- so a copy-on-write
+            // view IS a deep copy, reached without materialising a second set of weights. This is
+            // what NeuralNetworkBase.DeepCopy already relies on.
+            installed[i] = settings.Mode == CloneMode.Shared
+                ? tensors[i]
+                : (Tensor<T>)tensors[i].CloneShared();
+        }
+
+        clone.SetTrainableParameters(installed);
+    }
+
+    /// <summary>Copies each registered sub-layer's parameters into the matching sub-layer.</summary>
+    /// <remarks>
+    /// Pairwise by index: both sides were built by the same constructor in the same order, which is
+    /// the pairing <c>GetTrainableParameters</c> and <c>ParameterCount</c> already rely on when they
+    /// walk this list. Needs no shape at all — a tensor carries its own — so it reaches composites a
+    /// forward probe cannot. Recursion carries the mode with it, so a Shared clone shares its
+    /// children's weights too rather than quietly deep-copying them.
+    /// </remarks>
+    private static void CopyChildren<T>(LayerBase<T> source, LayerBase<T> clone, CloneOptions settings)
+    {
+        var sourceChildren = source.GetSubLayers();
+        var cloneChildren = clone.GetSubLayers();
+
+        if (sourceChildren is null || cloneChildren is null) return;
+        if (sourceChildren.Count != cloneChildren.Count) return;
+
+        for (var i = 0; i < sourceChildren.Count; i++)
+        {
+            if (sourceChildren[i] is LayerBase<T> childSource
+                && cloneChildren[i] is LayerBase<T> childClone)
+            {
+                InstallInto(childSource, childClone, settings);
+            }
         }
     }
 

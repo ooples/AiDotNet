@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -10,21 +10,21 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>
 /// BatchEnsemble creates multiple ensemble members that share base weights but have
 /// their own small rank-1 matrices. For a weight matrix W, each member i computes:
-/// W_i = W ⊙ (r_i ⊗ s_i)
-/// where r_i and s_i are per-member rank vectors, ⊙ is element-wise multiplication,
-/// and ⊗ is outer product.
+/// W_i = W âŠ™ (r_i âŠ— s_i)
+/// where r_i and s_i are per-member rank vectors, âŠ™ is element-wise multiplication,
+/// and âŠ— is outer product.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> BatchEnsemble is a clever way to create multiple models
 /// (ensemble members) that share most of their weights.
 ///
-/// Traditional ensemble: Train N separate models with N×parameters
-/// BatchEnsemble: Train 1 base model + N small vectors = ~1×parameters + small overhead
+/// Traditional ensemble: Train N separate models with NÃ—parameters
+/// BatchEnsemble: Train 1 base model + N small vectors = ~1Ã—parameters + small overhead
 ///
 /// How it works:
 /// 1. A single shared weight matrix W captures the main learned patterns
 /// 2. Each ensemble member has two small vectors (r and s)
-/// 3. Member i's effective weights = W × (r_i outer-product s_i)
+/// 3. Member i's effective weights = W Ã— (r_i outer-product s_i)
 /// 4. This modulates the shared weights to create diversity
 ///
 /// Benefits:
@@ -34,9 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Easy to implement and train
 ///
 /// Example with 256-dim hidden layer and 4 members:
-/// - Shared weights: 256 × 256 = 65,536 parameters
-/// - Per-member vectors: 4 × (256 + 256) = 2,048 parameters
-/// - Total overhead: ~3% more parameters for 4× ensemble benefit
+/// - Shared weights: 256 Ã— 256 = 65,536 parameters
+/// - Per-member vectors: 4 Ã— (256 + 256) = 2,048 parameters
+/// - Total overhead: ~3% more parameters for 4Ã— ensemble benefit
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -128,6 +128,9 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'rankInitScale' the layer was built with.</summary>
+    private readonly double _rankInitScale;
+
     /// <summary>
     /// Initializes a new instance of the BatchEnsembleLayer class.
     /// </summary>
@@ -154,6 +157,7 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         double rankInitScale = 0.5)
         : base([inputDim], [outputDim])
     {
+        _rankInitScale = rankInitScale;
         _inputDim = inputDim;
         _outputDim = outputDim;
         _numMembers = numMembers;
@@ -246,7 +250,7 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     /// 4. Output is scaled by each member's s vector (output modulation)
     /// 5. Bias is added (shared across members)
     ///
-    /// The output has batchSize × numMembers rows, with consecutive numMembers
+    /// The output has batchSize Ã— numMembers rows, with consecutive numMembers
     /// rows belonging to the same input sample.
     /// </para>
     /// </remarks>
@@ -282,8 +286,8 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         var weights2D = Engine.Reshape(_weights, [_inputDim, _outputDim]);
         var matmul = Engine.TensorMatMul(scaledInput, weights2D);
 
-        // Apply s-vector scaling per member by broadcasting [M, outputDim] →
-        // [B, M, outputDim] → [B*M, outputDim]. Same tiling pattern used for
+        // Apply s-vector scaling per member by broadcasting [M, outputDim] â†’
+        // [B, M, outputDim] â†’ [B*M, outputDim]. Same tiling pattern used for
         // r-vectors above.
         var sVecs3D = Engine.Reshape(_sVectors, [1, _numMembers, _outputDim]);
         var sVecsTiled = Engine.TensorTile(sVecs3D, [batchSize, 1, 1]);
@@ -305,7 +309,7 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     /// (<c>[batchSize * numMembers, inputDim]</c>, members in consecutive rows).
     /// </summary>
     /// <remarks>
-    /// Unlike <see cref="Forward"/>, this does not tile the input — it lets a stack of
+    /// Unlike <see cref="Forward"/>, this does not tile the input â€” it lets a stack of
     /// BatchEnsemble layers run member-aware without re-expanding the batch at every layer.
     /// The per-member r/s vectors are still tiled to match. All Engine ops, so the autodiff
     /// tape records the computation.
@@ -361,10 +365,10 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         int batchSize = expandedBatchSize / _numMembers;
 
         // The output is laid out as [batchSize*numMembers, outputDim] with the
-        // members for one batch item stored in consecutive rows — so reshape to
+        // members for one batch item stored in consecutive rows â€” so reshape to
         // [batchSize, numMembers, outputDim] and reduce-mean over the member axis
         // to collapse the ensemble. One Engine call replaces
-        // batchSize × outputDim × numMembers scalar NumOps.Add dispatches.
+        // batchSize Ã— outputDim Ã— numMembers scalar NumOps.Add dispatches.
         var reshaped = Engine.Reshape(output, [batchSize, _numMembers, _outputDim]);
         return Engine.ReduceMean(reshaped, new[] { 1 }, keepDims: false);
     }

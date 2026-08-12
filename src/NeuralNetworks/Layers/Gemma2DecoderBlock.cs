@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -6,7 +6,7 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// Gemma-2 decoder block with <em>sandwiched</em> RMSNorms — a norm both before and after each sublayer:
+/// Gemma-2 decoder block with <em>sandwiched</em> RMSNorms â€” a norm both before and after each sublayer:
 /// <c>x = x + postAttnNorm(Attn(inputNorm(x)))</c> then <c>x = x + postFfnNorm(GeGLU(preFfnNorm(x)))</c>.
 /// The FFN is a gated GeGLU (tanh-GELU gate); RMSNorms use the Gemma <c>(1 + weight)</c> convention (applied
 /// at load time).
@@ -66,6 +66,9 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
     /// <summary>Construction state: the 'ffnDim' the layer was built with.</summary>
     private readonly int _ffnDim;
 
+    /// <summary>Construction state: the 'rmsNormEpsilon' the layer was built with.</summary>
+    private readonly double _rmsNormEpsilon;
+
     /// <summary>Creates a Gemma-2 decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="ffnDim">FFN inner dimension.</param>
@@ -74,6 +77,7 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
     public Gemma2DecoderBlock(int hiddenSize, int ffnDim, LayerBase<T> attention, double rmsNormEpsilon = 1e-6)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _rmsNormEpsilon = rmsNormEpsilon;
         _ffnDim = ffnDim;
         Guard.NotNull(attention);
         _hiddenSize = hiddenSize;

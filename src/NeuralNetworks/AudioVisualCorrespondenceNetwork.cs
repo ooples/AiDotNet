@@ -1156,21 +1156,14 @@ public partial class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>,
             _numEncoderLayers);
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        // Create a new instance without passing optimizer/loss to get fresh instances
-        // Passing the same optimizer would share mutable state (momentum, etc.)
-        var copy = new AudioVisualCorrespondenceNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _audioSampleRate,
-            _videoFrameRate,
-            _numEncoderLayers);
-
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
+    // No DeepCopy override. The one that used to live here constructed exactly what
+    // CreateNewInstance above constructs — same five arguments, same reason for leaving the
+    // optimizer and loss out — and then called copy.SetParameters(GetParameters()) on it. That
+    // last step is what made it wrong: the fresh copy's layers are lazy, so the model-level
+    // SetParameters weighed its own 3,072 materialized parameters against the source's 496,898
+    // and threw. The base DeepCopy resolves the destination against the source before copying,
+    // which is precisely the step this override was missing, so inheriting it is both shorter
+    // and correct.
 
     #endregion
 }

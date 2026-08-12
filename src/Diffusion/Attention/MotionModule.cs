@@ -60,6 +60,9 @@ public partial class MotionModule<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int NumFrames => _numFrames;
 
+    /// <summary>Construction state: the 'ffnMultiplier' the layer was built with.</summary>
+    private readonly int _ffnMultiplier;
+
     /// <summary>
     /// Initializes a new AnimateDiff motion module.
     /// </summary>
@@ -78,6 +81,7 @@ public partial class MotionModule<T> : LayerBase<T>, IShapeContract
             new[] { spatialSize * spatialSize, numFrames, channels },
             new[] { spatialSize * spatialSize, numFrames, channels })
     {
+        _ffnMultiplier = ffnMultiplier;
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
         if (numHeads <= 0)

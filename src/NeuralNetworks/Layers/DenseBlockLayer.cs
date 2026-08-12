@@ -103,6 +103,9 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'bnMomentum' the layer was built with.</summary>
+    private readonly double _bnMomentum;
+
     /// <summary>
     /// Lazy ctor — input depth/height/width come from the first
     /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); only
@@ -114,6 +117,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     public DenseBlockLayer(int growthRate, double bnMomentum = 0.1)
         : base([-1, -1, -1], [growthRate, -1, -1])
     {
+        _bnMomentum = bnMomentum;
         if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
 
         _inputChannels = -1; // resolved in OnFirstForward
