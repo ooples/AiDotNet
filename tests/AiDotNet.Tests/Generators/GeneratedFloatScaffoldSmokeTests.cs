@@ -121,6 +121,7 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "CausalForestTests");
         Assert.Contains(floatScaffolds, t => t.Name == "CoxProportionalHazardsTests");
         Assert.Contains(floatScaffolds, t => t.Name == "BinaryRelevanceTests");
+        Assert.Contains(floatScaffolds, t => t.Name == "CNNBiLSTMCRFTests");
 
         Assert.Contains(doubleScaffolds, t => t.Name == "GraFPrintTests");
         Assert.Contains(doubleScaffolds, t => t.Name == "SambaLanguageModelTests");

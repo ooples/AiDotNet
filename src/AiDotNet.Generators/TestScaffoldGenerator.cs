@@ -11003,6 +11003,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "OpticalFlowTestBase" or
             "PortfolioOptimizerTestBase" or
             "SegmentationTestBase" or
+            "SequenceLabelingNERTestBase" or
             "SpanBasedNERTestBase" or
             "SpeakerRecognitionTestBase" or
             "SurvivalModelTestBase" or
