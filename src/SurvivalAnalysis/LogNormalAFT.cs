@@ -274,6 +274,19 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
     }
 
     /// <summary>
+    /// Converts an exponent to the model's numeric type without turning a finite
+    /// double result into infinity when <typeparamref name="T"/> has a smaller range.
+    /// </summary>
+    private T ExpAsFiniteNumeric(double exponent)
+    {
+        double maxValue = NumOps.ToDouble(NumOps.MaxValue);
+        if (exponent >= Math.Log(maxValue))
+            return NumOps.MaxValue;
+
+        return NumOps.FromDouble(Math.Exp(exponent));
+    }
+
+    /// <summary>
     /// Predicts survival probabilities at specified times.
     /// </summary>
     public override Matrix<T> PredictSurvivalProbability(Matrix<T> x, Vector<T> times)
@@ -322,7 +335,7 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
                 eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             // For log-normal, the acceleration factor is exp(-η)
-            result[i] = NumOps.FromDouble(Math.Exp(-eta));
+            result[i] = ExpAsFiniteNumeric(-eta);
         }
 
         return result;
@@ -368,8 +381,7 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
                 mu += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(input[i, j]);
 
             // Median survival time for log-normal: exp(μ)
-            double median = Math.Exp(mu);
-            result[i] = NumOps.FromDouble(median);
+            result[i] = ExpAsFiniteNumeric(mu);
         }
 
         return result;

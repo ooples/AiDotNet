@@ -10982,6 +10982,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // compiled-output assertions in GeneratedFloatScaffoldSmokeTests in sync.
             "AnomalyDetectorTestBase" or
             "CausalModelTestBase" or
+            "MultiLabelClassifierTestBase" or
             "ReinforcementLearningTestBase" or
             "RiskModelTestBase" or
             "VideoDenoisingTestBase" or
@@ -11004,6 +11005,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "SegmentationTestBase" or
             "SpanBasedNERTestBase" or
             "SpeakerRecognitionTestBase" or
+            "SurvivalModelTestBase" or
             "TimeSeriesModelTestBase" or
             "TransformerNERTestBase" or
             "TTSModelTestBase" or
