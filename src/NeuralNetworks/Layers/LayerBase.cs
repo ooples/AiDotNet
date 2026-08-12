@@ -4720,18 +4720,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         bool deferred = hasRegistry && ParameterCount == 0
                      && (subsForShape is null || subsForShape.Count == 0);
 
-        // A COMPOSITE WHOSE CHILDREN HAVE NOT RESOLVED still throws, deliberately. Its count is the
-        // sum of what its children currently declare, so while they are lazy it is short --
-        // BottleneckBlock reports 344 against a 488-value checkpoint because six children have not
-        // sized themselves, and ApplyParameterLayout cannot size them either since GetSubLayers()
-        // does not return children that do not exist yet.
+        // A COMPOSITE WHOSE CHILDREN HAVE NOT RESOLVED. Its count is the sum of what its children
+        // currently declare, so while they are lazy it is short -- BottleneckBlock reports 344
+        // against a 488-value checkpoint because six children have not sized themselves, and
+        // ApplyParameterLayout cannot size them either: GetSubLayers() cannot return a child that
+        // does not exist yet.
         //
-        // Holding the vector for replay was tried and removed: TransitionLayer and BottleneckBlock
-        // do not call EnsureInitializedFromInput -- they do not override Forward at all -- so the
-        // replay hook never fires for them and the hold only converted an accurate exception into a
-        // silently wrong output. Same failure count either way; a loud one is worth more. The real
-        // fix is for a composite to build its children at restore, which is a change to how
-        // children are created, not to this guard.
+        // Hold the vector and replay it once the composite's own OnFirstForward has built them.
+        // TransitionLayer already declares exactly this -- a _pendingParameters field, documented
+        // as "stash the whole vector and replay inside OnFirstForward" -- and reads it at the end
+        // of OnFirstForward. Nothing ever assigns it, because the layer has no SetParameters
+        // override to do so, so the mechanism has always been dead. Holding here revives it for
+        // every composite at once rather than per layer.
+        if (hasRegistry && !deferred && parameters.Length != ParameterCount
+            && subsForShape is { Count: > 0 } && !IsShapeResolved && !_firstForwardRan)
+        {
+            _restoredBeforeShapeResolved = parameters;
+            return;
+        }
+
         if (hasRegistry && !deferred && parameters.Length != ParameterCount)
         {
             // Name the layer. A bare count pair says a restore failed somewhere in a hundred-layer

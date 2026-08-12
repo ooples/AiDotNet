@@ -64,6 +64,7 @@ public static class LayerCloning
         if (source is null) throw new ArgumentNullException(nameof(source));
 
         var settings = options ?? CloneOptions.Full;
+        RefuseUnimplementedOptions(settings);
         var clone = Reconstruct(source);
 
         if (settings.IncludeParameters)
@@ -111,6 +112,57 @@ public static class LayerCloning
         }
 
         return clone;
+    }
+
+    /// <summary>
+    /// Refuses the options this clone path does not yet honour, rather than ignoring them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default of each is "carry everything", which reconstruction plus
+    /// <c>GetParameters</c>/<c>UpdateParameters</c> genuinely does — the whole state vector moves,
+    /// buffers included. It is the NON-default request that is unimplemented: asking to leave
+    /// optimizer state or buffers behind, or to share the random stream, currently changes nothing.
+    /// </para>
+    /// <para>
+    /// A flag that silently ignores its argument is worse than one that is absent. A caller who
+    /// sets <c>IncludeBuffers = false</c> to get a clone that evaluates from fresh statistics
+    /// receives the original's running means instead, and nothing anywhere says so. Refusing makes
+    /// the gap visible at the call site instead of in a downstream metric.
+    /// </para>
+    /// <para>
+    /// Implementing them means restoring by role rather than by flat vector:
+    /// <c>ParameterSlotRole.LearnedState</c> is exactly the buffer set, and
+    /// <c>ParameterSlotRole.Gradient</c> the optimizer's. The chunk walk already carries those
+    /// roles; the flat <c>UpdateParameters</c> contract is what cannot express the distinction.
+    /// </para>
+    /// </remarks>
+    private static void RefuseUnimplementedOptions(CloneOptions settings)
+    {
+        if (!settings.IncludeBuffers)
+        {
+            throw new NotSupportedException(
+                "CloneOptions.IncludeBuffers = false is not implemented: the clone restores through "
+                + "a flat parameter vector, which cannot separate ParameterSlotRole.LearnedState "
+                + "buffers from trainable weights. The copy would carry the buffers regardless, so "
+                + "the request is refused rather than silently ignored.");
+        }
+
+        if (!settings.IncludeOptimizerState)
+        {
+            throw new NotSupportedException(
+                "CloneOptions.IncludeOptimizerState = false is not implemented: optimizer state is "
+                + "not part of a layer's parameter surface, so this clone path neither copies nor "
+                + "omits it. The request is refused rather than silently ignored.");
+        }
+
+        if (settings.ShareRandomState)
+        {
+            throw new NotSupportedException(
+                "CloneOptions.ShareRandomState = true is not implemented: the rebuilt layer "
+                + "constructs its own random stream and nothing re-seeds it from the original. The "
+                + "request is refused rather than silently ignored.");
+        }
     }
 
     /// <summary>
