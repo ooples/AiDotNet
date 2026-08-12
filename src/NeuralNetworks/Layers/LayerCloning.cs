@@ -204,6 +204,13 @@ public static class LayerCloning
     /// </remarks>
     internal static IEnumerable<int[]> ProbeShapes(int[] declared)
     {
+        // 16 before 4, and NOT 1. Trying a length-1 fill first was measured and rejected: it made
+        // DeepCopy neutral-to-worse (CanaryQwen 6,341 -> 6,953 ms, F5TTS 1,783 -> 2,413 ms) even
+        // though it succeeded on the first candidate every time, so the extra attempt was not the
+        // cost. What that rules out is the assumption behind it -- the probe's expense is not the
+        // sequence-length arithmetic, it is materializing the layer's weights, and that is sized by
+        // the layer rather than by the probe. Shortening the free axis cannot make it cheaper, which
+        // means the probe cost is work the clone has to do anyway rather than overhead to remove.
         foreach (var fill in new[] { 16, 4 })
         {
             var concrete = new int[declared.Length];
