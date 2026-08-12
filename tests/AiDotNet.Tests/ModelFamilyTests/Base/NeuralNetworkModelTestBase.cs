@@ -4052,7 +4052,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// Finiteness check written out because <c>double.IsFinite</c> does not exist on net471, which this
     /// test project also targets.
     /// </summary>
-    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+    protected static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
     /// <summary>
     /// Returns the next representable <see cref="double"/> toward positive infinity.
