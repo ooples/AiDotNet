@@ -1,6 +1,14 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors;
 using Xunit;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Parameters;
@@ -100,5 +108,69 @@ public class DeferredRestoreGateTests
         var wrong = new Vector<double>(5);
 
         Assert.Throws<System.ArgumentException>(() => layer.SetParameters(wrong));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task NetworkRestore_MaterializesExtraTrainableLayers()
+    {
+        await Task.Yield();
+        var source = new ExtraLayerRestoreNetwork();
+        source.MaterializeParameters();
+        var checkpoint = source.GetParameters();
+        Assert.NotEmpty(checkpoint);
+
+        var target = new ExtraLayerRestoreNetwork();
+        target.SetParameters(checkpoint);
+
+        Assert.Equal(checkpoint.Length, target.ParameterCount);
+        Assert.Equal(checkpoint.ToArray(), target.GetParameters().ToArray());
+    }
+
+    private sealed class ExtraLayerRestoreNetwork : NeuralNetworkBase<double>
+    {
+        private TransformerEncoderLayer<double>? _extraLayer;
+
+        public ExtraLayerRestoreNetwork()
+            : base(
+                new NeuralNetworkArchitecture<double>(
+                    InputType.OneDimensional,
+                    NeuralNetworkTaskType.Regression,
+                    inputSize: 16,
+                    outputSize: 16),
+                new MeanSquaredErrorLoss<double>())
+        {
+            _extraLayer = new TransformerEncoderLayer<double>(
+                numHeads: 2, feedForwardDim: 32, embeddingSize: 16);
+        }
+
+        protected override void InitializeLayers()
+        {
+        }
+
+        protected override IEnumerable<LayerBase<double>?> GetExtraTrainableLayers()
+        {
+            if (_extraLayer is not null)
+                yield return _extraLayer;
+        }
+
+        public override Tensor<double> Predict(Tensor<double> input)
+            => (_extraLayer ?? throw new System.InvalidOperationException()).Forward(input);
+
+        public override void Train(Tensor<double> input, Tensor<double> expectedOutput)
+        {
+        }
+
+        public override ModelMetadata<double> GetModelMetadata() => new();
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+        }
+
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+        }
+
+        protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
+            => new ExtraLayerRestoreNetwork();
     }
 }
