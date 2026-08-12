@@ -800,6 +800,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
         sb.AppendLine($"    void global::AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<{elem}>.RegisterGeneratedParameters(");
         sb.AppendLine($"        global::AiDotNet.Models.Parameters.ParameterComponentRegistry<{elem}> registry)");
         sb.AppendLine("    {");
+        sb.AppendLine("        RegisterGeneratedParameterComponents(registry);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Composes this type's generated parameter fields with inherited fields.</summary>");
+        sb.AppendLine("    protected override void RegisterGeneratedParameterComponents(");
+        sb.AppendLine($"        global::AiDotNet.Models.Parameters.ParameterComponentRegistry<{elem}> registry)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        base.RegisterGeneratedParameterComponents(registry);");
         string ownerId = classSymbol.ToDisplayString().Replace("\\", "\\\\").Replace("\"", "\\\"");
         foreach (var f in fields.OrderBy(item => item.Name, System.StringComparer.Ordinal))
         {
@@ -816,4 +824,5 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
         return sb.ToString();
     }
+
 }

@@ -180,12 +180,16 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     {
     }
 
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
     private void EnsureComponentsRegistered()
     {
         if (_componentsRegistered) return;
         _componentsRegistered = true;
-        if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
-            generated.RegisterGeneratedParameters(_parameterRegistry);
+        RegisterGeneratedParameterComponents(_parameterRegistry);
         RegisterComponents();
     }
 

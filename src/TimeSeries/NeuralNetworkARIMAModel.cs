@@ -721,6 +721,8 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
             SerializationHelper<T>.SerializeVector(writer, _y);
         else
             writer.Write(0);
+
+        SerializationHelper<T>.SerializeVector(writer, _residuals);
     }
 
     /// <summary>
@@ -754,6 +756,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         // Read neural network parameters
         var serializedModelLength = reader.ReadInt32();
         var serializedModel = reader.ReadBytes(serializedModelLength);
+        _neuralNetwork.Deserialize(serializedModel);
 
         // Read options
         _nnarimaOptions.AROrder = reader.ReadInt32();
@@ -764,10 +767,12 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         try
         {
             _y = SerializationHelper<T>.DeserializeVector(reader);
+            _residuals = SerializationHelper<T>.DeserializeVector(reader);
         }
         catch (EndOfStreamException)
         {
             // Older models don't include training series
+            _residuals = Vector<T>.Empty();
         }
     }
 

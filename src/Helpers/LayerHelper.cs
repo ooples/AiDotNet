@@ -31238,8 +31238,8 @@ public static class LayerHelper<T>
         int latentW = inputWidth / downsampleFactor;
 
         // Input convolution: [inputChannels] -> [baseChannels]
-        yield return new ConvolutionalLayer<T>(
-            baseChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            inputChannels, baseChannels, 3, 1, 1, identity);
 
         // Encoder blocks with progressive downsampling
         int inC = baseChannels;
@@ -31259,8 +31259,8 @@ public static class LayerHelper<T>
             // Downsample (except last level)
             if (level < mults.Length - 1)
             {
-                yield return new ConvolutionalLayer<T>(
-                    outC, 3, 2, 1, identity);
+                yield return ConvolutionalLayer<T>.WithInputDepth(
+                    outC, outC, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -31395,8 +31395,8 @@ public static class LayerHelper<T>
         int latentW = inputWidth / downsampleFactor;
 
         // Input convolution: [inputChannels] -> [baseChannels]
-        yield return new ConvolutionalLayer<T>(
-            baseChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            inputChannels, baseChannels, 3, 1, 1, identity);
 
         // Encoder spatial blocks with downsampling
         int inC = baseChannels;
@@ -31413,8 +31413,8 @@ public static class LayerHelper<T>
             // Downsample (except last level)
             if (level < mults.Length - 1)
             {
-                yield return new ConvolutionalLayer<T>(
-                    outC, 3, 2, 1, identity);
+                yield return ConvolutionalLayer<T>.WithInputDepth(
+                    outC, outC, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -31422,12 +31422,12 @@ public static class LayerHelper<T>
 
         // Latent projection layers
         int lastChannels = baseChannels * mults[^1];
-        yield return new ConvolutionalLayer<T>(
-            latentChannels, 3, 1, 1, identity);
-        yield return new ConvolutionalLayer<T>(
-            latentChannels, 3, 1, 1, identity);
-        yield return new ConvolutionalLayer<T>(
-            latentChannels, 1, 1, 0, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            lastChannels, latentChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            lastChannels, latentChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            latentChannels, latentChannels, 1, 1, 0, identity);
     }
 
     /// <summary>
@@ -31460,8 +31460,8 @@ public static class LayerHelper<T>
         int lastChannels = baseChannels * mults[^1];
 
         // Post-quant convolution: [latentChannels] -> [lastChannels]
-        yield return new ConvolutionalLayer<T>(
-            lastChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            latentChannels, lastChannels, 3, 1, 1, identity);
 
         // Decoder spatial blocks (mirror of encoder)
         int inC = lastChannels;
@@ -31476,16 +31476,16 @@ public static class LayerHelper<T>
 
             if (level > 0)
             {
-                yield return new DeconvolutionalLayer<T>(
-                    outC, 4, 2, 1, identity);
+                yield return DeconvolutionalLayer<T>.WithInputDepth(
+                    outC, outC, 4, 2, 1, identity);
                 h *= 2;
                 w *= 2;
             }
         }
 
         // Output convolution: [baseChannels] -> [inputChannels] with Tanh
-        yield return new ConvolutionalLayer<T>(
-            inputChannels, 3, 1, 1,
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            baseChannels, inputChannels, 3, 1, 1,
             (IActivationFunction<T>)new TanhActivation<T>());
     }
 

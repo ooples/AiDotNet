@@ -5,6 +5,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Parameters;
 using AiDotNet.Regression;
+using AiDotNet.TimeSeries;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Parameters;
@@ -169,7 +170,7 @@ public class ParameterManifestTests
     }
 
     [Fact]
-    public async Task Restore_EmptyVariableTail_DoesNotMaterializeAnEmptyLazyPrefix()
+    public async Task Restore_EmptyVariableTail_RejectsAMissingShapeResolvedPrefix()
     {
         await Task.Yield();
         var lazyNetwork = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(
@@ -185,10 +186,11 @@ public class ParameterManifestTests
         registry.Register("tail", new VariableLengthParameterSource<double>(
             () => 0, () => new Vector<double>(0), values => Assert.Empty(values)));
 
-        registry.SetParameters(new Vector<double>(0));
+        var error = Assert.Throws<ArgumentException>(() =>
+            registry.SetParameters(new Vector<double>(0)));
 
-        Assert.Empty(lazyNetwork.GetParameters());
-        Assert.Equal(0, registry.ParameterCount);
+        Assert.Contains("Expected at least 8 parameters", error.Message, StringComparison.Ordinal);
+        Assert.Equal(8, lazyNetwork.GetParameters().Length);
     }
 
     [Fact]
@@ -343,6 +345,22 @@ public class ParameterManifestTests
         Assert.Equal(new[] { 1d, 2d, 3d }, parameters.ToArray());
         Assert.Equal(2, model.ParameterLayout.Slots.Count);
         Assert.All(model.ParameterLayout.Slots, slot => Assert.NotNull(slot.ParameterCount));
+    }
+
+    [Fact]
+    public async Task GeneratedRegistration_ComposesInheritedAndDerivedModelFields()
+    {
+        await Task.Yield();
+        var model = new VARMAModel<double>();
+
+        var stableIds = model.ParameterLayout.Slots.Select(slot => slot.StableId).ToArray();
+
+        Assert.Contains(stableIds, id => id.Contains(
+            "VectorAutoRegressionModel<T>::_coefficients", StringComparison.Ordinal));
+        Assert.Contains(stableIds, id => id.Contains(
+            "VARMAModel<T>::_maCoefficients", StringComparison.Ordinal));
+        Assert.Equal(6, stableIds.Length);
+        Assert.Equal(model.ParameterCount, model.GetParameters().Length);
     }
 
     [Fact]

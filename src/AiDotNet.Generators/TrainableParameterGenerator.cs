@@ -565,7 +565,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
-            sb.AppendLine("        if (IsShapeResolved) EnsureInitialized();");
+            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitialized();");
             if (hasOptional)
             {
                 sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");

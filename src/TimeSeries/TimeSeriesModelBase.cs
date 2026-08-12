@@ -1177,6 +1177,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         // Serialize model parameters if trained
         if (IsTrained)
         {
+            // Nested network serializers materialize lazy weights. Do that before capturing this
+            // model's manifest so SerializeCore cannot grow the layout after the snapshot is saved.
+            if (Components.Count > 0)
+                _parameterRegistry.MaterializeCheckpointSources();
+
             // The manifest-backed registry is the source of truth. ModelParameters remains the
             // fallback for legacy models that have not migrated a concrete storage surface yet.
             var parameterSnapshot = Components.Count > 0
@@ -1301,7 +1306,8 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             {
                 var readiness = _parameterRegistry.ParameterLayout.Readiness;
                 if (readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred ||
-                    readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized)
+                    readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized ||
+                    _parameterRegistry.ParameterCount != parameterSnapshot.Length)
                 {
                     restoreParametersAfterCore = true;
                 }
@@ -1314,8 +1320,8 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             // Let derived classes deserialize their specific data
             DeserializeCore(reader);
 
-            // A shape-deferred source cannot accept its vector until model-specific deserialization
-            // has materialized it. This is the only case where the manifest must run second.
+            // Deferred sources and layouts whose construction-time size differs from the saved
+            // manifest cannot accept the vector until model-specific state has materialized them.
             if (restoreParametersAfterCore && parameterSnapshot is not null)
                 _parameterRegistry.SetParameters(parameterSnapshot);
         }
@@ -1492,6 +1498,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     {
     }
 
+    /// <summary>Generated override chain for fields declared across the model hierarchy.</summary>
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
     /// to refresh anything DERIVED from them.
@@ -1506,8 +1518,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         {
             if (!_componentsRegistered)
             {
-                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }

@@ -77,7 +77,24 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     {
         EnsureLayersInitialized();
         TriggerLazyShapeResolution();
-        foreach (var layer in EnumerateAllLayers()) RegisterParameterComponent(layer);
+        RegisterParameterComponent("encoder/00000000/input", _inputConv);
+        RegisterLayerCollection("encoder/00000001/spatial", _encoderLayers);
+        RegisterParameterComponent("encoder/00000002/mean", _meanConv);
+        RegisterParameterComponent("encoder/00000003/log_variance", _logVarConv);
+        RegisterParameterComponent("encoder/00000004/quant", _quantConv);
+        RegisterParameterComponent("decoder/00000000/post_quant", _postQuantConv);
+        RegisterLayerCollection("decoder/00000001/spatial", _decoderLayers);
+        RegisterParameterComponent("decoder/00000002/output", _outputConv);
+    }
+
+    private void RegisterLayerCollection(string prefix, IReadOnlyList<ILayer<T>> layers)
+    {
+        for (int i = 0; i < layers.Count; i++)
+        {
+            RegisterParameterComponent(
+                $"{prefix}/{AiDotNet.Models.Parameters.ParameterStableId.IndexSegment(i)}",
+                layers[i]);
+        }
     }
 
     /// <summary>
@@ -113,51 +130,61 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     /// <summary>
     /// Encoder layers.
     /// </summary>
+    [Scratch]
     private List<ILayer<T>> _encoderLayers;
 
     /// <summary>
     /// Decoder layers.
     /// </summary>
+    [Scratch]
     private List<ILayer<T>> _decoderLayers;
 
     /// <summary>
     /// Mean projection layer for latent distribution.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _meanConv;
 
     /// <summary>
     /// Log variance projection layer for latent distribution.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _logVarConv;
 
     /// <summary>
     /// Input convolution to initial embedding.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _inputConv;
 
     /// <summary>
     /// Quant convolution from latent to decoder.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _quantConv;
 
     /// <summary>
     /// Post-quant convolution in decoder.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _postQuantConv;
 
     /// <summary>
     /// Output convolution to RGB.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _outputConv;
 
     /// <summary>
     /// Cached mean from encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedMean;
 
     /// <summary>
     /// Cached log variance from encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedLogVar;
 
     /// <summary>
@@ -648,9 +675,8 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         if (_preserveMaterializedParameters)
         {
             TriggerLazyShapeResolution();
-            var parameters = GetParameters();
             clone.TriggerLazyShapeResolution();
-            clone.SetParameters(parameters);
+            CopyMaterializedParametersTo(clone);
         }
         else
         {

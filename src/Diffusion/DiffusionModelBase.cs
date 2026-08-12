@@ -407,6 +407,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     {
     }
 
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>Runs <see cref="RegisterComponents"/> once, before the parameter surface is read.</summary>
     private void EnsureComponentsRegistered()
     {
@@ -414,8 +419,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Set BEFORE invoking: RegisterParameterComponent invalidates caches, which can re-enter
         // through a parameter query, and this must not recurse.
         _componentsRegistered = true;
-        if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
-            generated.RegisterGeneratedParameters(_parameterRegistry);
+        RegisterGeneratedParameterComponents(_parameterRegistry);
         RegisterComponents();
     }
 

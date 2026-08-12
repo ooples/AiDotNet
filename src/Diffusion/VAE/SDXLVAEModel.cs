@@ -127,7 +127,8 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
         int channels = _baseChannels;
 
         // Input convolution
-        _inputConv = new ConvolutionalLayer<T>(
+        _inputConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: _inputChannels,
             outputDepth: channels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -148,7 +149,8 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
             // Downsample (except last level)
             if (level < _channelMultipliers.Length - 1)
             {
-                _encoderLayers.Add(new ConvolutionalLayer<T>(
+                _encoderLayers.Add(ConvolutionalLayer<T>.WithInputDepth(
+                    inputDepth: channels,
                     outputDepth: channels,
                     kernelSize: 3, stride: 2, padding: 1,
                     activationFunction: new IdentityActivation<T>()));
@@ -157,18 +159,21 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
 
         // Mean and log-var projections
         int lastChannels = _baseChannels * _channelMultipliers[^1];
-        _meanConv = new ConvolutionalLayer<T>(
+        _meanConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: lastChannels,
             outputDepth: _latentChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        _logVarConv = new ConvolutionalLayer<T>(
+        _logVarConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: lastChannels,
             outputDepth: _latentChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
 
         // Decoder: improved SDXL decoder with higher fidelity
-        _postQuantConv = new ConvolutionalLayer<T>(
+        _postQuantConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: _latentChannels,
             outputDepth: lastChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -187,14 +192,16 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
 
             if (level > 0)
             {
-                _decoderLayers.Add(new DeconvolutionalLayer<T>(
+                _decoderLayers.Add(DeconvolutionalLayer<T>.WithInputDepth(
+                    inputDepth: channels,
                     outputDepth: channels,
                     kernelSize: 4, stride: 2, padding: 1,
                     activationFunction: new IdentityActivation<T>()));
             }
         }
 
-        _outputConv = new ConvolutionalLayer<T>(
+        _outputConv = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: channels,
             outputDepth: _inputChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new TanhActivation<T>());

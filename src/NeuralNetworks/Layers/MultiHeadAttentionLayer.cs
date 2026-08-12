@@ -231,35 +231,35 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Tensor of weights for transforming input into query representations.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
     private Tensor<T> _queryWeights;
 
     /// <summary>
     /// Tensor of weights for transforming input into key representations.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
     private Tensor<T> _keyWeights;
 
     /// <summary>
     /// Tensor of weights for transforming input into value representations.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
     private Tensor<T> _valueWeights;
 
     /// <summary>
     /// Tensor of weights for the final output projection.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
     private Tensor<T> _outputWeights;
 
     /// <summary>
     /// Tensor of biases added to the final output.
     /// Shape: [embeddingDimension]
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_embeddingDimension")]
     private Tensor<T> _outputBias;
 
     /// <summary>

@@ -525,6 +525,10 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             PackParameters,
             UnpackParameters));
 
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components.
     /// </summary>
@@ -538,8 +542,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         {
             if (!_componentsRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }

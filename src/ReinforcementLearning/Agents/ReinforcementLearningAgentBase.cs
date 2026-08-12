@@ -348,6 +348,11 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     {
     }
 
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
     /// to refresh anything DERIVED from them.
@@ -367,8 +372,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         {
             if (!_componentsRegistered)
             {
-                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }

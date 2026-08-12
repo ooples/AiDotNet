@@ -193,6 +193,10 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     {
     }
 
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components.
     /// </summary>
@@ -206,8 +210,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         {
             if (!_componentsRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }

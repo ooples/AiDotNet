@@ -72,7 +72,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "InputDepth, OutputDepth, KernelSize, KernelSize")]
 
     private Tensor<T> _kernels;
 
@@ -95,7 +95,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// or brightness levels.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth")]
 
     private Tensor<T> _biases;
 
@@ -380,6 +380,32 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
         _kernels = new Tensor<T>([0, 0, 0, 0]);
         _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Creates an allocation-free transposed convolution whose channel dimensions are known at
+    /// construction time.
+    /// </summary>
+    /// <remarks>
+    /// Spatial dimensions remain lazy because they do not affect the parameter layout. This is the
+    /// transposed-convolution counterpart to <see cref="ConvolutionalLayer{T}.WithInputDepth"/> and
+    /// lets metadata/checkpoint code inspect the structural manifest without allocating kernels.
+    /// </remarks>
+    public static DeconvolutionalLayer<T> WithInputDepth(
+        int inputDepth,
+        int outputDepth,
+        int kernelSize,
+        int stride = 1,
+        int padding = 0,
+        IActivationFunction<T>? activationFunction = null)
+    {
+        if (inputDepth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputDepth), "inputDepth must be positive.");
+
+        var layer = new DeconvolutionalLayer<T>(
+            outputDepth, kernelSize, stride, padding, activationFunction);
+        layer.InputDepth = inputDepth;
+        return layer;
     }
 
     /// <summary>

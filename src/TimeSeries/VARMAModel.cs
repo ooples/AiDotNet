@@ -104,6 +104,32 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
         _residuals = Matrix<T>.Empty();
     }
 
+    /// <inheritdoc />
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new VARMAModel<T>(new VARMAModelOptions<T>
+        {
+            Lag = _varmaOptions.Lag,
+            OutputDimension = _varmaOptions.OutputDimension,
+            DecompositionType = _varmaOptions.DecompositionType,
+            MaLag = _varmaOptions.MaLag,
+            LagOrder = _varmaOptions.LagOrder,
+            IncludeTrend = _varmaOptions.IncludeTrend,
+            SeasonalPeriod = _varmaOptions.SeasonalPeriod,
+            AutocorrelationCorrection = _varmaOptions.AutocorrelationCorrection,
+            ModelType = _varmaOptions.ModelType,
+            LossFunction = _varmaOptions.LossFunction,
+            MaxPredictionAbsValue = _varmaOptions.MaxPredictionAbsValue,
+            MaxTrainingTimeSeconds = _varmaOptions.MaxTrainingTimeSeconds,
+            UseEarlyStopping = _varmaOptions.UseEarlyStopping,
+            EarlyStoppingPatience = _varmaOptions.EarlyStoppingPatience,
+            EarlyStoppingMinDelta = _varmaOptions.EarlyStoppingMinDelta,
+            DecompositionMethod = _varmaOptions.DecompositionMethod,
+            UseIntercept = _varmaOptions.UseIntercept,
+            Seed = _varmaOptions.Seed
+        });
+    }
+
     /// <summary>
     /// Generates forecasts using the trained VARMA model.
     /// </summary>
@@ -404,7 +430,27 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// </remarks>
     private Vector<T> SolveOLS(Matrix<T> x, Vector<T> y)
     {
-        return MatrixSolutionHelper.SolveLinearSystem(x.Transpose().Multiply(x), x.Transpose().Multiply(y), _varmaOptions.DecompositionType);
+        Matrix<T> normal = x.Transpose().Multiply(x);
+        Vector<T> rhs = x.Transpose().Multiply(y);
+
+        // Residual-lag columns are frequently collinear (especially in the univariate family-test
+        // data). Solving the raw normal equations with LU then yields NaN/Infinity. A scale-aware
+        // ridge makes the system positive and bounded without changing the VARMA model class.
+        double diagonalScale = 0.0;
+        for (int i = 0; i < normal.Rows; i++)
+            diagonalScale = Math.Max(diagonalScale, Math.Abs(NumOps.ToDouble(normal[i, i])));
+        T ridge = NumOps.FromDouble(Math.Max(1.0, diagonalScale) * 1e-8);
+        for (int i = 0; i < normal.Rows; i++)
+            normal[i, i] = NumOps.Add(normal[i, i], ridge);
+
+        Vector<T> coefficients = MatrixSolutionHelper.SolveLinearSystem(
+            normal, rhs, MatrixDecompositionType.Qr);
+        for (int i = 0; i < coefficients.Length; i++)
+        {
+            if (!NumericalStabilityHelper.IsFinite(coefficients[i]))
+                coefficients[i] = NumOps.Zero;
+        }
+        return coefficients;
     }
 
     /// <summary>
@@ -450,6 +496,12 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
                 writer.Write(Convert.ToDouble(val));
             }
         }
+
+        writer.Write(_residuals.Rows);
+        writer.Write(_residuals.Columns);
+        for (int i = 0; i < _residuals.Rows; i++)
+            for (int j = 0; j < _residuals.Columns; j++)
+                writer.Write(Convert.ToDouble(_residuals[i, j]));
     }
 
     /// <summary>
@@ -496,6 +548,24 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
                 rowData[j] = NumOps.FromDouble(reader.ReadDouble());
             }
             _maCoefficients.SetRow(i, new Vector<T>(rowData));
+        }
+
+
+        // The MA correction reads recent innovations. They are learned state, not a transient
+        // training cache, so persist them alongside the coefficient matrix. Older payloads end
+        // after the coefficient matrix; retain compatibility with those checkpoints.
+        try
+        {
+            int residualRows = reader.ReadInt32();
+            int residualColumns = reader.ReadInt32();
+            _residuals = new Matrix<T>(residualRows, residualColumns);
+            for (int i = 0; i < residualRows; i++)
+                for (int j = 0; j < residualColumns; j++)
+                    _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _residuals = Matrix<T>.Empty();
         }
     }
 }

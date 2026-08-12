@@ -57,14 +57,18 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     {
     }
 
+    /// <summary>Generated override chain for fields declared across the model hierarchy.</summary>
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
     private ParameterComponentRegistry<T> AdditionalParameterRegistry
     {
         get
         {
             if (!_additionalParametersRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_additionalParameterRegistry);
+                RegisterGeneratedParameterComponents(_additionalParameterRegistry);
                 RegisterComponents();
                 _additionalParametersRegistered = true;
             }

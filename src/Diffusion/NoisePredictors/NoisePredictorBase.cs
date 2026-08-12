@@ -1286,9 +1286,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         int stride = 1,
         int padding = 0,
         IActivationFunction<T>? activation = null)
-        => new ConvolutionalLayer<T>(
-            outputDepth,
-            kernelSize, stride, padding, activation, InitializationStrategies<T>.Lazy);
+        => ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth, outputDepth, kernelSize, stride, padding, activation,
+            InitializationStrategies<T>.Lazy);
 
     /// <summary>
     /// Creates a <see cref="MultiHeadAttentionLayer{T}"/> with lazy Q/K/V/O weight

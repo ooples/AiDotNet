@@ -355,6 +355,23 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
     }
 
+    /// <summary>
+    /// Materializes nested neural-network sources before a checkpoint manifest is captured.
+    /// </summary>
+    /// <remarks>
+    /// Neural-network serialization materializes lazy weights. A containing model must do the
+    /// same before capturing its own flat vector; otherwise the nested serializer can grow the
+    /// layout after the outer snapshot has already been written.
+    /// </remarks>
+    public void MaterializeCheckpointSources()
+    {
+        foreach (var entry in OrderedEntries())
+        {
+            if (TryGetNetwork(entry.Source, out var network))
+                network.MaterializeParameters();
+        }
+    }
+
     private CapturedLayout CaptureLayout()
     {
         var ordered = OrderedEntries();

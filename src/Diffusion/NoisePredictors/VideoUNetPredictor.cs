@@ -1249,7 +1249,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // (_inputHeight != _inputWidth) would produce incorrect attention
         // sequence lengths — documented on the constructor's inputHeight param.
         int inputRes = ResolutionAtLevel(level + 1);
-        return new DeconvolutionalLayer<T>(
+        return DeconvolutionalLayer<T>.WithInputDepth(
+            inputDepth: channels,
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
@@ -1379,28 +1380,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // (correct) weights, so the source stays self-consistent.
         TriggerLazyShapeResolution();
 
-        // Paired per-layer copy. Crucially we do NOT run a resolving forward on the
-        // CLONE. Every layer's SetParameters self-resolves its shape without a forward:
-        // ConvolutionalLayer / DeconvolutionalLayer infer inputDepth from the incoming
-        // parameter-vector length, MultiHeadAttentionLayer allocates from its
-        // construction-known embedding dim, and DenseLayer is already shape-resolved at
-        // construction (LazyDense calls ResolveShapesOnly) — now that the time-embed MLP
-        // input width matches the real sinusoidal embedding, every construction shape
-        // equals the forward shape, so no layer silently re-resolves.
-        //
-        // A resolving forward on the clone would lazily initialise the clone's weights
-        // to fresh random values and build the fused-CPU weight pack from THOSE; the
-        // subsequent in-place SetParameters cannot invalidate that CPU pack
-        // (Engine.InvalidatePersistentTensor is a no-op without a GPU), so the clone's
-        // forward would read a stale pack built from random weights and diverge from the
-        // source by a small per-element amount (the Clone_ShouldProduceIdenticalOutput
-        // failure). Copying layer-by-layer from the already-resolved source skips the
-        // random-init/pack step entirely, so the clone's first real forward packs from
-        // the correct copied weights.
-        //
-        // NOTE: deliberately NOT routed through the global COW helper (TryShareParametersFrom):
-        // its O(1)-until-write share is correct in principle, but this predictor's fused-CPU
-        // weight pack requires the explicit paired copy above to avoid the stale-pack divergence.
+        // Materialize the clone with the same execution path, then copy values into its existing
+        // tensors. This preserves layer-owned caches and avoids relying on SetParameters to infer
+        // a lazy tensor's shape from a flat length (which is ambiguous for grouped/deconvolutional
+        // kernels and caused output-divergent clones).
+        clone.TriggerLazyShapeResolution();
         using (var srcEnum = EnumerateLayersInParameterOrder().GetEnumerator())
         using (var cloneEnum = clone.EnumerateLayersInParameterOrder().GetEnumerator())
         {

@@ -189,14 +189,14 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The learnable convolution kernels with shape [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize].
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize")]
 
     private Tensor<T> _kernels;
 
     /// <summary>
     /// The learnable bias values with shape [OutputChannels], one per output channel.
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputChannels")]
 
     private Tensor<T> _biases;
 
@@ -331,6 +331,31 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
 
         _kernels = new Tensor<T>([0, 0, 0, 0, 0]);
         _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Creates an allocation-free 3-D convolution whose channel dimensions are known at
+    /// construction time.
+    /// </summary>
+    /// <remarks>
+    /// Depth, height and width remain lazy because they do not affect kernel or bias size. The
+    /// pinned channel axis makes the structural manifest complete without a synthetic forward.
+    /// </remarks>
+    public static Conv3DLayer<T> WithInputChannels(
+        int inputChannels,
+        int outputChannels,
+        int kernelSize,
+        int stride = 1,
+        int padding = 0,
+        IActivationFunction<T>? activationFunction = null)
+    {
+        if (inputChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputChannels), "inputChannels must be positive.");
+
+        var layer = new Conv3DLayer<T>(
+            outputChannels, kernelSize, stride, padding, activationFunction);
+        layer.InputChannels = inputChannels;
+        return layer;
     }
 
     /// <summary>

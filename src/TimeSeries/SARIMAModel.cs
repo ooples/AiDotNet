@@ -607,6 +607,8 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Serialize training series for Predict(Matrix) undifferencing
         SerializationHelper<T>.SerializeVector(writer, _trainingSeries);
+        SerializationHelper<T>.SerializeVector(writer, _lastTrainDiffValues);
+        SerializationHelper<T>.SerializeVector(writer, _lastTrainResiduals);
     }
 
     /// <summary>
@@ -644,10 +646,14 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
         try
         {
             _trainingSeries = SerializationHelper<T>.DeserializeVector(reader);
+            _lastTrainDiffValues = SerializationHelper<T>.DeserializeVector(reader);
+            _lastTrainResiduals = SerializationHelper<T>.DeserializeVector(reader);
         }
         catch (EndOfStreamException)
         {
             _trainingSeries = Vector<T>.Empty();
+            _lastTrainDiffValues = Vector<T>.Empty();
+            _lastTrainResiduals = Vector<T>.Empty();
         }
     }
 

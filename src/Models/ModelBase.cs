@@ -99,6 +99,11 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     {
     }
 
+    /// <summary>Generated override chain for fields declared across the model hierarchy.</summary>
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
     /// to refresh anything DERIVED from them.
@@ -113,8 +118,7 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
         {
             if (!_componentsRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
 
                 // Generated sources hold accessors rather than snapshots, so registration can be

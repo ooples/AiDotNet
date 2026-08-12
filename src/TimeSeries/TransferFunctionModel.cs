@@ -513,6 +513,8 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
             SerializationHelper<T>.SerializeVector(writer, _y);
         else
             writer.Write(0);
+
+        SerializationHelper<T>.SerializeVector(writer, _residuals);
     }
 
     /// <summary>
@@ -558,10 +560,12 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
         try
         {
             _y = SerializationHelper<T>.DeserializeVector(reader);
+            _residuals = SerializationHelper<T>.DeserializeVector(reader);
         }
         catch (EndOfStreamException)
         {
             // Older models don't include training series
+            _residuals = Vector<T>.Empty();
         }
     }
 

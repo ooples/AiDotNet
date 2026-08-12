@@ -657,6 +657,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
     }
 
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>The registered components, registering them on first use.</summary>
     protected IReadOnlyList<IParameterSource<T>> ParameterComponents
     {
@@ -664,8 +669,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (!_componentsRegistered)
             {
-                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }
@@ -2313,14 +2317,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // models. ParameterLayout is the one ordered ownership record shared by all parameter
             // consumers; unresolved slots remain explicitly unresolved rather than becoming zero.
             var layout = ParameterLayout;
-            if (layout.ParameterCount.HasValue) return layout.ParameterCount.Value;
+            if (layout.Readiness is AiDotNet.Models.Parameters.ParameterReadiness.Materialized
+                or AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree)
+            {
+                return layout.ParameterCount ?? 0;
+            }
 
-            // A deferred FUTURE layout does not make the CURRENT vector unknowable. Dynamic and
-            // conditional networks legitimately keep branches lazy after a valid forward; forcing a
-            // guessed shape would corrupt them, while throwing here breaks metadata and the streaming
-            // heuristic before training can run. ParameterVectorLength walks the same concrete state
-            // GetParameters emits, so count/vector equality remains exact. Restore still consumes the
-            // deferred manifest and refuses ambiguous slice boundaries.
+            // A deferred or allocation-free FUTURE layout does not change the CURRENT vector. A
+            // shape-resolved lazy slot has a useful structural count in the manifest, but its values
+            // do not exist yet and GetParameters therefore cannot emit them. Returning that future
+            // count here made fresh models contradict their own vector surface. Dynamic and
+            // conditional networks likewise keep branches deferred after a valid forward.
+            // ParameterVectorLength walks the same concrete state GetParameters emits, so
+            // count/vector equality remains exact. The manifest still retains the structural count
+            // and readiness for checkpoint planning and on-demand restore.
             return ParameterVectorLength;
         }
     }

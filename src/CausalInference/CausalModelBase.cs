@@ -105,6 +105,10 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParame
     {
     }
 
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components.
     /// </summary>
@@ -118,8 +122,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParame
         {
             if (!_componentsRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }
