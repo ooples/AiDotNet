@@ -298,11 +298,15 @@
          left contradicting the versions below.
 
          Bumped 0.120.6 -> 0.121.0: brings AiDotNet.Tensors #925, which prevents full-span
-         autodiff views from being returned to the tensor pool while the graph still owns them. -->
+         autodiff views from being returned to the tensor pool while the graph still owns them.
+
+         Bumped 0.122.0 -> 0.123.0: brings AiDotNet.Tensors #935, which hardens fan-out
+         accumulator ownership, nested backward scopes, differentiable tensor views, compiled-plan
+         topology identity, and composite gradients used by the generated model-shape shards. -->
 
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.122.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.122.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.122.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.123.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.122.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />

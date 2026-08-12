@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tests.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -412,19 +413,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual int MoreDataLongIterations => 200;
 
-    /// <summary>
-    /// Reference-identity comparer, spelled out rather than using the BCL's
-    /// ReferenceEqualityComparer: that name also resolves to an internal AiDotNet type in this
-    /// compilation, which the Release build picks and then rejects as inaccessible (CS0122), and
-    /// the BCL one is .NET 5+ only so it would not survive the net471 target either.
-    /// </summary>
-    private sealed class IdentityComparer : IEqualityComparer<object>
-    {
-        internal static readonly IdentityComparer Instance = new();
-        public new bool Equals(object? a, object? b) => ReferenceEquals(a, b);
-        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
-    }
-
     /// <inheritdoc />
     public virtual async Task InitializeAsync()
     {
@@ -802,7 +790,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (span <= 0) return domain.MinInclusive;
 
         int offset;
-        if (double.IsFinite(value) && value >= 0.0 && value <= 1.0)
+        if (IsFinite(value) && value >= 0.0 && value <= 1.0)
         {
             // Use span - 1 so both endpoints remain legal and common probes such as 0.1/0.9
             // cannot alias merely because the vocabulary divides a fixed decimal scale (the old
@@ -1455,7 +1443,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// which is exponential on a deep graph and reported the same offender repeatedly.
     /// </remarks>
     private static void CheckReachable(ILayer<T> layer, List<string> offenders)
-        => CheckReachable(layer, offenders, new HashSet<object>(IdentityComparer.Instance));
+        => CheckReachable(layer, offenders, new HashSet<object>(ReferenceIdentityComparer<object>.Instance));
 
     private static void CheckReachable(ILayer<T> layer, List<string> offenders, HashSet<object> visited)
     {
@@ -1468,7 +1456,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // to an internal AiDotNet type in this compilation, which the Release build picks and then
         // rejects as inaccessible (CS0122), and the BCL one is .NET 5+ only so it would not survive
         // the net471 target either. Reference identity is all this needs; spell it out.
-        var exposedSet = new HashSet<object>(exposed, IdentityComparer.Instance);
+        var exposedSet = new HashSet<object>(exposed, ReferenceIdentityComparer<object>.Instance);
 
         int held = 0, missing = 0;
         foreach (var field in layer.GetType().GetFields(
@@ -2990,7 +2978,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             System.Math.Max(System.Math.Abs(objectiveBeforeAnalytical), System.Math.Abs(objectiveAfterAnalytical)));
         double objectiveDrift = System.Math.Abs(objectiveAfterAnalytical - objectiveBeforeAnalytical) / objectiveScale;
         double deterministicTolerance = typeof(T) == typeof(double) ? 1e-9 : 1e-5;
-        if (!double.IsFinite(objectiveDrift) || objectiveDrift > deterministicTolerance)
+        if (!IsFinite(objectiveDrift) || objectiveDrift > deterministicTolerance)
         {
             ReportGradientFinding(
                 GradientReportFile,
@@ -3054,7 +3042,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             System.Math.Max(1.0, System.Math.Max(
                 System.Math.Abs(objectiveAfterParameterRoundTrip),
                 System.Math.Abs(objectiveAfterAnalytical)));
-        if (!double.IsFinite(roundTripDrift) || roundTripDrift > deterministicTolerance)
+        if (!IsFinite(roundTripDrift) || roundTripDrift > deterministicTolerance)
         {
             ReportGradientFinding(
                 GradientReportFile,
@@ -3144,7 +3132,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 var (lp4, lm4) = GradientCheckLossPairAt(nn, loss, input, target, theta, i, orig, eps * 4.0);
                 double d2 = (lp2 - lm2) / (4.0 * eps);
                 double d4 = (lp4 - lm4) / (8.0 * eps);
-                if (double.IsFinite(d2) && double.IsFinite(d4))
+                if (IsFinite(d2) && IsFinite(d4))
                 {
                     if (System.Math.Abs(numeric - d2) <= System.Math.Abs(d2 - d4))
                     {
@@ -3212,9 +3200,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // generated float scaffold.
             double objectiveForUlp = objectiveAfterParameterRoundTrip;
             double lossUlp = isDouble
-                ? System.Math.Abs(System.Math.BitIncrement(objectiveForUlp) - objectiveForUlp)
+                ? System.Math.Abs(BitIncrement(objectiveForUlp) - objectiveForUlp)
                 : System.Math.Abs((double)System.MathF.BitIncrement((float)objectiveForUlp) - (float)objectiveForUlp);
-            if (!double.IsFinite(lossUlp) || lossUlp <= 0.0) lossUlp = double.Epsilon;
+            if (!IsFinite(lossUlp) || lossUlp <= 0.0) lossUlp = double.Epsilon;
 
             // Start as close to zero as the scalar loss precision permits. For FP32, a direction
             // normally has enough aggregate signal to use a step 64x smaller than an individual
@@ -3245,7 +3233,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             {
                 double narrow = directionDerivatives[stepIndex];
                 double wide = directionDerivatives[stepIndex + 1];
-                if (!double.IsFinite(narrow) || !double.IsFinite(wide)) continue;
+                if (!IsFinite(narrow) || !IsFinite(wide)) continue;
                 if (directionSpans[stepIndex] >= 16.0 * lossUlp &&
                     directionSpans[stepIndex + 1] >= 16.0 * lossUlp)
                 {
@@ -3285,7 +3273,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 // twelve coordinate probes passed and the localized discrepancies were < 8e-5.
                 double directionAbsoluteError = System.Math.Abs(analyticDirection - numericDirection);
                 double directionAbsoluteTolerance = absFloor * System.Math.Sqrt(direction.Count);
-                directionAgrees = double.IsFinite(numericDirection) &&
+                directionAgrees = IsFinite(numericDirection) &&
                     (directionRelError <= directionTolerance ||
                      directionAbsoluteError <= directionAbsoluteTolerance);
                 if (!directionAgrees)
@@ -4065,6 +4053,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// test project also targets.
     /// </summary>
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    /// <summary>
+    /// Returns the next representable <see cref="double"/> toward positive infinity.
+    /// This is the net471-compatible equivalent of <c>Math.BitIncrement</c>.
+    /// </summary>
+    private static double BitIncrement(double value)
+    {
+        if (double.IsNaN(value) || value == double.PositiveInfinity) return value;
+        if (value == 0.0) return double.Epsilon;
+
+        long bits = BitConverter.DoubleToInt64Bits(value);
+        return BitConverter.Int64BitsToDouble(value > 0.0 ? bits + 1 : bits - 1);
+    }
 
     /// <summary>
     /// Parameter ceiling for the CHUNKED measurement path, which handles models too large for a flat
