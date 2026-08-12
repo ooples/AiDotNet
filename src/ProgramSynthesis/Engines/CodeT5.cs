@@ -193,9 +193,4 @@ public class CodeT5<T> : CodeModelBase<T>
             includeUseDataFlow: false,
             includeEncoderDecoderLayerCounts: true);
     }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CodeT5<T>(CodeArchitecture, LossFunction, optimizer: null, tokenizer: Tokenizer);
-    }
 }

@@ -219,9 +219,4 @@ public class CodeBERT<T> : CodeModelBase<T>
             includeUseDataFlow: false,
             includeEncoderDecoderLayerCounts: false);
     }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CodeBERT<T>(CodeArchitecture, LossFunction, optimizer: null, tokenizer: Tokenizer);
-    }
 }

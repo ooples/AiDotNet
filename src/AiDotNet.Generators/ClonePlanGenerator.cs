@@ -495,7 +495,64 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 }
             }
         }
-        return FindUniqueByType(type, parameter);
+
+        return FindByNameSuffix(type, parameter) ?? FindUniqueByType(type, parameter);
+    }
+
+    /// <summary>
+    /// Finds the member whose name ends with the parameter's, when the exact name did not match.
+    /// </summary>
+    /// <param name="type">The type being planned.</param>
+    /// <param name="parameter">The constructor parameter to source.</param>
+    /// <returns>That member's name, or <see langword="null"/> when there is not exactly one.</returns>
+    /// <remarks>
+    /// <para>
+    /// A qualifying prefix is the common way this library disambiguates a stored argument:
+    /// <c>AttentiveNAS</c> keeps its <c>searchSpace</c> in <c>_nasSearchSpace</c>, and
+    /// <c>BayTransProtoAlgorithm</c> keeps its <c>options</c> in <c>_algoOptions</c>. Both hold
+    /// exactly what the constructor was given; only the name is decorated.
+    /// </para>
+    /// <para>
+    /// Tried BEFORE the type search and preferred over it, because a name that ends with the
+    /// parameter's is evidence about THIS parameter, where a unique type is only evidence that
+    /// nothing else could be meant. Where two members qualify, neither is chosen.
+    /// </para>
+    /// </remarks>
+    private static string? FindByNameSuffix(INamedTypeSymbol type, IParameterSymbol parameter)
+    {
+        var suffix = char.ToUpperInvariant(parameter.Name[0]) + parameter.Name.Substring(1);
+        string? found = null;
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers())
+            {
+                var name = member switch
+                {
+                    IPropertySymbol { IsStatic: false, IsIndexer: false } p
+                        when p.GetMethod is not null && IsCarriedAs(p.Type, parameter.Type) => p.Name,
+                    IFieldSymbol { IsStatic: false, IsConst: false } f
+                        when IsCarriedAs(f.Type, parameter.Type) => f.Name,
+                    _ => null,
+                };
+
+                if (name is null) continue;
+                if (!name.EndsWith(suffix, System.StringComparison.Ordinal)) continue;
+
+                // Two matches AT THE SAME LEVEL are genuinely ambiguous, and neither is chosen.
+                if (found is not null) return null;
+
+                found = name;
+            }
+
+            // Most-derived wins. AttentiveNAS keeps its searchSpace in _nasSearchSpace while a base
+            // also exposes SearchSpace; both hold it, and the one the constructor assigned is the one
+            // declared alongside that constructor. Refusing the pair left the model unrebuildable
+            // over a naming decision that changes nothing about its state.
+            if (found is not null) return found;
+        }
+
+        return null;
     }
 
     /// <summary>
