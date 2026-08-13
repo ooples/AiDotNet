@@ -559,13 +559,22 @@ internal static class FinanceModelTestFactory
         // Parameterized cloning is exact and readiness-aware. Materialize every shape that the
         // architecture can prove without inventing dimensions for non-sequential or data-dependent
         // graphs. A remaining deferred manifest is a first-class state, not an empty parameter set.
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot? layoutBeforeRead = null;
         if (model is NeuralNetworkBase<T> neuralNetwork)
         {
             neuralNetwork.MaterializeParameters();
+            layoutBeforeRead = neuralNetwork.ParameterLayout;
         }
 
         var parameters = ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).GetParameters();
-        Assert.Equal(((IParameterizable<T, Tensor<T>, Tensor<T>>)model).ParameterCount, parameters.Length);
+        long parameterCount = ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).ParameterCount;
+        var layoutAfterRead = model is NeuralNetworkBase<T> materializedNetwork
+            ? materializedNetwork.ParameterLayout
+            : null;
+        Assert.True(parameterCount == parameters.Length,
+            $"{model.GetType().FullName}: ParameterCount reports {parameterCount} but " +
+            $"GetParameters() returned {parameters.Length}. Manifest transition: " +
+            DescribeLayoutTransition(layoutBeforeRead, layoutAfterRead));
 
         if (model is NeuralNetworkBase<T> readinessAware
             && readinessAware.ParameterLayout.Readiness is not (
@@ -584,6 +593,39 @@ internal static class FinanceModelTestFactory
         {
             disposable.Dispose();
         }
+    }
+
+    private static string DescribeLayoutTransition(
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot? before,
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot? after)
+    {
+        if (before is null || after is null) return "not available for this model type";
+
+        var beforeById = before.Slots.ToDictionary(slot => slot.StableId, StringComparer.Ordinal);
+        var changes = new List<string>();
+        foreach (var slot in after.Slots)
+        {
+            if (!beforeById.TryGetValue(slot.StableId, out var original))
+            {
+                changes.Add($"{slot.StableId}: added {slot.ParameterCount?.ToString() ?? "deferred"}/" +
+                            slot.Readiness);
+                continue;
+            }
+
+            if (original.ParameterCount != slot.ParameterCount || original.Readiness != slot.Readiness)
+            {
+                changes.Add(
+                    $"{slot.StableId}: {original.ParameterCount?.ToString() ?? "deferred"}/" +
+                    $"{original.Readiness} -> {slot.ParameterCount?.ToString() ?? "deferred"}/{slot.Readiness}");
+            }
+        }
+
+        return changes.Count == 0
+            ? $"no slot changed ({before.Readiness}, known {before.KnownParameterCount}, " +
+              $"total {before.ParameterCount?.ToString() ?? "deferred"}); slots: " +
+              string.Join("; ", after.Slots.Take(24).Select(slot =>
+                  $"{slot.StableId}={slot.ParameterCount?.ToString() ?? "deferred"}/{slot.Readiness}"))
+            : string.Join("; ", changes.Take(16));
     }
 
     private static void RunCheckpointRoundTrip<T>(

@@ -61,3 +61,4 @@ AIDN089 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Nu
 AIDN090 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Nullable persistent state requires an explicit availability lifecycle
 AIDN091 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Parameter alias target is invalid
 AIDN092 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Trainable parameter condition must name one instance Boolean field or readable property
+AIDN093 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Bound adaptive parameter axes must name one readable instance Int32 dimension

@@ -12,6 +12,13 @@ namespace AiDotNet.Tests.IntegrationTests.Parameters;
 
 public class ParameterManifestTests
 {
+    private sealed class SerializedTreeState
+    {
+        public int Feature { get; set; }
+        public double Threshold { get; set; }
+        public List<SerializedTreeState>? Children { get; set; }
+    }
+
     [Fact]
     public async Task Registry_OrdersStorageByStableId()
     {
@@ -328,6 +335,55 @@ public class ParameterManifestTests
             "replacement", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 1);
 
         Assert.Equal("weight", snapshot.Slots[0].StableId);
+    }
+
+    [Fact]
+    public async Task SerializedFittedGraph_RoundTripsThroughOneGeneratedParameterSource()
+    {
+        await Task.Yield();
+        SerializedTreeState? state = new()
+        {
+            Feature = 3,
+            Threshold = 1.25,
+            Children = [new SerializedTreeState { Feature = 7, Threshold = -0.5 }]
+        };
+        var source = new SerializedObjectParameterSource<double>(
+            () => state,
+            value => state = (SerializedTreeState?)value,
+            typeof(SerializedTreeState));
+
+        var parameters = source.GetParameters();
+        Assert.True(parameters.Length > 0);
+        Assert.Equal(parameters.Length, source.ParameterCount);
+
+        state = null;
+        Assert.True(source.CanResizeOnRestore);
+        source.SetParameters(parameters);
+
+        Assert.NotNull(state);
+        Assert.Equal(3, state.Feature);
+        Assert.Equal(1.25, state.Threshold);
+        var child = Assert.Single(state.Children!);
+        Assert.Equal(7, child.Feature);
+        Assert.Equal(-0.5, child.Threshold);
+    }
+
+    [Fact]
+    public async Task LayoutSnapshot_PreservesKnownSubtotalWhileAnotherSlotIsDeferred()
+    {
+        await Task.Yield();
+        var snapshot = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "resolved", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12),
+            new ParameterSlotDescriptor(
+                "deferred", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeDeferred, null)
+        });
+
+        Assert.Null(snapshot.ParameterCount);
+        Assert.Equal(12, snapshot.KnownParameterCount);
     }
 
     [Fact]

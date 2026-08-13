@@ -114,7 +114,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// for one hidden neuron. These weights determine how each input feature influences each
     /// hidden neuron and are trainable parameters of the layer.
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _inputSize")]
 
     private Tensor<T> _inputWeights;
 
@@ -126,6 +126,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// for one hidden neuron. These weights determine how the previous hidden state influences the
     /// current hidden state and are what gives the recurrent layer its "memory" capability.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _hiddenWeights;
 
     /// <summary>
@@ -136,7 +137,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// weighted sum for the corresponding hidden neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenSize")]
 
     private Tensor<T> _biases;
 

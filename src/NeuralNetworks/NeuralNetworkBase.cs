@@ -2293,8 +2293,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
     /// The count is derived from the same stable parameter manifest used by the flat and chunked parameter
     /// APIs. When a future lazy slot is still unknown, the manifest remains explicitly deferred while
-    /// this property reports the exact vector that exists now; it never substitutes a guessed future
-    /// size for the concrete current state.
+    /// this property reports the exact width of every independently resolved slot. It never
+    /// substitutes a guessed future size, and it does include resolved, allocation-free declarations
+    /// because a flat read materializes those values on demand.
     /// </remarks>
     public virtual long ParameterCount
     {
@@ -2323,10 +2324,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 return layout.ParameterCount.Value;
             }
 
-            // Truly deferred or conditional graphs still have no honest structural total.
-            // ParameterVectorLength walks the concrete state GetParameters can emit today; once
-            // every shape is resolved, the manifest branch above becomes authoritative instead.
-            return ParameterVectorLength;
+            // A mixed graph can contain one honestly deferred slot and hundreds of independently
+            // resolved, allocation-free slots. Falling back to already-materialized storage here
+            // discarded those resolved widths, then GetParameters materialized them and returned a
+            // larger vector. The snapshot already calculated the exact known subtotal from the same
+            // ordered slots. Unknown slots still contribute zero, so this is not a future-size guess.
+            return layout.KnownParameterCount;
         }
     }
 

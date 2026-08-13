@@ -84,6 +84,64 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
+    public async Task LazyComposite_ManifestBuildsChildStructureWithoutDeclaringItParameterFree()
+    {
+        await Task.Yield();
+        using var layer = new TransformerEncoderLayer<double>(numHeads: 2, feedForwardDim: 32);
+        layer.ResolveShapesOnly(new[] { 4, 16 });
+
+        var layout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+            layer.GetParameterLayout());
+
+        Assert.True(layout.ParameterCount > 0);
+        Assert.Equal(
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized,
+            layout.Readiness);
+
+        long declared = layer.ParameterCount;
+        Assert.Equal(declared, layer.GetParameters().Length);
+    }
+
+    [Fact]
+    public async Task MixedCompositeManifest_PreservesConcreteSiblingsBesideDeferredChildren()
+    {
+        await Task.Yield();
+        using var block = new TransformerEncoderBlock<double>(
+            hiddenSize: 24,
+            numHeads: 4,
+            ffnDim: 48,
+            dropoutRate: 0);
+
+        // Attention and normalization are construction-sized. The two Dense FFN children are
+        // honestly deferred until a real sequence shape reaches the block.
+        var parameters = block.GetParameters();
+        var layout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+            block.GetParameterLayout());
+
+        Assert.True(parameters.Length > 0);
+        Assert.Equal(AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred, layout.Readiness);
+        Assert.Equal(parameters.Length, layout.KnownParameterCount);
+        Assert.Contains(layout.Slots, slot => slot.Readiness ==
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
+        Assert.Contains(layout.Slots, slot => slot.ParameterCount > 0);
+    }
+
+    [Fact]
+    public async Task ParameterShapeReadyLayer_MaterializesWithDynamicDataAxes()
+    {
+        await Task.Yield();
+        using var layer = ConvolutionalLayer<double>.WithInputDepth(
+            inputDepth: 3,
+            outputDepth: 8,
+            kernelSize: 3);
+
+        Assert.False(layer.IsShapeResolved);
+        long declared = layer.ParameterCount;
+        Assert.True(declared > 0);
+        Assert.Equal(declared, layer.GetParameters().Length);
+    }
+
+    [Fact]
     public void ParameterCount_ReflectsLazyShapeResolutionAfterTrain()
     {
         // A fresh model has resolved shapes but deliberately unmaterialized weights. Reads stay

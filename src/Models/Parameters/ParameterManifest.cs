@@ -366,6 +366,7 @@ public sealed class ParameterLayoutSnapshot
                             : external
                                 ? ParameterReadiness.External
                                 : ParameterReadiness.ParameterFree;
+        KnownParameterCount = total;
         ParameterCount = unresolved ? null : total;
         Fingerprint = ComputeFingerprint(immutableSlots);
     }
@@ -378,6 +379,19 @@ public sealed class ParameterLayoutSnapshot
 
     /// <summary>The exact total, or <c>null</c> rather than a false zero when a shape is deferred.</summary>
     public long? ParameterCount { get; }
+
+    /// <summary>
+    /// The exact width of every slot whose size is currently known, including resolved slots that
+    /// have deliberately not allocated their backing storage yet.
+    /// </summary>
+    /// <remarks>
+    /// This equals <see cref="ParameterCount"/> when the complete layout is resolved. While one or
+    /// more slots remain deferred it is an explicit lower bound, not a guessed total: deferred
+    /// slots contribute nothing, while independently resolved slots retain their real width. Flat
+    /// read boundaries use this value because those resolved slots materialize on demand even when
+    /// an unrelated slot is still waiting for shape or fit information.
+    /// </remarks>
+    public long KnownParameterCount { get; }
 
     /// <summary>The version of the canonical manifest representation.</summary>
     public int SchemaVersion => CurrentSchemaVersion;

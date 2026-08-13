@@ -721,6 +721,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         => System.Array.Empty<(LayerBase<T>?, TensorShape)>();
 
     /// <summary>
+    /// Gets whether generated metadata found child-layer fields whose structure may need to be
+    /// constructed before this layer's allocation-free parameter manifest can be complete.
+    /// </summary>
+    /// <remarks>
+    /// The source generator overrides this from the child fields themselves. It lets the base
+    /// distinguish a genuinely parameter-free leaf from a lazy composite whose children do not
+    /// exist until <see cref="EnsureInitialized"/> runs. Model and layer authors never override it.
+    /// </remarks>
+    protected virtual bool HasDeclaredSubLayerStructure => false;
+
+    /// <summary>
     /// Wraps dimensions as a <see cref="TensorShape"/> without copying them.
     /// </summary>
     /// <remarks>
@@ -762,6 +773,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         => System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
 
     /// <summary>
+    /// Concrete shapes used only to size adaptive parameter declarations without allocating them.
+    /// </summary>
+    /// <remarks>
+    /// An adaptive axis is a wildcard for restore validation, but it can still have a known current
+    /// size. The generator emits this parallel view for bound wildcard syntax such as
+    /// <c>*(_inputSize)</c>: validation remains adaptive while the manifest can use the resolved
+    /// input width. Empty means the validation shapes above are also the counting shapes.
+    /// </remarks>
+    protected virtual IReadOnlyList<TensorShape> DeclaredParameterCountShapes()
+        => System.Array.Empty<TensorShape>();
+
+    /// <summary>
     /// Gets whether this layer has at least one currently-enabled generated parameter-shape
     /// declaration, even when its axes are not resolved yet.
     /// </summary>
@@ -790,6 +813,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         materialized = true;
 
         var declared = DeclaredParameterShapes();
+        var countShapes = DeclaredParameterCountShapes();
+        bool hasDistinctCountShapes = countShapes.Count == declared.Count;
         if (declared is not null && declared.Count > 0)
         {
             for (int i = 0; i < declared.Count; i++)
@@ -801,10 +826,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     continue;
                 }
 
+                var countShape = hasDistinctCountShapes ? countShapes[i] : expected;
                 long expectedCount = 1;
-                for (int axis = 0; axis < expected.Length; axis++)
+                for (int axis = 0; axis < countShape.Length; axis++)
                 {
-                    int dimension = expected[axis];
+                    int dimension = countShape[axis];
                     if (dimension <= 0) return false;
                     expectedCount = checked(expectedCount * dimension);
                 }
@@ -854,30 +880,96 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
     {
-        if (!TryGetDeclaredParameterCount(out long count, out bool materialized))
-        {
-            return new[]
-            {
-                new ParameterSlotDescriptor(
-                    "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
-            };
-        }
+        EnsureDeclaredSubLayerStructure();
 
-        return new[]
+        // Preserve mixed readiness at the same granularity as the recursive value walk. A
+        // composite is not one indivisible parameter slot: its own tensors and each child become
+        // ready independently. Collapsing the whole subtree into a single aggregate meant one
+        // deferred Dense child erased already concrete attention and normalization siblings from
+        // the manifest, even though GetParameters() correctly emitted those values. The network
+        // then had no principled count to report.
+        //
+        // Keeping one slot for this layer's own storage followed by child slots in registration
+        // order also mirrors FillParameters exactly. That gives count, flat read, restore, chunks,
+        // and checkpoint identity one structural source of truth without any model override.
+        var slots = new List<ParameterSlotDescriptor>();
+        var subs = GetSubLayers();
+        bool hasParameterChildren = subs is not null && subs.Any(child =>
+            child is not null && !IsSubLayerParameterFrozen(child));
+
+        if (!TryGetOwnDeclaredParameterCount(out long ownCount, out bool ownMaterialized))
         {
-            new ParameterSlotDescriptor(
+            slots.Add(new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null));
+        }
+        else if (ownCount > 0 || !hasParameterChildren)
+        {
+            slots.Add(new ParameterSlotDescriptor(
                 "$", ParameterSlotRole.Trainable,
-                count == 0
+                ownCount == 0
                     ? ParameterReadiness.ParameterFree
-                    : materialized
+                    : ownMaterialized
                         ? ParameterReadiness.Materialized
                         : ParameterReadiness.ShapeResolvedUnmaterialized,
-                count)
-        };
+                ownCount));
+        }
+
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var child = subs[i];
+                if (child is null || IsSubLayerParameterFrozen(child)) continue;
+
+                string prefix = $"children/{i:D8}";
+                if (child is LayerBase<T> childBase)
+                {
+                    var childSlots = childBase.GetParameterLayout();
+                    for (int slotIndex = 0; slotIndex < childSlots.Count; slotIndex++)
+                    {
+                        var childSlot = childSlots[slotIndex];
+                        string stableId = childSlot.StableId == "$"
+                            ? prefix
+                            : prefix + "/" + childSlot.StableId;
+                        slots.Add(new ParameterSlotDescriptor(
+                            stableId,
+                            childSlot.Role,
+                            childSlot.Readiness,
+                            childSlot.ParameterCount,
+                            shape: childSlot.Shape,
+                            elementType: childSlot.ElementType,
+                            updatePolicy: childSlot.UpdatePolicy,
+                            persistence: childSlot.Persistence,
+                            ownership: childSlot.Ownership,
+                            availability: childSlot.Availability));
+                    }
+                }
+                else
+                {
+                    long count = child.ParameterCount;
+                    slots.Add(new ParameterSlotDescriptor(
+                        prefix,
+                        ParameterSlotRole.Trainable,
+                        count == 0
+                            ? ParameterReadiness.ParameterFree
+                            : ParameterReadiness.Materialized,
+                        count));
+                }
+            }
+        }
+
+        if (slots.Count == 0)
+        {
+            slots.Add(new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ParameterFree, 0));
+        }
+
+        return slots;
     }
 
     private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
     {
+        EnsureDeclaredSubLayerStructure();
         if (!TryGetOwnDeclaredParameterCount(out count, out materialized)) return false;
 
         var subs = GetSubLayers();
@@ -903,6 +995,35 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             materialized &= concreteCount == 0 || child.IsShapeResolved;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Constructs a generated child-module graph in shape-only mode before reading its manifest.
+    /// </summary>
+    /// <remarks>
+    /// A lazy composite can know its own input shape while its child fields are still null.
+    /// Treating that state as parameter-free made a pre-read count smaller than the vector emitted
+    /// by <see cref="GetParameters"/>, because that value read is the first operation that ran the
+    /// composite initializer. The generator tells the base which layers own children; the base then
+    /// runs their idempotent initializer under the same non-allocating shape-only guard used by
+    /// architecture propagation. Leaf layers never enter this path, so a manifest query remains
+    /// allocation-free even for foundation-scale models.
+    /// </remarks>
+    private void EnsureDeclaredSubLayerStructure()
+    {
+        if (!HasDeclaredSubLayerStructure) return;
+        if (!IsShapeResolved && !ParametersAreConstructionSized) return;
+
+        bool wasResolvingShapesOnly = IsResolvingShapesOnly;
+        IsResolvingShapesOnly = true;
+        try
+        {
+            EnsureInitializationSerialized();
+        }
+        finally
+        {
+            IsResolvingShapesOnly = wasResolvingShapesOnly;
+        }
     }
 
     /// <summary>
@@ -1115,7 +1236,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // every implementation latches on its own flag -- so calling it unconditionally is free
         // for a layer that is already up, and is the only thing that works for the 195 layers
         // that never told the base they were down.
-        if (IsShapeResolved || ParametersAreConstructionSized)
+        // A layer can know every PARAMETER dimension while leaving unrelated data axes dynamic.
+        // ConvolutionalLayer.WithInputDepth is the canonical case: channel counts and kernel size
+        // fully determine its weights, while image height/width correctly remain unresolved. Its
+        // generated declaration is therefore a stronger readiness signal than IsShapeResolved.
+        // This is an explicit value boundary, so materializing a countable declaration is expected;
+        // bare ParameterCount remains allocation-free.
+        bool hasCountableDeclaredParameters =
+            TryGetOwnDeclaredParameterCount(out long declaredParameterCount, out _)
+            && declaredParameterCount > 0;
+        if (IsShapeResolved || ParametersAreConstructionSized || hasCountableDeclaredParameters)
         {
             EnsureInitializationSerialized();
             // #1715: register the just-materialized streaming weights with the pool so transparent

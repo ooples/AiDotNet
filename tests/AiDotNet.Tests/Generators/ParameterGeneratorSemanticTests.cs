@@ -180,6 +180,44 @@ public partial class StatelessLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBas
     }
 
     [Fact]
+    public async Task LayerGenerator_DeclaresChildStructureForAllocationFreeManifest()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class Child<T> : AiDotNet.Interfaces.ILayer<T> { }
+[AutoParameters]
+public partial class CompositeLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private Child<T> _child = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("HasDeclaredSubLayerStructure => true", generated, StringComparison.Ordinal);
+        Assert.Contains("EnsureSubLayersRegistered", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_BoundAdaptiveAxisSeparatesValidationFromManifestSizing()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class AdaptiveLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private int _inputSize = 4;
+    private int _outputSize = 8;
+    [TrainableParameter(Shape = ""*(_inputSize), _outputSize"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weights = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("ShapeOf(-2, _outputSize)", generated, StringComparison.Ordinal);
+        Assert.Contains("DeclaredParameterCountShapes", generated, StringComparison.Ordinal);
+        Assert.Contains("ShapeOf(_inputSize, _outputSize)", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_EmitsOnlyDeclaredTrainableAndPersistentRoles()
     {
         await Task.Yield();
@@ -306,6 +344,28 @@ public partial class DeferredBufferModel<T> : AiDotNet.Models.ModelBase<T, objec
             "new ScalarParameterSource<T>(() => _rho, value => _rho = value)",
             generated,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelGenerator_FittedObjectGraphUsesGeneratedSerializedStateSource()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+using AiDotNet.Attributes;
+public partial class TreeModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private sealed class Node { public double Value { get; set; } }
+
+    [FittedParameter]
+    private List<Node>? _trees;
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains("new SerializedObjectParameterSource<T>(() => _trees", generated,
+            StringComparison.Ordinal);
+        Assert.Contains("ParameterSlotRole.LearnedState", generated, StringComparison.Ordinal);
+        Assert.Contains("ParameterAvailability.Fit", generated, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -131,7 +131,9 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             var persistentSource = SourceExpressionFor(
                                 tf, elem, allowPrimitive: true,
                                 allowDeferredVectorReplacement: HasFitAvailability(
-                                    tf, classification.Kind));
+                                    tf, classification.Kind),
+                                allowSerializedObject:
+                                    classification.Kind == ParameterMemberSemanticModel.Kind.Fitted);
                             if (persistentSource is not null)
                             {
                                 persistentFields.Add((tf.Name, persistentSource,
@@ -174,7 +176,9 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             var persistentSource = SourceExpressionFor(
                                 tp, elem,
                                 allowDeferredVectorReplacement: HasFitAvailability(
-                                    tp, classification.Kind));
+                                    tp, classification.Kind),
+                                allowSerializedObject:
+                                    classification.Kind == ParameterMemberSemanticModel.Kind.Fitted);
                             if (persistentSource is not null)
                             {
                                 persistentFields.Add((tp.Name, persistentSource,
@@ -269,7 +273,9 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 var sourceExpression = SourceExpressionFor(
                     member, elem, allowPrimitive,
                     allowDeferredVectorReplacement: HasFitAvailability(
-                        member, classification.Kind));
+                        member, classification.Kind),
+                    allowSerializedObject:
+                        classification.Kind == ParameterMemberSemanticModel.Kind.Fitted);
                 if (sourceExpression is null) continue;
                 fields.Add((member.Name, sourceExpression, RoleExpression(classification.Kind),
                     AvailabilityExpression(member, classification.Kind)));
@@ -803,7 +809,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
         ISymbol member,
         string elem,
         bool allowPrimitive = false,
-        bool allowDeferredVectorReplacement = false)
+        bool allowDeferredVectorReplacement = false,
+        bool allowSerializedObject = false)
     {
         var type = MemberType(member);
         if (type is null) return null;
@@ -862,6 +869,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 var keyType = key!.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
                 return $"new Keyed{family}CollectionParameterSource<{elem}, {keyType}>(() => {name})";
             }
+        }
+
+        // A fitted graph can carry learned topology rather than tensor storage (tree ensembles are
+        // the canonical example). The semantic declaration is the opt-in: never infer persistence
+        // from an arbitrary CLR object, but once the author says [FittedParameter], generate the
+        // same count/read/restore contract numeric fields receive. Assignability is required so a
+        // fresh instance can accept the deserialized graph.
+        if (allowSerializedObject && CanAssign(member))
+        {
+            string stateType = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)
+                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return $"new SerializedObjectParameterSource<{elem}>(() => {name}, " +
+                   $"value => {name} = ({stateType})value!, typeof({stateType}))";
         }
         return null;
     }

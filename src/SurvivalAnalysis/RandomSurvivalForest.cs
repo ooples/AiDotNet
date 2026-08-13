@@ -51,7 +51,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Random Survival Forests", "https://doi.org/10.1214/08-AOAS169", Year = 2008, Authors = "Hemant Ishwaran, Udaya B. Kogalur, Eugene H. Blackstone, Michael S. Lauer")]
-public class RandomSurvivalForest<T> : SurvivalModelBase<T>
+public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
 {
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -81,6 +81,7 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
     /// <summary>
     /// The survival trees.
     /// </summary>
+    [FittedParameter]
     private List<SurvivalTree>? _trees;
 
     /// <summary>

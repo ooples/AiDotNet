@@ -529,7 +529,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 var axes = pf.Shape!.Split(',')
                     .Select(a => a.Trim())
                     .Where(a => a.Length > 0)
-                    .Select(a => a == "*" ? "-2" : a);
+                    .Select(ToValidationShapeAxis);
                 if (pf.Condition is not null)
                     sb.AppendLine($"        if ({pf.Condition})");
                 sb.AppendLine($"            __declared.Add(({pf.Name}, ShapeOf({string.Join(", ", axes)}), {pf.Role}));");
@@ -545,6 +545,36 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();
+            sb.AppendLine("        return __declared;");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        // A bound adaptive axis, written *(<expression>), keeps wildcard restore semantics but
+        // supplies the manifest with its current allocation-free size. Emit an aligned shape list
+        // only when one is present; ordinary declarations keep the zero-overhead default.
+        bool hasBoundAdaptiveAxes = shapedFields.Any(field =>
+            field.Shape!.Split(',').Any(axis => TryGetAdaptiveAxisBinding(axis.Trim(), out _)));
+        if (hasBoundAdaptiveAxes)
+        {
+            const string countShapeType = "AiDotNet.Tensors.LinearAlgebra.TensorShape";
+            sb.AppendLine("    /// <summary>Concrete sizing view for bound adaptive parameter axes.</summary>");
+            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{countShapeType}> DeclaredParameterCountShapes()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{countShapeType}>({shapedFields.Count});");
+            foreach (var pf in shapedFields)
+            {
+                var countAxes = pf.Shape!.Split(',')
+                    .Select(a => a.Trim())
+                    .Where(a => a.Length > 0)
+                    .Select(ToCountingShapeAxis);
+                if (pf.Condition is not null)
+                    sb.AppendLine($"        if ({pf.Condition})");
+                sb.AppendLine($"            __declared.Add(ShapeOf({string.Join(", ", countAxes)}));");
+            }
+            sb.AppendLine("        for (int __i = 0; __i < __declared.Count; __i++)");
+            sb.AppendLine("            for (int __d = 0; __d < __declared[__i].Length; __d++)");
+            sb.AppendLine("                if (__declared[__i][__d] <= 0) return System.Array.Empty<AiDotNet.Tensors.LinearAlgebra.TensorShape>();");
             sb.AppendLine("        return __declared;");
             sb.AppendLine("    }");
             sb.AppendLine();
@@ -889,6 +919,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         if (subLayerFields.Count > 0)
         {
             sb.AppendLine();
+            sb.AppendLine("    /// <summary>Auto-generated: this layer owns child-module structure.</summary>");
+            sb.AppendLine("    protected override bool HasDeclaredSubLayerStructure => true;");
+            sb.AppendLine();
             sb.AppendLine("    private bool _subLayersRegistered;");
             sb.AppendLine();
             sb.AppendLine("    /// <summary>");
@@ -999,6 +1032,26 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 return b.TypeArguments[0].ToDisplayString();
         }
         return "T";
+    }
+
+    private static string ToValidationShapeAxis(string axis)
+        => axis == "*" || TryGetAdaptiveAxisBinding(axis, out _) ? "-2" : axis;
+
+    private static string ToCountingShapeAxis(string axis)
+        => TryGetAdaptiveAxisBinding(axis, out string binding) ? binding : axis;
+
+    private static bool TryGetAdaptiveAxisBinding(string axis, out string binding)
+    {
+        binding = string.Empty;
+        if (axis.Length < 4
+            || !axis.StartsWith("*(", System.StringComparison.Ordinal)
+            || axis[axis.Length - 1] != ')')
+        {
+            return false;
+        }
+
+        binding = axis.Substring(2, axis.Length - 3).Trim();
+        return binding.Length > 0;
     }
 
     /// <summary>True when the class itself declares any of the named members.</summary>

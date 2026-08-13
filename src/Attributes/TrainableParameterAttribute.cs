@@ -124,10 +124,13 @@ public sealed class TrainableParameterAttribute : Attribute
     /// silently accepted incompatible weights.
     /// </para>
     /// <para>
-    /// Use <c>*</c> for an axis the layer adapts rather than fixes. <c>FeedForwardLayer</c> needs
-    /// <c>"*, OutputShape[0]"</c>: its <c>EnsureWeightShapeForInput</c> resizes the FIRST axis when a
-    /// caller's feature width disagrees, so a mismatch there is normal operation, not a broken
-    /// restore. Annotating it with a fixed first axis was measured to throw on healthy layers.
+    /// Use <c>*</c> for an axis the layer adapts rather than fixes. When its current size is known,
+    /// bind it with <c>*(_resolvedDimension)</c>. Validation still accepts a different restored size,
+    /// while the generated manifest uses the bound expression to count the current shape without
+    /// allocating its tensor. <c>FeedForwardLayer</c> uses
+    /// <c>"*(_inputSize), OutputShape[0]"</c>: its <c>EnsureWeightShapeForInput</c> resizes the first
+    /// axis when a caller's feature width disagrees, so a mismatch there is normal operation, not a
+    /// broken restore, but its resolved input width is still countable.
     /// </para>
     /// <para>
     /// Leave it null when the layer's parameters are sized entirely by its constructor and cannot
