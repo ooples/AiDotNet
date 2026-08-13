@@ -288,91 +288,18 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
         metadata.AdditionalInfo["BinarizeThreshold"] = NumOps.ToDouble(_binarizeThreshold);
         return metadata;
     }
-
     /// <inheritdoc/>
-    public override byte[] Serialize()
+    /// <remarks>
+    /// Both tables are needed: Bernoulli scores presence AND absence, and restoring one leaves
+    /// half the likelihood at its constructed default. The threshold decides which of the two a
+    /// feature lands in, so it is state as much as they are.
+    /// </remarks>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "RegularizationOptions", Regularization.GetOptions() },
-            { "ClassCounts", ClassCounts ?? Array.Empty<int>() },
-            { "BinarizeThreshold", NumOps.ToDouble(_binarizeThreshold) }
-        };
-
-        if (LogPriors is not null)
-        {
-            var logPriorsArray = new double[LogPriors.Length];
-            for (int i = 0; i < LogPriors.Length; i++)
-                logPriorsArray[i] = NumOps.ToDouble(LogPriors[i]);
-            modelData["LogPriors"] = logPriorsArray;
-        }
-
-        SerializeMatrix(modelData, "LogFeatureProbsPresent", _logFeatureProbsPresent);
-        SerializeMatrix(modelData, "LogFeatureProbsAbsent", _logFeatureProbsAbsent);
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        // Restore BinarizeThreshold
-        var binarizeToken = modelDataObj["BinarizeThreshold"];
-        if (binarizeToken is not null)
-            _binarizeThreshold = NumOps.FromDouble(binarizeToken.ToObject<double>());
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-            }
-        }
-
-        var classCountsToken = modelDataObj["ClassCounts"];
-        if (classCountsToken is not null)
-            ClassCounts = classCountsToken.ToObject<int[]>();
-
-        var logPriorsToken = modelDataObj["LogPriors"];
-        if (logPriorsToken is not null)
-        {
-            var logPriorsArray = logPriorsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (logPriorsArray.Length > 0)
-            {
-                LogPriors = new Vector<T>(logPriorsArray.Length);
-                for (int i = 0; i < logPriorsArray.Length; i++)
-                    LogPriors[i] = NumOps.FromDouble(logPriorsArray[i]);
-            }
-        }
-
-        _logFeatureProbsPresent = DeserializeMatrix(modelDataObj, "LogFeatureProbsPresent");
-        _logFeatureProbsAbsent = DeserializeMatrix(modelDataObj, "LogFeatureProbsAbsent");
+        base.RegisterState(state);
+        state.Declare("logFeatureProbsPresent", () => _logFeatureProbsPresent, v => _logFeatureProbsPresent = v);
+        state.Declare("logFeatureProbsAbsent", () => _logFeatureProbsAbsent, v => _logFeatureProbsAbsent = v);
+        state.DeclareScalar("binarizeThreshold", () => _binarizeThreshold, v => _binarizeThreshold = v);
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

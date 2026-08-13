@@ -63,6 +63,20 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
     /// </summary>
     protected int[]? ClassCounts { get; set; }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The priors and the class counts are what EVERY naive Bayes model learns, whatever its
+    /// likelihood is. Declaring them once here means each model in the family declares only its own
+    /// half -- means and variances, feature log-probabilities, per-category tables -- instead of
+    /// repeating this pair five times and letting the copies drift.
+    /// </remarks>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        state.Declare("logPriors", () => LogPriors, v => LogPriors = v);
+        state.Declare("classCounts", () => ClassCounts, v => ClassCounts = v);
+    }
+
     /// <summary>
     /// Initializes a new instance of the NaiveBayesBase class.
     /// </summary>

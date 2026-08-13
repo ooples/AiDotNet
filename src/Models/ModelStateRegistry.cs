@@ -205,6 +205,72 @@ public sealed class ModelStateRegistry<T>
             w => WriteInts(w, get()),
             r => set(ReadInts(r)));
 
+    /// <summary>Declares an array held as the model's own numeric type.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void DeclareArray(string name, Func<T[]?> get, Action<T[]?> set)
+        => Add(name,
+            w =>
+            {
+                var a = get();
+                if (a is null) { w.Write(-1); return; }
+                w.Write(a.Length);
+                foreach (var value in a) w.Write(Convert.ToDouble(value));
+            },
+            r =>
+            {
+                int length = r.ReadInt32();
+                if (length < 0) { set(null); return; }
+                var a = new T[length];
+                for (int i = 0; i < length; i++) a[i] = Ops.FromDouble(r.ReadDouble());
+                set(a);
+            });
+
+    /// <summary>Declares a list of matrices, such as per-class or per-category probability tables.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void Declare(string name, Func<List<Matrix<T>>?> get, Action<List<Matrix<T>>?> set)
+        => Add(name,
+            w =>
+            {
+                var list = get();
+                if (list is null) { w.Write(-1); return; }
+                w.Write(list.Count);
+                foreach (var m in list) WriteMatrix(w, m);
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+                var list = new List<Matrix<T>>(count);
+                for (int i = 0; i < count; i++) list.Add(ReadMatrix(r) ?? new Matrix<T>(0, 0));
+                set(list);
+            });
+
+    /// <summary>Declares an array of matrices, such as one probability table per category.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void Declare(string name, Func<Matrix<T>[]?> get, Action<Matrix<T>[]?> set)
+        => Add(name,
+            w =>
+            {
+                var a = get();
+                if (a is null) { w.Write(-1); return; }
+                w.Write(a.Length);
+                foreach (var m in a) WriteMatrix(w, m);
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+                var a = new Matrix<T>[count];
+                for (int i = 0; i < count; i++) a[i] = ReadMatrix(r) ?? new Matrix<T>(0, 0);
+                set(a);
+            });
+
     /// <summary>Declares a double array.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
