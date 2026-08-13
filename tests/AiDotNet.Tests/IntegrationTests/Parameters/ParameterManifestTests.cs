@@ -12,6 +12,13 @@ namespace AiDotNet.Tests.IntegrationTests.Parameters;
 
 public class ParameterManifestTests
 {
+    private sealed class SerializedTreeState
+    {
+        public int Feature { get; set; }
+        public double Threshold { get; set; }
+        public List<SerializedTreeState>? Children { get; set; }
+    }
+
     [Fact]
     public async Task Registry_OrdersStorageByStableId()
     {
@@ -331,6 +338,55 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task SerializedFittedGraph_RoundTripsThroughOneGeneratedParameterSource()
+    {
+        await Task.Yield();
+        SerializedTreeState? state = new()
+        {
+            Feature = 3,
+            Threshold = 1.25,
+            Children = [new SerializedTreeState { Feature = 7, Threshold = -0.5 }]
+        };
+        var source = new SerializedObjectParameterSource<double>(
+            () => state,
+            value => state = (SerializedTreeState?)value,
+            typeof(SerializedTreeState));
+
+        var parameters = source.GetParameters();
+        Assert.True(parameters.Length > 0);
+        Assert.Equal(parameters.Length, source.ParameterCount);
+
+        state = null;
+        Assert.True(source.CanResizeOnRestore);
+        source.SetParameters(parameters);
+
+        Assert.NotNull(state);
+        Assert.Equal(3, state.Feature);
+        Assert.Equal(1.25, state.Threshold);
+        var child = Assert.Single(state.Children!);
+        Assert.Equal(7, child.Feature);
+        Assert.Equal(-0.5, child.Threshold);
+    }
+
+    [Fact]
+    public async Task LayoutSnapshot_PreservesKnownSubtotalWhileAnotherSlotIsDeferred()
+    {
+        await Task.Yield();
+        var snapshot = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "resolved", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12),
+            new ParameterSlotDescriptor(
+                "deferred", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeDeferred, null)
+        });
+
+        Assert.Null(snapshot.ParameterCount);
+        Assert.Equal(12, snapshot.KnownParameterCount);
+    }
+
+    [Fact]
     public async Task LayoutFingerprint_ChangesWhenCheckpointOwnershipOrCountChanges()
     {
         await Task.Yield();
@@ -354,6 +410,41 @@ public class ParameterManifestTests
         Assert.Matches("^[a-f0-9]{64}$", original.Fingerprint);
         Assert.NotEqual(original.Fingerprint, renamed.Fingerprint);
         Assert.NotEqual(original.Fingerprint, resized.Fingerprint);
+    }
+
+    [Fact]
+    public async Task LayoutFingerprint_DistinguishesReadinessWithIdenticalIdentityAndCount()
+    {
+        await Task.Yield();
+        var unmaterialized = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12)
+        });
+        var materialized = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable,
+                ParameterReadiness.Materialized, 12)
+        });
+
+        Assert.NotEqual(unmaterialized.Fingerprint, materialized.Fingerprint);
+    }
+
+    [Fact]
+    public async Task LayoutSnapshot_RejectsDuplicateStableIdentity()
+    {
+        await Task.Yield();
+        var error = Assert.Throws<ArgumentException>(() => new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 2),
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Buffer, ParameterReadiness.Materialized, 2)
+        }));
+
+        Assert.Contains("duplicate stable identity", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -491,6 +582,45 @@ public class ParameterManifestTests
         tensor = null;
         Assert.Throws<ParameterLayoutNotReadyException>(() =>
             source.SetParameters(new Vector<double>(4)));
+    }
+
+    [Fact]
+    public async Task ResizableTensorFieldRestore_ResolvesOneDeferredAxisThenBecomesStrict()
+    {
+        await Task.Yield();
+        Tensor<double>? tensor = new(new[] { 5, 0 });
+        var source = new ResizableTensorFieldParameterSource<double>(
+            () => tensor, value => tensor = value);
+        var restored = new Vector<double>(Enumerable.Range(1, 15).Select(value => (double)value).ToArray());
+
+        Assert.True(source.CanResizeOnRestore);
+        Assert.Equal(ParameterReadiness.ShapeDeferred, Assert.Single(source.GetParameterLayout()).Readiness);
+
+        source.SetParameters(restored);
+
+        Assert.NotNull(tensor);
+        Assert.Equal(new[] { 5, 3 }, tensor.Shape.ToArray());
+        Assert.Equal(restored.ToArray(), source.GetParameters().ToArray());
+        Assert.False(source.CanResizeOnRestore);
+        Assert.Equal(ParameterReadiness.Materialized, Assert.Single(source.GetParameterLayout()).Readiness);
+        Assert.Throws<ArgumentException>(() => source.SetParameters(new Vector<double>(10)));
+    }
+
+    [Fact]
+    public async Task ResizableTensorFieldRestore_RejectsAmbiguousOrNonDivisibleShapes()
+    {
+        await Task.Yield();
+        Tensor<double>? ambiguous = new(new[] { 0, 0 });
+        var ambiguousSource = new ResizableTensorFieldParameterSource<double>(
+            () => ambiguous, value => ambiguous = value);
+        Assert.Throws<ParameterLayoutNotReadyException>(() =>
+            ambiguousSource.SetParameters(new Vector<double>(6)));
+
+        Tensor<double>? nonDivisible = new(new[] { 5, 0 });
+        var nonDivisibleSource = new ResizableTensorFieldParameterSource<double>(
+            () => nonDivisible, value => nonDivisible = value);
+        Assert.Throws<ArgumentException>(() =>
+            nonDivisibleSource.SetParameters(new Vector<double>(12)));
     }
 
     [Fact]

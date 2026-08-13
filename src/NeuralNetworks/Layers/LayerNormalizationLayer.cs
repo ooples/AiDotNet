@@ -69,13 +69,16 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The scale parameters learned during training.
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "InputShape[0]")]
 
     private Tensor<T> _gamma;
 
     /// <summary>
     /// The shift parameters learned during training.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "InputShape[0]")]
     private Tensor<T> _beta;
 
     /// <summary>

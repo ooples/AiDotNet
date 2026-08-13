@@ -78,7 +78,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// Also known as gamma. This learnable parameter allows the network to scale
     /// each normalized feature. Initialized to ones.
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "InputShape[0]")]
 
     private Tensor<T> _gamma;
 
@@ -89,6 +90,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// Also known as beta. This learnable parameter allows the network to shift
     /// each normalized feature. Initialized to zeros.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
+        Shape = "InputShape[0]")]
     private Tensor<T> _beta;
 
     /// <summary>
@@ -98,6 +101,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// This is updated during training and used for normalization during inference.
     /// Initialized to zeros.
     /// </remarks>
+    [Buffer(Name = "running_mean", Role = PersistentTensorRole.Constant)]
     private Tensor<T> _runningMean;
 
     /// <summary>
@@ -107,6 +111,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// This is updated during training and used for normalization during inference.
     /// Initialized to ones.
     /// </remarks>
+    [Buffer(Name = "running_variance", Role = PersistentTensorRole.Constant)]
     private Tensor<T> _runningVariance;
 
     /// <summary>

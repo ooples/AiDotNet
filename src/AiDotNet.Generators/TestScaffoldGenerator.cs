@@ -14264,15 +14264,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
-        if (model.ClassName == "EoMT")
-        {
-            // EoMT is a mask transformer with an explicit spatial position signal. A constant image
-            // removes texture but not position, so requiring one near-uniform decoded class is not an
-            // architectural invariant. The base test still runs two complete forwards and requires
-            // every value to be finite and exactly reproducible.
-            sb.AppendLine("    protected override bool UniformInputShouldProduceUniformMask => false;");
-        }
-
         // MoreData_ShouldNotDegrade trains two same-weight clones on the SAME seeded random task
         // (both RNGs use seed 42) and compares their losses against a default 1e-4 monotonicity
         // tolerance. Models with a non-zero fitting floor on that arbitrary task can settle into

@@ -54,9 +54,11 @@ namespace AiDotNet.NeuralNetworks
         private readonly Random _random; // Shared Random instance to avoid time-based seeding issues
 
         // Architecture parameters (alpha) - learnable parameters that determine operation weights
+        [TrainableParameter]
         private readonly List<Matrix<T>> _architectureParams;
 
         // Network weights - parameters for each operation
+        [TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Fit)]
         private readonly Dictionary<string, Vector<T>> _weights;
 
         // Gradients

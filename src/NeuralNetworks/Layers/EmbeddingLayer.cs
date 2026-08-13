@@ -95,8 +95,8 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// During training, these values are adjusted to make similar tokens have similar vectors.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Embeddings)]
-
+    [TrainableParameter(Role = PersistentTensorRole.Embeddings,
+        Shape = "_vocabularySize, _embeddingDimension")]
     private Tensor<T> _embeddingTensor;
 
     /// <summary>

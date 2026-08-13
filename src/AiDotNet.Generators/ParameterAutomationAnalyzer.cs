@@ -167,6 +167,30 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                    + "storage has one persistent semantic role. Invalid aliases cannot be excluded "
                    + "safely because they may hide otherwise unowned state.");
 
+    private static readonly DiagnosticDescriptor InvalidParameterCondition = new(
+        id: "AIDN092",
+        title: "Trainable parameter condition is invalid",
+        messageFormat: "'{0}.{1}' declares condition '{2}', but {3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "TrainableParameter.Condition must name one instance Boolean field or readable "
+                   + "property on the declaring type. Use nameof(...) so renames remain compiler-safe. "
+                   + "A valid condition is the single source of truth for count, optimizer discovery, "
+                   + "checkpoint persistence, and restore acceptance.");
+
+    private static readonly DiagnosticDescriptor InvalidAdaptiveShapeBinding = new(
+        id: "AIDN093",
+        title: "Trainable parameter adaptive shape binding is invalid",
+        messageFormat: "'{0}.{1}' declares adaptive shape axis '{2}', but {3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A bound adaptive axis must use *(<name>), where the name identifies one "
+                   + "readable instance Int32 field or property on the declaring layer. The wildcard "
+                   + "preserves adaptive restore validation while the binding gives the allocation-free "
+                   + "manifest an exact current width. Use bare * only when the axis is still unknown.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -270,6 +294,119 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                             spc.ReportDiagnostic(Diagnostic.Create(
                                 MissingStateAvailability, memberLocation,
                                 type.Name, member.Name, memberType.ToDisplayString()));
+                        }
+
+                        if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable)
+                        {
+                            string? conditionName = GetTrainableCondition(member);
+                            if (conditionName is not null)
+                            {
+                                var conditions = type.GetMembers(conditionName)
+                                    .Where(candidate => candidate is IFieldSymbol or IPropertySymbol)
+                                    .ToArray();
+                                string? reason = null;
+                                if (string.IsNullOrWhiteSpace(conditionName))
+                                    reason = "the condition name is empty";
+                                else if (conditions.Length != 1)
+                                    reason = conditions.Length == 0
+                                        ? "no such field or property exists on the declaring type"
+                                        : "the condition name is ambiguous";
+                                else if (conditions[0].IsStatic)
+                                    reason = "the condition must be instance-specific, not static";
+                                else
+                                {
+                                    ITypeSymbol? conditionType = conditions[0] switch
+                                    {
+                                        IFieldSymbol conditionField => conditionField.Type,
+                                        IPropertySymbol conditionProperty when conditionProperty.GetMethod is not null
+                                            && conditionProperty.Parameters.Length == 0 => conditionProperty.Type,
+                                        _ => null
+                                    };
+                                    if (conditionType?.SpecialType != SpecialType.System_Boolean)
+                                        reason = "the named member is not a readable Boolean";
+                                }
+
+                                if (reason is not null)
+                                {
+                                    spc.ReportDiagnostic(Diagnostic.Create(
+                                        InvalidParameterCondition, memberLocation,
+                                        type.Name, member.Name, conditionName, reason));
+                                }
+                            }
+
+
+                            string? declaredShape = GetTrainableShape(member);
+                            if (declaredShape is not null)
+                            {
+                                foreach (string rawAxis in declaredShape.Split(','))
+                                {
+                                    string axis = rawAxis.Trim();
+                                    if (!axis.StartsWith("*", System.StringComparison.Ordinal)
+                                        || axis == "*")
+                                        continue;
+
+                                    string binding = string.Empty;
+                                    string? reason = null;
+                                    if (axis.Length < 4
+                                        || !axis.StartsWith("*(", System.StringComparison.Ordinal)
+                                        || axis[axis.Length - 1] != ')')
+                                    {
+                                        reason = "adaptive axes must be '*' or '*(memberName)'";
+                                    }
+                                    else
+                                    {
+                                        binding = axis.Substring(2, axis.Length - 3).Trim();
+                                        if (string.IsNullOrWhiteSpace(binding)
+                                            || !SyntaxFacts.IsValidIdentifier(binding))
+                                        {
+                                            reason = "the binding must be one member name";
+                                        }
+                                        else
+                                        {
+                                            var dimensions = type.GetMembers(binding)
+                                                .Where(candidate => candidate is IFieldSymbol
+                                                    or IPropertySymbol)
+                                                .ToArray();
+                                            if (dimensions.Length != 1)
+                                            {
+                                                reason = dimensions.Length == 0
+                                                    ? "no such field or property exists on the declaring type"
+                                                    : "the binding name is ambiguous";
+                                            }
+                                            else if (dimensions[0].IsStatic)
+                                            {
+                                                reason = "the dimension must be instance-specific, not static";
+                                            }
+                                            else
+                                            {
+                                                ITypeSymbol? dimensionType = dimensions[0] switch
+                                                {
+                                                    IFieldSymbol dimensionField => dimensionField.Type,
+                                                    IPropertySymbol dimensionProperty
+                                                        when dimensionProperty.GetMethod is not null
+                                                             && dimensionProperty.Parameters.Length == 0
+                                                        => dimensionProperty.Type,
+                                                    _ => null
+                                                };
+                                                if (dimensionType?.SpecialType
+                                                    != SpecialType.System_Int32)
+                                                    reason = "the named member is not a readable Int32 dimension";
+                                            }
+                                        }
+                                    }
+
+                                    if (reason is not null)
+                                    {
+                                        spc.ReportDiagnostic(Diagnostic.Create(
+                                            InvalidAdaptiveShapeBinding,
+                                            memberLocation,
+                                            type.Name,
+                                            member.Name,
+                                            axis,
+                                            reason));
+                                    }
+                                }
+                            }
                         }
 
                         if (classification.Kind == ParameterMemberSemanticModel.Kind.Alias)
@@ -544,6 +681,36 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             return IsTensorType(namedType.TypeArguments[1]);
 
         return false;
+    }
+
+    private static string? GetTrainableCondition(ISymbol member)
+    {
+        foreach (var attribute in member.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString()
+                != ParameterMemberSemanticModel.TrainableAttribute) continue;
+            foreach (var argument in attribute.NamedArguments)
+            {
+                if (argument.Key == "Condition" && argument.Value.Value is string condition)
+                    return condition;
+            }
+        }
+        return null;
+    }
+
+    private static string? GetTrainableShape(ISymbol member)
+    {
+        foreach (var attribute in member.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString()
+                != ParameterMemberSemanticModel.TrainableAttribute) continue;
+            foreach (var argument in attribute.NamedArguments)
+            {
+                if (argument.Key == "Shape" && argument.Value.Value is string shape)
+                    return shape;
+            }
+        }
+        return null;
     }
 
     private static bool DeclaresStableParameterRegistration(INamedTypeSymbol type, string stableId)

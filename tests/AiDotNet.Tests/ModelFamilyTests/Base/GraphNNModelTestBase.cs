@@ -39,18 +39,18 @@ public abstract class GraphNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var network = CreateNetwork();
 
         // Create a diagonal-heavy input (simulating self-loops in adjacency)
-        var input = new Tensor<T>(InputShape);
-
-        // Fill with small values, then set diagonal-like positions to 1.0
-        for (int i = 0; i < input.Length; i++)
-            input[i] = NumOps.FromDouble(0.01);
+        // Synthesize through the model's generated public contract. Graph models can consume
+        // continuous node features or discrete token IDs; the invariant must never manufacture
+        // values that the production boundary rejects.
+        var input = CreateConstantTensor(EffectiveInputShape, 0.01);
 
         // Set diagonal elements (stride = last_dim + 1 for square-ish tensors)
-        int lastDim = InputShape[InputShape.Length - 1];
+        int lastDim = EffectiveInputShape[EffectiveInputShape.Length - 1];
+        var diagonalValue = CreateConstantTensor(EffectiveInputShape, 1.0)[0];
         for (int i = 0; i < input.Length; i += lastDim + 1)
         {
             if (i < input.Length)
-                input[i] = NumOps.FromDouble(1.0);
+                input[i] = diagonalValue;
         }
 
         var output = network.Predict(input);
@@ -77,8 +77,7 @@ public abstract class GraphNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
-        var input = new Tensor<T>(InputShape);
-        // All zeros by default
+        var input = CreateConstantTensor(EffectiveInputShape, 0.0);
 
         var output = network.Predict(input);
 
@@ -106,20 +105,17 @@ public abstract class GraphNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var network = CreateNetwork();
 
         // Input 1: identity-like structure (strong self-connections)
-        var input1 = new Tensor<T>(InputShape);
-        for (int i = 0; i < input1.Length; i++)
-            input1[i] = NumOps.FromDouble(0.1);
-        int lastDim1 = InputShape[InputShape.Length - 1];
+        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
+        int lastDim1 = EffectiveInputShape[EffectiveInputShape.Length - 1];
+        var diagonalValue = CreateConstantTensor(EffectiveInputShape, 1.0)[0];
         for (int i = 0; i < input1.Length; i += lastDim1 + 1)
         {
             if (i < input1.Length)
-                input1[i] = NumOps.FromDouble(1.0);
+                input1[i] = diagonalValue;
         }
 
         // Input 2: uniform structure (all connections equal)
-        var input2 = new Tensor<T>(InputShape);
-        for (int i = 0; i < input2.Length; i++)
-            input2[i] = NumOps.FromDouble(0.5);
+        var input2 = CreateConstantTensor(EffectiveInputShape, 0.5);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);

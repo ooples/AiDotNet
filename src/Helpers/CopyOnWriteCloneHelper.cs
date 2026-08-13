@@ -54,8 +54,8 @@ internal static class CopyOnWriteCloneHelper
         // a zero-/mismatched-shape tensor and also falls back.
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var sps = srcLayers[i].GetTrainableParameters();
-            var dps = dstLayers[i].GetTrainableParameters();
+            var sps = GetWithoutMaterialization(srcLayers[i]);
+            var dps = GetWithoutMaterialization(dstLayers[i]);
             if (sps.Count != dps.Count) return false;
             for (int p = 0; p < sps.Count; p++)
                 if (!ShapesEqual(sps[p], dps[p])) return false;
@@ -63,7 +63,7 @@ internal static class CopyOnWriteCloneHelper
 
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var sp = srcLayers[i].GetTrainableParameters();
+            var sp = GetWithoutMaterialization(srcLayers[i]);
             if (sp.Count == 0) continue;
             var shared = new Tensor<T>[sp.Count];
             for (int p = 0; p < sp.Count; p++)
@@ -73,6 +73,11 @@ internal static class CopyOnWriteCloneHelper
 
         return true;
     }
+
+    private static IReadOnlyList<Tensor<T>> GetWithoutMaterialization<T>(ITrainableLayer<T> layer) =>
+        layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase
+            ? layerBase.GetTrainableParametersWithoutMaterialization()
+            : layer.GetTrainableParameters();
 
     private static bool ShapesEqual<T>(Tensor<T> a, Tensor<T> b)
     {

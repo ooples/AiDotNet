@@ -235,7 +235,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
         for (int i = 0; i < ordered.Count; i++)
         {
-            var source = ordered[i].Source;
+            var entry = ordered[i];
+            var source = entry.Source;
             if (source is null) return false;
 
             if (source is IParameterLayoutSource layoutSource)
@@ -247,6 +248,12 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     if (slot.Readiness == ParameterReadiness.ShapeDeferred
                         || !slot.ParameterCount.HasValue)
                     {
+                        bool concreteAbsence = entry.Availability == ParameterAvailability.Conditional
+                            || entry.Availability == ParameterAvailability.External
+                            || (entry.Role == ParameterSlotRole.Buffer
+                                && entry.Availability != ParameterAvailability.Fit);
+                        if (concreteAbsence)
+                            continue;
                         return false;
                     }
 

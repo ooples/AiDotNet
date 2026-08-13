@@ -11418,7 +11418,7 @@ public static class LayerHelper<T>
         int vocabSize = 50265)
     {
         return (CreateDessurtEncoderLayers(encoderDim, encoderLayers, numHeads),
-                CreateDessurtDecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
+                CreateDessurtDecoderLayers(encoderDim, decoderDim, decoderLayers, numHeads, vocabSize));
     }
 
     private static IEnumerable<ILayer<T>> CreateDessurtEncoderLayers(int hiddenDim, int numLayers, int numHeads, int maxPatches = 1025)
@@ -11447,14 +11447,21 @@ public static class LayerHelper<T>
         }
     }
 
-    private static IEnumerable<ILayer<T>> CreateDessurtDecoderLayers(int hiddenDim, int numLayers, int numHeads, int vocabSize)
+    private static IEnumerable<ILayer<T>> CreateDessurtDecoderLayers(
+        int encoderDim, int hiddenDim, int numLayers, int numHeads, int vocabSize)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int maxSequenceLength = 512;
 
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        // The public one-input Dessurt graph receives encoded visual features here. A token
+        // EmbeddingLayer would reinterpret those continuous features as vocabulary IDs. Project
+        // only when the encoder and decoder widths differ; otherwise preserve the encoder tokens.
+        // Text-token autoregression is a separate multi-input graph and must declare its token port
+        // explicitly rather than changing the semantics of this image-only path at runtime.
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(hiddenDim, identityActivation);
         // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and Dessurt's decoder
         // learns its positions -- the dead _decoderPositionEmbeddings field was that table, allocated and never read.
         yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, hiddenDim);

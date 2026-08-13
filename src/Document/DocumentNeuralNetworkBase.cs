@@ -45,8 +45,26 @@ namespace AiDotNet.Document;
     Direction = TensorLayoutDirection.Output,
     Note = "One class distribution per decode step: MaxSequenceLength steps, OutputClassCount "
          + "classes. Both are model constants, so neither spatial axis reaches the output.")]
-public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Features,
+    DomainResolver = nameof(ResolveDocumentInputDomain))]
+public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// Resolves the public document-input domain from the first semantic consumer in the model graph.
+    /// </summary>
+    /// <remarks>
+    /// Document models are deliberately heterogeneous: page-image models accept continuous pixels,
+    /// token-first models accept bounded integer IDs, and layout-aware models accept packed continuous
+    /// rows which split into validated token and coordinate streams internally.  The base neural-network
+    /// graph already owns that distinction, so the generated public contract delegates to it instead of
+    /// forcing every document model to repeat a hand-written override.
+    /// </remarks>
+    protected virtual LayerInputDomain ResolveDocumentInputDomain(int[]? inputShape) =>
+        inputShape is { Length: >= 3 }
+            ? LayerInputDomain.Continuous
+            : base.GetInputDomain(inputShape);
+
     /// <summary>
     /// The number of classes this model emits per decode step, or 0 for "not stated".
     /// </summary>

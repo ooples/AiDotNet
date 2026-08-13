@@ -1012,6 +1012,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             contract,
             ModelTestHelpers.CreateSeededRandom(1789));
         contract.Validate(input);
+
+        // Synthesis and validation are only useful if the value crosses the real public boundary.
+        // This closes the former gap where a manifest could agree with itself while Predict still
+        // rejected the generated tensor or routed it into an incompatible first semantic layer.
+        var output = network.Predict(input);
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0,
+            $"{network.GetType().Name} accepted its generated input contract but returned an empty output.");
     }
 
     [Fact(Timeout = 120000)]
@@ -1553,6 +1561,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
 
         long declared = network.ParameterCount;
+        var declaredLayout = network is NeuralNetworkBase<T> declaredNetwork
+            ? declaredNetwork.ParameterLayout
+            : null;
         // No NotSupportedException exemption. It used to say some models "deliberately do not
         // expose a flat parameter vector" and round-trip through WriteParameters instead. That
         // was never a design decision, only unfinished plumbing: PyTorch has no module that
@@ -1560,19 +1571,53 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // the detection backbones, the necks, ConvTasNet, MATCHA, Nougat -- and a sweep of src/
         // now finds ZERO surfaces whose body is only a throw. Nothing may refuse.
         int actual = network.GetParameters().Length;
+        var materializedLayout = network is NeuralNetworkBase<T> materializedNetwork
+            ? materializedNetwork.ParameterLayout
+            : null;
 
         // A model whose parameters are not sized yet legitimately reports 0 from BOTH surfaces;
         // that is consistent, so it is not what this invariant is about.
         if (declared == 0 && actual == 0) return;
 
+        string layoutTransition = DescribeLayoutTransition(declaredLayout, materializedLayout);
         Assert.True(declared == actual,
             $"{network.GetType().FullName}: ParameterCount reports {declared} but GetParameters() " +
             $"returned {actual} values (difference {declared - actual}). The two must describe the " +
             "same tensors — SetParameters pairs them by length, so a mismatch means a saved " +
             "parameter vector cannot be restored and the model silently keeps its initial weights. " +
+            $"Manifest transition: {layoutTransition}. " +
             "The usual causes are a layer that resolves its shape without allocating, a count " +
             "computed for weights that do not exist yet, or sub-layers the recursive walk cannot " +
             "reach (children held in a List need RegisterSubLayer).");
+
+        static string DescribeLayoutTransition(
+            AiDotNet.Models.Parameters.ParameterLayoutSnapshot? before,
+            AiDotNet.Models.Parameters.ParameterLayoutSnapshot? after)
+        {
+            if (before is null || after is null) return "not available for this model type";
+
+            var beforeById = before.Slots.ToDictionary(slot => slot.StableId, StringComparer.Ordinal);
+            var changes = new List<string>();
+            foreach (var slot in after.Slots)
+            {
+                if (!beforeById.TryGetValue(slot.StableId, out var original))
+                {
+                    changes.Add($"{slot.StableId}: added {slot.ParameterCount?.ToString() ?? "deferred"}");
+                    continue;
+                }
+
+                if (original.ParameterCount != slot.ParameterCount || original.Readiness != slot.Readiness)
+                {
+                    changes.Add(
+                        $"{slot.StableId}: {original.ParameterCount?.ToString() ?? "deferred"}/" +
+                        $"{original.Readiness} -> {slot.ParameterCount?.ToString() ?? "deferred"}/{slot.Readiness}");
+                }
+            }
+
+            return changes.Count == 0
+                ? $"no slot changed ({before.Readiness}, {before.ParameterCount?.ToString() ?? "deferred"})"
+                : string.Join("; ", changes.Take(12));
+        }
     }
 
     /// <summary>

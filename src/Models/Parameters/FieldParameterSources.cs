@@ -85,6 +85,121 @@ public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParame
     }
 }
 
+/// <summary>
+/// A tensor field whose one unresolved axis is learned from the first restore payload.
+/// </summary>
+/// <remarks>
+/// Fit-sized models can declare a placeholder such as <c>[0]</c> or <c>[5, 0]</c>. The fixed
+/// dimensions preserve the tensor's structure while the single zero dimension identifies the
+/// axis whose width is data-dependent. Once restored, the source becomes fixed-size and every
+/// later restore is validated exactly like <see cref="TensorFieldParameterSource{T}"/>.
+/// </remarks>
+public sealed class ResizableTensorFieldParameterSource<T> :
+    IVariableLengthParameterSource<T>, IParameterLayoutSource
+{
+    private readonly Func<Tensor<T>?> _get;
+    private readonly Action<Tensor<T>> _set;
+
+    /// <summary>Creates a source over a replaceable, fit-sized tensor field.</summary>
+    public ResizableTensorFieldParameterSource(Func<Tensor<T>?> get, Action<Tensor<T>> set)
+    {
+        _get = get ?? throw new ArgumentNullException(nameof(get));
+        _set = set ?? throw new ArgumentNullException(nameof(set));
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => _get()?.Length ?? 0;
+
+    /// <inheritdoc />
+    public bool CanResizeOnRestore => ParameterCount == 0;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var value = _get();
+        bool unresolved = value is null;
+        if (value is not null)
+        {
+            for (int axis = 0; axis < value.Shape.Length; axis++)
+                unresolved |= value.Shape[axis] <= 0;
+        }
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable,
+                unresolved ? ParameterReadiness.ShapeDeferred
+                    : value!.Length == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
+                    : ParameterReadiness.Materialized,
+                unresolved ? null : (long?)value!.Length,
+                shape: value?.Shape.ToArray(),
+                elementType: typeof(T).FullName)
+        };
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var value = _get();
+        if (value is null) return new Vector<T>(0);
+        var result = new Vector<T>(value.Length);
+        value.AsSpan().CopyTo(result.AsWritableSpan());
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        var current = _get();
+        if (current is not null && current.Length > 0)
+        {
+            if (parameters.Length != current.Length)
+                throw new ArgumentException(
+                    $"Expected exactly {current.Length} values for the tensor field, got {parameters.Length}.",
+                    nameof(parameters));
+            parameters.AsSpan().CopyTo(current.AsWritableSpan());
+            return;
+        }
+
+        var declaredShape = current?.Shape.ToArray() ?? new[] { 0 };
+        int unresolvedAxis = -1;
+        long fixedProduct = 1;
+        for (int axis = 0; axis < declaredShape.Length; axis++)
+        {
+            if (declaredShape[axis] <= 0)
+            {
+                if (unresolvedAxis >= 0)
+                    throw new ParameterLayoutNotReadyException(
+                        "restore", new ParameterLayoutSnapshot(GetParameterLayout()));
+                unresolvedAxis = axis;
+            }
+            else
+            {
+                fixedProduct = checked(fixedProduct * declaredShape[axis]);
+            }
+        }
+
+        if (unresolvedAxis < 0)
+        {
+            if (parameters.Length != 0)
+                throw new ArgumentException(
+                    $"Expected an empty tensor payload, got {parameters.Length} values.", nameof(parameters));
+        }
+        else
+        {
+            if (fixedProduct == 0 || parameters.Length % fixedProduct != 0)
+                throw new ArgumentException(
+                    $"A {parameters.Length}-value payload cannot resolve tensor shape " +
+                    $"[{string.Join(", ", declaredShape)}].", nameof(parameters));
+            declaredShape[unresolvedAxis] = checked((int)(parameters.Length / fixedProduct));
+        }
+
+        var replacement = new Tensor<T>(declaredShape);
+        parameters.AsSpan().CopyTo(replacement.AsWritableSpan());
+        _set(replacement);
+    }
+}
+
 /// <summary>A <see cref="Matrix{T}"/> field exposed as a parameter surface, written through.</summary>
 /// <typeparam name="T">The numeric type of the values.</typeparam>
 /// <remarks>

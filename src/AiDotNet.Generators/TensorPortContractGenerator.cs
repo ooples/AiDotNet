@@ -106,6 +106,23 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidPortRelationship = new(
+        "ADNPORT011",
+        "Tensor-port relationship is not executable",
+        "'{0}' has an invalid relationship in input variant '{1}': {2}.",
+        "AiDotNet.TensorPorts",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Derived/defaulted ports and shape relations must be resolvable without runtime guesswork.");
+
+    private static readonly DiagnosticDescriptor AmbiguousVariantSignature = new(
+        "ADNPORT012",
+        "Input variants cannot be distinguished",
+        "'{0}' variants {1} require the same external port set [{2}]. Give each overload a structurally distinct required signature.",
+        "AiDotNet.TensorPorts",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     private enum Domain
     {
         Unspecified = 0,
@@ -326,7 +343,8 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             {
                 if (port.Domain == Domain.IntegerIndices
                     && string.IsNullOrWhiteSpace(port.MaxExclusiveMember)
-                    && string.IsNullOrWhiteSpace(port.MaxExclusiveResolver))
+                    && string.IsNullOrWhiteSpace(port.MaxExclusiveResolver)
+                    && string.IsNullOrWhiteSpace(port.DomainResolver))
                 {
                     spc.ReportDiagnostic(Diagnostic.Create(
                         IntegerRangeRequired, type.Locations.FirstOrDefault(), port.Name, type.Name));
@@ -389,6 +407,84 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                         + $"input does not exist in variant '{port.Variant}'"));
                     invalid = true;
                 }
+            }
+
+            foreach (var port in ports.Where(port => port.Direction == Direction.Input))
+            {
+                string? relationshipError = port.Source == Source.Derived
+                    && string.IsNullOrWhiteSpace(port.SameShapeAs)
+                    && string.IsNullOrWhiteSpace(port.ShapeMember)
+                        ? $"derived port '{port.Name}' declares neither SameShapeAs nor ShapeMember"
+                    : port.Source == Source.Defaulted && port.Required
+                        ? $"defaulted port '{port.Name}' is also marked Required"
+                        : null;
+                if (relationshipError is not null)
+                {
+                    spc.ReportDiagnostic(Diagnostic.Create(
+                        InvalidPortRelationship,
+                        type.Locations.FirstOrDefault(),
+                        type.Name,
+                        port.Variant,
+                        relationshipError));
+                    invalid = true;
+                }
+            }
+
+            foreach (var variantGroup in ports
+                         .Where(port => port.Direction == Direction.Input)
+                         .GroupBy(port => port.Variant, StringComparer.Ordinal))
+            {
+                var byName = variantGroup
+                    .GroupBy(port => port.Name, StringComparer.Ordinal)
+                    .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+                var reportedCyclePorts = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var start in variantGroup.Where(port => !string.IsNullOrWhiteSpace(port.SameShapeAs)))
+                {
+                    if (reportedCyclePorts.Contains(start.Name)) continue;
+                    var seenRelations = new HashSet<string>(StringComparer.Ordinal) { start.Name };
+                    var current = start;
+                    while (!string.IsNullOrWhiteSpace(current.SameShapeAs)
+                           && byName.TryGetValue(current.SameShapeAs!, out var related))
+                    {
+                        if (!seenRelations.Add(related.Name))
+                        {
+                            foreach (string name in seenRelations)
+                                reportedCyclePorts.Add(name);
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                InvalidPortRelationship,
+                                type.Locations.FirstOrDefault(),
+                                type.Name,
+                                variantGroup.Key,
+                                $"SameShapeAs cycle reaches '{related.Name}'"));
+                            invalid = true;
+                            break;
+                        }
+                        current = related;
+                    }
+                }
+            }
+
+            foreach (var ambiguous in ports
+                         .Where(port => port.Direction == Direction.Input)
+                         .GroupBy(port => port.Variant, StringComparer.Ordinal)
+                         .Select(group => new
+                         {
+                             Variant = group.Key,
+                             RequiredKey = string.Join("\u001f", group
+                                 .Where(port => port.Source == Source.External && port.Required)
+                                 .Select(port => port.Name)
+                                 .OrderBy(name => name, StringComparer.Ordinal))
+                         })
+                         .GroupBy(item => item.RequiredKey, StringComparer.Ordinal)
+                         .Where(group => group.Count() > 1))
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    AmbiguousVariantSignature,
+                    type.Locations.FirstOrDefault(),
+                    type.Name,
+                    string.Join(", ", ambiguous.Select(item => "'" + item.Variant + "'")),
+                    string.Join(", ", ambiguous.Key.Split(new[] { '\u001f' }, StringSplitOptions.RemoveEmptyEntries))));
+                invalid = true;
             }
 
             int minimumRank = 0;
@@ -487,8 +583,10 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
             var inputs = ports.Where(p => p.Direction == Direction.Input).ToList();
             var outputs = ports.Where(p => p.Direction == Direction.Output).ToList();
+            bool layerContractOwner = InheritsFromLayerBase(type);
+            bool modelContractOwner = InheritsFromNeuralNetworkBase(type);
 
-            if (inputs.Count > 0 && !Declares(type, "InputPorts"))
+            if (inputs.Count > 0 && layerContractOwner && !Declares(type, "InputPorts"))
             {
                 sb.AppendLine("    /// <summary>Generated from [TensorPort] declarations.</summary>");
                 sb.AppendLine("    public override global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.NeuralNetworks.Layers.LayerPort> InputPorts =>");
@@ -498,7 +596,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                 sb.AppendLine("    ];").AppendLine();
             }
 
-            if (outputs.Count > 0 && !Declares(type, "OutputPorts"))
+            if (outputs.Count > 0 && layerContractOwner && !Declares(type, "OutputPorts"))
             {
                 sb.AppendLine("    /// <summary>Generated from [TensorPort] declarations.</summary>");
                 sb.AppendLine("    public override global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.NeuralNetworks.Layers.LayerPort> OutputPorts =>");
@@ -506,6 +604,23 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                 foreach (var port in outputs)
                     sb.Append("        ").Append(PortExpression(type, port, isInput: false)).AppendLine(",");
                 sb.AppendLine("    ];").AppendLine();
+            }
+
+            if (inputs.Count > 0 && modelContractOwner && !Declares(type, "GetInputContract"))
+            {
+                sb.AppendLine("    /// <summary>Generated public model-boundary contract.</summary>");
+                sb.AppendLine("    public override global::AiDotNet.NeuralNetworks.InputContractManifest GetInputContract(int[]? inputShape = null)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        int[] shape = inputShape is { Length: > 0 } ? (int[])inputShape.Clone() : GetInputShape();");
+                sb.AppendLine("        return new global::AiDotNet.NeuralNetworks.InputContractManifest(");
+                sb.AppendLine("            GetType().Name,");
+                sb.AppendLine("            new global::AiDotNet.NeuralNetworks.Layers.LayerPort[]");
+                sb.AppendLine("            {");
+                foreach (var port in inputs)
+                    sb.Append("                ").Append(PortExpression(type, port, isInput: true, shapeOverride: "shape")).AppendLine(",");
+                sb.AppendLine("            },");
+                sb.AppendLine("            shapeConstraint: GetInputShapeConstraint());");
+                sb.AppendLine("    }").AppendLine();
             }
 
             if (inputs.Count > 0 && !Declares(type, "GetInputDomain") && rankRoute is null)
@@ -687,6 +802,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                 attribute is null ? null : NamedString(attribute, "MaxExclusiveMember"),
                 attribute is null ? null : NamedString(attribute, "MaxExclusiveResolver"),
                 attribute is null ? null : NamedString(attribute, "CustomProviderKey"),
+                attribute is null ? null : NamedString(attribute, "DomainResolver"),
                 null,
                 false,
                 name,
@@ -719,6 +835,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             NamedString(attr, "MaxExclusiveMember"),
             NamedString(attr, "MaxExclusiveResolver"),
             NamedString(attr, "CustomProviderKey"),
+            NamedString(attr, "DomainResolver"),
             NamedString(attr, "ShapeMember"),
             NamedBool(attr, "PropagatesInputDomain", defaultValue: false),
             NamedString(attr, "StableId") ?? name,
@@ -733,12 +850,18 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             NamedIntArray(attr, "AxisDivisors"));
     }
 
-    private static string PortExpression(INamedTypeSymbol type, Port port, bool isInput)
+    private static string PortExpression(
+        INamedTypeSymbol type,
+        Port port,
+        bool isInput,
+        string? shapeOverride = null)
     {
-        string shape = string.IsNullOrWhiteSpace(port.ShapeMember)
+        string shape = shapeOverride ?? (string.IsNullOrWhiteSpace(port.ShapeMember)
             ? (isInput ? "GetInputShape()" : "GetOutputShape()")
-            : MemberExpression(type, port.ShapeMember!);
-        string domain = DomainExpression(port, isInput ? "GetInputShape()" : "null");
+            : MemberExpression(type, port.ShapeMember!));
+        string domain = DomainExpression(
+            port,
+            shapeOverride ?? (isInput ? "GetInputShape()" : "null"));
         return "new global::AiDotNet.NeuralNetworks.Layers.LayerPort("
             + Literal(port.Name) + ", " + shape + ", "
             + (port.Required ? "true" : "false") + ", " + domain + ", "
@@ -883,8 +1006,13 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         sb.AppendLine(");").AppendLine();
     }
 
-    private static string DomainExpression(Port port, string inputShapeExpression) => port.Domain switch
+    private static string DomainExpression(Port port, string inputShapeExpression)
     {
+        if (!string.IsNullOrWhiteSpace(port.DomainResolver))
+            return port.DomainResolver + "(" + inputShapeExpression + ")";
+
+        return port.Domain switch
+        {
         Domain.Unspecified => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Unspecified",
         Domain.BooleanMask => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.BooleanMask",
         Domain.AdditiveMask => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.AdditiveMask",
@@ -897,7 +1025,8 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         Domain.IntegerIndices => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Indices("
             + port.MaxExclusiveMember + ")",
         _ => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Continuous",
-    };
+        };
+    }
 
     private static string MemberExpression(INamedTypeSymbol type, string member)
     {
@@ -909,6 +1038,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     {
         if (!string.IsNullOrWhiteSpace(port.MaxExclusiveMember)) yield return port.MaxExclusiveMember!;
         if (!string.IsNullOrWhiteSpace(port.MaxExclusiveResolver)) yield return port.MaxExclusiveResolver!;
+        if (!string.IsNullOrWhiteSpace(port.DomainResolver)) yield return port.DomainResolver!;
         if (!string.IsNullOrWhiteSpace(port.ShapeMember)) yield return port.ShapeMember!;
     }
 
@@ -927,6 +1057,15 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             if (member is not IMethodSymbol method || !IsInt(method.ReturnType)
                 || method.Parameters.Length != 1 || !IsIntArray(method.Parameters[0].Type))
                 return port.MaxExclusiveResolver + "|a method with signature int Method(int[]?)";
+        }
+
+        if (!string.IsNullOrWhiteSpace(port.DomainResolver))
+        {
+            var member = FindMember(type, port.DomainResolver!);
+            if (member is not IMethodSymbol method || !IsLayerInputDomain(method.ReturnType)
+                || method.Parameters.Length != 1 || !IsIntArray(method.Parameters[0].Type))
+                return port.DomainResolver
+                    + "|a method with signature LayerInputDomain Method(int[]?)";
         }
 
         if (!string.IsNullOrWhiteSpace(port.ShapeMember))
@@ -948,6 +1087,11 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
     private static string? ValidatePortValues(Port port)
     {
+        if (!string.IsNullOrWhiteSpace(port.DomainResolver)
+            && (!string.IsNullOrWhiteSpace(port.MaxExclusiveMember)
+                || !string.IsNullOrWhiteSpace(port.MaxExclusiveResolver)
+                || !string.IsNullOrWhiteSpace(port.CustomProviderKey)))
+            return "declares DomainResolver together with a fixed range/custom provider; the resolver must be the single domain authority";
         if (!string.IsNullOrWhiteSpace(port.MaxExclusiveMember)
             && !string.IsNullOrWhiteSpace(port.MaxExclusiveResolver))
             return "declares both MaxExclusiveMember and MaxExclusiveResolver; choose one range owner";
@@ -994,6 +1138,10 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
     private static bool IsInt(ITypeSymbol type) => type.SpecialType == SpecialType.System_Int32;
 
+    private static bool IsLayerInputDomain(ITypeSymbol type) => type is INamedTypeSymbol named
+        && named.Name == "LayerInputDomain"
+        && named.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks.Layers";
+
     private static bool IsIntArray(ITypeSymbol type) => type is IArrayTypeSymbol array
         && array.Rank == 1 && IsInt(array.ElementType);
 
@@ -1015,6 +1163,15 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
             if (current.Name == "LayerBase"
                 && current.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks.Layers")
+                return true;
+        return false;
+    }
+
+    private static bool InheritsFromNeuralNetworkBase(INamedTypeSymbol type)
+    {
+        for (INamedTypeSymbol? current = type.BaseType; current is not null; current = current.BaseType)
+            if (current.Name == "NeuralNetworkBase"
+                && current.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks")
                 return true;
         return false;
     }
@@ -1144,6 +1301,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             string? maxExclusiveMember,
             string? maxExclusiveResolver,
             string? customProviderKey,
+            string? domainResolver,
             string? shapeMember,
             bool propagatesInputDomain,
             string stableId,
@@ -1165,6 +1323,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             MaxExclusiveMember = maxExclusiveMember;
             MaxExclusiveResolver = maxExclusiveResolver;
             CustomProviderKey = customProviderKey;
+            DomainResolver = domainResolver;
             ShapeMember = shapeMember;
             PropagatesInputDomain = propagatesInputDomain;
             StableId = stableId;
@@ -1187,6 +1346,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         public string? MaxExclusiveMember { get; }
         public string? MaxExclusiveResolver { get; }
         public string? CustomProviderKey { get; }
+        public string? DomainResolver { get; }
         public string? ShapeMember { get; }
         public bool PropagatesInputDomain { get; }
         public string StableId { get; }

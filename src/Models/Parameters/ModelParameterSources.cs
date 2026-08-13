@@ -1,6 +1,10 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace AiDotNet.Models.Parameters;
 
@@ -224,6 +228,145 @@ public sealed class VariableLengthParameterSource<T> : IVariableLengthParameterS
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         _set(parameters);
+    }
+}
+
+/// <summary>
+/// Exposes an explicitly classified fitted object graph through the canonical numeric parameter
+/// manifest without requiring its model to hand-write count, flatten and restore methods.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Tree ensembles and other non-gradient models learn topology as well as numeric leaves. Treating
+/// only tensors as persistent parameters silently loses the actual model, while guessing that every
+/// object is persistent would capture caches and services. This adapter is therefore generator-only
+/// and opt-in through <c>[FittedParameter]</c>.
+/// </para>
+/// <para>
+/// Compact UTF-8 JSON bytes are represented as exact numeric values in the flat vector. Every byte
+/// is exactly representable by the framework's supported floating-point types, restore validates
+/// the integral byte domain before deserializing, and the learned-state role keeps this surface out
+/// of optimizer initialization. A null value remains fit-deferred; a fresh model can accept one
+/// variable-width restore, after which its materialized width becomes an exact contract.
+/// </para>
+/// </remarks>
+public sealed class SerializedObjectParameterSource<T> :
+    IVariableLengthParameterSource<T>, IParameterLayoutSource
+{
+    private static readonly JsonSerializerSettings SerializerSettings = new()
+    {
+        ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
+        Formatting = Formatting.None,
+        TypeNameHandling = TypeNameHandling.None
+    };
+
+    private readonly Func<object?> _get;
+    private readonly Action<object?> _set;
+    private readonly Type _stateType;
+    private readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Creates a source over one assignable fitted-state member.</summary>
+    public SerializedObjectParameterSource(
+        Func<object?> get,
+        Action<object?> set,
+        Type stateType)
+    {
+        _get = get ?? throw new ArgumentNullException(nameof(get));
+        _set = set ?? throw new ArgumentNullException(nameof(set));
+        _stateType = stateType ?? throw new ArgumentNullException(nameof(stateType));
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => SerializeCurrent()?.LongLength ?? 0;
+
+    /// <inheritdoc />
+    public bool CanResizeOnRestore => _get() is null;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var bytes = SerializeCurrent();
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$",
+                ParameterSlotRole.LearnedState,
+                bytes is null ? ParameterReadiness.FitDeferred : ParameterReadiness.Materialized,
+                bytes?.LongLength,
+                shape: bytes is null ? null : new[] { bytes.Length },
+                elementType: _stateType.FullName)
+        };
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var bytes = SerializeCurrent();
+        if (bytes is null) return new Vector<T>(0);
+
+        var result = new Vector<T>(bytes.Length);
+        for (int i = 0; i < bytes.Length; i++)
+            result[i] = _numOps.FromDouble(bytes[i]);
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length == 0)
+        {
+            _set(null);
+            return;
+        }
+
+        var bytes = new byte[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            double value = _numOps.ToDouble(parameters[i]);
+            double integral = Math.Round(value);
+            // AiDotNet targets net471, where double.IsFinite is unavailable.
+            if (double.IsNaN(value) || double.IsInfinity(value)
+                || value < byte.MinValue || value > byte.MaxValue
+                || value != integral)
+            {
+                throw new ArgumentException(
+                    $"Value at offset {i} is {value}; serialized fitted state requires integral " +
+                    $"bytes in the inclusive range [{byte.MinValue}, {byte.MaxValue}].",
+                    nameof(parameters));
+            }
+            bytes[i] = checked((byte)integral);
+        }
+
+        string json = Encoding.UTF8.GetString(bytes);
+        object? restored;
+        try
+        {
+            restored = JsonConvert.DeserializeObject(json, _stateType, SerializerSettings);
+        }
+        catch (JsonException exception)
+        {
+            throw new ArgumentException(
+                $"The parameter vector is not valid serialized fitted state for " +
+                $"'{_stateType.FullName}'.",
+                nameof(parameters),
+                exception);
+        }
+
+        if (restored is null)
+            throw new ArgumentException(
+                $"The parameter vector deserialized to null for fitted state " +
+                $"'{_stateType.FullName}'.",
+                nameof(parameters));
+        _set(restored);
+    }
+
+    private byte[]? SerializeCurrent()
+    {
+        var current = _get();
+        if (current is null) return null;
+        string json = JsonConvert.SerializeObject(current, Formatting.None, SerializerSettings);
+        return Encoding.UTF8.GetBytes(json);
     }
 }
 

@@ -19,6 +19,8 @@ namespace AiDotNet.Attributes
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class TrainableParameterAttribute : Attribute
     {
         public bool Optional { get; set; }
+        public string? Condition { get; set; }
+        public string? Shape { get; set; }
         public int Availability { get; set; }
     }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FittedParameterAttribute : Attribute { }
@@ -249,5 +251,84 @@ public sealed class AliasLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double
         var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN091"));
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("_missing", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Missing", "no such field")]
+    [InlineData("Rank", "not a readable Boolean")]
+    [InlineData("Shared", "instance-specific")]
+    public async Task TrainableCondition_MustNameOneInstanceBoolean(
+        string condition, string expectedReason)
+    {
+        await Task.Yield();
+        string source = $@"
+using AiDotNet.Attributes;
+public sealed class ConditionalLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{{
+    private int Rank => 2;
+    private static bool Shared => true;
+    [TrainableParameter(Condition = ""{condition}"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN092"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(expectedReason, diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TrainableCondition_AcceptsReadableInstanceBoolean()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ConditionalLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private bool Enabled => true;
+    [TrainableParameter(Condition = nameof(Enabled))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}";
+
+        Assert.DoesNotContain(Run(source), item => item.Id == "AIDN092");
+    }
+
+    [Theory]
+    [InlineData("*(Missing)", "no such field")]
+    [InlineData("*(Enabled)", "not a readable Int32")]
+    [InlineData("*(Input + 1)", "one member name")]
+    [InlineData("*Input", "must be '*' or")]
+    public async Task AdaptiveShapeBinding_MustNameOneInstanceInt32(
+        string axis, string expectedReason)
+    {
+        await Task.Yield();
+        string source = $@"
+using AiDotNet.Attributes;
+public sealed class AdaptiveLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{{
+    private bool Enabled = true;
+    private int Input = 4;
+    [TrainableParameter(Shape = ""{axis}"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN093"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(expectedReason, diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AdaptiveShapeBinding_AcceptsReadableInstanceInt32AndBareWildcard()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class AdaptiveLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private int Input = 4;
+    [TrainableParameter(Shape = ""*(Input), *"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}";
+
+        Assert.DoesNotContain(Run(source), item => item.Id == "AIDN093");
     }
 }

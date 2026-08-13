@@ -21,13 +21,15 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks;
 /// round-trip (train → GetParameters → save → fresh model → SetParameters) threw
 /// <c>Expected N parameters, got M</c>.
 ///
-/// The fix has two arms:
-///   1. <c>ParameterCount</c> sums per-layer counts fresh on every access — never goes stale.
-///   2. Public <c>ResolveShapes(sampleInput)</c> method lets callers materialize lazy layers
-///      up-front so a fresh model's <c>SetParameters</c> sees the same size the trained
-///      model's <c>GetParameters</c> returned.
+/// The completed contract has three arms:
+///   1. <c>ParameterCount</c> sums the generated structural manifest on every access — never stale
+///      and never dependent on whether weights happen to have been allocated.
+///   2. Architecture-known models resolve their declared topology automatically, so a fresh model
+///      can restore a checkpoint without a warm-up forward or model-specific parameter override.
+///   3. Public <c>ResolveShapes(sampleInput)</c> remains available for genuinely data-dependent
+///      topology and is idempotent after automatic resolution.
 ///
-/// These tests pin both arms.
+/// These tests pin all three arms.
 /// </summary>
 public class NeuralNetworkBaseResolveShapesTests
 {
@@ -84,14 +86,74 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public void ParameterCount_ReflectsLazyShapeResolutionAfterTrain()
+    public async Task LazyComposite_ManifestBuildsChildStructureWithoutDeclaringItParameterFree()
     {
-        // A fresh model has resolved shapes but deliberately unmaterialized weights. Reads stay
-        // allocation-free, so the concrete count is honestly zero and readiness carries the fact
-        // that parameters are still pending.
+        await Task.Yield();
+        using var layer = new TransformerEncoderLayer<double>(numHeads: 2, feedForwardDim: 32);
+        layer.ResolveShapesOnly(new[] { 4, 16 });
+
+        var layout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+            layer.GetParameterLayout());
+
+        Assert.True(layout.ParameterCount > 0);
+        Assert.Equal(
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized,
+            layout.Readiness);
+
+        long declared = layer.ParameterCount;
+        Assert.Equal(declared, layer.GetParameters().Length);
+    }
+
+    [Fact]
+    public async Task MixedCompositeManifest_PreservesConcreteSiblingsBesideDeferredChildren()
+    {
+        await Task.Yield();
+        using var block = new TransformerEncoderBlock<double>(
+            hiddenSize: 24,
+            numHeads: 4,
+            ffnDim: 48,
+            dropoutRate: 0);
+
+        // Attention and normalization are construction-sized. The two Dense FFN children are
+        // honestly deferred until a real sequence shape reaches the block.
+        var parameters = block.GetParameters();
+        var layout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+            block.GetParameterLayout());
+
+        Assert.True(parameters.Length > 0);
+        Assert.Equal(AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred, layout.Readiness);
+        Assert.Equal(parameters.Length, layout.KnownParameterCount);
+        Assert.Contains(layout.Slots, slot => slot.Readiness ==
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
+        Assert.Contains(layout.Slots, slot => slot.ParameterCount > 0);
+    }
+
+    [Fact]
+    public async Task ParameterShapeReadyLayer_MaterializesWithDynamicDataAxes()
+    {
+        await Task.Yield();
+        using var layer = ConvolutionalLayer<double>.WithInputDepth(
+            inputDepth: 3,
+            outputDepth: 8,
+            kernelSize: 3);
+
+        Assert.False(layer.IsShapeResolved);
+        long declared = layer.ParameterCount;
+        Assert.True(declared > 0);
+        Assert.Equal(declared, layer.GetParameters().Length);
+    }
+
+    [Fact]
+    public async Task ParameterCount_UsesDeclaredShapesBeforeTrainAndRemainsStableAfterTrain()
+    {
+        await Task.Yield();
+
+        // NeRF's topology is non-sequential, but every parameter dimension follows from its
+        // architecture. The model hook resolves that topology without allocating weights, so the
+        // generated manifest can publish the final count before the first forward.
         var model = BuildNeRF();
         long freshCount = model.ParameterCount;
-        Assert.Equal(0, freshCount);
+        Assert.True(freshCount > 0);
         Assert.True(model.HasUninitializedParameters);
 
         // First Train call materializes DenseLayer inputs via positional encoding
@@ -99,13 +161,10 @@ public class NeuralNetworkBaseResolveShapesTests
         var (x, y) = DummyBatch(32);
         model.Train(x, y);
 
-        // Post-train ParameterCount MUST reflect the resolved sizes. Pre-#1832 the cache
-        // stuck at freshCount and this assertion failed.
+        // Training materializes values but must not change a constructor-known structural count.
+        // Pre-#1832 the cache and the materialized vector described different layouts.
         long resolvedCount = model.ParameterCount;
-        Assert.True(resolvedCount > freshCount,
-            $"ParameterCount should grow after lazy shape resolution during first Train " +
-            $"(fresh={freshCount}, resolved={resolvedCount}). If they're equal, the stale " +
-            $"cache from pre-#1832 is back.");
+        Assert.Equal(freshCount, resolvedCount);
 
         // ParameterCount and GetParameters().Length MUST agree post-resolution — that's the
         // invariant SetParameters relies on for length validation.
@@ -113,27 +172,30 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public void ResolveShapes_UnblocksFlatVectorRoundTrip()
+    public async Task AutomaticShapeResolution_UnblocksFlatVectorRoundTrip()
     {
+        await Task.Yield();
+
         // Train a model briefly to materialize its lazy shapes + move some weights.
         var trained = BuildNeRF();
         var (x, y) = DummyBatch(32, seed: 1);
         trained.Train(x, y);
         var savedParams = trained.GetParameters();
 
-        // Fresh sibling — same architecture, no Train yet, lazy shapes still un-materialized.
+        // A fresh sibling reports the same structural width before allocating values. Restore is
+        // therefore warm-up-free: model creators do not need a parameter or shape override and
+        // users do not need to know which sample tensor would initialize the graph.
         var fresh = BuildNeRF();
-        Assert.True(fresh.GetParameters().Length < savedParams.Length,
-            "Fresh sibling should have FEWER parameters than the trained model (lazy layers " +
-            "not yet resolved). If they're equal, the test fixture broke.");
+        Assert.Equal(savedParams.Length, fresh.ParameterCount);
+        Assert.True(fresh.HasUninitializedParameters);
 
         // NeRF declares its real non-sequential topology in ResolveLazyLayerShapes, so restore can
         // materialize that known layout on demand without requiring a sample input first.
         fresh.SetParameters(savedParams);
         Assert.Equal(savedParams.Length, fresh.GetParameters().Length);
 
-        // ResolveShapes with a sample input drives one forward pass to materialize the
-        // lazy layers. After it returns, the fresh model's size matches the trained one.
+        // ResolveShapes remains a safe, idempotent operation for callers that use it uniformly
+        // across architecture-known and genuinely data-dependent models.
         var sample = new Tensor<float>(new[] { 1, 6 }, new Vector<float>(new float[6]));
         fresh.ResolveShapes(sample);
         Assert.Equal(savedParams.Length, fresh.GetParameters().Length);
@@ -156,10 +218,17 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public void SetParameters_EmptyLazyCheckpoint_DoesNotChangeLayoutMidRestore()
+    public async Task SetParameters_EmptyTrulyShapeDeferredCheckpoint_DoesNotChangeLayoutMidRestore()
     {
-        var source = BuildLazyDenseNetwork();
-        var target = BuildLazyDenseNetwork();
+        await Task.Yield();
+
+        // No architecture supplies an input width here, so these layers are genuinely deferred.
+        // In contrast, BuildLazyDenseNetwork declares inputSize=3 and must now publish/materialize
+        // its complete generated parameter surface without a warm-up forward.
+        using var source = new DenseLayer<double>(
+            4, (IActivationFunction<double>)new ReLUActivation<double>());
+        using var target = new DenseLayer<double>(
+            4, (IActivationFunction<double>)new ReLUActivation<double>());
         var checkpoint = source.GetParameters();
 
         Assert.Empty(checkpoint);

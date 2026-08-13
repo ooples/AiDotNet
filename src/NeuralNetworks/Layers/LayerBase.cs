@@ -186,6 +186,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected Vector<T> Parameters;
 
+    // True only when SetParameters received a checkpoint for an explicitly registered parameter
+    // graph whose shapes were still deferred. Parameters is also a legitimate legacy storage slot,
+    // so length alone must never be used to infer this lifecycle state.
+    private bool _hasDeferredParameterPayload;
+
+    /// <summary>Length of a parked lazy-restore payload, or zero for ordinary own storage.</summary>
+    internal int DeferredParameterPayloadLength =>
+        _hasDeferredParameterPayload ? Parameters.Length : 0;
+
     /// <summary>
     /// The gradients of the trainable parameters.
     /// </summary>
@@ -397,9 +406,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <para>Examples: BatchNorm running mean/variance, positional encoding tables,
     /// Hebbian/STDP connection weights, precomputed frequency tensors.</para>
     /// </remarks>
-    private readonly List<(string Name, Tensor<T> Tensor)> _registeredBuffers = new();
-    private readonly Dictionary<string, ParameterSlotRole> _registeredBufferStateRoles
-        = new(StringComparer.Ordinal);
+    private sealed class BufferRegistration
+    {
+        public BufferRegistration(
+            string name,
+            Tensor<T> tensor,
+            PersistentTensorRole persistenceRole,
+            ParameterSlotRole stateRole)
+        {
+            Name = name;
+            Tensor = tensor;
+            PersistenceRole = persistenceRole;
+            StateRole = stateRole;
+        }
+
+        public string Name { get; }
+        public Tensor<T> Tensor { get; set; }
+        public PersistentTensorRole PersistenceRole { get; }
+        public ParameterSlotRole StateRole { get; }
+    }
+
+    // One ordered registry is the source of truth for identity, tensor and both roles. The former
+    // list + dictionary representation could drift during disposal and concurrent lazy
+    // materialization, leaving a name in one store but not the other.
+    private readonly object _bufferRegistrationLock = new();
+    private readonly List<BufferRegistration> _registeredBuffers = new();
 
     /// <summary>
     /// Gets or sets the initialization strategy for this layer.
@@ -516,6 +547,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Executes the layer's lazy-initialization hook under the common initialization gate.
+    /// Generated parameter surfaces and base forward/materialization paths use this method so
+    /// individual layer authors do not need to reproduce double-checked locking correctly.
+    /// </summary>
+    protected void EnsureInitializationSerialized()
+    {
+        lock (InitializationLock)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name,
+                    "A disposed layer cannot be initialized or registered again.");
+            EnsureInitialized();
+        }
+    }
+
+    /// <summary>
     /// Materializes this layer, if it can be, before its parameter surface is read or written.
     /// </summary>
     /// <remarks>
@@ -547,6 +594,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected virtual IReadOnlyList<Tensor<T>> GetTrainableParametersUnmaterialized()
         => GetTrainableParameters();
+
+    /// <summary>
+    /// Returns the currently-present trainable tensors without causing lazy weights to be allocated.
+    /// </summary>
+    /// <remarks>
+    /// Clone and parameter-layout infrastructure use this internal view to observe the same state as
+    /// <see cref="ParameterCount"/> and <see cref="GetParameters"/>. Calling the public trainable view
+    /// from those read-only operations can invoke generated lazy initialization and change the model's
+    /// parameter surface merely by inspecting or cloning it.
+    /// </remarks>
+    internal IReadOnlyList<Tensor<T>> GetTrainableParametersWithoutMaterialization() =>
+        GetTrainableParametersUnmaterialized();
 
     /// <summary>
     /// Materializes this layer, if it can be, before its parameter surface is WRITTEN.
@@ -662,6 +721,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         => System.Array.Empty<(LayerBase<T>?, TensorShape)>();
 
     /// <summary>
+    /// Gets whether generated metadata found child-layer fields whose structure may need to be
+    /// constructed before this layer's allocation-free parameter manifest can be complete.
+    /// </summary>
+    /// <remarks>
+    /// The source generator overrides this from the child fields themselves. It lets the base
+    /// distinguish a genuinely parameter-free leaf from a lazy composite whose children do not
+    /// exist until <see cref="EnsureInitialized"/> runs. Model and layer authors never override it.
+    /// </remarks>
+    protected virtual bool HasDeclaredSubLayerStructure => false;
+
+    /// <summary>
     /// Wraps dimensions as a <see cref="TensorShape"/> without copying them.
     /// </summary>
     /// <remarks>
@@ -703,6 +773,36 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         => System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
 
     /// <summary>
+    /// Concrete shapes used only to size adaptive parameter declarations without allocating them.
+    /// </summary>
+    /// <remarks>
+    /// An adaptive axis is a wildcard for restore validation, but it can still have a known current
+    /// size. The generator emits this parallel view for bound wildcard syntax such as
+    /// <c>*(_inputSize)</c>: validation remains adaptive while the manifest can use the resolved
+    /// input width. Empty means the validation shapes above are also the counting shapes.
+    /// </remarks>
+    protected virtual IReadOnlyList<TensorShape> DeclaredParameterCountShapes()
+        => System.Array.Empty<TensorShape>();
+
+    /// <summary>
+    /// Gets whether this layer has at least one currently-enabled generated parameter-shape
+    /// declaration, even when its axes are not resolved yet.
+    /// </summary>
+    /// <remarks>
+    /// Generated code overrides this from the same <c>[TrainableParameter(Shape = ...)]</c>
+    /// declarations that produce <see cref="DeclaredParameterShapes"/>. It preserves the semantic
+    /// difference between "the shape contract is waiting" and "there are no parameter slots" when
+    /// the latter method must temporarily return an empty list for a <c>-1</c> axis.
+    /// </remarks>
+    protected virtual bool HasActiveDeclaredParameterShapes => false;
+
+    /// <summary>
+    /// Gets whether exhaustive generated automation proved that this layer declares no persistent
+    /// trainable state, buffers, or parameter-bearing children.
+    /// </summary>
+    protected virtual bool IsDeclaredParameterFree => false;
+
+    /// <summary>
     /// Computes this layer's own parameter width from declared shapes without allocating lazy
     /// tensors. Child layers are intentionally excluded: the owning graph walk visits each child
     /// once with reference-identity deduplication.
@@ -713,6 +813,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         materialized = true;
 
         var declared = DeclaredParameterShapes();
+        var countShapes = DeclaredParameterCountShapes();
+        bool hasDistinctCountShapes = countShapes.Count == declared.Count;
         if (declared is not null && declared.Count > 0)
         {
             for (int i = 0; i < declared.Count; i++)
@@ -724,10 +826,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     continue;
                 }
 
+                var countShape = hasDistinctCountShapes ? countShapes[i] : expected;
                 long expectedCount = 1;
-                for (int axis = 0; axis < expected.Length; axis++)
+                for (int axis = 0; axis < countShape.Length; axis++)
                 {
-                    int dimension = expected[axis];
+                    int dimension = countShape[axis];
                     if (dimension <= 0) return false;
                     expectedCount = checked(expectedCount * dimension);
                 }
@@ -737,6 +840,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
         else
         {
+            if (HasActiveDeclaredParameterShapes)
+            {
+                materialized = false;
+                return false;
+            }
+
             var trainable = GetTrainableParametersUnmaterialized();
             if ((trainable is null || trainable.Count == 0) && HasUninitializedParameters)
                 return false;
@@ -771,30 +880,96 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
     {
-        if (!TryGetDeclaredParameterCount(out long count, out bool materialized))
-        {
-            return new[]
-            {
-                new ParameterSlotDescriptor(
-                    "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
-            };
-        }
+        EnsureDeclaredSubLayerStructure();
 
-        return new[]
+        // Preserve mixed readiness at the same granularity as the recursive value walk. A
+        // composite is not one indivisible parameter slot: its own tensors and each child become
+        // ready independently. Collapsing the whole subtree into a single aggregate meant one
+        // deferred Dense child erased already concrete attention and normalization siblings from
+        // the manifest, even though GetParameters() correctly emitted those values. The network
+        // then had no principled count to report.
+        //
+        // Keeping one slot for this layer's own storage followed by child slots in registration
+        // order also mirrors FillParameters exactly. That gives count, flat read, restore, chunks,
+        // and checkpoint identity one structural source of truth without any model override.
+        var slots = new List<ParameterSlotDescriptor>();
+        var subs = GetSubLayers();
+        bool hasParameterChildren = subs is not null && subs.Any(child =>
+            child is not null && !IsSubLayerParameterFrozen(child));
+
+        if (!TryGetOwnDeclaredParameterCount(out long ownCount, out bool ownMaterialized))
         {
-            new ParameterSlotDescriptor(
+            slots.Add(new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null));
+        }
+        else if (ownCount > 0 || !hasParameterChildren)
+        {
+            slots.Add(new ParameterSlotDescriptor(
                 "$", ParameterSlotRole.Trainable,
-                count == 0
+                ownCount == 0
                     ? ParameterReadiness.ParameterFree
-                    : materialized
+                    : ownMaterialized
                         ? ParameterReadiness.Materialized
                         : ParameterReadiness.ShapeResolvedUnmaterialized,
-                count)
-        };
+                ownCount));
+        }
+
+        if (subs is not null)
+        {
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var child = subs[i];
+                if (child is null || IsSubLayerParameterFrozen(child)) continue;
+
+                string prefix = $"children/{i:D8}";
+                if (child is LayerBase<T> childBase)
+                {
+                    var childSlots = childBase.GetParameterLayout();
+                    for (int slotIndex = 0; slotIndex < childSlots.Count; slotIndex++)
+                    {
+                        var childSlot = childSlots[slotIndex];
+                        string stableId = childSlot.StableId == "$"
+                            ? prefix
+                            : prefix + "/" + childSlot.StableId;
+                        slots.Add(new ParameterSlotDescriptor(
+                            stableId,
+                            childSlot.Role,
+                            childSlot.Readiness,
+                            childSlot.ParameterCount,
+                            shape: childSlot.Shape,
+                            elementType: childSlot.ElementType,
+                            updatePolicy: childSlot.UpdatePolicy,
+                            persistence: childSlot.Persistence,
+                            ownership: childSlot.Ownership,
+                            availability: childSlot.Availability));
+                    }
+                }
+                else
+                {
+                    long count = child.ParameterCount;
+                    slots.Add(new ParameterSlotDescriptor(
+                        prefix,
+                        ParameterSlotRole.Trainable,
+                        count == 0
+                            ? ParameterReadiness.ParameterFree
+                            : ParameterReadiness.Materialized,
+                        count));
+                }
+            }
+        }
+
+        if (slots.Count == 0)
+        {
+            slots.Add(new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ParameterFree, 0));
+        }
+
+        return slots;
     }
 
     private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
     {
+        EnsureDeclaredSubLayerStructure();
         if (!TryGetOwnDeclaredParameterCount(out count, out materialized)) return false;
 
         var subs = GetSubLayers();
@@ -820,6 +995,35 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             materialized &= concreteCount == 0 || child.IsShapeResolved;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Constructs a generated child-module graph in shape-only mode before reading its manifest.
+    /// </summary>
+    /// <remarks>
+    /// A lazy composite can know its own input shape while its child fields are still null.
+    /// Treating that state as parameter-free made a pre-read count smaller than the vector emitted
+    /// by <see cref="GetParameters"/>, because that value read is the first operation that ran the
+    /// composite initializer. The generator tells the base which layers own children; the base then
+    /// runs their idempotent initializer under the same non-allocating shape-only guard used by
+    /// architecture propagation. Leaf layers never enter this path, so a manifest query remains
+    /// allocation-free even for foundation-scale models.
+    /// </remarks>
+    private void EnsureDeclaredSubLayerStructure()
+    {
+        if (!HasDeclaredSubLayerStructure) return;
+        if (!IsShapeResolved && !ParametersAreConstructionSized) return;
+
+        bool wasResolvingShapesOnly = IsResolvingShapesOnly;
+        IsResolvingShapesOnly = true;
+        try
+        {
+            EnsureInitializationSerialized();
+        }
+        finally
+        {
+            IsResolvingShapesOnly = wasResolvingShapesOnly;
+        }
     }
 
     /// <summary>
@@ -971,7 +1175,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected void InitializeShapesWithoutAllocating()
     {
         IsConstructingShapesOnly = true;
-        try { EnsureInitialized(); }
+        try { EnsureInitializationSerialized(); }
         finally { IsConstructingShapesOnly = false; }
     }
 
@@ -1032,9 +1236,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // every implementation latches on its own flag -- so calling it unconditionally is free
         // for a layer that is already up, and is the only thing that works for the 195 layers
         // that never told the base they were down.
-        if (IsShapeResolved || ParametersAreConstructionSized)
+        // A layer can know every PARAMETER dimension while leaving unrelated data axes dynamic.
+        // ConvolutionalLayer.WithInputDepth is the canonical case: channel counts and kernel size
+        // fully determine its weights, while image height/width correctly remain unresolved. Its
+        // generated declaration is therefore a stronger readiness signal than IsShapeResolved.
+        // This is an explicit value boundary, so materializing a countable declaration is expected;
+        // bare ParameterCount remains allocation-free.
+        bool hasCountableDeclaredParameters =
+            TryGetOwnDeclaredParameterCount(out long declaredParameterCount, out _)
+            && declaredParameterCount > 0;
+        if (IsShapeResolved || ParametersAreConstructionSized || hasCountableDeclaredParameters)
         {
-            EnsureInitialized();
+            EnsureInitializationSerialized();
             // #1715: register the just-materialized streaming weights with the pool so transparent
             // auto-eviction can page them out — the forward path does this via
             // EnsureInitializedFromInput → RegisterStreamingWeightsWithPool, but the
@@ -1062,6 +1275,36 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 if (subs[i] is LayerBase<T> child) child.EnsureParametersMaterialized();
             }
         }
+
+        ReplayDeferredParameterPayload();
+    }
+
+    /// <summary>
+    /// Replays a flat payload that arrived before this layer could expose concrete tensor slots.
+    /// </summary>
+    private void ReplayDeferredParameterPayload()
+    {
+        if (!_hasDeferredParameterPayload) return;
+
+        var deferred = Parameters;
+        Parameters = Vector<T>.Empty();
+        _hasDeferredParameterPayload = false;
+
+        int materializedLength = FillParameters(null, 0);
+        if (materializedLength != deferred.Length)
+        {
+            Parameters = deferred;
+            _hasDeferredParameterPayload = true;
+            throw new InvalidOperationException(
+                $"{GetType().Name} materialized {materializedLength} parameter values, but its " +
+                $"deferred restore payload contains {deferred.Length}. The declared shape contract " +
+                "and checkpoint layout disagree.");
+        }
+
+        // With the shadow slot cleared, the ordinary base setter now distributes into the generated
+        // tensors/buffers/children exactly once. This makes deferred restore the same operation as an
+        // eager restore after materialization, instead of leaving both copies in the flat surface.
+        SetParameters(deferred);
     }
 
     /// <inheritdoc />
@@ -1688,13 +1931,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
-        if (!_firstForwardRan && !IsShapeResolved)
+        lock (InitializationLock)
         {
-            OnFirstForward(input);
-            _firstForwardRan = true;
-            RegisterStreamingWeightsWithPool();
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name,
+                    "A disposed layer cannot execute a forward pass.");
+            if (!_firstForwardRan && !IsShapeResolved)
+            {
+                OnFirstForward(input);
+                _firstForwardRan = true;
+                RegisterStreamingWeightsWithPool();
+            }
+            EnsureInitialized();
         }
-        EnsureInitialized();
     }
 
     /// <summary>
@@ -1902,7 +2151,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         IsResolvingShapesOnly = true;
         try
         {
-            EnsureInitialized();
+            EnsureInitializationSerialized();
         }
         finally
         {
@@ -2579,7 +2828,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var contractShape = inputs.Values.FirstOrDefault()?.Shape.ToArray() ?? GetInputShape();
         var manifest = GetInputContract(contractShape);
         string variant = manifest.ResolveVariant(inputs.Keys);
-        manifest.Bind(contractShape, variant: variant)
+        var inputShapes = inputs.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.Shape.ToArray(),
+            StringComparer.Ordinal);
+        manifest.Bind(inputShapes, variant)
             .Validate(inputs);
 
         var observer = LayerForwardObserver<T>.Current;
@@ -4307,6 +4560,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 && _cachedOwnLength == Parameters.Length)
                 return _cachedParameterCount;
 
+            // Prefer the allocation-free structural manifest whenever the layer can describe it.
+            // A shape-resolved lazy tensor is a real parameter slot even before its backing storage
+            // is allocated; reporting zero made a complete CNN look parameter-free until Forward.
+            // DeclaredParameterShapes is generated from the same [TrainableParameter] declarations
+            // that own get/set/chunk order, so this remains one fold rather than a parallel formula.
+            if (TryGetDeclaredParameterCount(out long declaredTotal, out _))
+            {
+                _cachedParameterCount = declaredTotal;
+                _cachedParameterEpoch = System.Threading.Volatile.Read(ref s_parameterEpoch);
+                _cachedOwnLength = Parameters.Length;
+                return declaredTotal;
+            }
+
             // Deliberately does NOT materialize. Counting must stay side-effect-free: this property
             // is read from ComputeTopologyFingerprint and from Dispose, and allocating weights just
             // to size them threw OutOfMemoryException on a 774M-parameter model that the caller was
@@ -4742,6 +5008,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     public virtual Vector<T> GetParameters()
     {
+        // Reading values is an explicit materialization boundary. ParameterCount remains allocation-
+        // free and can report a shape-resolved structural count, while a caller asking for the flat
+        // payload receives exactly those declared values. This is the same split as a lazy module's
+        // symbolic shape versus its state_dict payload, and prevents count/vector drift without
+        // allocating foundation-scale weights during topology inspection or disposal.
+        EnsureParametersMaterialized();
+
         // One allocation, filled in a single pass. The obvious recursive form -- build a List and,
         // for each child, append the Vector its own GetParameters() returned -- re-copies every
         // scalar once per level of nesting and allocates a whole vector per child on the way. For
@@ -4775,6 +5048,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal IEnumerable<ParameterChunk<T>> GetParameterStateChunks(string stablePrefix)
     {
+        // Chunks carry values, not merely schema. Materialize at this explicit value boundary so
+        // their lengths are the concrete projection of the same manifest ParameterCount reads.
+        EnsureParametersMaterialized();
+
         if (Parameters.Length > 0)
         {
             yield return new ParameterChunk<T>(
@@ -4783,7 +5060,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 new Tensor<T>(new[] { Parameters.Length }, Parameters));
         }
 
-        var trainable = GetTrainableParameters();
+        var trainable = GetTrainableParametersUnmaterialized();
         if (trainable is not null)
         {
             for (int i = 0; i < trainable.Count; i++)
@@ -5102,6 +5379,23 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        // A parameter-free layer is a closed contract, not a deferred one. The old fallback stored
+        // any incoming vector in Parameters whenever no registry entries existed, which meant a
+        // typo such as dropout.SetParameters(nonEmpty) silently turned a stateless layer into a
+        // stateful one. The manifest already knows the distinction that a zero count cannot express:
+        // ParameterFree rejects values, while ShapeDeferred may park them until geometry arrives.
+        if (IsDeclaredParameterFree && parameters.Length != 0)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name} is parameter-free and cannot accept {parameters.Length} values.",
+                nameof(parameters));
+        }
+
         // Materializes ON DEMAND, never speculatively. Reading and counting stay lazy, so a restore
         // is the one moment the layer learns it needs weights it does not have yet -- and the
         // incoming length is the evidence. Materializing unconditionally instead made restore
@@ -5192,9 +5486,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // materialization, which is the convention Conv1DLayer's ApplyResolvedParameters follows.
         if (!hasRegistry || (!shapeKnown && !currentLayoutMatches))
         {
+            _hasDeferredParameterPayload = hasRegistry && !shapeKnown && !currentLayoutMatches;
             Parameters = parameters;
             return;
         }
+
+        _hasDeferredParameterPayload = false;
 
         int index = 0;
 
@@ -5808,44 +6105,75 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Buffer name must not be empty.", nameof(name));
 
-        // Buffer registration is name-based, matching PyTorch's register_buffer
-        // contract. Lazy initialization and deserialization can replace a buffer
-        // tensor after a placeholder or restored value is installed; keep the
-        // engine's persistent-tensor registry and the layer's named view aligned.
-        for (int i = 0; i < _registeredBuffers.Count; i++)
+        lock (_bufferRegistrationLock)
         {
-            if (!string.Equals(_registeredBuffers[i].Name, name, StringComparison.Ordinal))
-                continue;
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name,
+                    $"Cannot register persistent state '{name}' after the layer was disposed.");
 
-            var previous = _registeredBuffers[i].Tensor;
-            if (ReferenceEquals(previous, tensor)
-                && _registeredBufferStateRoles.TryGetValue(name, out var existingStateRole)
-                && existingStateRole == stateRole)
+            // Name is the stable identity within a layer. Lazy materialization and restore may
+            // replace its tensor, but may never silently change what kind of state that identity
+            // represents.
+            for (int i = 0; i < _registeredBuffers.Count; i++)
+            {
+                var existing = _registeredBuffers[i];
+                if (!string.Equals(existing.Name, name, StringComparison.Ordinal))
+                    continue;
+
+                if (existing.PersistenceRole != role || existing.StateRole != stateRole)
+                {
+                    throw new InvalidOperationException(
+                        $"Persistent state '{name}' is already registered with roles "
+                        + $"({existing.PersistenceRole}, {existing.StateRole}) and cannot also use "
+                        + $"({role}, {stateRole}). Give structurally different state a unique stable name.");
+                }
+
+                if (ReferenceEquals(existing.Tensor, tensor))
+                    return;
+
+                // Publish the replacement to the engine before retiring the previous tensor. If
+                // registration fails, the canonical entry and previous engine registration remain
+                // untouched.
+                Engine.RegisterPersistentTensor(tensor, role);
+                try
+                {
+                    Engine.UnregisterPersistentTensor(existing.Tensor);
+                }
+                catch
+                {
+                    Engine.UnregisterPersistentTensor(tensor);
+                    throw;
+                }
+
+                existing.Tensor = tensor;
+                BumpParameterEpoch();
                 return;
+            }
 
-            if (ReferenceEquals(previous, tensor))
-                throw new InvalidOperationException(
-                    $"Persistent state '{name}' is already registered as " +
-                    $"{_registeredBufferStateRoles[name]} and cannot also be {stateRole}.");
-
-            Engine.UnregisterPersistentTensor(previous);
             Engine.RegisterPersistentTensor(tensor, role);
-            _registeredBuffers[i] = (name, tensor);
-            _registeredBufferStateRoles[name] = stateRole;
+            try
+            {
+                _registeredBuffers.Add(new BufferRegistration(name, tensor, role, stateRole));
+            }
+            catch
+            {
+                Engine.UnregisterPersistentTensor(tensor);
+                throw;
+            }
             BumpParameterEpoch();
-            return;
         }
-
-        Engine.RegisterPersistentTensor(tensor, role);
-        _registeredBuffers.Add((name, tensor));
-        _registeredBufferStateRoles.Add(name, stateRole);
-        BumpParameterEpoch();
     }
 
     private ParameterSlotRole GetRegisteredBufferStateRole(string name)
-        => _registeredBufferStateRoles.TryGetValue(name, out var role)
-            ? role
-            : ParameterSlotRole.Buffer;
+    {
+        lock (_bufferRegistrationLock)
+        {
+            for (int i = 0; i < _registeredBuffers.Count; i++)
+                if (string.Equals(_registeredBuffers[i].Name, name, StringComparison.Ordinal))
+                    return _registeredBuffers[i].StateRole;
+            return ParameterSlotRole.Buffer;
+        }
+    }
 
     /// <summary>
     /// Gets all registered buffers (non-trainable persistent tensors) for this layer.
@@ -5858,7 +6186,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// avoided: it puts tensors in front of the pre-step buffer-view walk beside the parent that
     /// already handles them, which silently breaks training.
     /// </remarks>
-    public virtual IReadOnlyList<(string Name, Tensor<T> Tensor)> GetRegisteredBuffers() => _registeredBuffers;
+    public virtual IReadOnlyList<(string Name, Tensor<T> Tensor)> GetRegisteredBuffers()
+    {
+        lock (_bufferRegistrationLock)
+        {
+            var snapshot = new (string Name, Tensor<T> Tensor)[_registeredBuffers.Count];
+            for (int i = 0; i < _registeredBuffers.Count; i++)
+                snapshot[i] = (_registeredBuffers[i].Name, _registeredBuffers[i].Tensor);
+            return snapshot;
+        }
+    }
 
     #region ITrainableLayer<T> Implementation
 
@@ -5902,9 +6239,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             var t = _registeredTensors[i];
             if (t is not null && t.Length > 0) t.To(device);
         }
-        for (int i = 0; i < _registeredBuffers.Count; i++)
+        var registeredBuffers = GetRegisteredBuffers();
+        for (int i = 0; i < registeredBuffers.Count; i++)
         {
-            var t = _registeredBuffers[i].Tensor;
+            var t = registeredBuffers[i].Tensor;
             if (t is not null && t.Length > 0) t.To(device);
         }
         for (int i = 0; i < _registeredSubLayers.Count; i++)
@@ -6376,8 +6714,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
-        if (_disposed)
-            return;
+        List<Tensor<T>> bufferSnapshot;
+        lock (InitializationLock)
+        {
+            lock (_bufferRegistrationLock)
+            {
+                if (_disposed)
+                    return;
+
+                // Initialization always takes InitializationLock before publishing a buffer. Taking
+                // the same locks in the same order makes disposal a true lifecycle barrier: no
+                // initializer can allocate state between the terminal flag and registry cleanup.
+                _disposed = true;
+                bufferSnapshot = new List<Tensor<T>>(_registeredBuffers.Count);
+                for (int i = 0; i < _registeredBuffers.Count; i++)
+                    bufferSnapshot.Add(_registeredBuffers[i].Tensor);
+                _registeredBuffers.Clear();
+            }
+        }
 
         if (disposing)
         {
@@ -6408,15 +6762,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
             _registeredTensors.Clear();
 
-            foreach (var (_, tensor) in _registeredBuffers)
+            foreach (var tensor in bufferSnapshot)
             {
                 if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
             }
-            _registeredBuffers.Clear();
         }
-
-        _disposed = true;
     }
 
     /// <summary>
