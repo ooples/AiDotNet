@@ -49,6 +49,9 @@ ADNPORT007 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Generat
 ADNPORT008 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Tensor-contract member has an incompatible signature
 ADNPORT009 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Generated forward contract is ambiguous or uses unsupported parameters
 ADNPORT010 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Stable input port identity collides across inherited/local declarations
+ADN0058 | AiDotNet.Serialization | Error | CloneAutomationAnalyzer, Clone override duplicates what the base class already does
+ADN0059 | AiDotNet.Serialization | Info | CloneAutomationAnalyzer, Model cannot be rebuilt from its own state
+ADN0060 | AiDotNet.Serialization | Error | CloneAutomationAnalyzer, Serialization is hand-written instead of declared
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
 AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract

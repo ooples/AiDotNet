@@ -52,9 +52,37 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Info,
         isEnabledByDefault: true);
 
+    /// <summary>State a layer persists by hand instead of declaring it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Every hand-written <c>Serialize</c> in this library was inspected, and not one writes state
+    /// that lacks a declaration mechanism. They write constructor parameters (<c>[LayerState]</c>
+    /// already generates both halves), tensors (<c>RegisterTrainableParameter</c> and
+    /// <c>RegisterBuffer</c> already own those), or the resolved shape (the base payload now carries
+    /// it). They exist because the state was never declared, so nothing generated it.
+    /// </para>
+    /// <para>
+    /// ERROR, DELIBERATELY, AND RED UNTIL THE BACKLOG IS ZERO. This rule exists to verify FULL
+    /// compliance, and a warning is the thing everyone learns to scroll past -- 368 hand-written
+    /// halves accumulated under exactly that kind of silence. The build stays red until every one of
+    /// them declares its state, which is the point: the count is the work, and it is not allowed to
+    /// be invisible.
+    /// </para>
+    /// </remarks>
+    private static readonly DiagnosticDescriptor HandWrittenSerialization = new(
+        "ADN0060",
+        "Serialization is hand-written instead of declared",
+        "'{0}.{1}' persists state by hand. Declare the state instead and the generator writes and "
+            + "reads it: mark constructor parameters [LayerState], register tensors with "
+            + "RegisterTrainableParameter or RegisterBuffer, and let the base carry the resolved "
+            + "shape. A hand-written pair is two places to forget the same field",
+        "AiDotNet.Serialization",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-        => ImmutableArray.Create(RedundantOverride, Unreproducible);
+        => ImmutableArray.Create(RedundantOverride, Unreproducible, HandWrittenSerialization);
 
     /// <inheritdoc/>
     public override void Initialize(AnalysisContext context)
@@ -79,10 +107,28 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
         var method = (MethodDeclarationSyntax)context.Node;
 
         if (!method.Modifiers.Any(m => m.ValueText == "override")) return;
-        if (method.ParameterList.Parameters.Count != 0) return;
 
         var name = method.Identifier.ValueText;
+
+        // Serialization is reported wherever it is hand-written, without asking whether the base
+        // "already reproduces" it. That question is the wrong one: the state a layer persists by
+        // hand is state nothing declared, so the base COULD not reproduce it, and treating that as
+        // justification is what let 297 hand-written halves accumulate. The remedy is to declare the
+        // state, not to prove the override earns its place.
+        if (name is "Serialize" or "Deserialize")
+        {
+            if (context.ContainingSymbol is IMethodSymbol { OverriddenMethod: not null and not { IsAbstract: true } }
+                && context.ContainingSymbol.ContainingType is INamedTypeSymbol owner)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    HandWrittenSerialization, method.Identifier.GetLocation(), owner.Name, name));
+            }
+
+            return;
+        }
+
         if (name is not ("CreateNewInstance" or "DeepCopy" or "Clone")) return;
+        if (method.ParameterList.Parameters.Count != 0) return;
 
         if (!IsSingleReturnOfNewObject(method) && !IsPureForwarder(method, name)) return;
 
