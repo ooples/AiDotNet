@@ -34,7 +34,7 @@ public class VaeDecodeAliasingTests
     }
 
     /// <summary>
-    /// A LATENT-shaped tensor. The noise predictor consumes latents, not images — passing the
+    /// A LATENT-shaped tensor. The noise predictor consumes latents, not images â€” passing the
     /// image-shaped Textured() fixture routes it down a different path and the test measures nothing.
     /// </summary>
     private static Tensor<double> TexturedLatent(int seed)
