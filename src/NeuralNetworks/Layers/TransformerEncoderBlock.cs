@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, HasTrainingMode = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 2, 16, 0.0")]
+[LayerProperty(IsTrainable = true, HasTrainingMode = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 64", TestConstructorArgs = "64, 4, 256, 0.0")]
 // SHAPE-PRESERVING. Both Pre-LN sublayers close with a residual add against the stream they were
 // given - `TensorAdd(input, attnOut)` and `TensorAdd(afterAttn, ffnReshaped)` - and the FFN detour
 // through the 2-D DenseLayers restores the stream's own dimensions with

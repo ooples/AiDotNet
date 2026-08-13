@@ -159,7 +159,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// Each coefficient quantifies the effect of one external variable. The model
     /// learns these coefficients from your data to improve predictions.
     /// </remarks>
-    private Vector<T>? _regression;
+    private Vector<T> _regression;
 
     /// <summary>
     /// Creates a new Bayesian Structural Time Series model with the specified options.
@@ -198,8 +198,13 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         // Initialize regression component if included
         if (_bayesianOptions.IncludeRegression)
         {
-            // We'll initialize the regression vector later when we have the actual input data
-            _regression = null;
+            // The feature count is unknown until training, but an empty vector represents that
+            // allocation-free state without making the whole checkpoint manifest shape-deferred.
+            _regression = Vector<T>.Empty();
+        }
+        else
+        {
+            _regression = Vector<T>.Empty();
         }
     }
 
@@ -1244,6 +1249,8 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         writer.Write(_trainingSeries.Length);
         for (int i = 0; i < _trainingSeries.Length; i++)
             writer.Write(Convert.ToDouble(_trainingSeries[i]));
+
+        SerializationHelper<T>.SerializeVector(writer, _regression);
     }
 
     /// <summary>
@@ -1312,10 +1319,13 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
             _trainingSeries = new Vector<T>(tsLen);
             for (int i = 0; i < tsLen; i++)
                 _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+
+            _regression = SerializationHelper<T>.DeserializeVector(reader);
         }
         catch (EndOfStreamException)
         {
             _trainingSeries = Vector<T>.Empty();
+            _regression = Vector<T>.Empty();
         }
     }
 

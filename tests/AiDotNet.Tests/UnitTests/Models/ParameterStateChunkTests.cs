@@ -22,7 +22,7 @@ public sealed class ParameterStateChunkTests
         Assert.Equal(model.ParameterCount, chunks.Sum(chunk => (long)chunk.Tensor.Length));
         AssertFlatParity(model.GetParameters(), chunks);
         Assert.Contains(chunks, chunk => chunk.Role == ParameterSlotRole.Trainable);
-        Assert.Contains(chunks, chunk => chunk.Role == ParameterSlotRole.LearnedState);
+        Assert.Contains(chunks, chunk => chunk.Role == ParameterSlotRole.Buffer);
         Assert.True(
             chunks.Where(chunk => chunk.Role == ParameterSlotRole.Trainable)
                 .Sum(chunk => (long)chunk.Tensor.Length) < model.ParameterCount,

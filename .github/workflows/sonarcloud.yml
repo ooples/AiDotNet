@@ -755,12 +755,22 @@ jobs:
           # CANCELLED before finishing (dense with heavy segmentation/foundation models,
           # e.g. Mask2Former). Split G-M → G-I + J-M so each serial half finishes under the
           # timeout. Gap-free + non-overlapping: union == G-M.
-          - name: ModelFamily - Generated Layers G-I
+          # SPLIT FROM "G-I", which reached the 45-minute job ceiling and uploaded no TRX. It
+          # carried 35 layer types (G 19, H 10, I 6) plus the generated model scaffolds on the same
+          # prefixes -- against healthy shards like C and D at 25 and 22. This is the one of the
+          # four reported shards where breadth genuinely was the problem; U (6 types) and Vo-VR
+          # (1 type) are small and fail for a different reason, so they are NOT split here.
+          - name: ModelFamily - Generated Layers G
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.G
+          - name: ModelFamily - Generated Layers H-I
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
+              (FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I)
           # J-M in turn never once COMPLETED: every run either OOMed (MiniGPT-v2 / Llama-3.2-Vision /
           # Kimi-VL, all bounded now) or ran out the 45-min budget. It carries 183 generated classes,
           # and the last CI run covered only 44 of them in 14.4 min of execution before dying —
@@ -1212,7 +1222,8 @@ jobs:
             'ModelFamily - Generated Layers B',
             'ModelFamily - Generated Layers C',
             'ModelFamily - Generated Layers D-F',
-            'ModelFamily - Generated Layers G-I',
+            'ModelFamily - Generated Layers G',
+            'ModelFamily - Generated Layers H-I',
             'ModelFamily - Generated Layers J-L',
             'ModelFamily - Generated Layers M A-Medi',
             'ModelFamily - Generated Layers M MedS-Meta',
@@ -1531,7 +1542,7 @@ jobs:
           if-no-files-found: ignore
 
   parameter-enumeration-sweep:
-    name: Parameter sweep (${{ matrix.sweep }})
+    name: Parameter sweep (${{ matrix.label }})
     runs-on: ubuntu-latest
     # LEAST PRIVILEGE, DECLARED. With no permissions block this job inherited the workflow
     # or repository default token scope, which on a repository defaulting to read/write hands
@@ -1560,17 +1571,24 @@ jobs:
     # (did not start / no summary / killed mid-run) fails. So the job stays a
     # reporter for findings and a gate for its own brokenness, which is what the
     # surrounding comments claimed all along.
-    # One runner PER sweep. Each of these constructs every model in the library, so running them
-    # together in a single job is what killed the first attempt: the step was cancelled after 6m48s
-    # against a 60-minute limit, which is a runner OOM, not a timeout. Splitting gives each sweep a
-    # whole runner's memory and runs them concurrently instead of serially.
+    # One runner PER sweep workload. The count contract is further split into isolated test hosts:
+    # all eight rows are safe individually, but running them consecutively in one host retains
+    # enough native/runtime state to crash after the third row. The shard selector changes only
+    # discovery; the eight jobs remain a complete, disjoint partition of the model catalog.
     strategy:
       fail-fast: false
       matrix:
-        sweep:
-          - ParameterCountContractTests
-          - ParameterChunkParityTests
-          - ParameterEnumerationParityTests
+        include:
+          - { sweep: ParameterCountContractTests, count_shard: '0', label: 'ParameterCountContractTests 0/8', artifact_suffix: 'parameter-count-0' }
+          - { sweep: ParameterCountContractTests, count_shard: '1', label: 'ParameterCountContractTests 1/8', artifact_suffix: 'parameter-count-1' }
+          - { sweep: ParameterCountContractTests, count_shard: '2', label: 'ParameterCountContractTests 2/8', artifact_suffix: 'parameter-count-2' }
+          - { sweep: ParameterCountContractTests, count_shard: '3', label: 'ParameterCountContractTests 3/8', artifact_suffix: 'parameter-count-3' }
+          - { sweep: ParameterCountContractTests, count_shard: '4', label: 'ParameterCountContractTests 4/8', artifact_suffix: 'parameter-count-4' }
+          - { sweep: ParameterCountContractTests, count_shard: '5', label: 'ParameterCountContractTests 5/8', artifact_suffix: 'parameter-count-5' }
+          - { sweep: ParameterCountContractTests, count_shard: '6', label: 'ParameterCountContractTests 6/8', artifact_suffix: 'parameter-count-6' }
+          - { sweep: ParameterCountContractTests, count_shard: '7', label: 'ParameterCountContractTests 7/8', artifact_suffix: 'parameter-count-7' }
+          - { sweep: ParameterChunkParityTests, count_shard: '', label: 'ParameterChunkParityTests', artifact_suffix: 'parameter-chunks' }
+          - { sweep: ParameterEnumerationParityTests, count_shard: '', label: 'ParameterEnumerationParityTests', artifact_suffix: 'parameter-enumeration' }
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -1614,6 +1632,9 @@ jobs:
           # DOTNET_gcServer: 1 is layered back over every step, so a separate hardening step
           # cannot turn Server GC off. Step-level env outranks both.
           DOTNET_gcServer: '0'
+          # Empty for the non-count sweeps. ParameterCountContractTests validates this value and
+          # discovers exactly one of its eight theory rows when it is present.
+          AIDOTNET_PARAMETER_COUNT_SHARD: ${{ matrix.count_shard }}
         # The reporting harness (ParameterEnumerationParityTests) classifies every override as
         # redundant / load-bearing / self-inconsistent / mandatory, by invoking the genuine
         # inherited implementation rather than approximating it. Its output is the input to the
@@ -1689,7 +1710,7 @@ jobs:
         run: |
           mkdir -p sweep-artifacts
           for f in /tmp/parameter-enumeration-parity.tsv \
-                   /tmp/parameter-count-violations.txt \
+                   /tmp/parameter-count-violations*.txt \
                    /tmp/chunk-parity.txt; do
             [ -f "$f" ] && cp "$f" sweep-artifacts/ || echo "absent: $f"
           done
@@ -1700,7 +1721,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: parameter-sweep-${{ matrix.sweep }}-${{ github.sha }}
+          name: parameter-sweep-${{ matrix.artifact_suffix }}-${{ github.sha }}
           path: |
             sweep-artifacts/
             TestResults/

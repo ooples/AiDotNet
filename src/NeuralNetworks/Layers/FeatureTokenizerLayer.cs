@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
@@ -51,6 +52,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // leading axes into the batch (batch = input.Length / features), so a rank-3 input's output batch is
 // a PRODUCT of two input axes and a rank-1 input's is the constant 1 - neither is a claim this
 // layer's configuration supports, so they are left undescribed rather than guessed at.
+[LayerCategory(LayerCategory.Embedding)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output,

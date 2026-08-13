@@ -10,22 +10,20 @@ namespace AiDotNet.Attributes;
 /// of it is part of the model; recreating it from scratch after a load changes nothing.
 /// </para>
 /// <para>
-/// This attribute exists because a tensor field is about to mean "parameter" by DEFAULT. Today the
-/// framework cannot tell a weight from a cache — both are <c>Tensor&lt;T&gt;</c> — so it relies on
-/// authors remembering to opt IN with <see cref="TrainableParameterAttribute"/>, and across the
-/// library 2,197 tensor fields carry no classification at all. Opting in has failed empirically, so
-/// the default inverts: a plain tensor field is a parameter, and the exceptions declare themselves.
+/// The framework deliberately does not infer a role from <c>Tensor&lt;T&gt;</c>. A cache and a weight have
+/// the same storage type, so inference would silently hand activations to an optimizer. This
+/// declaration tells the shared analyzer and generators that the storage is transient.
 /// </para>
 /// <para>
-/// Most scratch never needs this attribute. Nullable fields (<c>Tensor&lt;T&gt;?</c>) are already
-/// excluded, which covers the usual cache shape — <c>_lastInput</c>, <c>_lastOutput</c> — and any
-/// field whose name ends in <c>Gradient</c> is excluded by convention. Reach for
-/// <c>[Scratch]</c> when a field is non-nullable but still not part of the model.
+/// Nullability is only a storage fact and does not imply scratch. Apply <c>[Scratch]</c> to cached
+/// activations and workspaces whether nullable or non-nullable. A matching generated gradient field
+/// is the one narrow convention recognized because its owning trainable parameter supplies the
+/// semantic relationship.
 /// </para>
 /// <para><b>For Beginners:</b> if deleting this tensor and rebuilding it on the next forward pass
 /// would lose nothing, it is scratch.</para>
 /// </remarks>
-[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class ScratchAttribute : Attribute
 {
 }

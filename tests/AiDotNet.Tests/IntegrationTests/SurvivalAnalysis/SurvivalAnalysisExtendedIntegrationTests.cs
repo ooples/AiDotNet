@@ -684,6 +684,7 @@ public class SurvivalAnalysisExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LogNormalAFT_ParameterRoundTrip()
     {
+        await Task.Yield();
         var (x, times, events) = CreateCovariateData(50, 0.3, 42);
         var model = new LogNormalAFT<double>(maxIterations: 200);
         model.FitSurvival(x, times, events);

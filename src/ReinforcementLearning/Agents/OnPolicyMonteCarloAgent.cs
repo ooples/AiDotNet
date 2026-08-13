@@ -301,6 +301,15 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "q-table",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _qTable));
+    }
 
     public override int FeatureCount => _options.StateSize;
 
@@ -335,8 +344,6 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         _returns = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<T>>>>(state.Returns.ToString()) ?? new Dictionary<string, Dictionary<int, List<T>>>();
         _epsilon = state.Epsilon;
     }
-
-
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {

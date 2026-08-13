@@ -134,7 +134,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// to features like "contains an edge" or "contains a curved line."
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "*, _outputSize")]
     private Tensor<T> _weights;
 
     /// <summary>
@@ -161,7 +161,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// which would limit what the network can learn.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "1, _outputSize")]
     private Tensor<T> _biases;
 
     /// <summary>
@@ -373,6 +373,14 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         lock (InitializationLock)
         {
             if (_isInitialized) return;
+
+            // Restored before the first forward: keep what arrived. Rule in LayerBase,
+            // shapes from the [TrainableParameter(Shape = ...)] annotations above.
+            if (TryAdoptRestoredParameters())
+            {
+                _isInitialized = true;
+                return;
+            }
 
             // Use SimdRandom for vectorized weight initialization (4x faster than
             // Tensor.CreateRandom which uses LockedRandom with per-element locking).

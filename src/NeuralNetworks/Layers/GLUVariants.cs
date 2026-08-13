@@ -22,12 +22,8 @@ public enum GLUGateType { Sigmoid, Swish, GELU, ReLU, Bilinear }
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 public partial class SwiGLUFeedForwardLayer<T> : GatedLinearUnitLayer<T>, IShapeContract
 {
-    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
-    private readonly int _outputSize;
-
     public SwiGLUFeedForwardLayer(int outputSize)
-        : base(outputSize, (IActivationFunction<T>)new SwishActivation<T>()) {
-        _outputSize = outputSize; }
+        : base(outputSize, (IActivationFunction<T>)new SwishActivation<T>()) { }
 
     /// <inheritdoc />
     public new IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -38,12 +34,8 @@ public partial class SwiGLUFeedForwardLayer<T> : GatedLinearUnitLayer<T>, IShape
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 public partial class GeGLUFeedForwardLayer<T> : GatedLinearUnitLayer<T>, IShapeContract
 {
-    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
-    private readonly int _outputSize;
-
     public GeGLUFeedForwardLayer(int outputSize)
-        : base(outputSize, (IActivationFunction<T>)new GELUActivation<T>()) {
-        _outputSize = outputSize; }
+        : base(outputSize, (IActivationFunction<T>)new GELUActivation<T>()) { }
 
     /// <inheritdoc />
     public new IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -54,12 +46,8 @@ public partial class GeGLUFeedForwardLayer<T> : GatedLinearUnitLayer<T>, IShapeC
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 public partial class ReGLUFeedForwardLayer<T> : GatedLinearUnitLayer<T>, IShapeContract
 {
-    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
-    private readonly int _outputSize;
-
     public ReGLUFeedForwardLayer(int outputSize)
-        : base(outputSize, (IActivationFunction<T>)new ReLUActivation<T>()) {
-        _outputSize = outputSize; }
+        : base(outputSize, (IActivationFunction<T>)new ReLUActivation<T>()) { }
 
     /// <inheritdoc />
     public new IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -70,12 +58,8 @@ public partial class ReGLUFeedForwardLayer<T> : GatedLinearUnitLayer<T>, IShapeC
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 public partial class BilinearGLUFeedForwardLayer<T> : GatedLinearUnitLayer<T>, IShapeContract
 {
-    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
-    private readonly int _outputSize;
-
     public BilinearGLUFeedForwardLayer(int outputSize)
-        : base(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()) {
-        _outputSize = outputSize; }
+        : base(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()) { }
 
     /// <inheritdoc />
     public new IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)

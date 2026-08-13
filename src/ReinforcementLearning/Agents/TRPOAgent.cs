@@ -546,12 +546,6 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         return kl;
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     private int ArgMax(Vector<T> values)
     {
         int maxIndex = 0;

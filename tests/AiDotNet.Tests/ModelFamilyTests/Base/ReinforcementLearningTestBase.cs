@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using System;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
@@ -15,17 +16,25 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// RL agents use IFullModel&lt;T, Vector&lt;T&gt;, Vector&lt;T&gt;&gt; where
 /// input is state and output is action/value.
 /// </remarks>
-public abstract class ReinforcementLearningTestBase
+public abstract class ReinforcementLearningTestBase<T>
 {
-    protected abstract IFullModel<double, Vector<double>, Vector<double>> CreateModel();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Converts a double literal into the fixture's numeric type.</summary>
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+
+    /// <summary>Converts a fixture-typed value back to double for finiteness / magnitude asserts.</summary>
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
+    protected abstract IFullModel<T, Vector<T>, Vector<T>> CreateModel();
 
     protected virtual int StateDim => 4;
 
-    private Vector<double> CreateRandomState(Random rng)
+    private Vector<T> CreateRandomState(Random rng)
     {
-        var state = new Vector<double>(StateDim);
+        var state = new Vector<T>(StateDim);
         for (int i = 0; i < StateDim; i++)
-            state[i] = rng.NextDouble() * 2.0 - 1.0;
+            state[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
         return state;
     }
 
@@ -42,11 +51,11 @@ public abstract class ReinforcementLearningTestBase
     /// </summary>
     protected virtual int TrainingIterationCap => 1500;
 
-    private static bool ActionsDiffer(Vector<double> a, Vector<double> b)
+    private static bool ActionsDiffer(Vector<T> a, Vector<T> b)
     {
         int minLen = Math.Min(a.Length, b.Length);
         for (int i = 0; i < minLen; i++)
-            if (Math.Abs(a[i] - b[i]) > 1e-12)
+            if (Math.Abs(ToD(a[i]) - ToD(b[i])) > 1e-12)
                 return true;
         return false;
     }
@@ -56,23 +65,23 @@ public abstract class ReinforcementLearningTestBase
     /// opposite alternating patterns, and two complementary one-hot-ish spikes), built
     /// deterministically so the test is reproducible.
     /// </summary>
-    private Vector<double>[] BuildStateBattery()
+    private Vector<T>[] BuildStateBattery()
     {
-        var ascending = new Vector<double>(StateDim);
-        var descending = new Vector<double>(StateDim);
-        var altA = new Vector<double>(StateDim);
-        var altB = new Vector<double>(StateDim);
-        var spikeLow = new Vector<double>(StateDim);
-        var spikeHigh = new Vector<double>(StateDim);
+        var ascending = new Vector<T>(StateDim);
+        var descending = new Vector<T>(StateDim);
+        var altA = new Vector<T>(StateDim);
+        var altB = new Vector<T>(StateDim);
+        var spikeLow = new Vector<T>(StateDim);
+        var spikeHigh = new Vector<T>(StateDim);
         for (int i = 0; i < StateDim; i++)
         {
-            ascending[i] = (i + 1.0) / StateDim;               // 0.25, 0.50, 0.75, 1.00
-            descending[i] = (StateDim - i) / (double)StateDim; // 1.00, 0.75, 0.50, 0.25
-            altA[i] = (i % 2 == 0) ? 1.0 : -1.0;               // +,-,+,-
-            altB[i] = (i % 2 == 0) ? -1.0 : 1.0;               // -,+,-,+
+            ascending[i] = ToT((i + 1.0) / StateDim);               // 0.25, 0.50, 0.75, 1.00
+            descending[i] = ToT((StateDim - i) / (double)StateDim); // 1.00, 0.75, 0.50, 0.25
+            altA[i] = ToT((i % 2 == 0) ? 1.0 : -1.0);               // +,-,+,-
+            altB[i] = ToT((i % 2 == 0) ? -1.0 : 1.0);               // -,+,-,+
         }
-        spikeLow[0] = 1.0;                 // weight on the first feature
-        spikeHigh[StateDim - 1] = 1.0;     // weight on the last feature
+        spikeLow[0] = ToT(1.0);                 // weight on the first feature
+        spikeHigh[StateDim - 1] = ToT(1.0);     // weight on the last feature
         return new[] { ascending, descending, altA, altB, spikeLow, spikeHigh };
     }
 
@@ -80,7 +89,7 @@ public abstract class ReinforcementLearningTestBase
     /// True if the agent's greedy action is not identical across every state in the
     /// battery — i.e. its policy conditions on the input for at least one pair.
     /// </summary>
-    private static bool ActionsVaryAcross(IFullModel<double, Vector<double>, Vector<double>> model, Vector<double>[] states)
+    private static bool ActionsVaryAcross(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T>[] states)
     {
         var first = model.Predict(states[0]);
         for (int i = 1; i < states.Length; i++)
@@ -89,7 +98,7 @@ public abstract class ReinforcementLearningTestBase
         return false;
     }
 
-    private static bool ParametersChanged(double[] snapshot, Vector<double> current)
+    private static bool ParametersChanged(double[] snapshot, Vector<T> current)
     {
         // A change in length is itself a parameter change: tabular agents grow their
         // Q-table lazily as new states are visited, so an agent that starts with an empty
@@ -97,7 +106,7 @@ public abstract class ReinforcementLearningTestBase
         if (snapshot.Length != current.Length)
             return true;
         for (int i = 0; i < Math.Min(snapshot.Length, current.Length); i++)
-            if (Math.Abs(snapshot[i] - current[i]) > 1e-15)
+            if (Math.Abs(snapshot[i] - ToD(current[i])) > 1e-15)
                 return true;
         return false;
     }
@@ -112,16 +121,16 @@ public abstract class ReinforcementLearningTestBase
         var state = CreateRandomState(rng);
 
         // Train briefly
-        var target = new Vector<double>(StateDim);
-        for (int i = 0; i < StateDim; i++) target[i] = 0.5;
+        var target = new Vector<T>(StateDim);
+        for (int i = 0; i < StateDim; i++) target[i] = ToT(0.5);
         model.Train(state, target);
 
         var action = model.Predict(state);
         Assert.True(action.Length > 0, "RL agent produced empty action.");
         for (int i = 0; i < action.Length; i++)
         {
-            Assert.False(double.IsNaN(action[i]), $"Action[{i}] is NaN — broken policy.");
-            Assert.False(double.IsInfinity(action[i]), $"Action[{i}] is Infinity — unbounded action.");
+            Assert.False(double.IsNaN(ToD(action[i])), $"Action[{i}] is NaN — broken policy.");
+            Assert.False(double.IsInfinity(ToD(action[i])), $"Action[{i}] is Infinity — unbounded action.");
         }
     }
 
@@ -173,7 +182,7 @@ public abstract class ReinforcementLearningTestBase
         // When the agent exposes its raw action-values, probe those directly: that signal is the
         // deterministic, non-projected evidence of state-conditionality and removes the random-init
         // flakiness of an argmax-only read-out (no reliance on a training fallback flipping the argmax).
-        if (model is IActionValueProvider<double> valueProvider)
+        if (model is IActionValueProvider<T> valueProvider)
         {
             var qBattery = BuildStateBattery();
             var firstQ = valueProvider.GetActionValues(qBattery[0]);
@@ -209,10 +218,10 @@ public abstract class ReinforcementLearningTestBase
             // Use a large reward so the reinforced action's learned value clearly exceeds
             // any other action's initial value, flipping the greedy action within a few
             // post-warm-up updates (fast early-exit) instead of inching past random init.
-            var target1 = new Vector<double>(actionLen);
-            var target2 = new Vector<double>(actionLen);
-            target1[0] = 10.0;               // prefer the first action in battery[0]
-            target2[actionLen - 1] = 10.0;   // prefer the last action in battery[1]
+            var target1 = new Vector<T>(actionLen);
+            var target2 = new Vector<T>(actionLen);
+            target1[0] = ToT(10.0);               // prefer the first action in battery[0]
+            target2[actionLen - 1] = ToT(10.0);   // prefer the last action in battery[1]
 
             for (int iter = 0; !anyDifferent && iter < TrainingIterationCap; iter++)
             {
@@ -251,9 +260,9 @@ public abstract class ReinforcementLearningTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
 
-        var paramsBefore = ((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters();
+        var paramsBefore = ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters();
         var snapshot = new double[paramsBefore.Length];
-        for (int i = 0; i < paramsBefore.Length; i++) snapshot[i] = paramsBefore[i];
+        for (int i = 0; i < paramsBefore.Length; i++) snapshot[i] = ToD(paramsBefore[i]);
 
         // Train with a NON-DEGENERATE, learnable signal until the parameters change or a
         // bounded budget elapses. The signal must vary: a constant-reward stream is
@@ -268,10 +277,10 @@ public abstract class ReinforcementLearningTestBase
         var stateA = CreateRandomState(rng);
         var stateB = CreateRandomState(rng);
         int actionLen = Math.Max(model.Predict(stateA).Length, 2);
-        var targetA = new Vector<double>(actionLen);
-        var targetB = new Vector<double>(actionLen);
-        targetA[0] = 1.0;                 // action 0, reward 1.0
-        targetB[actionLen - 1] = 0.3;     // last action, reward 0.3 (≠ reward of A)
+        var targetA = new Vector<T>(actionLen);
+        var targetB = new Vector<T>(actionLen);
+        targetA[0] = ToT(1.0);                 // action 0, reward 1.0
+        targetB[actionLen - 1] = ToT(0.3);     // last action, reward 0.3 (≠ reward of A)
 
         bool anyChanged = false;
         for (int iter = 0; !anyChanged && iter < TrainingIterationCap; iter++)
@@ -280,10 +289,10 @@ public abstract class ReinforcementLearningTestBase
             else model.Train(stateB, targetB);
             if (iter % 8 == 0)
                 anyChanged = ParametersChanged(
-                    snapshot, ((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters());
+                    snapshot, ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters());
         }
         anyChanged = anyChanged || ParametersChanged(
-            snapshot, ((IParameterizable<double, Vector<double>, Vector<double>>)model).GetParameters());
+            snapshot, ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters());
 
         Assert.True(anyChanged, "RL agent parameters unchanged after a learnable training signal.");
     }
@@ -312,7 +321,7 @@ public abstract class ReinforcementLearningTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
         var state = CreateRandomState(rng);
-        var target = new Vector<double>(StateDim);
+        var target = new Vector<T>(StateDim);
         model.Train(state, target);
         Assert.NotNull(model.GetModelMetadata());
     }
@@ -349,7 +358,7 @@ public abstract class ReinforcementLearningTestBase
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        var parameterizable = (IParameterizable<double, Vector<double>, Vector<double>>)model;
+        var parameterizable = (IParameterizable<T, Vector<T>, Vector<T>>)model;
 
         // Untrained: whatever the agent reports, the two APIs must agree. Zero is a valid answer.
         Assert.True(
@@ -358,7 +367,7 @@ public abstract class ReinforcementLearningTestBase
             $"disagrees with ParameterCount ({parameterizable.ParameterCount}). Callers pair these " +
             "by length, so a mismatch means a saved parameter vector restores into the wrong slots.");
 
-        model.Train(CreateRandomState(rng), new Vector<double>(StateDim));
+        model.Train(CreateRandomState(rng), new Vector<T>(StateDim));
 
         Assert.True(parameterizable.GetParameters().Length > 0,
             "After training, the agent should expose the parameters it learned.");
@@ -369,3 +378,11 @@ public abstract class ReinforcementLearningTestBase
             $"disagrees with ParameterCount ({parameterizable.ParameterCount}).");
     }
 }
+
+/// <summary>Default-precision alias, so existing derived fixtures need no change.</summary>
+/// <remarks>
+/// Mirrors the pattern the already-generic bases use. The generated scaffold names
+/// <c>ReinforcementLearningTestBase&lt;float&gt;</c> directly once the base is whitelisted;
+/// this alias only serves fixtures that were written against the non-generic name.
+/// </remarks>
+public abstract class ReinforcementLearningTestBase : ReinforcementLearningTestBase<double> { }

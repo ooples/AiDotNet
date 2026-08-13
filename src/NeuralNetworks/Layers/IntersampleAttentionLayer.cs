@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -38,6 +39,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // only rescales.
 // Rank 3 only: the forward pass indexes Shape[0..2] unconditionally.
 // Same rank and same roles both directions, so OutputAxesFor is generated as Same on every axis.
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "2, 4, 8", TestConstructorArgs = "8, 2, 0.0")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Other, TensorAxis.Features,
     Direction = TensorLayoutDirection.Input,
     Note = "Field embeddings; attention runs across the BATCH axis, one problem per field.")]

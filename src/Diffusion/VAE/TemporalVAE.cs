@@ -70,7 +70,25 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
     /// <remarks>Same layers, same order, as the previous GetParameters walked.</remarks>
     protected override void RegisterComponents()
     {
-        foreach (var layer in EnumerateAllLayers()) RegisterParameterComponent(layer);
+        RegisterParameterComponent("encoder/input", _inputConv);
+        RegisterLayerCollection("encoder/spatial", _encoderSpatialLayers);
+        RegisterLayerCollection("encoder/temporal", _encoderTemporalLayers);
+        RegisterParameterComponent("encoder/mean", _meanConv);
+        RegisterParameterComponent("encoder/log_variance", _logVarConv);
+        RegisterParameterComponent("decoder/post_quant", _postQuantConv);
+        RegisterLayerCollection("decoder/spatial", _decoderSpatialLayers);
+        RegisterLayerCollection("decoder/temporal", _decoderTemporalLayers);
+        RegisterParameterComponent("decoder/output", _outputConv);
+    }
+
+    private void RegisterLayerCollection(string prefix, IReadOnlyList<ILayer<T>> layers)
+    {
+        for (int i = 0; i < layers.Count; i++)
+        {
+            RegisterParameterComponent(
+                $"{prefix}/{AiDotNet.Models.Parameters.ParameterStableId.IndexSegment(i)}",
+                layers[i]);
+        }
     }
 
     /// <summary>
@@ -106,56 +124,67 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
     /// <summary>
     /// Encoder spatial layers.
     /// </summary>
+    [Scratch]
     private readonly List<ILayer<T>> _encoderSpatialLayers;
 
     /// <summary>
     /// Encoder temporal layers.
     /// </summary>
+    [Scratch]
     private readonly List<ILayer<T>> _encoderTemporalLayers;
 
     /// <summary>
     /// Decoder spatial layers.
     /// </summary>
+    [Scratch]
     private readonly List<ILayer<T>> _decoderSpatialLayers;
 
     /// <summary>
     /// Decoder temporal layers.
     /// </summary>
+    [Scratch]
     private readonly List<ILayer<T>> _decoderTemporalLayers;
 
     /// <summary>
     /// Mean projection layer.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _meanConv;
 
     /// <summary>
     /// Log variance projection layer.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _logVarConv;
 
     /// <summary>
     /// Input convolution.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _inputConv;
 
     /// <summary>
     /// Post-quant convolution.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _postQuantConv;
 
     /// <summary>
     /// Output convolution.
     /// </summary>
+    [Scratch]
     private ConvolutionalLayer<T>? _outputConv;
 
     /// <summary>
     /// Cached mean from encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedMean;
 
     /// <summary>
     /// Cached log variance from encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedLogVar;
 
     /// <summary>
@@ -271,8 +300,8 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
 
         // First layer is the input convolution
         _inputConv = (ConvolutionalLayer<T>)allEncoderLayers[0];
-        // Last 3 are latent projections: MeanConv, LogVarConv, PostQuantConv
-        _postQuantConv = (ConvolutionalLayer<T>)allEncoderLayers[^1];
+        // Last 3 are latent projections: MeanConv, LogVarConv and the encoder helper's legacy
+        // post-quant placeholder. The decoder helper owns the real latent -> backbone projection.
         _logVarConv = (ConvolutionalLayer<T>)allEncoderLayers[^2];
         _meanConv = (ConvolutionalLayer<T>)allEncoderLayers[^3];
         // Middle layers are the encoder spatial blocks and downsamples
@@ -282,12 +311,14 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         }
 
         // Temporal encoder layers (parallel processing path, not in LayerHelper)
+        int encoderTemporalInputChannels = _baseChannels * _channelMultipliers[^1];
         for (int level = 0; level < _channelMultipliers.Length; level++)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
             for (int t = 0; t < _numTemporalLayers; t++)
             {
-                _encoderTemporalLayers.Add(CreateTemporalBlock(outChannels));
+                _encoderTemporalLayers.Add(CreateTemporalBlock(encoderTemporalInputChannels, outChannels));
+                encoderTemporalInputChannels = outChannels;
             }
         }
 
@@ -296,7 +327,10 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
             _inputChannels, _latentChannels, _baseChannels,
             _channelMultipliers).ToList();
 
-        // PostQuantConv already assigned above; skip first layer (duplicate postQuantConv)
+        // First decoder layer maps latentChannels to the backbone width. Selecting the encoder
+        // helper's latentChannels -> latentChannels placeholder here used to feed four channels into
+        // a residual stack expecting the paper-scale width.
+        _postQuantConv = (ConvolutionalLayer<T>)allDecoderLayers[0];
         // Last layer is output conv
         _outputConv = (ConvolutionalLayer<T>)allDecoderLayers[^1];
         // Middle layers are decoder spatial blocks and upsamples
@@ -313,12 +347,14 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         // mirroring the encoder's temporal path. Building it high→low (descending) made the chain
         // end at _baseChannels, so the spatial decoder's GroupNorm rejected the input with a
         // "channels != expected" mismatch for any numTemporalLayers >= 1 (a hard decode crash).
+        int decoderTemporalInputChannels = _baseChannels * _channelMultipliers[^1];
         for (int level = 0; level < _channelMultipliers.Length; level++)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
             for (int t = 0; t < _numTemporalLayers; t++)
             {
-                _decoderTemporalLayers.Add(CreateTemporalBlock(outChannels));
+                _decoderTemporalLayers.Add(CreateTemporalBlock(decoderTemporalInputChannels, outChannels));
+                decoderTemporalInputChannels = outChannels;
             }
         }
     }
@@ -732,14 +768,13 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
     // Spatial layer creation moved to LayerHelper<T>.CreateTemporalVAEEncoderLayers()
     // and LayerHelper<T>.CreateTemporalVAEDecoderLayers().
 
-    private ILayer<T> CreateTemporalBlock(int channels)
+    private ILayer<T> CreateTemporalBlock(int inputChannels, int outputChannels)
     {
         // Temporal block using 3D convolution across time dimension
         // Kept here because temporal blocks are a parallel processing path
-        int downsampleFactor = (int)Math.Pow(2, _channelMultipliers.Length - 1);
-        int spatialSize = 64 / downsampleFactor; // Compute from input size
-        return new Conv3DLayer<T>(
-            outputChannels: channels,
+        return Conv3DLayer<T>.WithInputChannels(
+            inputChannels: inputChannels,
+            outputChannels: outputChannels,
             kernelSize: _temporalKernelSize,
             stride: 1,
             padding: 1,

@@ -423,13 +423,6 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         target.UpdateParameters(targetParams);
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
-
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
         var result = new Vector<T>(state.Length + action.Length);

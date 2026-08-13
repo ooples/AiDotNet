@@ -427,7 +427,14 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </summary>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _v == null || _m.Length != parameters.Length)
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
+        if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);
@@ -437,13 +444,16 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         // Save pre-update state
-        if (_previousM == null || _previousV == null || _previousM.Length != parameters.Length)
+        if (_previousM == null || _previousM.Length != parameters.Length)
         {
             _previousM = new Vector<T>(parameters.Length);
+        }
+        if (_previousV == null || _previousV.Length != parameters.Length)
+        {
             _previousV = new Vector<T>(parameters.Length);
         }
-        _previousM = new Vector<T>(_m);
-        _previousV = new Vector<T>(_v);
+        _m.AsSpan().CopyTo(_previousM.AsWritableSpan());
+        _v.AsSpan().CopyTo(_previousV.AsWritableSpan());
         _previousT = _t;
 
         _t++;
@@ -474,34 +484,38 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta2, _t))
             : NumOps.One;
 
-        // Update first moment
-        var mScaled = (Vector<T>)Engine.Multiply(_m, beta1);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
+        // First pass: update moments in place and use the returned vector as temporary storage for
+        // the full Adam-plus-decay update. LAMB needs its norm before it can apply the trust ratio.
+        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var pSpan = parameters.AsSpan();
+        var gSpan = gradient.AsSpan();
+        var mSpan = _m.AsWritableSpan();
+        var vSpan = _v.AsWritableSpan();
+        var outSpan = updatedParameters.AsWritableSpan();
 
-        // Update second moment
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var vScaled = (Vector<T>)Engine.Multiply(_v, beta2);
-        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
-        _v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            T g = gSpan[i];
 
-        // Bias correction
-        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
-        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
+            T m = NumOps.Add(
+                NumOps.Multiply(mSpan[i], beta1),
+                NumOps.Multiply(g, oneMinusBeta1));
+            mSpan[i] = m;
 
-        // Adam update
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
-        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
-        var adamUpdate = (Vector<T>)Engine.Divide(mHat, denominator);
+            T v = NumOps.Add(
+                NumOps.Multiply(vSpan[i], beta2),
+                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
+            vSpan[i] = v;
 
-        // Add weight decay
-        var weightDecayTerm = (Vector<T>)Engine.Multiply(parameters, weightDecay);
-        var fullUpdate = (Vector<T>)Engine.Add(adamUpdate, weightDecayTerm);
+            T mHat = NumOps.Divide(m, biasCorrection1);
+            T vHat = NumOps.Divide(v, biasCorrection2);
+            T adamUpdate = NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            outSpan[i] = NumOps.Add(adamUpdate, NumOps.Multiply(pSpan[i], weightDecay));
+        }
 
         // Compute trust ratio
         T paramNorm = VectorHelper.L2Norm(parameters);
-        T updateNorm = VectorHelper.L2Norm(fullUpdate);
+        T updateNorm = VectorHelper.L2Norm(updatedParameters);
 
         T trustRatio;
         bool paramNormZero = NumOps.LessThan(paramNorm, epsilon);
@@ -520,9 +534,14 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             }
         }
 
-        // Apply update
-        var scaledUpdate = (Vector<T>)Engine.Multiply(fullUpdate, NumOps.Multiply(baseLr, trustRatio));
-        return (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
+        // Second pass: transform the temporary full update into the final returned parameters.
+        T stepScale = NumOps.Multiply(baseLr, trustRatio);
+        for (int i = 0; i < pSpan.Length; i++)
+        {
+            outSpan[i] = NumOps.Subtract(pSpan[i], NumOps.Multiply(outSpan[i], stepScale));
+        }
+
+        return updatedParameters;
     }
 
     // Per-parameter LAMB state for tape-based training

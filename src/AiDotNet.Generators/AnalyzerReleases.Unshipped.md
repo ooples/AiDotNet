@@ -1,30 +1,7 @@
-<!--
-DIAGNOSTIC ID PREFIX -- SETTLED, and deliberately NOT by renaming.
-
-This table carries five prefixes: AIDN (shipped), and ADN / ADNTEST / ADNSHAPE /
-ADNGEN (unshipped). Unshipped IDs are the cheap moment to unify, and that was
-weighed rather than skipped.
-
-DECISION: the unshipped prefixes STAY, and no new prefix is introduced.
-
-Why not fold them into AIDN. The shipped range is three-digit (AIDN001..AIDN062)
-and already occupies 050-052 for ComponentMetadata. Renaming ADN0050..ADN0054
-into that range gives AIDN0050 sitting beside AIDN050 -- two distinct rules one
-character apart, which is worse for grep, .editorconfig and suppression comments
-than the split it was meant to cure. A fresh non-colliding range would avoid that
-but renumbers rules referenced by sibling PRs in this 18-part split, and a rename
-landing in one part while another still emits the old ID is a build break nobody
-owns.
-
-What the prefixes now mean, so the split is a scheme rather than an accident:
-  AIDN      shipped rules, frozen
-  ADN00xx   LayerStateGenerator (serialization round-trip)
-  ADNSHAPE  ShapeDeclarationValidationGenerator
-  ADNTEST   TestScaffoldGenerator, scaffold correctness
-  ADNGEN    TestScaffoldGenerator, coverage gaps
-
-Revisit in the PR that lands last in the split, where a rename can be atomic.
--->
+; Unshipped analyzer release
+; Diagnostic prefixes remain split by generator until the final generator-refactor PR can
+; renumber them atomically: AIDN (shipped rules), ADN00xx (layer state), ADNSHAPE
+; (shape contracts), ADNTEST (scaffold correctness), and ADNGEN (coverage gaps).
 
 ### New Rules
 
@@ -62,5 +39,21 @@ ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two
 ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
 ADNSHAPE003 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
 ADNSHAPE004 | AiDotNet.Shapes | Warning | ShapeDeclarationValidationGenerator, Layer overrides Forward instead of ForwardTraced and is invisible to graph tracing (Warning until the #1789 conversion completes; the final slice raises it to Error)
+ADNPORT001 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Integer-index port does not declare its legal upper bound
+ADNPORT002 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Tensor-port contract references a missing member
+ADNPORT003 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Duplicate input or output port name
+ADNPORT004 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Adjacent sequential layers have incompatible value domains
+ADNPORT005 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Model input-shape constraint references a missing member
+ADNPORT006 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Type using a generated tensor/model-input contract is not partial
+ADNPORT007 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Generated rank-routing or model-input geometry contains impossible values
+ADNPORT008 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Tensor-contract member has an incompatible signature
+ADNPORT009 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Generated forward contract is ambiguous or uses unsupported parameters
+ADNPORT010 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Stable input port identity collides across inherited/local declarations
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
+AIDN086 | AiDotNet.ComponentMetadata | Error | ComponentMetadataValidationGenerator, Layer declares a contradictory gradient contract
+AIDN087 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, ParameterCount compared against zero as a readiness test (Warning while the backlog is non-zero; promote to Error at zero per the ADNSHAPE006/007 ladder)
+AIDN088 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Numeric state requires an explicit semantic classification
+AIDN089 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Numeric state has conflicting semantic classifications
+AIDN090 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Nullable persistent state requires an explicit availability lifecycle
+AIDN091 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Parameter alias target is invalid

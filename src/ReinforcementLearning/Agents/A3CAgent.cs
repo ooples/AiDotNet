@@ -572,12 +572,6 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     // UpdateNetworkParameters removed — networks trained via Train()/TrainWithCustomLoss,
     // then local parameters copied to global networks.
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     /// <summary>
     /// Appends one step of (s, a, r, s', done) experience to the on-policy
     /// trajectory buffer. A3C uses no replay (Mnih et al. 2016 §3.1) — the

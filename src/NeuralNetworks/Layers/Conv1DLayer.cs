@@ -262,11 +262,6 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         // Apply any parameters handed to SetParameters before the shape was known. This is the second
         // half of the deferral: geometry is now resolved from the REAL input, so the restored weights
         // land on exactly the tensors the original had, and a clone reproduces the original bit-for-bit.
-        // Nothing assigned this field, so the replay below never ran. Take the restore the base
-        // held when it arrived before the shape resolved; the children exist by now, so the
-        // per-child split below is possible.
-        _pendingParameters ??= ConsumePendingRestoredParameters();
-
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;

@@ -409,11 +409,6 @@ public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, 
     }
 
     // Helper methods
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        target.UpdateParameters(source.GetParameters());
-    }
-
     private int ArgMax(Vector<T> vector)
     {
         int maxIndex = 0;

@@ -99,12 +99,17 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     /// Registration
     /// order is serialization order, so keep it stable.
     /// </summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
 
     protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
-        ParameterSlotRole role = ParameterSlotRole.Trainable)
-        => _parameterRegistry.Register(stableId, component, role);
+        ParameterSlotRole role = ParameterSlotRole.Trainable,
+        ParameterAvailability availability = ParameterAvailability.Construction)
+        => _parameterRegistry.Register(stableId, component, role, availability);
 
     /// <summary>
     /// Declare the trainable components of this model here with
@@ -112,6 +117,10 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     /// constructor has built them.
     /// </summary>
     protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
     {
     }
 
@@ -128,8 +137,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
         {
             if (!_componentsRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }
@@ -167,7 +175,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     public virtual long ParameterCount
         => Registry.HasComponents ? Registry.ParameterCount : NumFeatures;
     /// <inheritdoc/>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization => Registry.CanInitializeOptimizerParameters;
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 

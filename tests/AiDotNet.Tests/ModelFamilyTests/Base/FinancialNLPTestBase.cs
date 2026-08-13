@@ -18,69 +18,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 public abstract class FinancialNLPTestBase<T> : FinancialModelTestBase<T>
 {
-    // Financial NLP models are token-based transformers: the first layer is a word/token
-    // EmbeddingLayer keyed by integer token IDs (Araci 2019 "FinBERT" arXiv:1908.10063 §3;
-    // Devlin et al. 2019 §3.1). The base helpers emit CONTINUOUS [0,1) values, which drive
-    // EmbeddingLayer down its continuous-projection path — there a CONSTANT scalar input
-    // projects to a scalar-multiple row that the model's scale-invariant LayerNorm collapses,
-    // so two constant inputs (0.1 vs 0.9) converge to the SAME representation after training
-    // and DifferentInputs_AfterTraining / MoreData see a degenerate, input-insensitive model.
-    // Emitting legal integer token IDs exercises the real embedding-LOOKUP path (distinct rows
-    // for distinct tokens), matching how these models are used on tokenized text.
-    protected override Tensor<T> CreateRandomTensor(int[] shape, Random rng)
-    {
-        var tensor = new Tensor<T>(shape);
-        if (IsInputShape(shape))
-        {
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = NumOps.FromDouble(rng.Next(0, 100));
-            return tensor;
-        }
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.FromDouble(rng.NextDouble());
-        return tensor;
-    }
-
-    protected override Tensor<T> CreateConstantTensor(int[] shape, double value)
-    {
-        var tensor = new Tensor<T>(shape);
-        if (IsInputShape(shape))
-        {
-            // ZERO STAYS ZERO. The token mapping below rewrote an all-zero request into
-            // non-zero token IDs, so FinancialModelTestBase.ZeroInput_ShouldNotCrash -- whose
-            // entire subject is what the model does with a zero input -- never actually sent
-            // one. The test passed while testing something else, which is worse than not
-            // having it: the zero path is exactly where an embedding lookup or a division by
-            // a zero norm tends to break.
-            //
-            // Token 0 is also the conventional [PAD] id for these encoders, so an all-zero
-            // input is a legal, meaningful sequence rather than an out-of-range lookup.
-            if (value == 0.0)
-            {
-                for (int i = 0; i < tensor.Length; i++)
-                    tensor[i] = NumOps.Zero;
-                return tensor;
-            }
-
-            // Distinct base token per scalar so different `value`s produce different token
-            // sequences (0.1 and 0.9 must map to different embeddings, not the same one).
-            int baseTok = value < 0.5 ? 3 : 37;
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = NumOps.FromDouble((i + baseTok) % 100);
-            return tensor;
-        }
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.FromDouble(value);
-        return tensor;
-    }
-
-    private bool IsInputShape(int[] shape)
-    {
-        if (shape.Length != InputShape.Length) return false;
-        for (int d = 0; d < shape.Length; d++)
-            if (shape[d] != InputShape[d]) return false;
-        return true;
-    }
+    // The generic neural-network fixture now asks the model's first effective
+    // layer for its LayerInputDomain. Keep financial NLP on that single source
+    // of truth instead of the old hard-coded [0,100) range: bounded smoke
+    // fixtures legitimately use vocabularies smaller than 100 (FinMA uses 64),
+    // while FinBERT uses a much larger table. The base constant mapper also
+    // preserves an all-zero PAD probe and maps distinct constants to distinct,
+    // legal indices for the discovered vocabulary.
 
     // Financial NLP models are BERT-base-class encoders (12 residual transformer blocks,
     // 768-wide). MoreData_ShouldNotDegrade's default 50 + 200 training iterations push a full

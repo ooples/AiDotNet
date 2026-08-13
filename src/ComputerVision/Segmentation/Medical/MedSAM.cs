@@ -262,7 +262,7 @@ public class MedSAM<T> : Common.MedicalSegmentationBase<T>
         try
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithTape(input, expectedOutput);
         }
         finally
         {

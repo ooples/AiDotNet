@@ -155,12 +155,9 @@ public partial class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         // Get the LoRA weight contribution
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
 
-        // Force-resolve the base layer if it's still in lazy state — without
-        // this, GetParameters() returns an empty Vector and the merge loop
-        // below indexes past the end. The LoRA decomposition's inner layer
-        // already settled on inputSize via the outSize×2 heuristic (see
-        // LoRAAdapterBase.CreateLoRALayer), so we propagate that to the base.
-        EnsureBaseLayerShapeResolved();
+        // A merge is an explicit value-reading operation, so bring up the base weights now.
+        // Construction and count queries remain allocation-free.
+        MaterializeBaseLayerParameters();
 
         // Get base layer parameters (works for both DenseLayer and FullyConnectedLayer)
         Vector<T> baseParams = _baseLayer.GetParameters();

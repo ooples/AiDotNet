@@ -56,13 +56,11 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
         var attributeSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
 
-        // Opt-in inverted discovery. A class marked [AutoParameters] treats every non-nullable
-        // tensor field as a trainable parameter unless it is explicitly excluded, which is how
-        // PyTorch behaves by construction (nn.Parameter is a distinct type, so a weight cannot be
-        // stored without announcing itself). Per-class so the inversion can be verified one layer
-        // at a time instead of flipped library-wide in one step.
+        // [AutoParameters] remains a migration marker, but it never assigns semantics. PyTorch can
+        // infer from nn.Parameter because that is a distinct type; Tensor<T> is also used for
+        // activations, caches, datasets and buffers, so treating its CLR type or nullability as a
+        // role silently corrupts the parameter graph.
         var autoParamsSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.AutoParametersAttribute");
-        var scratchSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.ScratchAttribute");
         var bufferSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.BufferAttribute");
         // Bail only if NO discovery route exists. This used to return whenever
         // TrainableParameterAttribute was missing, which also disabled register-call discovery,
@@ -111,34 +109,24 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var gradientFields = new Dictionary<string, GradientFieldInfo>();
             var subLayerFields = new List<SubLayerFieldInfo>();
 
-            bool autoParameters = autoParamsSymbol is not null && classSymbol.GetAttributes()
-                .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, autoParamsSymbol));
-
-            var bufferFields = new List<(string Field, string Name, string Role)>();
-
-            // A field handed to RegisterBuffer IS a buffer, whether or not it also carries
-            // [Buffer]. Without this, inverted discovery promoted BatchNormalization's _runningMean
-            // and _runningVariance to TRAINABLE -- counted once as parameters and again through the
-            // buffer registry (144 against a saved 96), and, far worse, handed to the optimizer.
-            // Running statistics are estimates of the data, not weights; a gradient step on them is
-            // silent corruption of every subsequent inference.
-            var imperativeBuffers = new HashSet<string>();
-            foreach (var (bufName, _) in DiscoverFromRegisterCalls(classDecl, model, "RegisterBuffer"))
-                imperativeBuffers.Add(bufName);
+            var bufferFields = new List<(string Field, string Name, string Role, string StateRole)>();
 
             foreach (var member in classSymbol.GetMembers())
             {
                 if (member is not IFieldSymbol field) continue;
 
+                var classification = ParameterMemberSemanticModel.Classify(field);
+
                 // Check for [TrainableParameter]
                 var attr = field.GetAttributes()
                     .FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeSymbol));
 
-                if (attr is not null)
+                if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable && attr is not null)
                 {
                     var role = "PersistentTensorRole.Weights";
                     var order = 0;
                     var optional = false;
+                    string? shape = null;
 
                     foreach (var namedArg in attr.NamedArguments)
                     {
@@ -148,66 +136,34 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             order = orderVal;
                         else if (namedArg.Key == "Optional" && namedArg.Value.Value is bool optVal)
                             optional = optVal;
+                        else if (namedArg.Key == "Shape" && namedArg.Value.Value is string shapeVal)
+                            shape = shapeVal;
                     }
 
-                    // A nullable field carrying an explicit [TrainableParameter] is Optional by
-                    // construction: the author declared it a parameter AND declared it may be
-                    // absent. BatchEnsembleLayer._bias is the shape -- allocated only when useBias
-                    // is set, guarded by "if (_bias != null)" on every use. Requiring the author to
-                    // also write Optional = true would make the nullable annotation a trap, and
-                    // until now the omission was masked: the register-call replacement dropped
-                    // every nullable field, so _bias was declared trainable and then silently left
-                    // out of the surface the optimizer walks.
                     var explicitNullable = field.NullableAnnotation == NullableAnnotation.Annotated
                                            || field.Type.NullableAnnotation == NullableAnnotation.Annotated;
                     paramFields.Add(new ParameterFieldInfo(
                         field.Name, role, order, DeclIndex: 0,
                         TypeName: field.Type.ToDisplayString(),
-                        Optional: optional || explicitNullable, Nullable: explicitNullable));
+                        // Nullable storage is emitted through the safe conditional mechanics while
+                        // AIDN090 requires the author to declare WHY it is nullable. This is a
+                        // migration bridge, not semantic inference: the diagnostic remains until
+                        // Optional/Availability is explicit, and the classifier never promotes an
+                        // unannotated nullable tensor into the graph.
+                        Optional: optional || explicitNullable, Nullable: explicitNullable,
+                        Shape: shape));
                 }
 
-                // Inverted default: an unmarked, non-nullable, non-readonly tensor field IS a
-                // parameter. readonly is excluded because the generated SetTrainableParameters
-                // REBINDS the field (tape-buffer views are swapped in wholesale), and assigning a
-                // readonly field outside a constructor is CS0191. A readonly tensor whose CONTENTS
-                // are trainable can still opt in explicitly with [TrainableParameter].
-                // Order matters -- this runs only when [TrainableParameter] was absent, so an
-                // explicit role, Order or Optional always wins over the inferred one.
-                else if (autoParameters && !field.IsStatic && !field.IsReadOnly
-                         // Auto-property backing fields (<Input>k__BackingField) are compiler-
-                         // generated: their name is not valid C# to emit, and the properties they
-                         // back are caches (FeedForwardLayer's Input/Output hold the last forward
-                         // pass). An author cannot put [Scratch] on a field that does not exist in
-                         // source, so a property-backed weight must use a real field to opt in.
-                         && !field.IsImplicitlyDeclared && field.AssociatedSymbol is null
-                         // Arrays of tensors are NOT a single parameter. IsTensorType is a prefix
-                         // test on the display string, and "Tensor<T>[]" starts with "Tensor<", so
-                         // an array slipped through and the generated code tried to assign the whole
-                         // array into one Tensor<T> slot (ContinuumMemorySystemLayer._storedInputs).
-                         && field.Type is not IArrayTypeSymbol
-                         && IsTensorOfLayerElement(field.Type, classSymbol)
-                         && !field.Name.EndsWith("Gradient", System.StringComparison.Ordinal)
-                         && field.NullableAnnotation != NullableAnnotation.Annotated
-                         && field.Type.NullableAnnotation != NullableAnnotation.Annotated
-                         && !HasAttr(field, scratchSymbol)
-                         && !HasAttr(field, bufferSymbol)
-                         && !imperativeBuffers.Contains(field.Name))
-                {
-                    // Biases infer their role from the name so per-role optimizer configuration
-                    // (weight-decay exemption) keeps working without an attribute.
-                    var inferredRole = field.Name.IndexOf("bias", System.StringComparison.OrdinalIgnoreCase) >= 0
-                        ? "PersistentTensorRole.Biases"
-                        : "PersistentTensorRole.Weights";
-                    paramFields.Add(new ParameterFieldInfo(
-                        field.Name, inferredRole, 0, DeclIndex: 0,
-                        TypeName: field.Type.ToDisplayString(), Optional: false));
-                }
-
-                // Collect [Buffer] fields: persistent state that is serialized but never trained.
+                // Collect every declared persistent non-optimizer role through the same base
+                // buffer mechanism. The manifest retains whether it is fitted, frozen, or a true
+                // auxiliary buffer; the optimizer view excludes all three.
                 // Marking alone is not enough -- without emitting RegisterBuffer the tensors leave
                 // the trainable set and join nothing, disappearing from ParameterCount and the flat
                 // vector entirely. ReservoirLayer proved it: "Expected 320 parameters, got 0".
-                if (!field.IsStatic && IsTensorType(field.Type) && HasAttr(field, bufferSymbol))
+                if (!field.IsStatic && IsTensorType(field.Type)
+                    && classification.Kind is ParameterMemberSemanticModel.Kind.Fitted
+                        or ParameterMemberSemanticModel.Kind.Frozen
+                        or ParameterMemberSemanticModel.Kind.Buffer)
                 {
                     var bufRole = "PersistentTensorRole.Constant";
                     var bufName = field.Name.TrimStart('_');
@@ -223,7 +179,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                                 bufName = bn;
                         }
                     }
-                    bufferFields.Add((field.Name, bufName, bufRole));
+                    string stateRole = classification.Kind switch
+                    {
+                        ParameterMemberSemanticModel.Kind.Fitted =>
+                            "global::AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState",
+                        ParameterMemberSemanticModel.Kind.Frozen =>
+                            "global::AiDotNet.Models.Parameters.ParameterSlotRole.Frozen",
+                        _ => "global::AiDotNet.Models.Parameters.ParameterSlotRole.Buffer"
+                    };
+                    bufferFields.Add((field.Name, bufName, bufRole, stateRole));
                 }
 
                 // Check for gradient fields (convention: {name}Gradient)
@@ -239,7 +203,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated ||
                                      field.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: false));
+                    var sliShape = field.GetAttributes()
+                        .FirstOrDefault(a => a.AttributeClass?.Name == "SubLayerInputAttribute")
+                        ?.ConstructorArguments.FirstOrDefault().Value as string;
+                    subLayerFields.Add(new SubLayerFieldInfo(field.Name, isNullable, IsCollection: false, InputShape: sliShape));
                 }
                 // ...and sub-layers held in a COLLECTION. A composite that keeps its children in a
                 // List<> got no registration at all, so GetSubLayers() returned nothing for them and
@@ -255,24 +222,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
 
-            // Discover trainable parameters from RegisterTrainableParameter() calls.
-            // Registration order is the canonical order — it matches _registeredTensors
-            // in LayerBase, so base.SetTrainableParameters positional assignment works.
-            // If RegisterTrainableParameter calls exist, they REPLACE attribute-discovered
-            // params to ensure correct ordering (attributes may be in declaration order
-            // which differs from registration order).
+            // Merge trainable parameters declared by attribute with the compatibility
+            // RegisterTrainableParameter route. Both are explicit semantic declarations; neither
+            // is tensor-type inference. Dropping either route makes a partially migrated layer's
+            // generated graph incomplete, so count/read/write can agree with each other while an
+            // actual weight silently disappears.
             {
-                var registeredFields = DiscoverFromRegisterCalls(classDecl, model, "RegisterTrainableParameter");
+                var registeredFields = DiscoverFromRegisterCalls(classSymbol, "RegisterTrainableParameter");
 
-
-                // Under [AutoParameters] the discovered set is AUTHORITATIVE and must not be
-                // replaced by the register-call list. Replacing would drop every field the
-                // inversion found: RWKVLayer registers 8 weight matrices imperatively while
-                // holding 10 more learned tensors (both LayerNorm affine pairs, the time- and
-                // channel-mixing coefficients, the first-token bonus), so the replace path would
-                // silently restore exactly the bug the inversion exists to fix. Registration order
-                // still governs the layers that have not opted in.
-                // ...unless the layer registers tensors the generator cannot SEE. Weights held
+                // Weights held
                 // in a Dictionary<string, Tensor<T>> or a List<Tensor<T>> and registered in a loop
                 // are not fields, so field discovery finds none of them; emitting a surface from
                 // the fields alone would OVERRIDE the runtime registry and drop every one
@@ -282,43 +240,30 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // often a cache (_lastInputs, _gpuCachedHiddenStates), and silently training a
                 // cache is worse than the bug. So imperative registration stays authoritative for
                 // exactly these layers, which is how they already worked.
-                if (autoParameters && !HasUnmappableRegistration(classDecl, model, classSymbol))
-                    registeredFields = new List<(string, string)>();
-
                 if (registeredFields.Count > 0)
                 {
-                    // Build attribute-discovered roles map for enrichment
-                    var attrRoles = new Dictionary<string, string>();
-                    var attrOptional = new Dictionary<string, bool>();
-                    foreach (var pf in paramFields)
-                    {
-                        attrRoles[pf.Name] = pf.Role;
-                        attrOptional[pf.Name] = pf.Optional;
-                    }
-
-                    // Replace paramFields with registration-ordered list
-                    paramFields.Clear();
-                    var seen = new HashSet<string>();
+                    var seen = new HashSet<string>(paramFields.Select(parameter => parameter.Name));
+                    int nextOrder = paramFields.Count == 0
+                        ? 0
+                        : paramFields.Max(parameter => parameter.Order) + 1;
                     foreach (var (fieldName, role) in registeredFields)
                     {
                         if (!seen.Add(fieldName)) continue;
 
-                        // Verify the field exists, is a Tensor<T>, and is non-nullable
+                        // A nullable registered field remains explicit trainable state. Preserve
+                        // its conditional presence in the generated manifest; AIDN090 separately
+                        // requires the author to declare the lifecycle that explains the null.
                         var matchingField = classSymbol.GetMembers()
                             .OfType<IFieldSymbol>()
-                            .FirstOrDefault(f => f.Name == fieldName && IsTensorType(f.Type)
-                                && f.NullableAnnotation != NullableAnnotation.Annotated
-                                && f.Type.NullableAnnotation != NullableAnnotation.Annotated);
+                            .FirstOrDefault(f => f.Name == fieldName && IsTensorType(f.Type));
                         if (matchingField is not null)
                         {
-                            // Prefer attribute role if available (more specific)
-                            var finalRole = attrRoles.TryGetValue(fieldName, out var attrRole)
-                                ? attrRole : role;
-                            var finalOptional = attrOptional.TryGetValue(fieldName, out var optFlag)
-                                && optFlag;
+                            bool nullable = matchingField.NullableAnnotation == NullableAnnotation.Annotated
+                                || matchingField.Type.NullableAnnotation == NullableAnnotation.Annotated;
                             paramFields.Add(new ParameterFieldInfo(
-                                matchingField.Name, finalRole, paramFields.Count, DeclIndex: 0,
-                                TypeName: matchingField.Type.ToDisplayString(), Optional: finalOptional));
+                                matchingField.Name, role, nextOrder++, DeclIndex: 0,
+                                TypeName: matchingField.Type.ToDisplayString(),
+                                Optional: nullable, Nullable: nullable));
                         }
                     }
                 }
@@ -350,7 +295,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         List<ParameterFieldInfo> paramFields,
         Dictionary<string, GradientFieldInfo> gradientFields,
         List<SubLayerFieldInfo> subLayerFields,
-        List<(string Field, string Name, string Role)> bufferFields)
+        List<(string Field, string Name, string Role, string StateRole)> bufferFields)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
         var className = classSymbol.Name;
@@ -407,7 +352,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("        _buffersRegistered = true;");
             foreach (var bf in bufferFields)
             {
-                sb.AppendLine($"        if ({bf.Field} is not null) RegisterBuffer({bf.Field}, \"{bf.Name}\", {bf.Role});");
+                sb.AppendLine($"        if ({bf.Field} is not null) RegisterBuffer({bf.Field}, \"{bf.Name}\", {bf.Role}, {bf.StateRole});");
             }
             sb.AppendLine("    }");
             sb.AppendLine();
@@ -420,6 +365,109 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+
+        // DeclaredSubLayerShapes — emitted from [SubLayerInput("...")] on the sub-layer fields.
+        //
+        // A composite's children do not all receive the composite's own input, and only the
+        // composite knows which gets what. Declaring it on the field lets the generator supply that
+        // fact to LayerBase.BringUpDeclaredSubLayers, so no composite implements the method.
+        var shapedSubLayers = subLayerFields
+            .Where(sl => !sl.IsCollection && !string.IsNullOrWhiteSpace(sl.InputShape))
+            .ToList();
+        if (shapedSubLayers.Count > 0)
+        {
+            string tpS = GetTypeParamName(classSymbol);
+            string subTuple = $"(LayerBase<{tpS}>? Child, AiDotNet.Tensors.LinearAlgebra.TensorShape InputShape)";
+            string subArray = $"(LayerBase<{tpS}>?, AiDotNet.Tensors.LinearAlgebra.TensorShape)";
+
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// The input shape each sub-layer receives from this composite.");
+            sb.AppendLine("    /// Auto-generated — do not modify. Edit the [SubLayerInput(\"...\")] arguments instead.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    /// <remarks>");
+            sb.AppendLine("    /// Empty while any declared child is still null or any axis is still negative: a composite");
+            sb.AppendLine("    /// builds its children inside its initializer, so both are ordinary states before that runs.");
+            sb.AppendLine("    /// Cached, because the initializer deliberately re-enters.");
+            sb.AppendLine("    /// </remarks>");
+            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{subTuple}> DeclaredSubLayerShapes()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        if (__declaredSubLayerShapes is not null) return __declaredSubLayerShapes;");
+            foreach (var sl in shapedSubLayers)
+            {
+                sb.AppendLine($"        if ({sl.Name} is null) return System.Array.Empty<{subArray}>();");
+            }
+            sb.AppendLine($"        var __sub = new {subArray}[]");
+            sb.AppendLine("        {");
+            foreach (var sl in shapedSubLayers)
+            {
+                var axes = string.Join(", ", sl.InputShape!.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0));
+                sb.AppendLine($"            ({sl.Name}, ShapeOf({axes})),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine("        for (int __i = 0; __i < __sub.Length; __i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var __s = __sub[__i].Item2;");
+            sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
+            sb.AppendLine($"                if (__s[__d] < 0) return System.Array.Empty<{subArray}>();");
+            sb.AppendLine("        }");
+            sb.AppendLine("        __declaredSubLayerShapes = __sub;");
+            sb.AppendLine("        return __declaredSubLayerShapes;");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine($"    private {subArray}[]? __declaredSubLayerShapes;");
+            sb.AppendLine();
+        }
+
+        // DeclaredParameterShapes — emitted from [TrainableParameter(Shape = "...")].
+        //
+        // This is the whole point of the Shape argument: LayerBase.TryAdoptRestoredParameters can see
+        // THAT a tensor was supplied before the first forward but not whether its shape is right, and
+        // only the layer knows that its weights are [inputSize, outputSize]. Declaring it on the field
+        // lets the generator supply that fact, so no layer hand-writes the override.
+        var shapedFields = paramFields.Where(p => !string.IsNullOrWhiteSpace(p.Shape)).ToList();
+        if (shapedFields.Count > 0)
+        {
+            string tp = GetTypeParamName(classSymbol);
+            string tupleType = $"(Tensor<{tp}>? Tensor, AiDotNet.Tensors.LinearAlgebra.TensorShape Expected, PersistentTensorRole Role)";
+            string arrayType = $"(Tensor<{tp}>?, AiDotNet.Tensors.LinearAlgebra.TensorShape, PersistentTensorRole)";
+
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// The shape each [TrainableParameter] must have once this layer's shapes are resolved.");
+            sb.AppendLine("    /// Auto-generated — do not modify. Edit the [TrainableParameter(Shape = \"...\")] arguments instead.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    /// <remarks>");
+            sb.AppendLine("    /// Returns empty while any declared axis is still the -1 lazy sentinel, which is the base's");
+            sb.AppendLine("    /// signal that this layer cannot answer yet. An axis written as * becomes -2, meaning the layer");
+            sb.AppendLine("    /// adapts that axis and a mismatch there is normal rather than a broken restore.");
+            sb.AppendLine("    /// </remarks>");
+            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{tupleType}> DeclaredParameterShapes()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var __declared = new {arrayType}[]");
+            sb.AppendLine("        {");
+            foreach (var pf in shapedFields)
+            {
+                var axes = pf.Shape!.Split(',')
+                    .Select(a => a.Trim())
+                    .Where(a => a.Length > 0)
+                    .Select(a => a == "*" ? "-2" : a);
+                sb.AppendLine($"            ({pf.Name}, ShapeOf({string.Join(", ", axes)}), {pf.Role}),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine();
+            sb.AppendLine("        for (int __i = 0; __i < __declared.Length; __i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var __s = __declared[__i].Item2;");
+            sb.AppendLine("            for (int __d = 0; __d < __s.Length; __d++)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                if (__s[__d] < 0 && __s[__d] != -2)");
+            sb.AppendLine($"                    return System.Array.Empty<{arrayType}>();");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine("        return __declared;");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
 
         // GetTrainableParameters
         bool hasOptional = paramFields.Any(p => p.Optional);
@@ -455,7 +503,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
-            sb.AppendLine("        if (IsShapeResolved) EnsureInitialized();");
+            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitialized();");
             if (hasOptional)
             {
                 sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");
@@ -967,7 +1015,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             }
             // Also check the type itself
             var typeDisplay = named.OriginalDefinition.ToDisplayString();
-            if (typeDisplay.StartsWith(LayerBaseTypeName + "<") || typeDisplay == LayerBaseTypeName)
+            if (typeDisplay.StartsWith(ILayerTypeName + "<") || typeDisplay == ILayerTypeName
+                || typeDisplay.StartsWith(LayerBaseTypeName + "<") || typeDisplay == LayerBaseTypeName)
                 return true;
         }
         return false;
@@ -1025,48 +1074,51 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     }
 
     private static List<(string FieldName, string Role)> DiscoverFromRegisterCalls(
-        ClassDeclarationSyntax classDecl, SemanticModel model, string methodName)
+        INamedTypeSymbol classSymbol, string methodName)
     {
         var results = new List<(string, string)>();
         var seen = new HashSet<string>();
 
-        // Walk all invocation expressions in the class body
-        foreach (var invocation in classDecl.DescendantNodes().OfType<InvocationExpressionSyntax>())
+        // Walk every partial declaration. Looking only at whichever syntax node reached the
+        // incremental pipeline first made registration discovery depend on file ordering.
+        foreach (var syntaxReference in classSymbol.DeclaringSyntaxReferences)
         {
-            // Match method name: RegisterTrainableParameter(...)
-            string invokedName;
-            if (invocation.Expression is IdentifierNameSyntax id)
-                invokedName = id.Identifier.Text;
-            else if (invocation.Expression is MemberAccessExpressionSyntax ma)
-                invokedName = ma.Name.Identifier.Text;
-            else
-                continue;
-
-            if (invokedName != methodName) continue;
-
-            var args = invocation.ArgumentList.Arguments;
-            if (args.Count < 2) continue;
-
-            // First arg: the field reference (e.g., _weights)
-            var fieldArg = args[0].Expression;
-            string fieldName;
-            if (fieldArg is IdentifierNameSyntax fieldId)
-                fieldName = fieldId.Identifier.Text;
-            else if (fieldArg is MemberAccessExpressionSyntax fieldMa && fieldMa.Expression is ThisExpressionSyntax)
-                fieldName = fieldMa.Name.Identifier.Text;
-            else
-                continue;
-
-            // Second arg: the role enum (e.g., PersistentTensorRole.Weights)
-            var roleArg = args[1].Expression.ToString();
-            // Normalize to full enum reference
-            if (!roleArg.Contains("PersistentTensorRole"))
-                roleArg = $"PersistentTensorRole.{roleArg}";
-
-            // Deduplicate (same field may be registered in multiple constructors)
-            if (seen.Add(fieldName))
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            foreach (var invocation in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
-                results.Add((fieldName, roleArg));
+                // Match method name: RegisterTrainableParameter(...)
+                string invokedName;
+                if (invocation.Expression is IdentifierNameSyntax id)
+                    invokedName = id.Identifier.Text;
+                else if (invocation.Expression is MemberAccessExpressionSyntax ma)
+                    invokedName = ma.Name.Identifier.Text;
+                else
+                    continue;
+
+                if (invokedName != methodName) continue;
+
+                var args = invocation.ArgumentList.Arguments;
+                if (args.Count < 2) continue;
+
+                // First arg: the field reference (e.g., _weights)
+                var fieldArg = args[0].Expression;
+                string fieldName;
+                if (fieldArg is IdentifierNameSyntax fieldId)
+                    fieldName = fieldId.Identifier.Text;
+                else if (fieldArg is MemberAccessExpressionSyntax fieldMa && fieldMa.Expression is ThisExpressionSyntax)
+                    fieldName = fieldMa.Name.Identifier.Text;
+                else
+                    continue;
+
+                // Second arg: the role enum (e.g., PersistentTensorRole.Weights)
+                var roleArg = args[1].Expression.ToString();
+                // Normalize to full enum reference
+                if (!roleArg.Contains("PersistentTensorRole"))
+                    roleArg = $"PersistentTensorRole.{roleArg}";
+
+                // Deduplicate (same field may be registered in multiple constructors).
+                if (seen.Add(fieldName))
+                    results.Add((fieldName, roleArg));
             }
         }
 
@@ -1089,7 +1141,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     private static string PresenceExpr(ParameterFieldInfo pf)
         => pf.Nullable ? $"{pf.Name} is not null && {pf.Name}.Length > 0" : $"{pf.Name}.Length > 0";
 
-    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false, bool Nullable = false);
+    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false, bool Nullable = false, string? Shape = null);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
-    private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection);
+    private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection, string? InputShape = null);
 }

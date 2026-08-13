@@ -82,8 +82,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     private bool _nativeLayersInitialized;
 
     // Learnable embeddings
-    private Tensor<T>? _patchEmbeddings;
-    private Tensor<T>? _decoderPositionEmbeddings;
 
     #endregion
 
@@ -262,11 +260,7 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
-        _patchEmbeddings = Tensor<T>.CreateDefault([_maxPatchesPerImage, _encoderDim], NumOps.Zero);
-        _decoderPositionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _decoderDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_patchEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
     }
 
     private void EnsureNativeInitialized()
@@ -808,8 +802,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         EnsureNativeInitialized();
         SetTrainingMode(true);
         TrainWithTape(input, expectedOutput, _optimizer);
-
-        UpdateParameters(CollectGradients());
         SetTrainingMode(false);
     }
 
@@ -818,15 +810,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     // GetParameters folds, which this model already exposes correctly. The throw existed
     // because the member was ABSTRACT and demanded an answer -- 572 models answered it the
     // same way.
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        EnsureNativeInitialized();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
-
     #endregion
 
     #region Disposal

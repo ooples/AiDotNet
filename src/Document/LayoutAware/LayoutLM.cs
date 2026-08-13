@@ -78,13 +78,9 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
     private readonly List<ILayer<T>> _transformerLayers = [];
     private readonly List<ILayer<T>> _classificationLayers = [];
 
-    // Learnable embeddings
-    private Tensor<T>? _wordEmbeddings;
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _position2DXEmbeddings;
-    private Tensor<T>? _position2DYEmbeddings;
-    private Tensor<T>? _position2DWEmbeddings;
-    private Tensor<T>? _position2DHEmbeddings;
+    // The word / 1D-position / 2D-layout embedding tables used to be six model fields here. They
+    // are now inside the LayoutEmbeddingLayer at the front of the stack, where the forward pass
+    // actually reads them -- see LayerHelper.CreateDefaultLayoutLMLayers.
 
     #endregion
 
@@ -238,7 +234,6 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -266,37 +261,8 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
             numHeads: _numHeads,
             vocabSize: _vocabSize,
             maxSequenceLength: MaxSequenceLength,
-            numClasses: _numClasses));
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        _wordEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _hiddenDim], NumOps.Zero);
-        _positionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _position2DXEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-        _position2DYEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-        _position2DWEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-        _position2DHEmbeddings = Tensor<T>.CreateDefault([_maxPosition2D, _hiddenDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_wordEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DXEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DYEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DWEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DHEmbeddings, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
+            numClasses: _numClasses,
+            maxPosition2D: _maxPosition2D));
     }
 
     #endregion
@@ -545,7 +511,7 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

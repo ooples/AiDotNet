@@ -164,9 +164,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     /// </summary>
     public int OutputChannels => _inputChannels < 0 ? -1 : _inputChannels + _numLayers * _growthRate;
 
-    /// <summary>Construction state: the 'bnMomentum' the layer was built with.</summary>
-    private readonly double _bnMomentum;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="DenseBlock{T}"/> class.
     /// </summary>
@@ -191,7 +188,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
             inputShape: [-1, -1, -1],
             outputShape: [-1, -1, -1])
     {
-        _bnMomentum = bnMomentum;
         if (numLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
         if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
 
@@ -256,11 +252,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
 
         // Replay parameters that arrived via Deserialize → SetParameters
         // before inner-layer shapes were resolved.
-        // Nothing assigned this field, so the replay below never ran. Take the restore the base
-        // held when it arrived before the shape resolved; the children exist by now, so the
-        // per-child split below is possible.
-        _pendingParameters ??= ConsumePendingRestoredParameters();
-
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;

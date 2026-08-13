@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Classification;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -28,18 +29,10 @@ namespace AiDotNet.Classification.SVM;
 /// - Kernel Trick: A way to handle non-linear boundaries without explicitly computing new features
 /// </para>
 /// </remarks>
-public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunctionClassifier<T>,
+public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunctionClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The per-class intercepts, which is what the hand-written surface exposed. The support vectors and their coefficients are structural and were never in this vector; putting them in would change its length and invalidate existing checkpoints.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => _intercept,
-            value => _intercept = value));
-    }
     /// <summary>
     /// Gets the SVM specific options.
     /// </summary>
@@ -58,6 +51,7 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     /// <summary>
     /// The bias terms for each classifier.
     /// </summary>
+    [FittedParameter]
     protected Vector<T>? _intercept;
 
     /// <inheritdoc/>

@@ -38,8 +38,12 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     private bool _additionalParametersRegistered;
 
     /// <summary>Registers an exceptional parameter component not discovered from a field.</summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _additionalParameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _additionalParameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
 
     /// <summary>Registers an exceptional component by stable identity and semantic role.</summary>
     protected void RegisterParameterComponent(
@@ -53,14 +57,18 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     {
     }
 
+    /// <summary>Generated override chain for fields declared across the model hierarchy.</summary>
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+    {
+    }
+
     private ParameterComponentRegistry<T> AdditionalParameterRegistry
     {
         get
         {
             if (!_additionalParametersRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_additionalParameterRegistry);
+                RegisterGeneratedParameterComponents(_additionalParameterRegistry);
                 RegisterComponents();
                 _additionalParametersRegistered = true;
             }

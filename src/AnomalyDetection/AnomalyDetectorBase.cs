@@ -35,16 +35,20 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     /// <remarks>The decision threshold, which is the one value fitting learns. It is reported unconditionally rather than only once fitted -- the hand-written pair was asymmetric, returning an EMPTY vector before fitting while still accepting one value, so a threshold saved from a fitted detector could not be restored into a fresh instance. Count and vector now agree in both states and a checkpoint round-trips.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(new ScalarParameterSource<T>(
-            () => _threshold,
-            value =>
-            {
-                _threshold = value;
-                // Restoring a threshold puts the detector in a fitted state: Predict can run
-                // without re-fitting on the original training data. The hand-written
-                // SetParameters did the same.
-                _isFitted = true;
-            }));
+        RegisterParameterComponent(
+            "AiDotNet.AnomalyDetection.AnomalyDetectorBase::threshold",
+            new ScalarParameterSource<T>(
+                () => _threshold,
+                value =>
+                {
+                    _threshold = value;
+                    // Restoring a threshold puts the detector in a fitted state: Predict can run
+                    // without re-fitting on the original training data. The hand-written
+                    // SetParameters did the same.
+                    _isFitted = true;
+                }),
+            ParameterSlotRole.LearnedState,
+            ParameterAvailability.Fit);
     }
 
     /// <summary>

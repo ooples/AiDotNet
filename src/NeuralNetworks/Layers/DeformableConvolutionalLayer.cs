@@ -332,11 +332,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         // before _weights / _bias / _offsetWeights / _offsetBias / (optional)
         // _maskWeights / _maskBias were allocated. With the tensors now
         // sized correctly, slicing matches GetParameters() ordering.
-        // Nothing assigned this field, so the replay below never ran. Take the restore the base
-        // held when it arrived before the shape resolved; the children exist by now, so the
-        // per-child split below is possible.
-        _pendingParameters ??= ConsumePendingRestoredParameters();
-
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;

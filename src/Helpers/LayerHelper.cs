@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -2905,8 +2906,24 @@ public static class LayerHelper<T>
             activationFunction: new IdentityActivation<T>()
         );
 
-        // Add the final Activation Layer (typically Softmax for classification tasks)
-        yield return new ActivationLayer<T>(new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Match the head to the declared task. Applying softmax unconditionally makes a regression
+        // network incapable of fitting ordinary continuous targets because every output is forced
+        // onto the probability simplex.
+        if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>(
+                new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>(
+                new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
+        else
+        {
+            yield return new ActivationLayer<T>(
+                new IdentityActivation<T>() as IActivationFunction<T>);
+        }
     }
 
     /// <summary>
@@ -5808,6 +5825,7 @@ public static class LayerHelper<T>
     /// Reference: "AudioGen: Textually Guided Audio Generation" by Kreuk et al., 2022
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultAudioGenLayers(
         int textHiddenDim = 768,
         int lmHiddenDim = 1536,
@@ -5822,82 +5840,66 @@ public static class LayerHelper<T>
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // === TEXT ENCODER (T5-style) ===
+        var encoderLayers = new List<ILayer<T>>
+        {
+            new EmbeddingLayer<T>(32128, textHiddenDim),
+            new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim)
+        };
 
-        // Token embedding: T5 vocabulary to hidden dimension
-        yield return new EmbeddingLayer<T>(32128, textHiddenDim);
-
-        // Positional encoding for text
-        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
-
-        // Encoder dropout
         if (dropoutRate > 0)
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            encoderLayers.Add(new DropoutLayer<T>(dropoutRate));
         }
 
-        // Text encoder transformer layers (6 layers, T5-base style)
         for (int i = 0; i < 6; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textHiddenDim) / (numHeads));
-
-            // Layer norm
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feedforward
-            yield return new DenseLayer<T>(textHiddenDim * 4, geluActivation);
-            yield return new DenseLayer<T>(textHiddenDim, identityActivation);
-
-            // Layer norm
-            yield return new LayerNormalizationLayer<T>();
+            encoderLayers.Add(new MultiHeadAttentionLayer<T>(numHeads, textHiddenDim / numHeads));
+            encoderLayers.Add(new LayerNormalizationLayer<T>());
+            encoderLayers.Add(new DenseLayer<T>(textHiddenDim * 4, geluActivation));
+            encoderLayers.Add(new DenseLayer<T>(textHiddenDim, identityActivation));
+            encoderLayers.Add(new LayerNormalizationLayer<T>());
 
             if (dropoutRate > 0)
             {
-                yield return new DropoutLayer<T>(dropoutRate);
+                encoderLayers.Add(new DropoutLayer<T>(dropoutRate));
             }
         }
 
-        // Project text to language model dimension
-        yield return new DenseLayer<T>(lmHiddenDim, identityActivation);
+        encoderLayers.Add(new DenseLayer<T>(lmHiddenDim, identityActivation));
 
-        // === AUDIO CODE EMBEDDING ===
-
-        // Embedding for audio codes from all codebooks
-        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks, lmHiddenDim);
-
-        // Positional encoding for audio sequence
-        yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
-
+        var decoderLayers = new List<ILayer<T>>
+        {
+            new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim)
+        };
         if (dropoutRate > 0)
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            decoderLayers.Add(new DropoutLayer<T>(dropoutRate));
         }
 
-        // === LANGUAGE MODEL DECODER ===
-
-        // Transformer decoder layers
         for (int i = 0; i < numLmLayers; i++)
         {
-            yield return new TransformerDecoderLayer<T>(
+            decoderLayers.Add(new TransformerDecoderLayer<T>(
                 numHeads: numHeads,
                 feedForwardDim: lmHiddenDim * 4,
                 sequenceLength: maxAudioTokens,
-                ffnActivation: geluActivation);
+                ffnActivation: geluActivation));
 
             if (dropoutRate > 0 && i < numLmLayers - 1)
             {
-                yield return new DropoutLayer<T>(dropoutRate);
+                decoderLayers.Add(new DropoutLayer<T>(dropoutRate));
             }
         }
 
-        // Final layer norm
-        yield return new LayerNormalizationLayer<T>();
-
-        // === OUTPUT PROJECTION ===
-
-        // Project to codebook logits
-        yield return new DenseLayer<T>(codebookSize * numCodebooks, identityActivation);
+        decoderLayers.Add(new LayerNormalizationLayer<T>());
+        int decoderVocabularySize = codebookSize * numCodebooks;
+        yield return new TokenConditionedDecoderLayer<T>(
+            encoderLayers,
+            new EmbeddingLayer<T>(decoderVocabularySize, lmHiddenDim),
+            decoderLayers,
+            new DenseLayer<T>(decoderVocabularySize, identityActivation),
+            encoderVocabularySize: 32128,
+            decoderVocabularySize: decoderVocabularySize,
+            maximumDecoderLength: maxAudioTokens);
     }
 
     /// <summary>
@@ -5987,7 +5989,8 @@ public static class LayerHelper<T>
         // === AUDIO CODE EMBEDDING ===
 
         // Combined codebook embedding (all codebooks share embedding space)
-        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks + 1, lmHiddenDim); // +1 for start token
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(codebookSize * numCodebooks + 1, lmHiddenDim)); // +1 for start token
 
         // Positional encoding for audio sequence
         yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
@@ -6470,7 +6473,7 @@ public static class LayerHelper<T>
         // === TEXT DECODER ===
 
         // Token embedding (Whisper vocabulary)
-        yield return new EmbeddingLayer<T>(vocabSize, modelDim);
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, modelDim));
 
         // Positional encoding for decoder
         yield return new PositionalEncodingLayer<T>(maxTokens, modelDim);
@@ -10503,7 +10506,8 @@ public static class LayerHelper<T>
         int vocabSize = 30522,
         int maxSequenceLength = 512,
         int numClasses = 7,
-        int patchSize = 16)
+        int patchSize = 16,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -10512,14 +10516,21 @@ public static class LayerHelper<T>
         // LayoutLM v1 (Xu et al. 2020, KDD) is a TEXT + 2D-layout model: its input is a sequence of
         // token IDs (the image-region features of the paper come from an EXTERNAL detector and are an
         // optional downstream add-on, not part of the core encoder — the visual patch stream first
-        // appears in LayoutLMv2/v3). The generated tests feed a rank-1 token-ID sequence accordingly,
-        // so the token EmbeddingLayer is the front of the stack. A leading PatchEmbeddingLayer (added
-        // when the tests briefly fed a document IMAGE) is wrong for token input and threw
-        // "PatchEmbeddingLayer requires rank-3/4 input; got rank 1" on every forward.
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-
-        // Position embeddings
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // appears in LayoutLMv2/v3). A leading PatchEmbeddingLayer (added when the tests briefly fed
+        // a document IMAGE) is wrong for token input and threw "PatchEmbeddingLayer requires rank-3/4
+        // input; got rank 1" on every forward.
+        //
+        // The whole embedding block is ONE layer, as in the paper: word + learned 1D position + the
+        // four 2D-layout terms, summed. It replaces the EmbeddingLayer + PositionalEncodingLayer pair
+        // that used to sit here, for two reasons. The layout terms had no representation at all — the
+        // model carried x/y/w/h tables as fields that were allocated, counted, serialized and trained,
+        // and read by nothing, so LayoutLM was a BERT that ignored the page. And the position half was
+        // the wrong KIND: PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids),
+        // whereas LayoutLM inherits BERT's LEARNED position embeddings.
+        //
+        // Token-only input still works unchanged (see LayoutEmbeddingLayer's input contract), so a
+        // caller with no OCR boxes gets exactly the previous behaviour.
+        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
 
         // LayerNorm after embeddings
         yield return new LayerNormalizationLayer<T>();
@@ -10584,7 +10595,8 @@ public static class LayerHelper<T>
         int vocabSize = 30522,
         int imageSize = 224,
         int visualBackboneChannels = 256,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
@@ -10616,11 +10628,13 @@ public static class LayerHelper<T>
 
         // === TEXT EMBEDDINGS ===
 
-        // Word embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-
-        // Position embeddings
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // One embedding block, as in the paper: word + learned 1D position + the four 2D-layout
+        // terms, summed. This replaces the EmbeddingLayer + PositionalEncodingLayer pair for two
+        // reasons -- the 2D table that carries a token's page position existed only as a model field
+        // nothing read, and PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids)
+        // where these BERT/XLM-R derived models use LEARNED positions. Token-only input is unchanged.
+        yield return LayerGraphContract.FromExternalInput(
+            new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D));
 
         // LayerNorm after embeddings
         yield return new LayerNormalizationLayer<T>();
@@ -10680,7 +10694,8 @@ public static class LayerHelper<T>
         int vocabSize = 30522,
         int imageSize = 224,
         int spatialDim = 128,
-        int numClasses = 16)
+        int numClasses = 16,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
@@ -10704,8 +10719,13 @@ public static class LayerHelper<T>
 
         // === TEXT EMBEDDINGS ===
 
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // One embedding block, as in the paper. DocFormer (Appalaraju et al., ICCV 2021) is a
+        // multi-modal model whose spatial features are summed into the text stream; the two spatial
+        // tables that were supposed to carry them lived as model fields, were counted and serialized,
+        // and were read by nothing. Folding them in here means the text stream can actually see where
+        // a token sits. Token-only input is unchanged when no boxes accompany it.
+        yield return LayerGraphContract.FromExternalInput(
+            new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D));
 
         // === SPATIAL ENCODINGS (shared) ===
 
@@ -10755,7 +10775,8 @@ public static class LayerHelper<T>
     /// Reference: "Pix2Struct: Screenshot Parsing as Pretraining" (ICML 2023)
     /// </para>
     /// </remarks>
-    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultPix2StructLayers(
+    [ValidateSequentialLayerDomains]
+    public static IEnumerable<ILayer<T>> CreateDefaultPix2StructLayers(
         int hiddenDim = 1024,
         int numEncoderLayers = 18,
         int numDecoderLayers = 18,
@@ -10765,10 +10786,16 @@ public static class LayerHelper<T>
         int maxPatches = 4096,
         int maxSequenceLength = 1024)
     {
-        return (
+        var decoderLayers = CreatePix2StructDecoderLayers(
+            hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength).ToList();
+
+        yield return new VisionEncoderDecoderLayer<T>(
             CreatePix2StructEncoderLayers(hiddenDim, numEncoderLayers, numHeads, patchSize, maxPatches),
-            CreatePix2StructDecoderLayers(hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength)
-        );
+            (EmbeddingLayer<T>)decoderLayers[0],
+            decoderLayers.Skip(1).Take(decoderLayers.Count - 2),
+            decoderLayers[decoderLayers.Count - 1],
+            vocabSize,
+            maxSequenceLength);
     }
 
     private static IEnumerable<ILayer<T>> CreatePix2StructEncoderLayers(
@@ -10777,8 +10804,10 @@ public static class LayerHelper<T>
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Patch embedding
-        yield return new DenseLayer<T>(hiddenDim, identityActivation);
+        // Convert the image to a patch sequence before applying sequence-position and attention
+        // layers. A Dense layer alone preserves [batch, channels, height, width], leaving rank 4
+        // encoder memory that cannot be consumed by the decoder's cross-attention path.
+        yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
         yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
 
@@ -10833,7 +10862,8 @@ public static class LayerHelper<T>
     /// Reference: "Nougat: Neural Optical Understanding for Academic Documents" (arXiv 2023)
     /// </para>
     /// </remarks>
-    public static (IEnumerable<ILayer<T>> EncoderLayers, IEnumerable<ILayer<T>> DecoderLayers) CreateDefaultNougatLayers(
+    [ValidateSequentialLayerDomains]
+    public static IEnumerable<ILayer<T>> CreateDefaultNougatLayers(
         int hiddenDim = 1024,
         int numEncoderLayers = 12,
         int numDecoderLayers = 10,
@@ -10843,10 +10873,16 @@ public static class LayerHelper<T>
         int patchSize = 16,
         int maxSequenceLength = 4096)
     {
-        return (
+        var decoderLayers = CreateNougatDecoderLayers(
+            hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength).ToList();
+
+        yield return new VisionEncoderDecoderLayer<T>(
             CreateNougatEncoderLayers(hiddenDim, numEncoderLayers, numHeads, imageSize, patchSize),
-            CreateNougatDecoderLayers(hiddenDim, numDecoderLayers, numHeads, vocabSize, maxSequenceLength)
-        );
+            (EmbeddingLayer<T>)decoderLayers[0],
+            decoderLayers.Skip(1).Take(decoderLayers.Count - 2),
+            decoderLayers[decoderLayers.Count - 1],
+            vocabSize,
+            maxSequenceLength);
     }
 
     private static IEnumerable<ILayer<T>> CreateNougatEncoderLayers(
@@ -10953,7 +10989,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(numPatches, hiddenDim);
 
         // Text embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, hiddenDim));
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
 
         // Unified encoder
@@ -11200,7 +11236,8 @@ public static class LayerHelper<T>
         int vocabSize = 250002,
         int imageSize = 224,
         int visualBackboneChannels = 256,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -11217,8 +11254,13 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDim, identityActivation);
 
         // XLM-RoBERTa embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // One embedding block, as in the paper: word + learned 1D position + the four 2D-layout
+        // terms, summed. This replaces the EmbeddingLayer + PositionalEncodingLayer pair for two
+        // reasons -- the 2D table that carries a token's page position existed only as a model field
+        // nothing read, and PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids)
+        // where these BERT/XLM-R derived models use LEARNED positions. Token-only input is unchanged.
+        yield return LayerGraphContract.FromExternalInput(
+            new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D));
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
@@ -11263,8 +11305,16 @@ public static class LayerHelper<T>
         // Patch embedding: [B, 3, imageSize, imageSize] -> [B, numPatches, hiddenDim]
         yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
 
-        // Position embeddings
-        yield return new PositionalEncodingLayer<T>(numPatches + 1, hiddenDim);
+        // CLS token, then LEARNED positions. Both were model fields on DiT that nothing read while
+        // the stack did something else, and both are load-bearing for a BEiT-derived model:
+        //
+        //   - The position table sized itself numPatches + 1, i.e. it already assumed a CLS token,
+        //     but no layer ever prepended one. The classification head therefore pooled patches
+        //     instead of reading the class token DiT (Li et al. 2022) is trained to classify from.
+        //   - PositionalEncodingLayer is SupportsTraining => false -- fixed sinusoids -- where ViT
+        //     and BEiT, which DiT inherits from, LEARN their position embeddings.
+        yield return new PrependCLSTokenLayer<T>(hiddenDim);
+        yield return new LearnedPositionalEmbeddingLayer<T>(numPatches + 1, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
@@ -11299,19 +11349,33 @@ public static class LayerHelper<T>
         int numHeads = 12,
         int layoutDim = 768,
         int vocabSize = 30522,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxPosition2D = 1024)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int maxSequenceLength = 512;
 
-        // Text embeddings stream
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // Text embeddings stream. One block: word + LEARNED 1D position, no layout terms. Keeping
+        // text and layout strictly apart is LiLT's contribution (Wang et al., ACL 2022) -- it is what
+        // lets one pre-trained layout encoder pair with any language's text encoder -- so this stream
+        // is fed a bare token sequence and never sees a box. The sinusoidal PositionalEncodingLayer
+        // that used to sit here is SupportsTraining => false, where LiLT's RoBERTa-derived text side
+        // uses learned positions; the dead _textPositionEmbeddings field was the leftover of that.
+        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
 
-        // Layout embeddings stream (2D position encoding)
-        yield return new DenseLayer<T>(layoutDim, identityActivation); // x, y, w, h
+        // Layout embeddings stream: the paper embeds each coordinate through a LOOKUP TABLE, the same
+        // 2D scheme LayoutLM uses, not a Dense projection of the raw numbers. A Dense over raw box
+        // values makes the model read coordinates as magnitudes, so x=101 and x=100 are near-identical
+        // by construction and a page-relative position has to be re-learned as arithmetic; a table
+        // lets each bucket mean whatever the data says it means. The dead _spatialEmbeddings and
+        // _layoutPositionEmbeddings fields were exactly these tables, allocated and never read.
+        yield return LayerGraphContract.FromDerivedInput(
+            new LayoutEmbeddingLayer<T>(
+                vocabSize: 1, hiddenDim: layoutDim, maxSequenceLength: maxSequenceLength,
+                maxPosition2D: maxPosition2D, includeTokens: false),
+            "layout");
         yield return new LayerNormalizationLayer<T>();
 
         // Dual-stream transformer with BiACM
@@ -11357,7 +11421,7 @@ public static class LayerHelper<T>
                 CreateDessurtDecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
     }
 
-    private static IEnumerable<ILayer<T>> CreateDessurtEncoderLayers(int hiddenDim, int numLayers, int numHeads)
+    private static IEnumerable<ILayer<T>> CreateDessurtEncoderLayers(int hiddenDim, int numLayers, int numHeads, int maxPatches = 1025)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -11366,6 +11430,12 @@ public static class LayerHelper<T>
         // Patch embedding
         yield return new ConvolutionalLayer<T>(hiddenDim, 16, 16, 0);
         yield return new LayerNormalizationLayer<T>();
+
+        // Dessurt's encoder had NO positional signal at all: _encoderPositionEmbeddings
+        // [numPatches + 1, encoderDim] sat as a dead model field and, unlike the decoder, nothing
+        // in the stack replaced it. A patch transformer without positions cannot tell one region of
+        // the page from another, which for a document model is the whole task.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxPatches, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -11385,7 +11455,9 @@ public static class LayerHelper<T>
         int maxSequenceLength = 512;
 
         yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and Dessurt's decoder
+        // learns its positions -- the dead _decoderPositionEmbeddings field was that table, allocated and never read.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -11422,7 +11494,7 @@ public static class LayerHelper<T>
         int maxPatchesPerImage = 4096)
     {
         return (CreateMATCHAEncoderLayers(encoderDim, encoderLayers, numHeads, maxPatchesPerImage),
-                CreateMATCHADecoderLayers(decoderDim, decoderLayers, numHeads, vocabSize));
+                CreateMATCHADecoderLayers(encoderDim, decoderDim, decoderLayers, numHeads, vocabSize));
     }
 
     private static IEnumerable<ILayer<T>> CreateMATCHAEncoderLayers(int hiddenDim, int numLayers, int numHeads, int maxPatches)
@@ -11440,7 +11512,10 @@ public static class LayerHelper<T>
         // both the paper's learned patch projection and the required tokenization.
         yield return new PatchEmbeddingLayer<T>(16, hiddenDim);
         yield return new LayerNormalizationLayer<T>();
-        yield return new PositionalEncodingLayer<T>(maxPatches, hiddenDim);
+        // LEARNED, not sinusoidal. MATCHA's Pix2Struct-derived encoder learns a per-patch
+        // position, and the dead _patchEmbeddings field -- [maxPatchesPerImage, encoderDim] --
+        // was exactly that table, allocated and never read while these sinusoids stood in for it.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxPatches, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -11452,15 +11527,21 @@ public static class LayerHelper<T>
         }
     }
 
-    private static IEnumerable<ILayer<T>> CreateMATCHADecoderLayers(int hiddenDim, int numLayers, int numHeads, int vocabSize)
+    private static IEnumerable<ILayer<T>> CreateMATCHADecoderLayers(
+        int encoderDim, int hiddenDim, int numLayers, int numHeads, int vocabSize)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int maxSequenceLength = 512;
 
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
+        // The public model has one image tensor and no separate decoder-token input. Its decoder
+        // therefore receives continuous visual tokens; treating them as vocabulary indices here
+        // rejected legal images. Preserve the remotely-added learned position table, but project
+        // the encoder width instead of inserting a token embedding into this single-input path.
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(hiddenDim, identityActivation);
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, hiddenDim);
 
         for (int i = 0; i < numLayers; i++)
         {
@@ -11517,7 +11598,9 @@ public static class LayerHelper<T>
             patchSize: 14,
             embeddingDim: visionDim,
             expectedInputChannels: 3);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, visionDim);
+        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and DocOwl's ViT-family vision encoder
+        // learns its positions -- the dead _visionPositionEmbeddings field was that table, allocated and never read.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxSequenceLength, visionDim);
 
         for (int i = 0; i < visionLayers; i++)
         {
@@ -11560,6 +11643,13 @@ public static class LayerHelper<T>
 
         yield return new RMSNormalizationLayer<T>(textDim);
         yield return new DenseLayer<T>(vocabSize, identityActivation);
+
+        // Token embedding for the TEXT side, appended last so no existing index moves. It is not a
+        // step in the sequential chain -- DocOwl's forward addresses it directly -- because the text
+        // blocks above consume the CONCATENATION of projected visual tokens and embedded text
+        // tokens, which a linear walk cannot express. Without it the decoder only ever saw the image
+        // and _languageEmbeddings sat dead: a vision-language model with no way in for language.
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, textDim));
     }
 
     /// <summary>
@@ -11604,7 +11694,9 @@ public static class LayerHelper<T>
         // visual activations through EmbeddingLayer as if they were integer token IDs.
         yield return new PatchEmbeddingLayer<T>(16, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
-        yield return new PositionalEncodingLayer<T>(numPatches, visionDim);
+        // LEARNED, not sinusoidal. PositionalEncodingLayer is SupportsTraining => false, and InfographicVQA's ViT-family vision encoder
+        // learns its positions -- the dead _visionPositionEmbeddings field was that table, allocated and never read.
+        yield return new LearnedPositionalEmbeddingLayer<T>(numPatches, visionDim);
 
         for (int i = 0; i < visionLayers; i++)
         {
@@ -11623,6 +11715,13 @@ public static class LayerHelper<T>
 
         _ = textDim;
         yield return new DenseLayer<T>(vocabSize, identityActivation);
+
+        // Token embedding for the question text, appended last so no existing index moves. It is not
+        // a step in the chain -- the forward addresses it directly -- because the fusion blocks
+        // consume the CONCATENATION of projected visual tokens and embedded text, which a linear
+        // walk cannot express. Sized fusionDim, the width the visual tokens were projected to, NOT
+        // textDim: they share a default of 768 and that coincidence would hide a mismatch.
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, fusionDim));
     }
 
     /// <summary>
@@ -11674,7 +11773,8 @@ public static class LayerHelper<T>
         int inputDim = 768,
         int hiddenDim = 256,
         int numGraphLayers = 4,
-        int numClasses = 7)
+        int numClasses = 7,
+        int maxNodes = 512)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -11682,6 +11782,10 @@ public static class LayerHelper<T>
         // Node feature encoder
         yield return new DenseLayer<T>(hiddenDim, reluActivation);
         yield return new LayerNormalizationLayer<T>();
+        // Node-order position. LayoutGraph._positionEmbeddings carried a [maxNodes, dim] table as a model field that nothing
+        // read; it indexes a node by its place in the document's reading order, which is precisely
+        // what a position embedding is, so it belongs in the stack rather than in the bin.
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxNodes, hiddenDim);
 
         // Graph layers with hierarchical structure
         for (int i = 0; i < numGraphLayers; i++)
@@ -11787,6 +11891,16 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(hiddenDim, kernelSize: 3, stride: 2, padding: 1, identityActivation);
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(reluActivation);
+
+        // SVTR (Du et al., 2022) adds a learned position to each column of the conv stem's output
+        // before the mixing blocks. _positionEmbeddings [numPatches, embedDim] was that table, held
+        // as a model field and read by nothing, and no positional layer stood in for it -- so the
+        // mixing blocks saw an unordered set of columns and had to recover reading order from the
+        // features themselves.
+        // The conv stem halves twice in BOTH axes, so the token sequence is (W/4)*(H/4) long --
+        // seqLen alone counts only the columns and would clamp most positions onto the last row.
+        yield return new LearnedPositionalEmbeddingLayer<T>(
+            Math.Max(1, (imageWidth / 4) * (imageHeight / 4)), hiddenDim);
 
         // Mixing blocks. SVTR's mixing block is a standard pre-norm transformer block WITH residual
         // connections (local/global attention + MLP, each wrapped in x = x + f(LN(x))). The composite
@@ -12212,9 +12326,12 @@ public static class LayerHelper<T>
 
         // The paper uses integer token indices for all four lookup tables.
         yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);  // W       (paper w_i)
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);  // W̃       (paper w̃_j)
-        yield return new EmbeddingLayer<T>(vocabSize, 1);                   // b       (paper b_i)
-        yield return new EmbeddingLayer<T>(vocabSize, 1);                   // b̃       (paper b̃_j)
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabSize, embeddingDimension));          // W̃       (paper w̃_j)
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabSize, 1));                           // b       (paper b_i)
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabSize, 1));                           // b̃       (paper b̃_j)
     }
 
     /// <summary>
@@ -12231,6 +12348,7 @@ public static class LayerHelper<T>
     /// (character n-grams). It represents words as the sum of their n-gram embeddings.
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFastTextLayers(
         NeuralNetworkArchitecture<T> architecture,
         int vocabSize,
@@ -12244,19 +12362,33 @@ public static class LayerHelper<T>
         if (architecture.OutputSize > 0 && architecture.OutputSize != vocabSize)
             throw new ArgumentException("architecture.OutputSize must match vocabSize for FastText softmax output.", nameof(architecture));
 
-        // FastText architecture:
-        // 1. Word Embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        // FastText (Joulin et al. 2017, "Bag of Tricks for Efficient Text Classification"):
+        // look up an embedding for every feature, AVERAGE them into one hidden vector, then a
+        // single linear layer and softmax over classes.
+        //
+        // ONE embedding table covers words AND subwords, exactly as fastText's own input matrix
+        // does: it is (nwords + bucket) x dim, with word ids occupying [0, vocabSize) and hashed
+        // character n-grams occupying [vocabSize, vocabSize + bucketSize). There is no second
+        // table in the paper.
+        //
+        // The previous chain had the n-gram table as its own SECOND stage, which made the chain
+        // feed the word table's OUTPUT into it as if those floats were token ids -- not the paper's
+        // architecture, and no valid shape can satisfy it. Splitting it out of the chain instead
+        // would be just as wrong in the other direction: the chain's backward would never reach it,
+        // so it would be registered as trainable while being unable to receive a gradient.
 
-        // 2. N-gram Embeddings
-        yield return new EmbeddingLayer<T>(bucketSize, embeddingDimension);
+        // The generated composite owns that one shared input matrix, performs the parallel word
+        // and hashed-subword lookups, and averages the feature axis correctly for both unbatched
+        // [features] and batched [batch, features] inputs.
+        yield return new FastTextEmbeddingLayer<T>(vocabSize, bucketSize, embeddingDimension);
 
-        // 3. Context word projection (similar to Word2Vec)
+        // Linear projection to the class/vocabulary scores.
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
 
-        // 4. Output activation
+        // Output activation.
         yield return new ActivationLayer<T>(new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
     }
+
 
     /// <summary>
     /// Creates default layers for a BLIP-2 neural network.
@@ -12296,7 +12428,8 @@ public static class LayerHelper<T>
         }
 
         // 3. Text embedding for Q-Former
-        yield return new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim));
 
         // 4. Projection heads
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null); // ITM
@@ -16889,6 +17022,7 @@ public static class LayerHelper<T>
     /// financial text, enabling it to understand financial terminology and sentiment nuances.
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFinBERTLayers(
         NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 30522,
@@ -16900,25 +17034,11 @@ public static class LayerHelper<T>
         int numSentimentClasses = 3,
         double dropoutRate = 0.1)
     {
-        // === Token Embedding Layer ===
-        // Maps token IDs to dense vectors
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: vocabularySize,
-            embeddingDimension: hiddenDimension);
-
-        // === Position Embedding Layer ===
-        // Adds position information to token embeddings
-        yield return new EmbeddingLayer<T>(
-            vocabularySize: maxSequenceLength,
-            embeddingDimension: hiddenDimension);
-
-        // === Layer Normalization ===
-        // Normalizes embeddings before transformer layers
-        yield return new LayerNormalizationLayer<T>(
-            );
-
-        // === Dropout ===
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new BertEmbeddingLayer<T>(
+            vocabularySize,
+            hiddenDimension,
+            maxSequenceLength,
+            dropoutProbability: dropoutRate);
 
         // === Transformer Layers ===
         // Each block is a RESIDUAL self-attention sublayer + RESIDUAL GELU-FFN sublayer with
@@ -17219,7 +17339,8 @@ public static class LayerHelper<T>
     {
         // Token embeddings
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+        yield return LayerGraphContract.FromDerivedInput(
+            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
 
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
@@ -17263,7 +17384,8 @@ public static class LayerHelper<T>
     {
         // Token and position embeddings
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+        yield return LayerGraphContract.FromDerivedInput(
+            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
 
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
@@ -17294,6 +17416,7 @@ public static class LayerHelper<T>
     /// heads handle different aspects of financial analysis.
     /// </para>
     /// </remarks>
+    [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
         NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 32000,
@@ -17305,12 +17428,11 @@ public static class LayerHelper<T>
         int numClasses = 3,
         double dropoutRate = 0.1)
     {
-        // Token and position embeddings
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
-
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new BertEmbeddingLayer<T>(
+            vocabularySize,
+            hiddenDimension,
+            maxSequenceLength,
+            dropoutProbability: dropoutRate);
 
         // Shared transformer backbone
         for (int i = 0; i < numLayers; i++)
@@ -17352,7 +17474,8 @@ public static class LayerHelper<T>
     {
         // Token and position embeddings
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+        yield return LayerGraphContract.FromDerivedInput(
+            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
 
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -23865,7 +23988,16 @@ public static class LayerHelper<T>
 
         // Eq 2: Z = LSTM(EMB(H)). Embedding shares the ASR vocabulary space; LSTM contextualises each
         // hotword's character sequence into one representation per hotword.
-        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        //
+        // Width is vocabSize + 1, not vocabSize: SeACo pads every sampled hotword out to the fixed
+        // length with a mask token, and SeACoOptions.ResolveHotwordMaskTokenId() resolves an unset
+        // HotwordMaskTokenId to VocabSize itself -- the appended '#' no-bias slot the paper adds past
+        // the ASR vocabulary, which MergeBiasedProbabilities already sizes as vocab + 1. Sized at
+        // vocabSize the highest legal id is vocabSize - 1, so that mask token was out of range by
+        // exactly one and the padded position threw "requires token indices, but element 1 is 4,
+        // which is not in [0, 4)". This affected every configuration that leaves the mask id unset,
+        // not just small fixtures; the id is simply one past the vocabulary at any size.
+        yield return new EmbeddingLayer<T>(vocabSize + 1, encoderDim);
         yield return new LSTMLayer<T>(encoderDim);
 
         // Eq 3: two attentions over Z — one for the decoder hidden state D, one for the CIF output E.
@@ -31148,8 +31280,8 @@ public static class LayerHelper<T>
         int latentW = inputWidth / downsampleFactor;
 
         // Input convolution: [inputChannels] -> [baseChannels]
-        yield return new ConvolutionalLayer<T>(
-            baseChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            inputChannels, baseChannels, 3, 1, 1, identity);
 
         // Encoder blocks with progressive downsampling
         int inC = baseChannels;
@@ -31169,8 +31301,8 @@ public static class LayerHelper<T>
             // Downsample (except last level)
             if (level < mults.Length - 1)
             {
-                yield return new ConvolutionalLayer<T>(
-                    outC, 3, 2, 1, identity);
+                yield return ConvolutionalLayer<T>.WithInputDepth(
+                    outC, outC, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -31305,8 +31437,8 @@ public static class LayerHelper<T>
         int latentW = inputWidth / downsampleFactor;
 
         // Input convolution: [inputChannels] -> [baseChannels]
-        yield return new ConvolutionalLayer<T>(
-            baseChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            inputChannels, baseChannels, 3, 1, 1, identity);
 
         // Encoder spatial blocks with downsampling
         int inC = baseChannels;
@@ -31323,8 +31455,8 @@ public static class LayerHelper<T>
             // Downsample (except last level)
             if (level < mults.Length - 1)
             {
-                yield return new ConvolutionalLayer<T>(
-                    outC, 3, 2, 1, identity);
+                yield return ConvolutionalLayer<T>.WithInputDepth(
+                    outC, outC, 3, 2, 1, identity);
                 h /= 2;
                 w /= 2;
             }
@@ -31332,12 +31464,12 @@ public static class LayerHelper<T>
 
         // Latent projection layers
         int lastChannels = baseChannels * mults[^1];
-        yield return new ConvolutionalLayer<T>(
-            latentChannels, 3, 1, 1, identity);
-        yield return new ConvolutionalLayer<T>(
-            latentChannels, 3, 1, 1, identity);
-        yield return new ConvolutionalLayer<T>(
-            latentChannels, 1, 1, 0, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            lastChannels, latentChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            lastChannels, latentChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            latentChannels, latentChannels, 1, 1, 0, identity);
     }
 
     /// <summary>
@@ -31370,8 +31502,8 @@ public static class LayerHelper<T>
         int lastChannels = baseChannels * mults[^1];
 
         // Post-quant convolution: [latentChannels] -> [lastChannels]
-        yield return new ConvolutionalLayer<T>(
-            lastChannels, 3, 1, 1, identity);
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            latentChannels, lastChannels, 3, 1, 1, identity);
 
         // Decoder spatial blocks (mirror of encoder)
         int inC = lastChannels;
@@ -31386,16 +31518,16 @@ public static class LayerHelper<T>
 
             if (level > 0)
             {
-                yield return new DeconvolutionalLayer<T>(
-                    outC, 4, 2, 1, identity);
+                yield return DeconvolutionalLayer<T>.WithInputDepth(
+                    outC, outC, 4, 2, 1, identity);
                 h *= 2;
                 w *= 2;
             }
         }
 
         // Output convolution: [baseChannels] -> [inputChannels] with Tanh
-        yield return new ConvolutionalLayer<T>(
-            inputChannels, 3, 1, 1,
+        yield return ConvolutionalLayer<T>.WithInputDepth(
+            baseChannels, inputChannels, 3, 1, 1,
             (IActivationFunction<T>)new TanhActivation<T>());
     }
 
@@ -32615,36 +32747,46 @@ public static class LayerHelper<T>
         int featHeight = height / 8;
         int featWidth = width / 8;
 
+        // RAFT's encoders are nonlinear feature extractors. ConvolutionalLayer is deliberately
+        // linear by default (matching nn.Conv2d), so architecture factories must state every
+        // nonlinearity explicitly rather than inheriting behavior from a global layer default.
+        // Besides preserving the paper's forward semantics, this selects ReLU-aware Kaiming gain
+        // for initialization and keeps the recurrent correlation graph well-conditioned at step 0.
         // Feature encoder (5 layers)
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(96, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
 
         // Context encoder (5 layers)
-        yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(96, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
 
         // Correlation conv
         int corrDim = correlationLevels * (2 * correlationRadius + 1) * (2 * correlationRadius + 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, (IActivationFunction<T>)new ReLUActivation<T>());
 
-        // GRU update block
+        // GRU update block. These convolutions produce PRE-ACTIVATIONS: RAFT applies sigmoid to
+        // z/r and tanh to the candidate in GRUUpdate. They therefore remain explicitly linear;
+        // applying ReLU here would restrict gates to [0.5, 1] and change the GRU equations.
         int gruInputDim = numFeatures + numFeatures + 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Flow heads
-        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1);
-        yield return new ConvolutionalLayer<T>(2, 3, 1, 1);
+        // Flow heads. The hidden projection is nonlinear; the terminal residual is signed and must
+        // stay linear so RAFT can refine motion in both coordinate directions.
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, 3, 1, 1, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new ConvolutionalLayer<T>(2, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Upsample conv
-        yield return new ConvolutionalLayer<T>(64 * 9, 3, 1, 1);
+        // Convex-upsample mask LOGITS. Softmax is applied in RAFT.UpsampleFlow; a ReLU here pins a
+        // large fraction of logits exactly at zero, changes the learned distribution, and makes the
+        // backward mathematically ambiguous at those points.
+        yield return new ConvolutionalLayer<T>(64 * 9, 3, 1, 1, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -33110,7 +33252,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(lmHiddenDim, (IActivationFunction<T>?)null);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, lmHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, lmHiddenDim));
 
         // Language model transformer layers
         for (int i = 0; i < numLmLayers; i++)
@@ -33194,7 +33337,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, textHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, textHiddenDim));
 
         // Text encoder layers
         int[] textTokenShape = new[] { 1, textHiddenDim };
@@ -33240,7 +33384,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text encoder
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, hiddenDim));
         for (int i = 0; i < numEncoderLayers; i++)
             yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
@@ -33492,7 +33637,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text encoder: EmbeddingLayer + numLayers × TransformerEncoder + projection
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, hiddenDim));
         for (int i = 0; i < numLayers; i++)
             yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
@@ -33545,7 +33691,8 @@ public static class LayerHelper<T>
         }
 
         // Text embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim));
 
         // ITM head + ITC projection + LM projection
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);
@@ -34021,7 +34168,8 @@ public static class LayerHelper<T>
             yield return new CrossAttentionLayer<T>(lmHiddenDim, lmHiddenDim, numHeads);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, lmHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, lmHiddenDim));
 
         // Language model transformer layers
         for (int i = 0; i < numLmLayers; i++)
@@ -34059,7 +34207,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, embeddingDimension);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, embeddingDimension));
 
         // Language model transformer layers + cross-attention layers
         int crossAttnCount = 0;

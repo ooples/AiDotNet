@@ -116,6 +116,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// concatenation the previous hand-written GetParameters performed.</remarks>
     protected override void RegisterComponents()
     {
+        EnsureInitialized();
         RegisterParameterComponent(_videoUNet);
         RegisterParameterComponent(_temporalVAE);
     }

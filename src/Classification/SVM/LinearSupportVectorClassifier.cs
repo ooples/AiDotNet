@@ -77,12 +77,14 @@ public partial class LinearSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Weight vector for linear classification.
     /// </summary>
+    [FittedParameter]
     private Vector<T>? _weights;
 
     /// <summary>
     /// Bias term (intercept) for the linear classifier.
     /// </summary>
 
+    [FittedParameter]
     private T _bias;
 
 

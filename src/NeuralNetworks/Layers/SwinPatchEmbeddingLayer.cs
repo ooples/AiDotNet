@@ -207,11 +207,6 @@ public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             new[] { _embedDim });
 
         // Replay any Deserialize-buffered parameters now that _projection is resolved.
-        // Nothing assigned this field, so the replay below never ran. Take the restore the base
-        // held when it arrived before the shape resolved; the children exist by now, so the
-        // per-child split below is possible.
-        _pendingParameters ??= ConsumePendingRestoredParameters();
-
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;

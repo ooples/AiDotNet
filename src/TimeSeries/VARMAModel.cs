@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -67,12 +68,13 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// <summary>
     /// Matrix of Moving Average (MA) coefficients that capture the dependency on past error terms.
     /// </summary>
+    [FittedParameter]
     private Matrix<T> _maCoefficients;
 
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Matrix<T> _residuals;
 
     /// <summary>
@@ -104,6 +106,32 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
         _residuals = Matrix<T>.Empty();
     }
 
+    /// <inheritdoc />
+    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+    {
+        return new VARMAModel<T>(new VARMAModelOptions<T>
+        {
+            Lag = _varmaOptions.Lag,
+            OutputDimension = _varmaOptions.OutputDimension,
+            DecompositionType = _varmaOptions.DecompositionType,
+            MaLag = _varmaOptions.MaLag,
+            LagOrder = _varmaOptions.LagOrder,
+            IncludeTrend = _varmaOptions.IncludeTrend,
+            SeasonalPeriod = _varmaOptions.SeasonalPeriod,
+            AutocorrelationCorrection = _varmaOptions.AutocorrelationCorrection,
+            ModelType = _varmaOptions.ModelType,
+            LossFunction = _varmaOptions.LossFunction,
+            MaxPredictionAbsValue = _varmaOptions.MaxPredictionAbsValue,
+            MaxTrainingTimeSeconds = _varmaOptions.MaxTrainingTimeSeconds,
+            UseEarlyStopping = _varmaOptions.UseEarlyStopping,
+            EarlyStoppingPatience = _varmaOptions.EarlyStoppingPatience,
+            EarlyStoppingMinDelta = _varmaOptions.EarlyStoppingMinDelta,
+            DecompositionMethod = _varmaOptions.DecompositionMethod,
+            UseIntercept = _varmaOptions.UseIntercept,
+            Seed = _varmaOptions.Seed
+        });
+    }
+
     /// <summary>
     /// Generates forecasts using the trained VARMA model.
     /// </summary>
@@ -129,12 +157,68 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// add that 0.3% correction, resulting in a final prediction of 2.8% growth.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Fits the VAR part, then the MA part on its residuals.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This override did not exist, which is why the model was a VAR. Every piece of the moving
+    /// average was written -- EstimateMACoefficients, PrepareLaggedResiduals, PredictMA,
+    /// CalculateResiduals -- and each had exactly ONE reference in the file: its own definition.
+    /// Nothing called any of them. _residuals never left Matrix&lt;T&gt;.Empty() and
+    /// _maCoefficients stayed zero, and both were serialized anyway.
+    /// </para>
+    /// <para>
+    /// VARMA is a VAR plus a moving average of its own errors. Fitting one and not the other gives
+    /// a model that is not wrong so much as not the model asked for: the AR part predicts, and the
+    /// systematic error the MA part exists to correct is left in.
+    /// </para>
+    /// </remarks>
+    protected override void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        base.TrainCore(x, y);
+
+        // The MA part is a regression on the VAR's own residuals, so it can only be fitted after
+        // the AR part has been.
+        _residuals = CalculateResiduals(x, y);
+
+        if (_varmaOptions.MaLag > 0 && _residuals.Rows > _varmaOptions.MaLag)
+        {
+            EstimateMACoefficients();
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The AR prediction plus the MA correction. The comment this replaces claimed "the MA
+    /// component is already incorporated during training" and that out-of-sample correction was
+    /// "negligible"; neither was true, because no MA component was ever fitted.
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // For in-sample predictions, base.Predict returns training values directly.
-        // The MA component is already incorporated during training.
-        // For out-of-sample, the MA correction is negligible (assumed zero errors).
-        return base.Predict(input);
+        var arPrediction = base.Predict(input);
+
+        if (_varmaOptions.MaLag <= 0 || _residuals.Rows == 0)
+        {
+            return arPrediction;
+        }
+
+        var maCorrection = PredictMA();
+        if (maCorrection.Length == 0)
+        {
+            return arPrediction;
+        }
+
+        // PredictMA returns one correction per output dimension, formed from the most recent
+        // residuals. It applies to the forecast, so add it to each predicted step.
+        var result = new Vector<T>(arPrediction.Length);
+        for (int i = 0; i < arPrediction.Length; i++)
+        {
+            T correction = maCorrection[i % maCorrection.Length];
+            result[i] = NumOps.Add(arPrediction[i], correction);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -348,7 +432,27 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// </remarks>
     private Vector<T> SolveOLS(Matrix<T> x, Vector<T> y)
     {
-        return MatrixSolutionHelper.SolveLinearSystem(x.Transpose().Multiply(x), x.Transpose().Multiply(y), _varmaOptions.DecompositionType);
+        Matrix<T> normal = x.Transpose().Multiply(x);
+        Vector<T> rhs = x.Transpose().Multiply(y);
+
+        // Residual-lag columns are frequently collinear (especially in the univariate family-test
+        // data). Solving the raw normal equations with LU then yields NaN/Infinity. A scale-aware
+        // ridge makes the system positive and bounded without changing the VARMA model class.
+        double diagonalScale = 0.0;
+        for (int i = 0; i < normal.Rows; i++)
+            diagonalScale = Math.Max(diagonalScale, Math.Abs(NumOps.ToDouble(normal[i, i])));
+        T ridge = NumOps.FromDouble(Math.Max(1.0, diagonalScale) * 1e-8);
+        for (int i = 0; i < normal.Rows; i++)
+            normal[i, i] = NumOps.Add(normal[i, i], ridge);
+
+        Vector<T> coefficients = MatrixSolutionHelper.SolveLinearSystem(
+            normal, rhs, MatrixDecompositionType.Qr);
+        for (int i = 0; i < coefficients.Length; i++)
+        {
+            if (!NumericalStabilityHelper.IsFinite(coefficients[i]))
+                coefficients[i] = NumOps.Zero;
+        }
+        return coefficients;
     }
 
     /// <summary>
@@ -394,6 +498,12 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
                 writer.Write(Convert.ToDouble(val));
             }
         }
+
+        writer.Write(_residuals.Rows);
+        writer.Write(_residuals.Columns);
+        for (int i = 0; i < _residuals.Rows; i++)
+            for (int j = 0; j < _residuals.Columns; j++)
+                writer.Write(Convert.ToDouble(_residuals[i, j]));
     }
 
     /// <summary>
@@ -440,6 +550,24 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
                 rowData[j] = NumOps.FromDouble(reader.ReadDouble());
             }
             _maCoefficients.SetRow(i, new Vector<T>(rowData));
+        }
+
+
+        // The MA correction reads recent innovations. They are learned state, not a transient
+        // training cache, so persist them alongside the coefficient matrix. Older payloads end
+        // after the coefficient matrix; retain compatibility with those checkpoints.
+        try
+        {
+            int residualRows = reader.ReadInt32();
+            int residualColumns = reader.ReadInt32();
+            _residuals = new Matrix<T>(residualRows, residualColumns);
+            for (int i = 0; i < residualRows; i++)
+                for (int j = 0; j < residualColumns; j++)
+                    _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _residuals = Matrix<T>.Empty();
         }
     }
 }

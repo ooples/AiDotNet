@@ -1419,6 +1419,8 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MultiHeadAttentionLayer_ParameterCount_IsPositive()
     {
+        await Task.Yield();
+
         // Arrange
         int sequenceLength = 10;
         int embeddingSize = 64;
@@ -1426,6 +1428,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         // Act
+        layer.MaterializeParameters();
         int paramCount = (int)layer.ParameterCount;
 
         // Assert
@@ -2354,12 +2357,15 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task EmbeddingLayer_ParameterCount_IsPositive()
     {
+        await Task.Yield();
+
         // Arrange
         int vocabSize = 1000;
         int embeddingDim = 64;
         var layer = new EmbeddingLayer<float>(vocabSize, embeddingDim);
 
         // Act
+        layer.MaterializeParameters();
         int paramCount = (int)layer.ParameterCount;
 
         // Assert - Embedding has vocabSize * embeddingDim parameters

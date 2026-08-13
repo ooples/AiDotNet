@@ -56,6 +56,7 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[RankRoutedInputDomain(2, 5)]
 [ResearchPaper("LayoutXLM: Multimodal Pre-training for Multilingual Visually-rich Document Understanding", "https://doi.org/10.48550/arXiv.2104.08836", Year = 2022, Authors = "Yiheng Xu, Tengchao Lv, Lei Cui, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Furu Wei")]
 public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
@@ -85,10 +86,6 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     private readonly List<ILayer<T>> _outputLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _spatialPositionEmbeddings;
-    private Tensor<T>? _visualPositionEmbeddings;
-    private Tensor<T>? _languageEmbeddings;
 
     #endregion
 
@@ -272,15 +269,7 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     {
         var random = RandomHelper.CreateSeededRandom(42);
 
-        _positionEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _spatialPositionEmbeddings = Tensor<T>.CreateDefault([1024, _hiddenDim], NumOps.Zero);
-        _visualPositionEmbeddings = Tensor<T>.CreateDefault([(ImageSize / 16) * (ImageSize / 16), _hiddenDim], NumOps.Zero);
-        _languageEmbeddings = Tensor<T>.CreateDefault([_numLanguages, _hiddenDim], NumOps.Zero);
 
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_spatialPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_visualPositionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_languageEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -732,7 +721,10 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     // Layer roles in CreateDefaultLayoutXLMLayers order: [0..VisualBackbonePrefixLength) = visual
     // backbone (conv/BN/pool + a final C->hidden projection Dense), then 4 text-embedding layers, then
     // the multimodal transformer + head. TextEmbeddingLayerCount mirrors LayoutLMv2's split.
-    private const int TextEmbeddingLayerCount = 4;
+    // Three, not four: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that
+    // used to open this section are now a single LayoutEmbeddingLayer, which also carries the 2D
+    // layout terms. The LayerNorm and Dropout after them are unchanged.
+    private const int TextEmbeddingLayerCount = 3;
 
     /// <summary>
     /// Full text+image fusion entry (industry-standard LayoutXLM): encodes BOTH a token-ID sequence and

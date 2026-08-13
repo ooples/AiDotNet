@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.Autodiff;
 
@@ -82,7 +83,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     public void SetLossFunction(ILossFunction<T> lossFunction) => ApplyLossFunction(lossFunction);
 
     private readonly NHiTSOptions<T> _options;
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
     private readonly List<NHiTSStackTensor<T>> _stacks;
     private readonly Random _random;
@@ -956,13 +957,9 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
         return metadata;
     }
 
-    /// <summary>Construction state: the 'numBlocks' the layer was built with.</summary>
-    private readonly int _numBlocks;
-
     public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
         : base(new[] { inputLength }, new[] { outputLength })
     {
-        _numBlocks = numBlocks;
         _inputLength = inputLength;
         _outputLength = outputLength;
         _hiddenSize = hiddenSize;

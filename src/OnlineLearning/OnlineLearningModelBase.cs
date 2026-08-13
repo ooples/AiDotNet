@@ -94,8 +94,12 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// Registration
     /// order is serialization order, so keep it stable.
     /// </summary>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
 
     protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
         ParameterSlotRole role = ParameterSlotRole.Trainable)
@@ -107,6 +111,10 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// constructor has built them.
     /// </summary>
     protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
     {
     }
 
@@ -123,8 +131,7 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
         {
             if (!_componentsRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }

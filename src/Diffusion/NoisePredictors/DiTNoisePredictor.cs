@@ -84,6 +84,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         EnsureLayersInitialized();
     }
+
+    /// <inheritdoc />
+    protected override void EnsureParameterStructureReady()
+    {
+        // This creates the fixed-shape LazyDense/normalization graph only. LazyDense uses
+        // ResolveShapesOnly, so a count/layout query does not allocate DiT's multi-GB weights.
+        EnsureLayersInitialized();
+    }
     /// <summary>
     /// Standard DiT model sizes.
     /// </summary>
@@ -222,6 +230,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// weights use <see cref="CopyParametersFrom"/> instead.
     /// </summary>
     public bool AreLayersInitialized => _layersInitialized;
+
+    /// <summary>
+    /// True when the construction-resolved layer graph has also allocated its lazy weights.
+    /// Count and metadata queries build the graph but must leave this false.
+    /// </summary>
+    internal bool WeightsMaterialized => _layersInitialized && _patchEmbed?.IsInitialized == true;
 
     /// <summary>
     /// Position embeddings (learnable).

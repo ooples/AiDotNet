@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "2, 16")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 64", TestConstructorArgs = "4, 256")]
 // GENUINELY RANK-AGNOSTIC, which is why this gets the shorthand rather than a list of layouts.
 // ForwardTraced normalises whatever it is given to [batch, seq, embed] - rank 1 becomes [1, 1, F],
 // rank 2 becomes [1, S, F], rank > 3 folds its leading axes into batch - runs the encoder, and then
@@ -198,6 +198,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// refers to "the ball" rather than "the dog" by attending strongly to the word "ball".
     /// </para>
     /// </remarks>
+    [SubLayerInput("1, _embeddingSize")]
     private MultiHeadAttentionLayer<T> _selfAttention;
 
     /// <summary>
@@ -219,6 +220,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// it prevents sudden spikes or drops that might disrupt the learning process.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private LayerNormalizationLayer<T> _norm1;
 
     /// <summary>
@@ -240,6 +242,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// making final decisions about what features to extract from each position.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private FeedForwardLayer<T> _feedForward1;
 
     /// <summary>
@@ -249,6 +252,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Projects the expanded representation back to the original embedding size.
     /// A proper transformer FFN has two layers: expansion and projection.
     /// </remarks>
+    [SubLayerInput("_feedForwardDim")]
     private FeedForwardLayer<T> _feedForward2;
 
     /// <summary>
@@ -270,6 +274,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// or for use by a decoder in the complete transformer model.
     /// </para>
     /// </remarks>
+    [SubLayerInput("_embeddingSize")]
     private LayerNormalizationLayer<T> _norm2;
 
     /// <summary>
@@ -434,13 +439,9 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // until the first forward.
         if (_embeddingSize > 0)
         {
-            // SHAPES ONLY HERE. A constructor must not allocate a decoder's worth of weights:
-            // measured, one LLaVA-NeXT-Video decoder layer (heads 32, ff 16384, embed 4096) cost
-            // 3,457 MB and 1,974 ms allocating, against 0.5 MB and 16 ms resolving shapes, and
-            // 32 of them is the difference between constructing the model and OutOfMemoryException.
-            _constructingShapesOnly = true;
-            try { EnsureInitialized(); }
-            finally { _constructingShapesOnly = false; }
+            // SHAPES ONLY HERE. A constructor must not allocate a decoder's worth of weights; the
+            // base owns that policy and the measurement behind it.
+            InitializeShapesWithoutAllocating();
         }
     }
 
@@ -448,18 +449,19 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// True once sublayers (attention, norm1, ffn1, ffn2, norm2) have been constructed.
     /// Eager ctor sets this <c>true</c> at construction.
     /// </summary>
+    /// <remarks>
+    /// Says the children EXIST, not that their weights do -- that second question is
+    /// <see cref="LayerBase{T}.DeclaredSubLayerWeightsMaterialized"/>, and the two together are
+    /// what keep <see cref="EnsureInitialized"/> re-enterable.
+    /// </remarks>
     private bool _isInitialized;
 
-    /// <summary>True once the sublayers' WEIGHTS are allocated, not merely their shapes resolved.</summary>
-    /// <remarks>
-    /// Separate from <c>_isInitialized</c> so <see cref="EnsureInitialized"/> is RE-ENTERABLE:
-    /// construction resolves shapes and leaves this false, and the first caller that genuinely needs
-    /// weights - a real forward, a restore, ApplyParameterLayout - performs the allocation.
-    /// </remarks>
-    private bool _sublayerWeightsMaterialized;
-
-    /// <summary>Set only while the eager constructor runs, so it resolves shapes without allocating.</summary>
-    private bool _constructingShapesOnly;
+    /// <summary>
+    /// The eager constructor supplies the embedding width, so every nested attention,
+    /// feed-forward, and normalization parameter can be sized without observing input data.
+    /// The lazy constructor keeps the default deferred behavior until its first forward.
+    /// </summary>
+    protected override bool ParametersAreConstructionSized => _embeddingSize > 0;
 
     /// <summary>
     /// AiDotNet#1370 shape oracle override: when the eager-dimension ctor
@@ -535,17 +537,19 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         ResolveShapes(resolved, declaredOutput);
     }
 
+
+
     protected override void EnsureInitialized()
     {
         // TWO CONDITIONS, NOT ONE. _isInitialized means the sublayers EXIST with resolved shapes;
-        // _sublayerWeightsMaterialized means their weights are ALLOCATED. Construction satisfies only
-        // the first, so this must stay re-enterable - the write path calls it again and that call is
-        // what allocates.
-        if (_isInitialized && _sublayerWeightsMaterialized) return;
+        // DeclaredSubLayerWeightsMaterialized means their weights are ALLOCATED. Construction
+        // satisfies only the first, so this must stay re-enterable - the write path calls it again
+        // and that call is what allocates.
+        if (_isInitialized && DeclaredSubLayerWeightsMaterialized) return;
 
         lock (InitializationLock)
         {
-            if (_isInitialized && _sublayerWeightsMaterialized) return;
+            if (_isInitialized && DeclaredSubLayerWeightsMaterialized) return;
             if (_embeddingSize <= 0)
                 throw new InvalidOperationException(
                     "TransformerEncoderLayer.EnsureInitialized called before _embeddingSize was resolved.");
@@ -601,50 +605,9 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             // Sub-layers are sized from the known embedding size rather than left lazy, so that
             // SetParameters dispatch -- which slices by ParameterCount -- does not see 0 for a lazy
             // FeedForwardLayer (-1 input × outDim + outDim = 0) and silently skip its serialized
-            // weights.
-            int[] subInputShape = new[] { _embeddingSize };
-
-            // WHO IS ASKING DECIDES. A shape-walker (LayerBase.ResolveShapesOnly sets
-            // IsResolvingShapesOnly) and the constructor both want dimensions without allocation.
-            // Anything else - a real forward, SetParameters, ApplyParameterLayout - is about to use
-            // the weights, so it gets them. LayerBase.EnsureParametersMaterialized is what routes
-            // the write path back here a second time, and _sublayerWeightsMaterialized is what makes
-            // that second entry do something.
-            if (IsResolvingShapesOnly || _constructingShapesOnly)
-            {
-                _selfAttention.ResolveShapesOnly(new[] { 1, _embeddingSize });
-                _norm1.ResolveShapesOnly(subInputShape);
-                _feedForward1.ResolveShapesOnly(subInputShape);
-                _feedForward2.ResolveShapesOnly(new[] { _feedForwardDim });
-                _norm2.ResolveShapesOnly(subInputShape);
-            }
-            else
-            {
-                // BOTH CALLS, and neither is redundant - they cover the two states a sublayer can be in
-                // and each is a no-op in the other's case.
-                //
-                //   ResolveFromShape gives a sublayer its shape, and opens with
-                //   `if (IsShapeResolved) return;` - so it is the one that matters for a sublayer the
-                //   shape-only pass left unresolved, and free for one it did not.
-                //
-                //   MaterializeParameters allocates, and declines on a layer whose shape is unresolved
-                //   (LayerBase gates it on IsShapeResolved) - so it is the one that matters for a
-                //   sublayer that already has its shape but no weights.
-                //
-                // Calling only MaterializeParameters was measured wrong: VideoCLIP's TEXT tower never
-                // runs a forward, so its sublayers were still unresolved here, every one of them
-                // declined, and the layer serialized 16,452 values - the MultiHeadAttentionLayer alone,
-                // which allocates without a shape because it is construction-sized - against the 49,792
-                // a restored copy expects. The VIDEO tower passed only because training had run real
-                // data through it and resolved its sublayers as a side effect. A save must not depend
-                // on which branch of a dual-tower model happened to execute.
-                ResolveAndMaterialize(_selfAttention, new[] { 1, _embeddingSize });
-                ResolveAndMaterialize(_norm1, subInputShape);
-                ResolveAndMaterialize(_feedForward1, subInputShape);
-                ResolveAndMaterialize(_feedForward2, new[] { _feedForwardDim });
-                ResolveAndMaterialize(_norm2, subInputShape);
-                _sublayerWeightsMaterialized = true;
-            }
+            // weights. The base decides whether that means shapes or weights; this layer only says
+            // which child takes which shape, in DeclaredSubLayerShapes below.
+            BringUpDeclaredSubLayers();
 
             _isInitialized = true;
         }

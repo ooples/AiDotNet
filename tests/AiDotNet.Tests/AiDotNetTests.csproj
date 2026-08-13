@@ -55,6 +55,15 @@
          be driven directly in a Roslyn generator unit test. Referenced above only as an analyzer,
          whose compiled assembly is not callable from tests. -->
     <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />
+    <!-- B1 semantic contract: these generators and their shared classifier are linked so tests can
+         execute Roslyn directly. The production project reference is analyzer-only and therefore
+         intentionally does not expose generator types as a compile reference. -->
+    <Compile Include="..\..\src\AiDotNet.Generators\ParameterMemberSemanticModel.cs" Link="Generators\ParameterMemberSemanticModel.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\ParameterAutomationAnalyzer.cs" Link="Generators\ParameterAutomationAnalyzer.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\TrainableParameterGenerator.cs" Link="Generators\TrainableParameterGenerator.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\ModelParameterGenerator.cs" Link="Generators\ModelParameterGenerator.cs" />
     <!-- Linked so GeneratorAxisMirrorTests can compare ShapeContractGenerator.Axis to TensorAxis by
          REFLECTION rather than by regex-parsing the source. The generator mirrors TensorAxis because it
          targets netstandard2.0 and cannot reference the analysed assembly; if the two ever disagree it

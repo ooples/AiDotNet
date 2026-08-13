@@ -237,7 +237,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// and weights close to zero mean the connection is weak or unimportant.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "InputShape[0], OutputShape[0]")]
 
     private Tensor<T> _weights;
 
@@ -261,7 +261,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// while a negative bias would require stronger input signals to activate.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputShape[0]")]
 
     private Tensor<T> _biases;
 
@@ -621,37 +621,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             if (inputSize < 0)
                 return;
 
-            // A fresh layer can receive materialized parameters before its first
-            // Forward (deserialization and graph-safe cloning both do this). The
-            // parameter tensors are the source of truth in that state: do not
-            // replace trained/restored values merely because the lazy-init latch
-            // has not run yet.
-            bool hasExpectedWeights =
-                _weights.Shape.Length == 2 &&
-                _weights.Shape[0] == inputSize &&
-                _weights.Shape[1] == outputSize;
-            bool hasExpectedBiases =
-                _biases.Shape.Length == 1 &&
-                _biases.Shape[0] == outputSize;
-
-            if (hasExpectedWeights && hasExpectedBiases)
+            // A fresh layer can receive materialized parameters before its first Forward
+            // (deserialization and graph-safe cloning both do this), and in that state the tensors
+            // are the source of truth. The RULE for that lives in LayerBase so every lazy layer
+            // answers it the same way; this layer supplies only the shapes it expects, in
+            // DeclaredParameterShapes below. A half-delivered or non-conforming set throws there.
+            if (TryAdoptRestoredParameters())
             {
-                RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
                 _isInitialized = true;
                 return;
-            }
-
-            // Never silently discard a partially restored or incompatible
-            // parameter set. Surface the broken lifecycle/shape contract at the
-            // layer boundary with both expected and actual shapes.
-            if (_weights.Length > 0 || _biases.Length > 0)
-            {
-                throw new InvalidOperationException(
-                    $"DenseLayer parameters do not conform to the resolved shape. " +
-                    $"Expected weights [{inputSize}, {outputSize}] and biases [{outputSize}], " +
-                    $"but received weights [{string.Join(", ", _weights.Shape.ToArray())}] and " +
-                    $"biases [{string.Join(", ", _biases.Shape.ToArray())}].");
             }
 
             // Streaming-aware allocation: when the parent network has
@@ -1791,12 +1769,30 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// Think of it like making a perfect clone that starts exactly where the original is.
     /// </para>
     /// </remarks>
-    // ROUTED THROUGH THE GENERATED PATH, not hand-written. The previous body rebuilt the copy from
-    // OutputShape[0] -- reverse-engineering the shape, which is exactly what [LayerState] replaced --
-    // and so dropped the lazily-resolved INPUT width entirely. It then called SetParameters on that
-    // unresolved copy, whose ParameterCount is still 0, giving "Expected 0 parameters, but got 16".
-    // Broken independently of the clone port: a lazy DenseLayer could never be cloned this way.
-    public override LayerBase<T> Clone() => (LayerBase<T>)LayerCloning.Clone(this);
+    public override LayerBase<T> Clone()
+    {
+        DenseLayer<T> copy;
+
+        if (UsingVectorActivation && VectorActivation is not null)
+        {
+            copy = new DenseLayer<T>(OutputShape[0], VectorActivation);
+        }
+        else
+        {
+            copy = new DenseLayer<T>(OutputShape[0], ScalarActivation);
+        }
+
+        // The public constructor is intentionally lazy, but a clone of a resolved layer must
+        // preserve its resolved geometry before the parameter vector is restored. Otherwise
+        // SetParameters has no input width from which to allocate [input, output] weights, leaves
+        // the clone at InputShape [-1], and the clone's first Forward randomizes over the values
+        // it was supposed to copy.
+        if (IsShapeResolved && InputShape.Length > 0 && InputShape.All(d => d > 0))
+            copy.ResolveShapesOnly(InputShape);
+
+        copy.SetParameters(GetParameters());
+        return copy;
+    }
 
     /// <summary>
     /// Releases resources used by this layer, including GPU tensor handles.

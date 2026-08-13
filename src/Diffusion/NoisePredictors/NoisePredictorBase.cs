@@ -29,7 +29,8 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// extend this base class.
 /// </para>
 /// </remarks>
-public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, IDisposable
+public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
+    AiDotNet.Models.Parameters.IParameterLayoutSource, IDisposable
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -381,7 +382,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// Measured before this fix: ReferenceEquals(PredictNoise(a, t), PredictNoise(b, t)) was true and
     /// the two results differed by exactly 0 for clearly different latents. That is the same defect
     /// found in the VAE Encode/Decode path, where it silently defeated every test that predicted twice
-    /// and compared � such a test measures no difference because it holds one buffer twice.
+    /// and compared — such a test measures no difference because it holds one buffer twice.
     /// </para>
     /// <para>
     /// The copy is a per-denoising-step allocation of one latent (small next to the UNet forward that
@@ -389,7 +390,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// owns. BOTH paths are detached, not just the compiled one: the eager fallback aliases as well,
     /// because layers reuse preallocated output buffers on the inference fast path (see
     /// ConvolutionalLayer's _preAllocatedOutput), so the final layer's output tensor is the same object
-    /// on every call. That was verified by measurement rather than assumed � detaching only the
+    /// on every call. That was verified by measurement rather than assumed — detaching only the
     /// compiled path left ReferenceEquals(PredictNoise(a), PredictNoise(b)) still true.
     /// </para>
     /// </remarks>
@@ -505,10 +506,10 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// Derived from the predictor's own weight tensors, in the order
-    /// <see cref="ReflectInstanceLayers"/> yields them -- the SAME walk that
-    /// <see cref="GetParameters"/>, <see cref="SetParameters"/> and
-    /// <see cref="GetParameterChunks"/> use, so none of them can disagree with another.
+    /// Derived from construction-declared tensor shapes when the layer graph can describe them,
+    /// otherwise from the predictor's concrete weight tensors in the order
+    /// <see cref="ReflectInstanceLayers"/> yields them. The declaration path is allocation-free,
+    /// while explicit value reads still materialize and validate the same shapes.
     /// </para>
     /// <para>
     /// This was abstract, which forced all six predictors to hand-write it, and they were badly
@@ -523,6 +524,10 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     {
         get
         {
+            EnsureParameterStructureReady();
+            if (TryGetDeclaredParameterCount(out long declaredCount, out _))
+                return declaredCount;
+
             EnsureParametersReadyGuarded();
             long total = 0;
             foreach (var tensor in EnumerateParameterTensors())
@@ -531,6 +536,60 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             }
             return total;
         }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<AiDotNet.Models.Parameters.ParameterSlotDescriptor> GetParameterLayout()
+    {
+        EnsureParameterStructureReady();
+        if (!TryGetDeclaredParameterCount(out long count, out bool materialized))
+        {
+            return new[]
+            {
+                new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                    "$", AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                    AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred, null)
+            };
+        }
+
+        return new[]
+        {
+            new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                "$", AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
+                count == 0
+                    ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                    : materialized
+                        ? AiDotNet.Models.Parameters.ParameterReadiness.Materialized
+                        : AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized,
+                count)
+        };
+    }
+
+    /// <summary>
+    /// Builds any layer objects whose dimensions are fixed by construction, without allocating
+    /// their weight tensors. Deferred-construction predictors override this independently from
+    /// <see cref="EnsureParametersReady"/>, whose explicit read/write path may materialize values.
+    /// </summary>
+    protected virtual void EnsureParameterStructureReady()
+    {
+    }
+
+    private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
+    {
+        count = 0;
+        materialized = true;
+        bool foundLayer = false;
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> layerBase) continue;
+            foundLayer = true;
+            if (!layerBase.TryGetOwnDeclaredParameterCount(
+                    out long layerCount, out bool layerMaterialized))
+                return false;
+            count = checked(count + layerCount);
+            materialized &= layerMaterialized;
+        }
+        return foundLayer;
     }
 
     /// <summary>
@@ -1227,9 +1286,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         int stride = 1,
         int padding = 0,
         IActivationFunction<T>? activation = null)
-        => new ConvolutionalLayer<T>(
-            outputDepth,
-            kernelSize, stride, padding, activation, InitializationStrategies<T>.Lazy);
+        => ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth, outputDepth, kernelSize, stride, padding, activation,
+            InitializationStrategies<T>.Lazy);
 
     /// <summary>
     /// Creates a <see cref="MultiHeadAttentionLayer{T}"/> with lazy Q/K/V/O weight
@@ -1504,8 +1563,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     #region IParameterizable<T, Tensor<T>, Tensor<T>> Implementation
 
     /// <inheritdoc />
-    /// <remarks>Concatenates <see cref="EnumerateParameterTensors"/> in order, so its length is
-    /// <see cref="ParameterCount"/> by construction rather than by agreement.</remarks>
+    /// <remarks>Concatenates <see cref="EnumerateParameterTensors"/> in order. A bare
+    /// <see cref="ParameterCount"/> can use construction-declared shapes without allocating;
+    /// this explicit value read materializes lazy tensors and emits those concrete values.</remarks>
     public virtual Vector<T> GetParameters()
     {
         EnsureParametersReadyGuarded();

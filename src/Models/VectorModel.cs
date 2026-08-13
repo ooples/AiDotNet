@@ -1103,6 +1103,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
     protected Vector<int>? _sensitiveFeatures;
     protected readonly List<FairnessMetric> _fairnessMetrics = new();
+    [ExternalState]
     protected IFullModel<T, Matrix<T>, Vector<T>>? _baseModel;
 
     /// <summary>

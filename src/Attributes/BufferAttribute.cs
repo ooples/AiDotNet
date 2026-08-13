@@ -28,14 +28,14 @@ namespace AiDotNet.Attributes;
 /// <code>
 /// public partial class MyNorm&lt;T&gt; : LayerBase&lt;T&gt;
 /// {
-///     private Tensor&lt;T&gt; _gamma;         // learned (the default)
+///     [TrainableParameter] private Tensor&lt;T&gt; _gamma; // learned
 ///     [Buffer] private Tensor&lt;T&gt; _runningMean;   // saved, never learned
 ///     [Scratch] private Tensor&lt;T&gt; _batchScratch; // neither saved nor learned
 /// }
 /// </code>
 /// </example>
 /// </remarks>
-[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
 public sealed class BufferAttribute : Attribute
 {
     /// <summary>
@@ -53,4 +53,8 @@ public sealed class BufferAttribute : Attribute
     /// that is read every forward pass but never written by an optimizer.
     /// </summary>
     public PersistentTensorRole Role { get; set; } = PersistentTensorRole.Constant;
+
+    /// <summary>Gets or sets when this persistent state is expected to become available.</summary>
+    public AiDotNet.Models.Parameters.ParameterAvailability Availability { get; set; }
+        = AiDotNet.Models.Parameters.ParameterAvailability.Construction;
 }

@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
 
@@ -76,21 +77,23 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// <summary>
     /// Matrix of coefficients that capture the relationships between variables across time lags.
     /// </summary>
+    [FittedParameter]
     private Matrix<T> _coefficients;
 
     /// <summary>
     /// Vector of intercept terms for each equation in the VAR model.
     /// </summary>
+    [FittedParameter]
     private Vector<T> _intercepts;
 
     /// <summary>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Matrix<T> _residuals;
 
     /// <summary>Stored training series for in-sample predictions.</summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>

@@ -809,6 +809,39 @@ public partial class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAu
     }
 
     /// <summary>
+    /// Resolves each sub-network's lazy layers through ITS OWN architecture instead of running the
+    /// base sequential walk from this model's <see cref="NeuralNetworkBase{T}.Architecture"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A GAN is not a plain sequential chain — it is two chains fed by different things. The
+    /// GAN-level architecture mirrors the IMAGE side (rank-3 for DCGAN, because that is what the
+    /// discriminator consumes), while the generator is fed a rank-1 latent vector. The base walk
+    /// starts from this model's architecture input and propagates it through every layer it can
+    /// reach, so it drove an image shape into the GENERATOR: the first transposed convolution took
+    /// its input depth from the image's channel count and allocated its kernel at that width.
+    /// </para>
+    /// <para>
+    /// That is unrecoverable rather than merely wrong, because the resolution also trips the
+    /// first-forward latch — so the real latent forward never re-resolves, and the layer throws
+    /// "Input inChannels (512) must match kernel inChannels (3)" on DCGAN (and 8 vs 1 on
+    /// ProgressiveGAN, the same numbers one channel count apart). Both models failed before a
+    /// single gradient was computed, in SetTrainingMode, which is why Predict and Train reported
+    /// identical errors.
+    /// </para>
+    /// <para>
+    /// Delegating is also what the base method's own remarks prescribe: it is virtual precisely so
+    /// a model whose topology is not a plain chain resolves through its real topology. Each
+    /// sub-network is itself idempotent, so repeating this walk is safe.
+    /// </para>
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        Generator.ResolveLazyLayerShapesFromOwnArchitecture();
+        Discriminator.ResolveLazyLayerShapesFromOwnArchitecture();
+    }
+
+    /// <summary>
     /// Performs a forward pass through the generator network using a tensor input.
     /// </summary>
     /// <param name="input">The input tensor containing noise vectors to generate images from.</param>

@@ -391,3 +391,193 @@ public sealed class KeyedVectorCollectionParameterSource<T, TKey> : IParameterSo
     public void SetParameters(Vector<T> parameters) => _inner.SetParameters(parameters);
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() => _inner.GetParameterLayout();
 }
+
+/// <summary>A scalar dictionary exposed in canonical key order.</summary>
+/// <remarks>
+/// The source keeps the keys in the manifest, not merely the current enumeration order. This is
+/// the parameter adapter for tabular models whose learned values live directly in dictionaries;
+/// adding or re-inserting an unrelated key therefore cannot reorder an existing checkpoint.
+/// </remarks>
+public sealed class KeyedScalarCollectionParameterSource<T, TKey> :
+    IParameterSource<T>, IParameterLayoutSource
+    where TKey : notnull
+{
+    private readonly Func<IDictionary<TKey, T>?> _get;
+
+    /// <summary>Creates a write-through source over the dictionary returned by <paramref name="get"/>.</summary>
+    public KeyedScalarCollectionParameterSource(Func<IDictionary<TKey, T>?> get)
+    {
+        _get = get ?? throw new ArgumentNullException(nameof(get));
+    }
+
+    private List<(string StableId, TKey Key)> Entries()
+    {
+        var result = new List<(string StableId, TKey Key)>();
+        var values = _get();
+        if (values is null) return result;
+
+        foreach (var value in values)
+            result.Add((ParameterCollectionKeys.Canonical(value.Key), value.Key));
+
+        result.Sort((left, right) => StringComparer.Ordinal.Compare(left.StableId, right.StableId));
+        for (int i = 1; i < result.Count; i++)
+        {
+            if (string.Equals(result[i - 1].StableId, result[i].StableId, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Collection parameter key '{result[i].StableId}' is not unique after canonicalization.");
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => Entries().Count;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var entries = Entries();
+        if (entries.Count == 0)
+        {
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable, ParameterReadiness.ParameterFree, 0)
+            };
+        }
+
+        var slots = new List<ParameterSlotDescriptor>(entries.Count);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            slots.Add(new ParameterSlotDescriptor(
+                entries[i].StableId, ParameterSlotRole.Trainable,
+                ParameterReadiness.Materialized, 1));
+        }
+        return slots;
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var values = _get();
+        var entries = Entries();
+        var result = new Vector<T>(entries.Count);
+        if (values is null) return result;
+        for (int i = 0; i < entries.Count; i++) result[i] = values[entries[i].Key];
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        var values = _get();
+        var entries = Entries();
+        if (parameters.Length != entries.Count)
+            throw new ArgumentException(
+                $"Expected {entries.Count} keyed scalar parameters, got {parameters.Length}.",
+                nameof(parameters));
+        if (values is null) return;
+        for (int i = 0; i < entries.Count; i++) values[entries[i].Key] = parameters[i];
+    }
+}
+
+/// <summary>A two-level scalar dictionary exposed in canonical outer- and inner-key order.</summary>
+/// <remarks>
+/// Tabular reinforcement-learning agents commonly store a state dictionary whose values are
+/// action dictionaries. Both key levels are part of the durable identity, so sparse or ragged
+/// tables round-trip without shifting later values onto a different state or action.
+/// </remarks>
+public sealed class NestedKeyedScalarCollectionParameterSource<T, TOuterKey, TInnerKey> :
+    IParameterSource<T>, IParameterLayoutSource
+    where TOuterKey : notnull
+    where TInnerKey : notnull
+{
+    private readonly Func<IDictionary<TOuterKey, Dictionary<TInnerKey, T>>?> _get;
+
+    /// <summary>Creates a write-through source over the nested dictionary returned by <paramref name="get"/>.</summary>
+    public NestedKeyedScalarCollectionParameterSource(
+        Func<IDictionary<TOuterKey, Dictionary<TInnerKey, T>>?> get)
+    {
+        _get = get ?? throw new ArgumentNullException(nameof(get));
+    }
+
+    private List<(string StableId, TOuterKey OuterKey, TInnerKey InnerKey)> Entries()
+    {
+        var result = new List<(string StableId, TOuterKey OuterKey, TInnerKey InnerKey)>();
+        var values = _get();
+        if (values is null) return result;
+
+        foreach (var outer in values)
+        {
+            string outerId = ParameterCollectionKeys.Canonical(outer.Key);
+            if (outer.Value is null) continue;
+            foreach (var inner in outer.Value)
+            {
+                result.Add((outerId + "/" + ParameterCollectionKeys.Canonical(inner.Key),
+                    outer.Key, inner.Key));
+            }
+        }
+
+        result.Sort((left, right) => StringComparer.Ordinal.Compare(left.StableId, right.StableId));
+        for (int i = 1; i < result.Count; i++)
+        {
+            if (string.Equals(result[i - 1].StableId, result[i].StableId, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Collection parameter key '{result[i].StableId}' is not unique after canonicalization.");
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
+    public long ParameterCount => Entries().Count;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        var entries = Entries();
+        if (entries.Count == 0)
+        {
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable, ParameterReadiness.ParameterFree, 0)
+            };
+        }
+
+        var slots = new List<ParameterSlotDescriptor>(entries.Count);
+        for (int i = 0; i < entries.Count; i++)
+        {
+            slots.Add(new ParameterSlotDescriptor(
+                entries[i].StableId, ParameterSlotRole.Trainable,
+                ParameterReadiness.Materialized, 1));
+        }
+        return slots;
+    }
+
+    /// <inheritdoc />
+    public Vector<T> GetParameters()
+    {
+        var values = _get();
+        var entries = Entries();
+        var result = new Vector<T>(entries.Count);
+        if (values is null) return result;
+        for (int i = 0; i < entries.Count; i++)
+            result[i] = values[entries[i].OuterKey][entries[i].InnerKey];
+        return result;
+    }
+
+    /// <inheritdoc />
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        var values = _get();
+        var entries = Entries();
+        if (parameters.Length != entries.Count)
+            throw new ArgumentException(
+                $"Expected {entries.Count} nested keyed scalar parameters, got {parameters.Length}.",
+                nameof(parameters));
+        if (values is null) return;
+        for (int i = 0; i < entries.Count; i++)
+            values[entries[i].OuterKey][entries[i].InnerKey] = parameters[i];
+    }
+}

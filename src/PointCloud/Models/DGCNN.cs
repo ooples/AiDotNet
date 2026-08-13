@@ -309,7 +309,10 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         {
             var dense = new DenseLayer<T>(
                 hidden,
-                activationFunction: new ReLUActivation<T>());
+                // The reference DGCNN head uses a leaky rectifier. A hard ReLU can turn a
+                // deterministic small-fixture initialization into an all-zero classifier,
+                // making every point cloud produce the zero logit vector.
+                activationFunction: new LeakyReLUActivation<T>());
             AddLayerToCollection(dense);
             _classificationHeadLayers.Add(dense);
             classifierInput = hidden;
@@ -687,7 +690,10 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
     private int[,]? _knnIndices; // Store k-NN indices for backward pass
     private int[,]? _maxIndices; // Store max neighbor indices for backward pass
 
-    public EdgeConvLayer(int inputChannels, int outputChannels, int k)
+    public EdgeConvLayer(
+        [LayerState] int inputChannels,
+        [LayerState] int outputChannels,
+        [LayerState] int k)
         : base([0, inputChannels], [0, outputChannels])
     {
         _inputChannels = inputChannels;
@@ -720,7 +726,10 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         var edgeFeatures = ComputeEdgeFeatures(input, _knnIndices);   // [P*k, 2C]
         var transformedEdges = _mlp.Forward(edgeFeatures);           // [P*k, outC] (linear)
         var normalized = _bn.Forward(transformedEdges);             // [P*k, outC] BN per channel
-        var activated = Engine.ReLU(normalized);                   // [P*k, outC] tape-tracked ReLU
+        // DGCNN uses a leaky rectifier in each EdgeConv block. Besides matching the paper, the
+        // non-zero negative slope prevents an unlucky deterministic initialization from turning
+        // the whole dynamic-graph feature path into a dead all-zero basin.
+        var activated = Engine.LeakyReLU(normalized, NumOps.FromDouble(0.2)); // tape-tracked
         var output = AggregateEdgeFeatures(activated, numPoints);  // [P, outC] max over k
 
         return output;
@@ -801,7 +810,33 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         // end-to-end. The prior scalar-loop max wrote a fresh new Tensor, severing the
         // tape so the MLP weights received zero gradient and the loss diverged.
         var reshaped = Engine.Reshape(edgeFeatures, [numPoints, k, _outputChannels]);
-        var pooled = Engine.ReduceMax(reshaped, new[] { 1 }, keepDims: false, out var argMax); // [P, outC]
+        _ = Engine.ReduceMax(reshaped, new[] { 1 }, keepDims: false, out var argMax);
+
+        // Build the exact max value through primitive tape operations. ReduceMax's returned
+        // argmax is discrete supervision (like TopK indices), so the mask is deliberately detached;
+        // multiply + ReduceSum then routes the gradient to precisely the selected neighbour. The
+        // package-level ReduceMax backward currently misroutes this rank-3/axis-1 case: the forward
+        // changes under finite differences while its analytical gradient points at different edge
+        // slots. Keeping ReduceMax only as the selector preserves exact DGCNN max aggregation while
+        // making the differentiable path explicit and independently checkable.
+        var maxMask = new Tensor<T>([numPoints, k, _outputChannels]);
+        for (int point = 0; point < numPoints; point++)
+        {
+            for (int channel = 0; channel < _outputChannels; channel++)
+            {
+                // ReduceMax reports a flat SOURCE-tensor index (not the local
+                // coordinate on the reduced axis). Decode [point, neighbor,
+                // channel] before building the mask. Treating the flat offset
+                // as a neighbor index rejected nearly every winner as >= k and
+                // collapsed every seeded DGCNN EdgeConv output to exact zero.
+                int sourceFlatIndex = argMax[point * _outputChannels + channel];
+                int selectedNeighbor = (sourceFlatIndex / _outputChannels) % k;
+                if ((uint)selectedNeighbor < (uint)k)
+                    maxMask[point, selectedNeighbor, channel] = NumOps.One;
+            }
+        }
+        var pooled = Engine.ReduceSum(
+            Engine.TensorMultiply(reshaped, maxMask), new[] { 1 }, keepDims: false); // [P, outC]
 
         // Preserve the per-(point,channel) arg-max neighbor index for the legacy manual
         // ComputeGradients path (unused by the tape training path, kept for compatibility).
@@ -810,7 +845,10 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         {
             for (int i = 0; i < numPoints; i++)
                 for (int c = 0; c < _outputChannels; c++)
-                    _maxIndices[i, c] = argMax[i * _outputChannels + c];
+                {
+                    int sourceFlatIndex = argMax[i * _outputChannels + c];
+                    _maxIndices[i, c] = (sourceFlatIndex / _outputChannels) % k;
+                }
         }
 
         return pooled;

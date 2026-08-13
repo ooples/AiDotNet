@@ -12,8 +12,10 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// score finiteness, determinism, monotonicity, and clone consistency.
 /// </summary>
 /// <remarks>
-/// Anomaly detectors use IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; where
-/// the output vector contains anomaly scores (higher = more anomalous).
+/// Anomaly detectors use IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;. The inherited
+/// <c>Predict</c> surface returns classification labels (1 for an inlier and -1 for an outlier),
+/// while <see cref="IAnomalyDetector{T}.ScoreAnomalies"/> returns the continuous scores where
+/// higher means more anomalous.
 /// </remarks>
 /// <typeparam name="T">
 /// Numeric precision of the generated fixture. Generic so a training-bound detector can be routed to
@@ -35,6 +37,10 @@ public abstract class AnomalyDetectorTestBase<T>
 
     protected virtual int TrainSamples => 100;
     protected virtual int Features => 3;
+
+    private static IAnomalyDetector<T> AsAnomalyDetector(
+        IFullModel<T, Matrix<T>, Vector<T>> model)
+        => Assert.IsAssignableFrom<IAnomalyDetector<T>>(model);
 
     private (Matrix<T> X, Vector<T> Y) GenerateNormalData(Random rng)
     {
@@ -71,8 +77,13 @@ public abstract class AnomalyDetectorTestBase<T>
             for (int j = 0; j < Features; j++)
                 outlierX[i, j] = ToT(50.0 + ModelTestHelpers.NextGaussian(rng) * 0.1);
 
-        var normalScores = model.Predict(normalX);
-        var outlierScores = model.Predict(outlierX);
+        // Predict is the detector's classification surface: +1 means inlier and -1 means
+        // anomaly. Comparing those labels as if they were scores reverses the documented
+        // ordering and makes a correct detector fail more strongly the better it classifies.
+        // ScoreAnomalies is the ranking surface whose contract is higher = more anomalous.
+        var detector = AsAnomalyDetector(model);
+        var normalScores = detector.ScoreAnomalies(normalX);
+        var outlierScores = detector.ScoreAnomalies(outlierX);
 
         // NON-FINITE IS A FAILURE, NOT A REASON TO SKIP. Wrapping the invariant in a
         // finiteness check meant a detector returning NaN or Infinity satisfied this test
@@ -112,7 +123,7 @@ public abstract class AnomalyDetectorTestBase<T>
         var (trainX, trainY) = GenerateNormalData(rng);
         model.Train(trainX, trainY);
 
-        var scores = model.Predict(trainX);
+        var scores = AsAnomalyDetector(model).ScoreAnomalies(trainX);
         for (int i = 0; i < scores.Length; i++)
         {
             double s = ToD(scores[i]);
@@ -148,8 +159,8 @@ public abstract class AnomalyDetectorTestBase<T>
         model.Train(trainX, trainY);
 
         var cloned = model.Clone();
-        var scores1 = model.Predict(trainX);
-        var scores2 = cloned.Predict(trainX);
+        var scores1 = AsAnomalyDetector(model).ScoreAnomalies(trainX);
+        var scores2 = AsAnomalyDetector(cloned).ScoreAnomalies(trainX);
         for (int i = 0; i < scores1.Length; i++)
             Assert.Equal(scores1[i], scores2[i]);
     }

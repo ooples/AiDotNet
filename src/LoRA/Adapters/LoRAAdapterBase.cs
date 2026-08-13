@@ -96,6 +96,27 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     }
 
     /// <summary>
+    /// Materializes the wrapped layer before an operation reads its parameter values.
+    /// </summary>
+    /// <remarks>
+    /// Shape resolution and parameter materialization are deliberately separate: ordinary
+    /// construction and count queries must remain allocation-free, while an explicit merge needs
+    /// the actual base weights. Keeping that distinction here prevents value-reading paths from
+    /// mistaking a shape-resolved placeholder for a populated parameter buffer.
+    /// </remarks>
+    protected void MaterializeBaseLayerParameters()
+    {
+        if (!EnsureBaseLayerShapeResolved())
+        {
+            throw new InvalidOperationException(
+                $"Cannot materialize {_baseLayer.GetType().Name} because its input shape is unresolved.");
+        }
+
+        if (_baseLayer is LayerBase<T> baseLayerBase)
+            baseLayerBase.MaterializeParameters();
+    }
+
+    /// <summary>
     /// Gets the base layer being adapted with LoRA.
     /// </summary>
     /// <remarks>

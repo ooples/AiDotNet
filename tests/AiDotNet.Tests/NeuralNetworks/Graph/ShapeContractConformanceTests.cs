@@ -245,6 +245,23 @@ public class ShapeContractConformanceTests
         Assert.False(ShapeInference.HasDeclaredOutputShapeContract(typeof(ExplicitlyUnavailableContract)));
         Assert.False(ShapeInference.HasDeclaredOutputShapeContract(typeof(InheritsUnavailableContract)));
         Assert.True(ShapeInference.HasDeclaredOutputShapeContract(typeof(OverridesUnavailableContract)));
+        Assert.False(ShapeInference.HasDeclaredOutputShapeContract(typeof(InheritsConditionalContract)));
+        Assert.True(ShapeInference.HasDeclaredOutputShapeContract(typeof(SatisfiesConditionalContract)));
+
+        // The three document models that exposed this lifecycle bug inherit the document base law but
+        // do not state its required class-count metadata. Detect that from the type alone: constructing
+        // any of these paper-scale models merely to discover a null contract defeats the worker boundary.
+        Assert.False(ShapeInference.HasDeclaredOutputShapeContract(
+            typeof(AiDotNet.Document.VisionLanguage.DocOwl<double>)));
+        Assert.False(ShapeInference.HasDeclaredOutputShapeContract(
+            typeof(AiDotNet.Document.VisionLanguage.InfographicVQA<double>)));
+        Assert.False(ShapeInference.HasDeclaredOutputShapeContract(
+            typeof(AiDotNet.Document.VisionLanguage.UDOP<double>)));
+
+        // CRNN supplies OutputClassCount, so the same inherited base implementation is concrete without
+        // requiring a repetitive per-model OutputAxesFor override.
+        Assert.True(ShapeInference.HasDeclaredOutputShapeContract(
+            typeof(AiDotNet.Document.OCR.TextRecognition.CRNN<double>)));
     }
 
     [Fact]
@@ -303,5 +320,26 @@ public class ShapeContractConformanceTests
     {
         public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) =>
             Array.Empty<OutputAxisContract>();
+    }
+
+    private class ConditionalContract : IShapeContract
+    {
+        protected virtual int OutputWidth => 0;
+
+        [ShapeContractRequiresPropertyOverride(nameof(OutputWidth),
+            "A concrete fixture must supply its output width.")]
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) =>
+            OutputWidth <= 0
+                ? null
+                : new[] { new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(OutputWidth)) };
+    }
+
+    private sealed class InheritsConditionalContract : ConditionalContract
+    {
+    }
+
+    private sealed class SatisfiesConditionalContract : ConditionalContract
+    {
+        protected override int OutputWidth => 7;
     }
 }

@@ -93,6 +93,7 @@ public class TabRRegression<T> : TabRBase<T>
 
         // Regression head
         _regressionHead = new FullyConnectedLayer<T>(
+            EmbeddingDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
     }

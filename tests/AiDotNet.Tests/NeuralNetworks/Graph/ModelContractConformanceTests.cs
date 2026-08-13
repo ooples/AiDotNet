@@ -89,10 +89,10 @@ public class ModelContractConformanceTests
 
             declared++;
 
-            // Capability is inspected before construction. VisionLanguageModelBase explicitly marks
-            // its honest family-wide null as unavailable, so 170 paper-scale descendants no longer
-            // have to allocate billions of parameters merely to return that null. An override resolves
-            // to a different interface target and is therefore a real contract that must be probed.
+            // Capability is inspected before construction. A base contract can mark its family-wide
+            // null as unavailable, or condition availability on a derived metadata-property override.
+            // Paper-scale descendants therefore do not allocate billions of parameters merely to return
+            // null, while a real method or required-property override is still probed automatically.
             if (!ShapeInference.HasDeclaredOutputShapeContract(closed))
             {
                 unavailable++;
@@ -125,7 +125,7 @@ public class ModelContractConformanceTests
 
         _out.WriteLine($"models declaring a contract : {declared}");
         _out.WriteLine($"  concrete contracts           : {concrete}");
-        _out.WriteLine($"  explicitly unavailable       : {unavailable}");
+        _out.WriteLine($"  statically unavailable       : {unavailable}");
         _out.WriteLine($"  contract agreed with Predict : {agreed}");
         _out.WriteLine($"  contract declined (null)     : {declined}");
         _out.WriteLine($"  DISAGREED                    : {disagreed.Count}");
@@ -133,7 +133,7 @@ public class ModelContractConformanceTests
         foreach (var s in unverified.Take(15)) _out.WriteLine($"    unverified: {s}");
         foreach (var d in disagreed) _out.WriteLine($"    DISAGREED: {d}");
 
-        // A window made exclusively of EXPLICIT unavailability declarations is a valid inventory
+        // A window made exclusively of static unavailability declarations is a valid inventory
         // result, not a failed conformance run. The old agreed > 0 assertion made 34 arbitrary
         // windows fail even though none contained a concrete contract. Non-vacuity is now exact:
         // every concrete contract in this window must complete a real comparison, while every

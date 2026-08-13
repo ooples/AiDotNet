@@ -75,6 +75,8 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShap
     /// other - the error that made three vision-language contracts wrong.
     /// </para>
     /// </remarks>
+    [ShapeContractRequiresPropertyOverride(nameof(OutputClassCount),
+        "The generic document contract is concrete only when a model supplies its output class count.")]
     public virtual IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
         int classes = OutputClassCount;

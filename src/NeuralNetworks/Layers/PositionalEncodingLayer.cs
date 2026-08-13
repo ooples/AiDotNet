@@ -73,6 +73,10 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
     /// up to maxSequenceLength. The encodings are calculated once during initialization
     /// and reused for all forward passes.
     /// </remarks>
+    // Deterministic derived state: it is rebuilt from maxSequenceLength/embeddingSize and may
+    // grow at runtime. Treating it as a parameter makes a forward pass change ParameterCount and
+    // checkpoint layout even though there is nothing for an optimizer to learn or restore.
+    [Scratch]
     private Tensor<T> encodings;
 
     private readonly object _encodingLock = new();

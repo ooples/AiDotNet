@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 // Roles are quoted from this layer's own guard: "requires rank>=2 input [seqLen, numClasses] or
 // [batch, seqLen, numClasses]". The trailing axis is the tag set (Features), the one before it the
 // sequence position (Time). Batch is optional rather than a second declaration because ForwardTraced

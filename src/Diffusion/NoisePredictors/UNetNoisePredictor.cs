@@ -66,6 +66,14 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         TriggerLazyShapeResolution();
     }
+
+    /// <inheritdoc />
+    protected override void EnsureParameterStructureReady()
+    {
+        // Run the real topology in shape-inference mode. This resolves decoder-concat and
+        // attention dimensions without allocating the paper-scale U-Net's weight tensors.
+        ResolveShapesViaForward();
+    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>
@@ -1361,7 +1369,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         if (_preserveMaterializedParameters)
         {
             clone.TriggerLazyShapeResolution();
-            if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+            // Preserve the complete trainable tensor graph. A per-layer
+            // GetParameters/SetParameters round-trip is not equivalent here:
+            // composite U-Net layers expose nested tensors through
+            // ITrainableLayer, and flattening only the parent layer can leave
+            // inference-visible child state at the clone's initialization.
+            // COW also avoids allocating a second foundation-scale parameter
+            // vector; the chunk fallback remains the safe eager path when the
+            // materialized source/clone graphs do not line up exactly.
+            if (!clone.TryShareParametersFrom(this))
+                clone.SetParameterChunks(GetParameterChunks());
         }
         else
         {
@@ -1376,28 +1393,24 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     private void CopyMaterializedParametersTo(UNetNoisePredictor<T> clone)
+        => CopyMaterializedParametersTo(clone, this);
+
+    private static void CopyMaterializedParametersTo(
+        UNetNoisePredictor<T> clone, UNetNoisePredictor<T> sourceModel)
     {
-        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
-        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
-
-        while (source.MoveNext())
+        using var source = sourceModel.EnumerateAllLayers().GetEnumerator();
+        using var target = clone.EnumerateAllLayers().GetEnumerator();
+        while (true)
         {
-            if (!target.MoveNext())
-            {
+            bool hasSource = source.MoveNext();
+            bool hasTarget = target.MoveNext();
+            if (hasSource != hasTarget)
                 throw new InvalidOperationException(
-                    "Clone has fewer materialized tensors than the source U-Net. " +
-                    "Architectures may differ or a lazy tensor was materialized without " +
-                    "marking runtime state.");
-            }
-
-            CopyTensorData(source.Current, target.Current);
-        }
-
-        if (target.MoveNext())
-        {
-            throw new InvalidOperationException(
-                "Clone has more materialized tensors than the source U-Net. " +
-                "Architectures may differ.");
+                    "Clone and source U-Net layer structures do not match.");
+            if (!hasSource) break;
+            if (source.Current is null || target.Current is null)
+                continue;
+            target.Current.SetParameters(source.Current.GetParameters());
         }
     }
 

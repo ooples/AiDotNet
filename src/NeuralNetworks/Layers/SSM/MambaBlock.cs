@@ -427,8 +427,8 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension * 2 });
 
         // Split into x and z branches
-        var xBranch = SliceTensor(projected3D, 2, 0, _innerDimension);
-        var zBranch = SliceTensor(projected3D, 2, _innerDimension, _innerDimension);
+        var xBranch = Engine.TensorNarrow(projected3D, 2, 0, _innerDimension);
+        var zBranch = Engine.TensorNarrow(projected3D, 2, _innerDimension, _innerDimension);
 
         _lastXBranch = xBranch;
         _lastZBranch = zBranch;
@@ -446,9 +446,9 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         var xProj = Engine.TensorMatMul(siluFlat, _xProjectionWeights);
         var xProj3D = Engine.Reshape(xProj, new[] { batchSize, seqLen, _dtRank + _stateDimension * 2 });
 
-        var deltaLowRank = SliceTensor(xProj3D, 2, 0, _dtRank);
-        var bParam = SliceTensor(xProj3D, 2, _dtRank, _stateDimension);
-        var cParam = SliceTensor(xProj3D, 2, _dtRank + _stateDimension, _stateDimension);
+        var deltaLowRank = Engine.TensorNarrow(xProj3D, 2, 0, _dtRank);
+        var bParam = Engine.TensorNarrow(xProj3D, 2, _dtRank, _stateDimension);
+        var cParam = Engine.TensorNarrow(xProj3D, 2, _dtRank + _stateDimension, _stateDimension);
 
         // Step 5: Project delta from low rank to inner dimension and apply softplus
         var deltaFlat = Engine.Reshape(deltaLowRank, new[] { batchSize * seqLen, _dtRank });
@@ -545,16 +545,15 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         var bias2D = Engine.Reshape(_convBias, new[] { 1, _innerDimension });
+        var timeSlices = new Tensor<T>[seqLen];
 
         // Pre-compute weight slices for each kernel position: [innerDim] -> [1, innerDim]
         var weightSlices = new Tensor<T>[_convKernelSize];
         for (int k = 0; k < _convKernelSize; k++)
         {
-            weightSlices[k] = Engine.Reshape(
-                _convWeights.GetSliceAlongDimension(k, 1),
-                new[] { 1, _innerDimension });
+            var weightColumn = Engine.TensorNarrow(_convWeights, 1, k, 1);
+            weightSlices[k] = Engine.Reshape(weightColumn, new[] { 1, _innerDimension });
         }
 
         for (int t = 0; t < seqLen; t++)
@@ -566,7 +565,8 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
                 int srcT = t - k;  // causal: only current and past positions
                 if (srcT >= 0)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);
+                    var xAtTime = Engine.TensorNarrow(input, 1, srcT, 1);
+                    var x_src = Engine.Reshape(xAtTime, new[] { batchSize, _innerDimension });
                     var weighted = Engine.TensorBroadcastMultiply(x_src, weightSlices[k]);
                     result_t = result_t is null
                         ? weighted
@@ -579,10 +579,10 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
                 ? Engine.TensorBroadcastAdd(new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D)
                 : Engine.TensorBroadcastAdd(result_t, bias2D);
 
-            output.SetSlice(1, t, final_t);
+            timeSlices[t] = Engine.Reshape(final_t, new[] { batchSize, 1, _innerDimension });
         }
 
-        return output;
+        return Engine.TensorConcatenate(timeSlices, axis: 1);
     }
 
     /// <summary>
@@ -678,39 +678,6 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Slices a tensor along a given axis, extracting a contiguous range.
     /// </summary>
-    private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
-    {
-        var shape = (int[])input._shape.Clone();
-        shape[axis] = length;
-        var output = new Tensor<T>(shape);
-
-        var indices = new int[input.Shape.Length];
-        SliceTensorRecursive(input, output, indices, 0, axis, start, length);
-
-        return output;
-    }
-
-    private static void SliceTensorRecursive(
-        Tensor<T> input, Tensor<T> output, int[] indices,
-        int dim, int axis, int start, int length)
-    {
-        if (dim == indices.Length)
-        {
-            var outIndices = (int[])indices.Clone();
-            var inIndices = (int[])indices.Clone();
-            inIndices[axis] += start;
-            output[outIndices] = input[inIndices];
-            return;
-        }
-
-        int limit = dim == axis ? length : input.Shape[dim];
-        for (int i = 0; i < limit; i++)
-        {
-            indices[dim] = i;
-            SliceTensorRecursive(input, output, indices, dim + 1, axis, start, length);
-        }
-    }
-
     #endregion
 
     #region Parameter Management

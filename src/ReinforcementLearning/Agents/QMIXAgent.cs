@@ -608,12 +608,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         return result;
     }
 
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
-    }
-
     private int ArgMax(Vector<T> values)
     {
         if (values is null)

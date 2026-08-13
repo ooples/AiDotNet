@@ -278,4 +278,26 @@ public class ShapeOracleIssue1370Tests
         Assert.False(layer.IsShapeResolved);
         Assert.False(layer.TryDeclareShape());
     }
+
+    [Fact]
+    public void TransformerEncoder_EagerCtor_RestoresIntoFreshInstanceWithoutDoubleCounting()
+    {
+        var source = new TransformerEncoderLayer<double>(
+            numHeads: 2, feedForwardDim: 32, embeddingSize: 16);
+        source.MaterializeParameters();
+        var checkpoint = source.GetParameters();
+
+        var target = new TransformerEncoderLayer<double>(
+            numHeads: 2, feedForwardDim: 32, embeddingSize: 16);
+        target.SetParameters(checkpoint);
+        var readBack = target.GetParameters();
+
+        Assert.NotEmpty(checkpoint);
+        Assert.Equal(checkpoint.Length, target.ParameterCount);
+        Assert.Equal(checkpoint.Length, readBack.Length);
+        for (int i = 0; i < checkpoint.Length; i++)
+        {
+            Assert.Equal(checkpoint[i], readBack[i], precision: 10);
+        }
+    }
 }

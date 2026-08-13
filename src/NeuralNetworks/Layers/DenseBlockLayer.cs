@@ -103,9 +103,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>Construction state: the 'bnMomentum' the layer was built with.</summary>
-    private readonly double _bnMomentum;
-
     /// <summary>
     /// Lazy ctor — input depth/height/width come from the first
     /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); only
@@ -117,7 +114,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     public DenseBlockLayer(int growthRate, double bnMomentum = 0.1)
         : base([-1, -1, -1], [growthRate, -1, -1])
     {
-        _bnMomentum = bnMomentum;
         if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
 
         _inputChannels = -1; // resolved in OnFirstForward
@@ -187,11 +183,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         // Replay parameters that arrived via Deserialize → SetParameters
         // before sub-layer shapes were resolved.
-        // Nothing assigned this field, so the replay below never ran. Take the restore the base
-        // held when it arrived before the shape resolved; the children exist by now, so the
-        // per-child split below is possible.
-        _pendingParameters ??= ConsumePendingRestoredParameters();
-
         if (_pendingParameters is not null)
         {
             var pending = _pendingParameters;
@@ -225,12 +216,15 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
         _bn1Out = _bn1.Forward(x);
-        _relu1Out = _relu.Activate(_bn1Out);
+        // Scalar activation objects operate eagerly and therefore detach the value from the
+        // active GradientTape. Keep the DenseNet pre-activation on the engine graph so gradients
+        // reach BN1 and every layer before this block.
+        _relu1Out = Engine.ReLU(_bn1Out);
         _conv1Out = _conv1x1.Forward(_relu1Out);
 
         // BN-ReLU-Conv3x3
         _bn2Out = _bn2.Forward(_conv1Out);
-        _relu2Out = _relu.Activate(_bn2Out);
+        _relu2Out = Engine.ReLU(_bn2Out);
         var output = _conv3x3.Forward(_relu2Out);
 
         // Remove batch dim if we added it

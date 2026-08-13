@@ -59,29 +59,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         "'{0}' marks parameter '{1}' of type '{2}' as [LayerState], but only int, long, float, double, bool, "
             + "string, enum, int[] and interface values can round-trip through layer metadata",
         "AiDotNet.Serialization", DiagnosticSeverity.Error, true);
-    // INFO, not a warning. Pinning is often correct -- an optional argument nobody varies really is
-    // its default forever -- so this must not fail a build or drown the log. What it must do is stop
-    // being INVISIBLE. Until now the generator silently substituted the literal default for any
-    // optional parameter it could not read back, so a layer whose clone quietly reverts a
-    // hyperparameter looked exactly like one that round-trips perfectly, and the only way to find out
-    // which was to sweep every model and read the wreckage. ContinuumMemorySystemLayer is the worked
-    // example: numFrequencyLevels was pinned to 3 while updateFrequencies WAS recorded, so a layer
-    // built with five levels came back as (3 levels, 5 frequencies) and its own constructor rejected
-    // the pair -- HopeNetwork could not be cloned at all, and nothing said so until a sweep did.
-    private static readonly DiagnosticDescriptor PinnedDefault = new(
-        "ADN0057",
-        "Optional constructor parameter is pinned to its default in the generated factory",
-        "'{0}' pins optional constructor parameter '{1}' to its declared default, so a rebuilt layer "
-            + "will not preserve a non-default value. Store it in a field named '{1}', '_{1}' or its "
-            + "PascalCase form and the generator will round-trip it",
-        // INFO, and it has to be. This project builds with warnings-as-errors, so shipping this at
-        // Warning turned 80 pinned parameters into 84 build ERRORS and failed the build outright --
-        // a reporting diagnostic must not be able to do that. Info does not surface at normal
-        // verbosity, and detailed verbosity is not an option (it logs all 72k discovered cases and
-        // has filled the system drive), so the way to COUNT them is to flip this one word to
-        // Warning, build, and grep ADN0057. That is how 80 -> 38 was measured.
-        "AiDotNet.Serialization", DiagnosticSeverity.Info, true);
-
 
     private static readonly DiagnosticDescriptor Unsuppliable = new(
         "ADN0053",
@@ -117,15 +94,8 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         var candidates = context.SyntaxProvider
             .CreateSyntaxProvider(
-                // EVERY constructor on a type with a base list, not just ones that already carry an
-                // attribute. Requiring an attributed parameter here meant a layer with no
-                // [LayerState] at all never reached Analyze -- so inference could not see it, no
-                // factory was generated for it, and the ADN0053 rule that exists to reject an
-                // unrestorable layer could only fire on layers that had already opted in.
-                static (node, _) => node is ConstructorDeclarationSyntax
-                {
-                    Parent: ClassDeclarationSyntax { BaseList: not null },
-                },
+                static (node, _) => node is ConstructorDeclarationSyntax c
+                    && c.ParameterList.Parameters.Any(p => p.AttributeLists.Count > 0),
                 static (ctx, _) => Analyze(ctx))
             .Where(static m => m is not null)
             .Select(static (m, _) => m!);
@@ -139,42 +109,17 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (ctx.SemanticModel.GetDeclaredSymbol(syntax) is not IMethodSymbol ctor) return null;
 
         var marked = ctor.Parameters.Where(HasStateAttribute).ToList();
-
-        // NO marked-count gate. Dropping a constructor with no [LayerState] made the whole feature
-        // opt-IN a second time, below the syntax predicate: inference lives further down this
-        // method, so a layer that stored every argument in a field but wrote no attribute was
-        // discarded here, got no factory, and could not be cloned -- while the build stayed green,
-        // because ADN0053 also never ran for it. Marked parameters are still read below; they are
-        // just no longer the price of admission.
+        if (marked.Count == 0) return null;
 
         var type = ctor.ContainingType;
 
         // THE HOST TYPE MUST BE ABLE TO CARRY THE GENERATED MEMBER. Analyze accepted any
         // constructor whose parameters carried [LayerState] and then emitted
         // `partial class {TypeName}` with `internal override void WriteConstructionState`.
-        // A struct, a record, or a class deriving from neither LayerBase nor
-        // NeuralNetworkBase produced a raw C#
+        // A struct, a record, or a class not derived from LayerBase produced a raw C#
         // compiler error pointing INTO generated source -- an error about code the author
         // never wrote and cannot open. Refused here with a diagnostic on the declaration
         // instead.
-        if (type.TypeKind != TypeKind.Class || type.IsRecord || !DerivesFromLayerBase(type))
-        {
-            // Only an EXPLICIT claim is worth a diagnostic here. Now that every constructor on a
-            // type with a base list is analysed, this branch also sees ordinary classes that never
-            // mentioned [LayerState] -- reporting those told 7,525 authors their type "marks
-            // constructor parameters [LayerState]" when it does no such thing.
-            if (marked.Count == 0) return null;
-        }
-
-        // An ABSTRACT layer is never constructed, so a factory naming it emits `new Abstract<T>(...)`
-        // and the generated code will not compile. This only began to matter once every
-        // constructor was analysed rather than only attributed ones.
-        //
-        // Likewise an arity the factory cannot register: reporting it is right when the author
-        // asked for state explicitly, and noise when the parameter was merely inferred.
-        if (type.IsAbstract && marked.Count == 0) return null;
-        if (type.TypeParameters.Length != 1 && marked.Count == 0) return null;
-
         if (type.TypeKind != TypeKind.Class || type.IsRecord || !DerivesFromLayerBase(type))
         {
             return new LayerModel
@@ -213,7 +158,6 @@ public class LayerStateGenerator : IIncrementalGenerator
                 .Select(r => r.GetSyntax())
                 .OfType<TypeDeclarationSyntax>()
                 .Any(d => d.Modifiers.Any(SyntaxKind.PartialKeyword)),
-            HasExplicitState = marked.Count > 0,
             HasHandWrittenMetadata = metadataOverrides.Count > 0
                 // SEMANTIC, NOT SUBSTRING. Scanning the method's full text for
                 // "base.GetMetadata" fired on the string appearing in a comment or a string
@@ -241,25 +185,7 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         foreach (var p in ctor.Parameters)
         {
-            var info = new ParamModel
-            {
-                Name = p.Name,
-                TypeFqn = p.Type.ToDisplayString(FullyQualified),
-                Owner = type.Name,
-            };
-
-            if (IsLayer(Unwrap(p.Type), out var childNumeric)
-                || IsLayerSequence(Unwrap(p.Type), out childNumeric))
-            {
-                info.LayerNumeric = childNumeric?.ToDisplayString(FullyQualified);
-            }
-
-            info.AcceptsNull = p.Type.NullableAnnotation == NullableAnnotation.Annotated
-                || p.NullableAnnotation == NullableAnnotation.Annotated;
-            info.TraceableNumeric = TraceableNumericOf(Unwrap(p.Type))?.ToDisplayString(FullyQualified);
-            info.ExpressionDelegate = ExpressionDelegateOf(Unwrap(p.Type));
-            info.Settings = SettingsOf(Unwrap(p.Type)) ?? new List<SettingModel>();
-
+            var info = new ParamModel { Name = p.Name, TypeFqn = p.Type.ToDisplayString(FullyQualified) };
 
             if (HasStateAttribute(p))
             {
@@ -295,27 +221,6 @@ public class LayerStateGenerator : IIncrementalGenerator
                     return model;
                 }
             }
-
-            // INFERRED, not merely marked. A constructor argument the layer stores in a field is
-            // construction state whether or not anyone wrote the attribute -- that is what the
-            // field is for. Requiring the attribute made correctness opt-IN, which is why 76 of
-            // 321 layers had no factory and nothing reported it.
-            //
-            // The attribute is still honoured, and is still how to override the metadata key, name
-            // the backing member, or claim a parameter inference would decline.
-            else if (!IsActivation(p.Type, out _)
-                && Classify(p.Type) is var inferredKind and not ValueKind.Unsupported
-                && FindBackingMember(type, p, out var inferredConvert, out var inferredNullable) is { } inferredMember
-                // A nullable backing member DECLINES inference rather than erroring, unlike the
-                // marked path: an unmarked parameter that cannot round-trip is simply not state.
-                && !inferredNullable)
-            {
-                info.IsState = true;
-                info.Key = p.Name;
-                info.Kind = inferredKind;
-                info.BackingMember = inferredMember;
-                info.NeedsConvert = inferredConvert;
-            }
             else if (IsActivation(p.Type, out var vector)
                 && !(vector ? vectorActivationBound : scalarActivationBound))
             {
@@ -336,11 +241,6 @@ public class LayerStateGenerator : IIncrementalGenerator
                 // Taken from the symbol, so the emitted argument is the value the
                 // constructor signature actually promises.
                 info.DefaultExpression = RenderDefault(p);
-
-                // Say so. Pinning is a real loss of construction state whenever the value was not
-                // the default, and it used to happen with nothing in the build to show for it.
-                model.Diagnostics.Add(new PendingDiagnostic(
-                    PinnedDefault, SpanFor(p, model), type.Name, p.Name));
             }
             else
             {
@@ -355,13 +255,7 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         if (!model.IsPartial)
         {
-            // REPORT, THEN STOP. Emitting `partial class X` against a non-partial declaration is
-            // CS0260 -- a raw compiler error pointing INTO generated source, about code the author
-            // never wrote. This is the same principle the host-type check above already applies;
-            // it only began to matter when models joined, because every layer was already partial
-            // and so the emit-anyway path was never exercised.
             model.Diagnostics.Add(new PendingDiagnostic(NotPartial, model.Location, type.Name));
-            return model;
         }
 
         if (model.HasHandWrittenMetadata)
@@ -378,168 +272,6 @@ public class LayerStateGenerator : IIncrementalGenerator
     private static bool HasStateAttribute(IParameterSymbol p)
         => p.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
 
-    /// <summary>The member named by <c>[LayerState(Member = "...")]</c>, if any.</summary>
-    private static string? StateMember(IParameterSymbol p)
-    {
-        var attr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
-        var named = attr?.NamedArguments.FirstOrDefault(n => n.Key == "Member").Value.Value as string;
-        return string.IsNullOrWhiteSpace(named) ? null : named;
-    }
-
-    /// <summary>
-    /// Whether the type is a layer, and if so its numeric type argument. Covers the base class,
-    /// the interface, and a concrete layer named directly.
-    /// </summary>
-    private static bool IsLayer(ITypeSymbol type, out ITypeSymbol? numeric)
-    {
-        numeric = null;
-        if (type is not INamedTypeSymbol named) return false;
-
-        if (named.ConstructedFrom.Name == "ILayer" && named.TypeArguments.Length == 1)
-        {
-            numeric = named.TypeArguments[0];
-            return true;
-        }
-
-        for (var b = named; b is not null; b = b.BaseType)
-        {
-            if (b.Name == "LayerBase" && b.TypeArguments.Length == 1)
-            {
-                numeric = b.TypeArguments[0];
-                return true;
-            }
-        }
-
-        foreach (var i in named.AllInterfaces)
-        {
-            if (i.Name == "ILayer" && i.TypeArguments.Length == 1)
-            {
-                numeric = i.TypeArguments[0];
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Whether the type is a sequence of layers, and if so their numeric type.</summary>
-    private static bool IsLayerSequence(ITypeSymbol type, out ITypeSymbol? numeric)
-    {
-        numeric = null;
-
-        if (type is IArrayTypeSymbol { Rank: 1 } arr) return IsLayer(arr.ElementType, out numeric);
-        if (type is not INamedTypeSymbol named) return false;
-
-        if (named.TypeArguments.Length == 1
-            && named.Name is "List" or "IList" or "IEnumerable" or "IReadOnlyList"
-                or "IReadOnlyCollection" or "ICollection")
-            return IsLayer(named.TypeArguments[0], out numeric);
-
-        return false;
-    }
-    /// <summary>
-    /// The member holds the layer the parameter was given: both are layers over the same numeric
-    /// type, AND the parameter is assignable to the member's declared type.
-    /// </summary>
-    /// <remarks>
-    /// Assignability is what keeps this from being too loose. "Both are layers over T" alone would
-    /// let a GroupedQueryAttentionLayer&lt;float&gt; parameter bind to a
-    /// MultiHeadAttentionLayer&lt;float&gt; field -- a DIFFERENT child, silently read back in place
-    /// of the one the constructor was given. The case this exists for is the reverse and is safe:
-    /// a LayerBase&lt;T&gt; parameter stored in an ILayer&lt;T&gt; field is the same object seen
-    /// through a wider type.
-    /// </remarks>
-    private static bool IsSameLayer(ITypeSymbol member, ITypeSymbol parameter)
-        => IsLayer(Unwrap(parameter), out var pn)
-           && IsLayer(Unwrap(member), out var mn)
-           && pn is not null && mn is not null
-           && SymbolEqualityComparer.Default.Equals(pn, mn)
-           && IsAssignableTo(Unwrap(parameter), Unwrap(member));
-
-    /// <summary>Both types are sequences of layers over the same numeric type.</summary>
-    private static bool IsSameLayerSequence(ITypeSymbol member, ITypeSymbol parameter)
-        => IsLayerSequence(Unwrap(parameter), out var pn)
-           && IsLayerSequence(Unwrap(member), out var mn)
-           && pn is not null && mn is not null
-           && SymbolEqualityComparer.Default.Equals(pn, mn);
-
-    /// <summary>Whether a value of <paramref name="from"/> can be stored in <paramref name="to"/>.</summary>
-    private static bool IsAssignableTo(ITypeSymbol from, ITypeSymbol to)
-    {
-        if (SameType(from, to)) return true;
-
-        for (var b = (from as INamedTypeSymbol)?.BaseType; b is not null; b = b.BaseType)
-        {
-            if (SameType(b, to)) return true;
-        }
-
-        return from is INamedTypeSymbol named && named.AllInterfaces.Any(i => SameType(i, to));
-    }
-
-    /// <summary>
-    /// For <c>Func&lt;ComputationNode&lt;X&gt;, ComputationNode&lt;X&gt;&gt;</c>, returns X.
-    /// </summary>
-    private static ITypeSymbol? TraceableNumericOf(ITypeSymbol type)
-    {
-        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Delegate } named) return null;
-
-        var invoke = named.DelegateInvokeMethod;
-        if (invoke is null || invoke.Parameters.Length != 1) return null;
-
-        var argument = Node(invoke.Parameters[0].Type);
-        var result = Node(invoke.ReturnType);
-        return argument is not null && SymbolEqualityComparer.Default.Equals(argument, result) ? argument : null;
-
-        static ITypeSymbol? Node(ITypeSymbol t)
-            => t is INamedTypeSymbol { Name: "ComputationNode", TypeArguments.Length: 1 } n ? n.TypeArguments[0] : null;
-    }
-
-    /// <summary>For <c>Expression&lt;TDelegate&gt;</c>, returns TDelegate as C# source.</summary>
-    private static string? ExpressionDelegateOf(ITypeSymbol type)
-        => type is INamedTypeSymbol { Name: "Expression", TypeArguments.Length: 1 } expression
-           && expression.TypeArguments[0].TypeKind == TypeKind.Delegate
-            ? expression.TypeArguments[0].ToDisplayString(FullyQualified)
-            : null;
-
-    /// <summary>
-    /// The settable public properties of a plain settings object, when it can be constructed
-    /// without arguments and every one of them is a value the metadata can carry. Anything else is
-    /// not a settings object and keeps reporting ADN0053 rather than round-tripping partially.
-    /// </summary>
-    private static List<SettingModel>? SettingsOf(ITypeSymbol type)
-    {
-        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Class } named || named.IsAbstract) return null;
-
-        if (!named.InstanceConstructors.Any(c => c.Parameters.Length == 0
-            && c.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal))
-            return null;
-
-        var settings = new List<SettingModel>();
-        foreach (var property in named.GetMembers().OfType<IPropertySymbol>())
-        {
-            if (property.IsStatic || property.IsIndexer) continue;
-            if (property.DeclaredAccessibility != Accessibility.Public) continue;
-            if (property.GetMethod is null || property.SetMethod is null) continue;
-            if (property.SetMethod.DeclaredAccessibility != Accessibility.Public) continue;
-
-            var kind = Classify(property.Type);
-            if (kind is ValueKind.Unsupported or ValueKind.Settings or ValueKind.Layer
-                or ValueKind.LayerList or ValueKind.Delegate or ValueKind.Expression or ValueKind.Component)
-                return null;
-
-            settings.Add(new SettingModel
-            {
-                Name = property.Name,
-                Kind = kind,
-                TypeFqn = property.Type.ToDisplayString(FullyQualified),
-            });
-        }
-
-        return settings.Count > 0 ? settings : null;
-    }
-
-
-
     private static string? StateKey(IParameterSymbol p)
     {
         var attr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == StateAttribute);
@@ -554,46 +286,10 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (type.TypeKind == TypeKind.Enum) return ValueKind.Enum;
 
         // A pluggable strategy: record which implementation was used and rebuild that one.
-        // Before the interface check: ILayer<T> would otherwise be claimed as a Component, which
-        // rebuilds by parameterless Activator.CreateInstance -- losing every argument the child
-        // was built with, silently and without failing.
-        // A delegate and an expression tree each have their own description path, and an
-        // Expression<T> is a class, so both are decided before the checks below.
-        if (type.TypeKind == TypeKind.Delegate) return ValueKind.Delegate;
-        if (ExpressionDelegateOf(type) is not null) return ValueKind.Expression;
-
-        if (IsLayer(type, out _)) return ValueKind.Layer;
-        if (IsLayerSequence(type, out _)) return ValueKind.LayerList;
-
-        // A plain configuration object: no behaviour, just settable values. Its properties are
-        // construction state as much as a scalar is, and rebuilding it by parameterless
-        // construction alone would silently restore every one of them to its default.
-        if (SettingsOf(type) is not null) return ValueKind.Settings;
-
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
 
-        if (type is IArrayTypeSymbol { Rank: 1 } arr)
-        {
-            // A shape list is as much construction state as a scalar dimension is, and rebuilding
-            // one from the declared input shape is exactly the inference this generator removes.
-            if (arr.ElementType.SpecialType == SpecialType.System_Int32) return ValueKind.Int32Array;
-            if (arr.ElementType.SpecialType == SpecialType.System_Double) return ValueKind.DoubleArray;
-            if (arr.ElementType.SpecialType == SpecialType.System_Boolean) return ValueKind.BooleanArray;
-            if (arr.ElementType.SpecialType == SpecialType.System_String) return ValueKind.StringArray;
-
-            // int[][]: the per-input shapes a merge layer (Add, Concatenate, Multiply) was built
-            // with, where the outer length is the number of inputs.
-            if (arr.ElementType is IArrayTypeSymbol { Rank: 1 } inner
-                && inner.ElementType.SpecialType == SpecialType.System_Int32)
-                return ValueKind.Int32Jagged;
-
-            return ValueKind.Unsupported;
-        }
-
-        // A graph layer's schema: which node and edge types it was built over. A layer built over
-        // different node types is a different layer, so this is construction state.
-        if (IsMap(type, SpecialType.System_Int32)) return ValueKind.StringInt32Map;
-        if (IsPairMap(type)) return ValueKind.StringPairMap;
+        if (type is IArrayTypeSymbol { Rank: 1 } arr && arr.ElementType.SpecialType == SpecialType.System_Int32)
+            return ValueKind.Int32Array;
 
         return type.SpecialType switch
         {
@@ -628,13 +324,7 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         needsConvert = false;
         memberIsNullable = false;
-        // [LayerState(Member = "...")] wins outright. Without it the attribute could not rescue a
-        // layer that stored the argument under any other name, because ADN0051 applied the same
-        // five-name rule to marked parameters too.
-        var named = StateMember(p);
-        var candidates = named is not null
-            ? new[] { named }
-            : new[] { p.Name, "_" + p.Name, "m_" + p.Name, Pascal(p.Name), "_" + Pascal(p.Name) };
+        var candidates = new[] { p.Name, "_" + p.Name, "m_" + p.Name, Pascal(p.Name), "_" + Pascal(p.Name) };
 
         for (var t = type; t is not null; t = t.BaseType)
         {
@@ -650,23 +340,6 @@ public class LayerStateGenerator : IIncrementalGenerator
 
                     switch (member)
                     {
-                        // A child layer is recorded by walking the object, so the member only has
-                        // to BE that layer, not to be declared as the same type. LoRAAdapterBase
-                        // keeps its child as ILayer<T> while a shape-resolving overload takes
-                        // LayerBase<T>; the stored object is the same one either way.
-                        case IFieldSymbol lf when IsSameLayer(lf.Type, p.Type):
-                            return lf.Name;
-                        case IPropertySymbol { GetMethod: not null } lp when IsSameLayer(lp.Type, p.Type):
-                            return lp.Name;
-
-                        // A sequence of children is written by enumerating it and read back as a
-                        // fresh list, so the member only has to hold layers of the same numeric
-                        // type -- List<ILayer<T>> backs an IEnumerable<ILayer<T>> parameter.
-                        case IFieldSymbol sf when IsSameLayerSequence(sf.Type, p.Type):
-                            return sf.Name;
-                        case IPropertySymbol { GetMethod: not null } sp when IsSameLayerSequence(sp.Type, p.Type):
-                            return sp.Name;
-
                         case IFieldSymbol f when SameType(f.Type, p.Type):
                             memberIsNullable = IsNullableValueType(f.Type);
                             return f.Name;
@@ -712,20 +385,6 @@ public class LayerStateGenerator : IIncrementalGenerator
             or SpecialType.System_Int32;
     }
 
-    /// <summary>A <c>Dictionary&lt;string, TValue&gt;</c> over the given value type.</summary>
-    private static bool IsMap(ITypeSymbol type, SpecialType value)
-        => type is INamedTypeSymbol { Name: "Dictionary", TypeArguments.Length: 2 } map
-           && map.TypeArguments[0].SpecialType == SpecialType.System_String
-           && map.TypeArguments[1].SpecialType == value;
-
-    /// <summary>A <c>Dictionary&lt;string, (string, string)&gt;</c>, however the tuple is named.</summary>
-    private static bool IsPairMap(ITypeSymbol type)
-        => type is INamedTypeSymbol { Name: "Dictionary", TypeArguments.Length: 2 } map
-           && map.TypeArguments[0].SpecialType == SpecialType.System_String
-           && map.TypeArguments[1] is INamedTypeSymbol { IsTupleType: true } tuple
-           && tuple.TupleElements.Length == 2
-           && tuple.TupleElements.All(e => e.Type.SpecialType == SpecialType.System_String);
-
     private static bool SameType(ITypeSymbol a, ITypeSymbol b)
         => Unwrap(a).ToDisplayString(FullyQualified) == Unwrap(b).ToDisplayString(FullyQualified);
 
@@ -760,15 +419,6 @@ public class LayerStateGenerator : IIncrementalGenerator
             // constructors could generate a different factory between builds. Ordering on the
             // constructor's own location also makes "first by source order" true.
             .Select(g => g
-                // Recoverable state first. Ranking by state-parameter count alone picked
-                // LambdaLayer's two-opaque-delegate constructor over its traceable one: an opaque
-                // delegate is the parameter LEAST likely to survive a save, so the constructor that
-                // rebuilt worst scored highest. Source order still breaks the remaining ties, so the
-                // choice stays deterministic across partial files.
-                .OrderByDescending(m => m.Parameters.Count(
-                    p => p.TraceableNumeric is not null || p.ExpressionDelegate is not null))
-                .ThenByDescending(m => m.Parameters.Count(p => p.IsState))
-                .ThenBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
                 .OrderBy(m => m.Location.FilePath, System.StringComparer.Ordinal)
                 .ThenBy(m => m.Location.Start)
                 .First())
@@ -788,13 +438,6 @@ public class LayerStateGenerator : IIncrementalGenerator
             // path this generator was built to replace, which is the -1 bug it fixes.
             if (model.TypeParameters.Count != 1)
             {
-                // Only an EXPLICIT claim is reported. With state inferred, this also sees
-                // non-generic layers that never asked to participate; writing a writer they
-                // can never pair with a factory, then reporting it, is noise the author
-                // cannot act on. An inferred parameter on an unsupported arity is simply not
-                // construction state.
-                if (!model.HasExplicitState) continue;
-
                 spc.ReportDiagnostic(Diagnostic.Create(
                     UnsupportedArity, model.Location.ToLocation(), model.TypeName, model.TypeParameters.Count));
             }
@@ -843,63 +486,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("        base.WriteConstructionState(__metadata);");
         foreach (var p in model.Parameters.Where(p => p.IsState))
         {
-            // A child layer records its OWN construction state under a nested key namespace, so a
-            // composite layer is rebuildable exactly as far as its children are. Writing only the
-            // child's type name would rebuild it by parameterless construction, silently dropping
-            // every argument it was given.
-            if (p.Kind == ValueKind.Layer)
-            {
-                var num = p.LayerNumeric ?? "T";
-                sb.AppendLine($"        global::AiDotNet.Serialization.LayerStateBag.WriteNested<{num}>("
-                    + $"__metadata, \"{p.Key}\", this.{p.BackingMember} as global::AiDotNet.NeuralNetworks.Layers.LayerBase<{num}>);");
-                continue;
-            }
-
-            if (p.Kind == ValueKind.LayerList)
-            {
-                var num = p.LayerNumeric ?? "T";
-                sb.AppendLine($"        global::AiDotNet.Serialization.LayerStateBag.WriteNestedRange<{num}>("
-                    + $"__metadata, \"{p.Key}\", this.{p.BackingMember});");
-                continue;
-            }
-
-            // A delegate is described rather than written down -- a traced graph, an expression
-            // tree, or a named method by reference. Never marshalled code: Keras writes the Lambda
-            // layer's bytecode and made loading a model arbitrary code execution (CVE-2025-9906).
-            if (p.Kind == ValueKind.Delegate)
-            {
-                sb.AppendLine(p.TraceableNumeric is null
-                    ? $"        __metadata[\"{p.Key}\"] = "
-                      + $"global::AiDotNet.Serialization.DelegateState.Save(this.{p.BackingMember});"
-                    : $"        __metadata[\"{p.Key}\"] = "
-                      + $"global::AiDotNet.Serialization.DelegateState.SaveTraceable<{p.TraceableNumeric}>("
-                      + $"this.{p.BackingMember}, this.GetInputShape());");
-                continue;
-            }
-
-            if (p.Kind == ValueKind.Expression)
-            {
-                sb.AppendLine($"        __metadata[\"{p.Key}\"] = "
-                    + $"global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
-                continue;
-            }
-
-            // A settings object is written property by property under its own key namespace, so it
-            // rebuilds through an object initializer the compiler checks rather than by reflection.
-            if (p.Kind == ValueKind.Settings)
-            {
-                sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
-                sb.AppendLine("        {");
-                sb.AppendLine($"            __metadata[\"{p.Key}.$set\"] = \"true\";");
-                foreach (var s in p.Settings)
-                {
-                    sb.AppendLine($"            __metadata[\"{p.Key}.{s.Name}\"] = "
-                        + $"global::AiDotNet.Serialization.LayerStateBag.Format(this.{p.BackingMember}.{s.Name});");
-                }
-                sb.AppendLine("        }");
-                continue;
-            }
-
             if (p.Kind == ValueKind.Component)
             {
                 sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatType(this.{p.BackingMember});");
@@ -979,48 +565,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <param name=\"vectorActivation\">Restored vector activation, when the constructor takes one.</param>");
         sb.AppendLine("    /// <param name=\"layer\">The rebuilt layer.</param>");
         sb.AppendLine("    /// <returns><c>true</c> when a factory exists for the type.</returns>");
-        // The recursion lives in generated code because only generated code can call TryCreate;
-        // putting it in LayerStateBag would make a hand-written type depend on generated output.
-        sb.AppendLine("    /// <summary>Rebuilds the child layer saved under <paramref name=\"key\"/>.</summary>");
-        sb.AppendLine("    /// <param name=\"state\">The parent's saved metadata.</param>");
-        sb.AppendLine("    /// <param name=\"key\">The constructor parameter the child was passed as.</param>");
-        sb.AppendLine("    /// <returns>The rebuilt child, or <c>null</c> when none was saved.</returns>");
-        sb.AppendLine("    internal static object? RebuildNested(global::AiDotNet.Serialization.LayerStateBag state, string key)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var type = state.NestedType(key);");
-        sb.AppendLine("        if (type is null) return null;");
-        sb.AppendLine();
-        sb.AppendLine("        var nested = state.Nested(key);");
-        sb.AppendLine("        var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;");
-        sb.AppendLine("        return TryCreate(");
-        sb.AppendLine("            definition,");
-        sb.AppendLine("            nested,");
-        sb.AppendLine("            nested.Component<global::AiDotNet.Interfaces.IActivationFunction<T>>(\"ScalarActivationType\"),");
-        sb.AppendLine("            nested.Component<global::AiDotNet.Interfaces.IVectorActivationFunction<T>>(\"VectorActivationType\"),");
-        sb.AppendLine("            out var child) ? child : null;");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>Rebuilds the child layers saved under <paramref name=\"key\"/>, in order.</summary>");
-        sb.AppendLine("    /// <typeparam name=\"TChild\">The element type the constructor takes.</typeparam>");
-        sb.AppendLine("    /// <param name=\"state\">The parent's saved metadata.</param>");
-        sb.AppendLine("    /// <param name=\"key\">The constructor parameter the children were passed as.</param>");
-        sb.AppendLine("    /// <returns>The rebuilt children.</returns>");
-        sb.AppendLine("    internal static global::System.Collections.Generic.List<TChild> RebuildNestedRange<TChild>(");
-        sb.AppendLine("        global::AiDotNet.Serialization.LayerStateBag state, string key) where TChild : class");
-        sb.AppendLine("    {");
-        sb.AppendLine("        var count = state.NestedCount(key);");
-        sb.AppendLine("        var items = new global::System.Collections.Generic.List<TChild>(count < 0 ? 0 : count);");
-        sb.AppendLine("        for (var i = 0; i < count; i++)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            // A child that will not rebuild is dropped rather than left as a null element:");
-        sb.AppendLine("            // a null layer in an expert list faults on the first forward pass, far from here.");
-        sb.AppendLine("            if (RebuildNested(state, key + \".\" + i.ToString(global::System.Globalization.CultureInfo.InvariantCulture)) is TChild c)");
-        sb.AppendLine("                items.Add(c);");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        return items;");
-        sb.AppendLine("    }");
-        sb.AppendLine();
         sb.AppendLine("    internal static bool TryCreate(");
         sb.AppendLine("        global::System.Type genericDefinition,");
         sb.AppendLine("        global::AiDotNet.Serialization.LayerStateBag state,");
@@ -1035,14 +579,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             var closed = model.ClosedFqn;
             var required = model.Parameters
                 .Where(p => p.IsState)
-                // Nested state is not stored under the bare parameter name, so the "is this state
-                // even mine" guard has to look for the key that is actually written.
-                .Select(p => "\"" + p.Key + p.Kind switch
-                {
-                    ValueKind.Layer => ".$type",
-                    ValueKind.LayerList => ".count",
-                    _ => string.Empty,
-                } + "\"")
+                .Select(p => "\"" + p.Key + "\"")
                 .ToList();
 
             sb.AppendLine($"        if (genericDefinition == typeof({model.OpenGenericFqn}))");
@@ -1077,65 +614,13 @@ public class LayerStateGenerator : IIncrementalGenerator
                 ? "global::AiDotNet.Interfaces.IVectorActivationFunction<T>"
                 : "global::AiDotNet.Interfaces.IActivationFunction<T>";
             var source = p.IsVectorActivation ? "vectorActivation" : "scalarActivation";
-            // `as` yields null both when no activation was saved and when the wrong kind was. A
-            // parameter that does not accept null is told which, rather than handed the null.
-            return p.AcceptsNull
-                ? $"{p.Name}: {source} as {iface}"
-                : $"{p.Name}: global::AiDotNet.Serialization.LayerStateBag.RequireActivation<{iface}>"
-                  + $"({source}, \"{p.Name}\", \"{p.Owner}\")";
+            return $"{p.Name}: {source} as {iface}";
         }
 
         // THE PARAMETER'S DEFAULT, NOT THE TYPE'S. Falls back to `default!` only when the
         // declaration genuinely has no value to render.
-        // `null` does not convert to an unconstrained `T?`, so a null default is emitted as
-        // `default!` -- the same value, in a form that compiles for a type parameter.
-        if (p.UseDefault)
-        {
-            var rendered = p.DefaultExpression is null or "null" ? "default!" : p.DefaultExpression;
-            return $"{p.Name}: {rendered}";
-        }
-        var read = ReadExpression(p);
-        return $"{p.Name}: {read}";
-    }
+        if (p.UseDefault) return $"{p.Name}: {p.DefaultExpression ?? "default!"}";
 
-    /// <summary>
-    /// Rebuilds a sequence of child layers into the collection type the constructor declared.
-    /// </summary>
-    /// <remarks>
-    /// The children come back as a <c>List&lt;TChild&gt;</c>; an array parameter needs ToArray() and
-    /// an IEnumerable/IReadOnlyList parameter takes the list as it is.
-    /// </remarks>
-    /// <summary>
-    /// Rebuilds a settings object through an object initializer, or leaves it null when none was
-    /// saved. Compile-checked property assignments rather than reflection, so a renamed property
-    /// breaks the build instead of silently restoring a default.
-    /// </summary>
-    private static string SettingsArgument(ParamModel p)
-    {
-        var assignments = string.Join(", ", p.Settings.Select(s => $"{s.Name} = {s.Read(p.Key)}"));
-        var created = $"new {p.TypeFqn.TrimEnd('?')} {{ {assignments} }}";
-        return p.AcceptsNull ? $"state.Has(\"{p.Key}.$set\") ? {created} : null" : created;
-    }
-
-    private static string LayerListArgument(ParamModel p)
-    {
-        var declared = p.TypeFqn.TrimEnd('?');
-        var rebuilt = $"RebuildNestedRange<{ElementFqn(declared)}>(state, \"{p.Key}\")";
-        return declared.EndsWith("[]", System.StringComparison.Ordinal) ? $"{rebuilt}.ToArray()" : rebuilt;
-    }
-
-    /// <summary>The element type of a declared array or single-argument generic collection.</summary>
-    private static string ElementFqn(string declared)
-    {
-        if (declared.EndsWith("[]", System.StringComparison.Ordinal))
-            return declared.Substring(0, declared.Length - 2);
-
-        var open = declared.IndexOf('<');
-        return open < 0 ? declared : declared.Substring(open + 1, declared.Length - open - 2);
-    }
-
-    private static string ReadExpression(ParamModel p)
-    {
         var read = p.Kind switch
         {
             ValueKind.Int32 => $"state.Int32(\"{p.Key}\")",
@@ -1145,30 +630,12 @@ public class LayerStateGenerator : IIncrementalGenerator
             ValueKind.Boolean => $"state.Boolean(\"{p.Key}\")",
             ValueKind.String => $"state.String(\"{p.Key}\")",
             ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
-            ValueKind.DoubleArray => $"state.DoubleArray(\"{p.Key}\")",
-            ValueKind.BooleanArray => $"state.BooleanArray(\"{p.Key}\")",
-            ValueKind.StringArray => $"state.StringArray(\"{p.Key}\")",
-            ValueKind.Int32Jagged => $"state.Int32Jagged(\"{p.Key}\")",
-            ValueKind.StringInt32Map => $"state.StringInt32Map(\"{p.Key}\")",
-            ValueKind.StringPairMap => $"state.StringPairMap(\"{p.Key}\")",
-            ValueKind.Layer => $"({p.TypeFqn.TrimEnd('?')})RebuildNested(state, \"{p.Key}\")!",
-            ValueKind.LayerList => LayerListArgument(p),
             ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
-            ValueKind.Delegate => $"global::AiDotNet.Serialization.DelegateState.Load<{p.TypeFqn.TrimEnd('?')}>("
-                + $"state.String(\"{p.Key}\"), \"{p.Owner}\", \"{p.Key}\")",
-            ValueKind.Expression => $"global::AiDotNet.Serialization.ExpressionState.Load<{p.ExpressionDelegate}>("
-                + $"state.String(\"{p.Key}\"), \"{p.Owner}\", \"{p.Key}\")",
-            ValueKind.Settings => SettingsArgument(p),
-
-            // A parameter that does not accept null must not be handed one: Component() returns
-            // null both when nothing was saved and when the saved type will not load.
-            ValueKind.Component => p.AcceptsNull
-                ? $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")"
-                : $"state.ComponentRequired<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            ValueKind.Component => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             _ => "default!",
         };
 
-        return read;
+        return $"{p.Name}: {read}";
     }
 
     private static readonly SymbolDisplayFormat FullyQualified =
@@ -1201,17 +668,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         String,
         Enum,
         Int32Array,
-        DoubleArray,
-        BooleanArray,
-        StringArray,
-        Int32Jagged,
-        StringInt32Map,
-        StringPairMap,
-        Layer,
-        LayerList,
-        Delegate,
-        Expression,
-        Settings,
         Component,
     }
 
@@ -1224,46 +680,10 @@ public class LayerStateGenerator : IIncrementalGenerator
 
     /// <summary>True when the type derives from AiDotNet's LayerBase.</summary>
     private static bool DerivesFromLayerBase(INamedTypeSymbol type)
-        => DerivesFrom(type, "AiDotNet.NeuralNetworks.Layers.LayerBase");
-
-    /// <summary>True when the type derives from AiDotNet's NeuralNetworkBase.</summary>
-    private static bool DerivesFromNeuralNetworkBase(INamedTypeSymbol type)
-        => DerivesFrom(type, "AiDotNet.NeuralNetworks.NeuralNetworkBase");
-
-    /// <summary>
-    /// True when the type has a base that declares the virtual this generator overrides.
-    /// </summary>
-    /// <remarks>
-    /// NOT CURRENTLY USED AS A GATE, and the reason is worth recording. Widening the gate to
-    /// NeuralNetworkBase compiles, but every model then fails ADN0053 on its `architecture`
-    /// parameter: this generator rebuilds from a Dictionary&lt;string, string&gt;, so a constructor
-    /// argument has to survive a round trip through text. Layers take scalars, enums and child
-    /// layers, all of which do. A model takes a NeuralNetworkArchitecture&lt;T&gt; -- a graph, which
-    /// does not.
-    ///
-    /// Cloning does not actually need it to. A clone has the LIVE source object in hand, so rich
-    /// arguments can be passed straight across (or cloned in their own right) rather than
-    /// serialized and rebuilt. Deserialization is the case that needs text, and it already has
-    /// SerializeNetworkSpecificData. So the model factory wants a different signature from the
-    /// layer one -- source-aware, not metadata-only -- which is why models do not simply join this
-    /// gate.
-    /// </remarks>
-    /// <remarks>
-    /// Both LayerBase and NeuralNetworkBase declare
-    /// <c>internal virtual void WriteConstructionState(Dictionary&lt;string, string&gt;)</c>, so the
-    /// generated override compiles against either. Gating on LayerBase alone was why models had no
-    /// generated factory and therefore could not be rebuilt — the same shape of omission this
-    /// generator's own history records, where gating on an already-present attribute meant the
-    /// types that most needed a diagnostic were the ones excluded from receiving one.
-    /// </remarks>
-    private static bool DerivesFromStatefulBase(INamedTypeSymbol type)
-        => DerivesFromLayerBase(type) || DerivesFromNeuralNetworkBase(type);
-
-    private static bool DerivesFrom(INamedTypeSymbol type, string baseDisplayName)
     {
         for (var b = type.BaseType; b is not null; b = b.BaseType)
         {
-            if (b.ConstructedFrom.ToDisplayString(UnqualifiedGenerics) == baseDisplayName)
+            if (b.ConstructedFrom.ToDisplayString(UnqualifiedGenerics) == "AiDotNet.NeuralNetworks.Layers.LayerBase")
             {
                 return true;
             }
@@ -1347,37 +767,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         };
     }
 
-    /// <summary>One property of a settings object, and how a rebuild reads it back.</summary>
-    private sealed class SettingModel
-    {
-        public string Name = string.Empty;
-        public ValueKind Kind;
-        public string TypeFqn = string.Empty;
-
-        /// <summary>The accessor call that reads this property out of the saved state.</summary>
-        public string Read(string parameterKey)
-        {
-            var key = parameterKey + "." + Name;
-            return Kind switch
-            {
-                ValueKind.Int32 => $"state.Int32(\"{key}\")",
-                ValueKind.Int64 => $"state.Int64(\"{key}\")",
-                ValueKind.Double => $"state.Double(\"{key}\")",
-                ValueKind.Single => $"state.Single(\"{key}\")",
-                ValueKind.Boolean => $"state.Boolean(\"{key}\")",
-                ValueKind.String => $"state.String(\"{key}\")",
-                ValueKind.Int32Array => $"state.Int32Array(\"{key}\")",
-                ValueKind.DoubleArray => $"state.DoubleArray(\"{key}\")",
-                ValueKind.BooleanArray => $"state.BooleanArray(\"{key}\")",
-                ValueKind.StringArray => $"state.StringArray(\"{key}\")",
-                ValueKind.Int32Jagged => $"state.Int32Jagged(\"{key}\")",
-                ValueKind.StringInt32Map => $"state.StringInt32Map(\"{key}\")",
-                ValueKind.StringPairMap => $"state.StringPairMap(\"{key}\")",
-                _ => $"state.Enum<{TypeFqn.TrimEnd('?')}>(\"{key}\")",
-            };
-        }
-    }
-
     private sealed class ParamModel
     {
         public string Name = string.Empty;
@@ -1398,31 +787,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         public string? DefaultExpression;
         public bool NeedsConvert;
         public ValueKind Kind;
-
-        /// <summary>
-        /// For a child layer or a sequence of them, the numeric type argument to write and rebuild
-        /// through. Usually the parent's own T, but a layer may name a closed child type.
-        /// </summary>
-        public string? LayerNumeric;
-
-        /// <summary>The layer that declares this parameter, named in any rebuild failure.</summary>
-        public string Owner = string.Empty;
-
-        /// <summary>Whether the parameter itself accepts a null argument.</summary>
-        public bool AcceptsNull;
-
-        /// <summary>
-        /// For a <c>Func&lt;ComputationNode&lt;X&gt;, ComputationNode&lt;X&gt;&gt;</c>, the X. Such a
-        /// delegate is described by running it once and recording what it did, which is the only
-        /// description that survives a closure.
-        /// </summary>
-        public string? TraceableNumeric;
-
-        /// <summary>For an <c>Expression&lt;TDelegate&gt;</c>, the TDelegate.</summary>
-        public string? ExpressionDelegate;
-
-        /// <summary>For a settings object, the properties that carry its state.</summary>
-        public List<SettingModel> Settings = new();
     }
 
     /// <summary>A location reduced to primitives, so it neither roots a Compilation nor breaks equality.</summary>
@@ -1557,9 +921,6 @@ public class LayerStateGenerator : IIncrementalGenerator
         public SourceSpan Location = SourceSpan.None;
         public bool IsPartial;
         public bool HasHandWrittenMetadata;
-
-        /// <summary>Whether any parameter was EXPLICITLY marked [LayerState].</summary>
-        public bool HasExplicitState;
         public bool IsValid;
 
         /// <summary>Value equality, which is what lets Roslyn cache this pipeline step.</summary>

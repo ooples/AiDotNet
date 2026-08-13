@@ -172,18 +172,6 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly int _splitSize;
 
-    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
-    private readonly int _inputSize;
-
-    /// <summary>Construction state: the 'streamAOutputSize' the layer was built with.</summary>
-    private readonly int _streamAOutputSize;
-
-    /// <summary>Construction state: the 'streamBOutputSize' the layer was built with.</summary>
-    private readonly int _streamBOutputSize;
-
-    /// <summary>Construction state: the 'streamALayers' the layer was built with.</summary>
-    private readonly System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>> _streamALayers;
-
     /// <summary>
     /// Creates a parallel streams layer that splits input features and processes each half independently.
     /// </summary>
@@ -213,14 +201,10 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
         int inputSize,
         int streamAOutputSize,
         int streamBOutputSize,
-        [LayerState(Member = "_streamA")] IEnumerable<ILayer<T>> streamALayers,
-        [LayerState(Member = "_streamB")] IEnumerable<ILayer<T>> streamBLayers)
+        IEnumerable<ILayer<T>> streamALayers,
+        IEnumerable<ILayer<T>> streamBLayers)
         : base([inputSize], [streamAOutputSize + streamBOutputSize])
     {
-        _streamALayers = streamALayers;
-        _streamBOutputSize = streamBOutputSize;
-        _streamAOutputSize = streamAOutputSize;
-        _inputSize = inputSize;
         // Fail fast at the boundary on bad inputs so misuse surfaces here, not deep in
         // the forward pass where the error message would be cryptic shape mismatches.
         if (inputSize <= 0)

@@ -340,89 +340,62 @@ public partial class DeltaNetLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        int headBatch = batchSize * _numHeads;
+        var qHeads = ToHeadMajor(q, batchSize, seqLen);
+        var kHeads = Engine.TensorMultiplyScalar(
+            ToHeadMajor(k, batchSize, seqLen),
+            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var vHeads = ToHeadMajor(v, batchSize, seqLen);
+        var betaHeads = Engine.Reshape(
+            Engine.TensorPermute(beta, new[] { 0, 2, 1 }),
+            new[] { headBatch, seqLen, 1 });
 
-        // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        // Save all states for backward pass: [batch, seqLen+1, numHeads, headDim, headDim]
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        // A recurrent state must itself stay on the tape. The old implementation wrote scalar
+        // values into a rented tensor, so every projection before the recurrence received a zero
+        // derivative even though the forward values were right.
+        var state = Tensor<T>.CreateDefault(
+            new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+        var outputs = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
+            var qCol = Engine.Reshape(Engine.TensorSliceAxis(qHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var kCol = Engine.Reshape(Engine.TensorSliceAxis(kHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var kRow = Engine.TensorPermute(kCol, new[] { 0, 2, 1 });
+            var vCol = Engine.Reshape(Engine.TensorSliceAxis(vHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var betaT = Engine.Reshape(Engine.TensorSliceAxis(betaHeads, 1, t),
+                new[] { headBatch, 1, 1 });
 
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T betaVal = beta[new[] { bi, t, hi }];
+            var prediction = Engine.BatchMatMul(state, kCol);
+            var delta = Engine.TensorSubtract(vCol, prediction);
+            var update = Engine.TensorBroadcastMultiply(
+                Engine.BatchMatMul(delta, kRow), betaT);
+            state = Engine.TensorAdd(state, update);
 
-                    // Retrieve current state's prediction for this key: S * k
-                    var sK = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        sK[di] = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], keyScale);
-                            sK[di] = NumOps.Add(sK[di],
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], kVal));
-                        }
-                    }
-
-                    // Delta: v - S*k (the error/correction term)
-                    var delta = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        delta[di] = NumOps.Subtract(v[new[] { bi, t, flatDi }], sK[di]);
-                    }
-
-                    // State update: S = S + beta * delta * k^T  (no alpha, implicit alpha = 1)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], keyScale);
-
-                            T prevS = state[new[] { bi, hi, di, ki }];
-                            T update = NumOps.Multiply(betaVal,
-                                NumOps.Multiply(delta[di], kVal));
-                            state[new[] { bi, hi, di, ki }] = NumOps.Add(prevS, update);
-                        }
-                    }
-
-                    // Output: o = S * q
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T qVal = q[new[] { bi, t, flatKi }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], qVal));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi2 = 0; hi2 < _numHeads; hi2++)
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int ki = 0; ki < _headDimension; ki++)
-                            allStates[new[] { bi, t + 1, hi2, di, ki }] = state[new[] { bi, hi2, di, ki }];
+            var y = Engine.BatchMatMul(state, qCol);
+            outputs.Add(Engine.Reshape(y, new[] { headBatch, 1, _headDimension }));
         }
 
-        _lastStates = allStates;
-        return output;
+        _lastStates = state;
+        return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
     }
+
+    private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(
+            Engine.TensorPermute(
+                Engine.Reshape(value, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+                new[] { 0, 2, 1, 3 }),
+            new[] { batchSize * _numHeads, seqLen, _headDimension });
+
+    private Tensor<T> FromHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(
+            Engine.TensorPermute(
+                Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
+                new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, seqLen, _modelDimension });
 
     /// <summary>
     /// Creates a tensor of ones with the same shape as the template tensor.

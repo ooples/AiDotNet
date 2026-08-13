@@ -11,10 +11,15 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests deep mathematical invariants: numerical gradient verification, KL divergence properties,
 /// temperature scaling correctness, convexity, and information-theoretic bounds.
 /// </summary>
-public abstract class DistillationStrategyTestBase
+public abstract class DistillationStrategyTestBase<T>
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-10;
+
     /// <summary>Factory method — subclasses return their concrete strategy instance.</summary>
-    protected abstract IDistillationStrategy<double> CreateStrategy();
+    protected abstract IDistillationStrategy<T> CreateStrategy();
 
     /// <summary>Batch size for test data. Must be >= 2 for meaningful tests.</summary>
     protected virtual int BatchSize => 4;
@@ -42,24 +47,24 @@ public abstract class DistillationStrategyTestBase
     // All strategies must pass the numerical gradient check — no exceptions.
 
     /// <summary>Creates teacher output logits matrix [batch, classes].</summary>
-    protected virtual Matrix<double> CreateTeacherOutput()
+    protected virtual Matrix<T> CreateTeacherOutput()
     {
         var rng = new Random(42);
-        var data = new Matrix<double>(BatchSize, NumClasses);
+        var data = new Matrix<T>(BatchSize, NumClasses);
         for (int i = 0; i < BatchSize; i++)
             for (int j = 0; j < NumClasses; j++)
-                data[i, j] = rng.NextDouble() * 4.0 - 2.0;
+                data[i, j] = ToT(rng.NextDouble() * 4.0 - 2.0);
         return data;
     }
 
     /// <summary>Creates student output logits matrix [batch, classes].</summary>
-    protected virtual Matrix<double> CreateStudentOutput()
+    protected virtual Matrix<T> CreateStudentOutput()
     {
         var rng = new Random(123);
-        var data = new Matrix<double>(BatchSize, NumClasses);
+        var data = new Matrix<T>(BatchSize, NumClasses);
         for (int i = 0; i < BatchSize; i++)
             for (int j = 0; j < NumClasses; j++)
-                data[i, j] = rng.NextDouble() * 4.0 - 2.0;
+                data[i, j] = ToT(rng.NextDouble() * 4.0 - 2.0);
         return data;
     }
 
@@ -75,8 +80,8 @@ public abstract class DistillationStrategyTestBase
         ValidateDimensions();
         if (!IsNonNegative) return;
         var strategy = CreateStrategy();
-        double loss = strategy.ComputeLoss(CreateStudentOutput(), CreateTeacherOutput());
-        Assert.True(loss >= -1e-10,
+        double loss = ToD(strategy.ComputeLoss(CreateStudentOutput(), CreateTeacherOutput()));
+        Assert.True(loss >= -Tolerance,
             $"Distillation loss should be non-negative but got {loss}.");
     }
 
@@ -90,7 +95,7 @@ public abstract class DistillationStrategyTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var strategy = CreateStrategy();
-        double loss = strategy.ComputeLoss(CreateStudentOutput(), CreateTeacherOutput());
+        double loss = ToD(strategy.ComputeLoss(CreateStudentOutput(), CreateTeacherOutput()));
         Assert.False(double.IsNaN(loss), "Loss is NaN.");
         Assert.False(double.IsInfinity(loss), "Loss is Infinity.");
     }
@@ -107,7 +112,7 @@ public abstract class DistillationStrategyTestBase
         if (!ZeroLossForIdentical) return;
         var strategy = CreateStrategy();
         var output = CreateTeacherOutput();
-        double loss = strategy.ComputeLoss(output, output);
+        double loss = ToD(strategy.ComputeLoss(output, output));
         Assert.True(loss < 0.01,
             $"Identical teacher/student should produce near-zero loss but got {loss}.");
     }
@@ -124,22 +129,28 @@ public abstract class DistillationStrategyTestBase
         var strategy = CreateStrategy();
         var teacher = CreateTeacherOutput();
 
-        // Small perturbation student
-        var smallPert = new Matrix<double>(BatchSize, NumClasses);
+        // Perturb along a non-uniform logit direction. Adding the same scalar to
+        // every class would leave softmax unchanged and make this test vacuous.
+        var smallPert = new Matrix<T>(BatchSize, NumClasses);
         for (int i = 0; i < BatchSize; i++)
             for (int j = 0; j < NumClasses; j++)
-                smallPert[i, j] = teacher[i, j] + 0.1;
+            {
+                double direction = (j % 2 == 0 ? 1.0 : -1.0) * (1.0 + 0.1 * i);
+                smallPert[i, j] = ToT(ToD(teacher[i, j]) + 0.1 * direction);
+            }
 
-        // Large perturbation student
-        var largePert = new Matrix<double>(BatchSize, NumClasses);
+        var largePert = new Matrix<T>(BatchSize, NumClasses);
         for (int i = 0; i < BatchSize; i++)
             for (int j = 0; j < NumClasses; j++)
-                largePert[i, j] = teacher[i, j] + 2.0;
+            {
+                double direction = (j % 2 == 0 ? 1.0 : -1.0) * (1.0 + 0.1 * i);
+                largePert[i, j] = ToT(ToD(teacher[i, j]) + 2.0 * direction);
+            }
 
-        double smallLoss = strategy.ComputeLoss(smallPert, teacher);
-        double largeLoss = strategy.ComputeLoss(largePert, teacher);
+        double smallLoss = ToD(strategy.ComputeLoss(smallPert, teacher));
+        double largeLoss = ToD(strategy.ComputeLoss(largePert, teacher));
 
-        Assert.True(largeLoss >= smallLoss - 1e-10,
+        Assert.True(largeLoss >= smallLoss - Tolerance,
             $"Larger divergence should produce larger loss: small={smallLoss:E4}, large={largeLoss:E4}.");
     }
 
@@ -173,8 +184,8 @@ public abstract class DistillationStrategyTestBase
         for (int i = 0; i < gradient.Rows; i++)
             for (int j = 0; j < gradient.Columns; j++)
             {
-                Assert.False(double.IsNaN(gradient[i, j]), $"Gradient NaN at [{i},{j}].");
-                Assert.False(double.IsInfinity(gradient[i, j]), $"Gradient Inf at [{i},{j}].");
+                Assert.False(double.IsNaN(ToD(gradient[i, j])), $"Gradient NaN at [{i},{j}].");
+                Assert.False(double.IsInfinity(ToD(gradient[i, j])), $"Gradient Inf at [{i},{j}].");
             }
     }
 
@@ -200,7 +211,7 @@ public abstract class DistillationStrategyTestBase
 
         var student = CreateStudentOutput();
         var teacher = CreateTeacherOutput();
-        double epsilon = 1e-5;
+        double epsilon = typeof(T) == typeof(float) ? 1e-3 : 1e-5;
 
         var analyticalGrad = strategy.ComputeGradient(student, teacher);
 
@@ -214,25 +225,31 @@ public abstract class DistillationStrategyTestBase
         {
             // Perturb student[row, col] by +epsilon
             var studentPlus = CloneMatrix(student);
-            studentPlus[row, col] += epsilon;
-            double lossPlus = strategy.ComputeLoss(studentPlus, teacher);
+            double original = ToD(student[row, col]);
+            double plusValue = ToD(ToT(original + epsilon));
+            double minusValue = ToD(ToT(original - epsilon));
+            if (plusValue == minusValue) continue;
+            studentPlus[row, col] = ToT(plusValue);
+            double lossPlus = ToD(strategy.ComputeLoss(studentPlus, teacher));
 
             // Perturb student[row, col] by -epsilon
             var studentMinus = CloneMatrix(student);
-            studentMinus[row, col] -= epsilon;
-            double lossMinus = strategy.ComputeLoss(studentMinus, teacher);
+            studentMinus[row, col] = ToT(minusValue);
+            double lossMinus = ToD(strategy.ComputeLoss(studentMinus, teacher));
 
-            double numericalGrad = (lossPlus - lossMinus) / (2 * epsilon);
-            double analyticalVal = analyticalGrad[row, col];
+            double numericalGrad = (lossPlus - lossMinus) / (plusValue - minusValue);
+            double analyticalVal = ToD(analyticalGrad[row, col]);
 
             double absMax = Math.Max(Math.Abs(analyticalVal), Math.Abs(numericalGrad));
             if (absMax < 1e-7) continue; // Both near zero
 
-            double relError = Math.Abs(analyticalVal - numericalGrad) / (absMax + 1e-8);
-            Assert.True(relError < 0.05,
+            double absError = Math.Abs(analyticalVal - numericalGrad);
+            double relError = absError / (absMax + 1e-8);
+            double absoluteTolerance = typeof(T) == typeof(float) ? 1e-4 : 0.0;
+            Assert.True(absError < absoluteTolerance || relError < 0.05,
                 $"Gradient check failed at [{row},{col}]: " +
                 $"analytical={analyticalVal:G8}, numerical={numericalGrad:G8}, " +
-                $"relError={relError:G4}.");
+                $"absError={absError:G4}, relError={relError:G4}.");
         }
     }
 
@@ -253,7 +270,7 @@ public abstract class DistillationStrategyTestBase
         double maxAbsGrad = 0;
         for (int i = 0; i < gradient.Rows; i++)
             for (int j = 0; j < gradient.Columns; j++)
-                maxAbsGrad = Math.Max(maxAbsGrad, Math.Abs(gradient[i, j]));
+                maxAbsGrad = Math.Max(maxAbsGrad, Math.Abs(ToD(gradient[i, j])));
 
         Assert.True(maxAbsGrad < 0.01,
             $"Gradient for identical inputs should be near-zero but max |grad| = {maxAbsGrad:E4}.");
@@ -273,7 +290,7 @@ public abstract class DistillationStrategyTestBase
         var student = CreateStudentOutput();
         var teacher = CreateTeacherOutput();
 
-        double originalLoss = strategy.ComputeLoss(student, teacher);
+        double originalLoss = ToD(strategy.ComputeLoss(student, teacher));
         var gradient = strategy.ComputeGradient(student, teacher);
 
         // Take a small step in the negative gradient direction.
@@ -281,16 +298,19 @@ public abstract class DistillationStrategyTestBase
         double gradNorm = 0;
         for (int i = 0; i < gradient.Rows; i++)
             for (int j = 0; j < gradient.Columns; j++)
-                gradNorm += gradient[i, j] * gradient[i, j];
+            {
+                double value = ToD(gradient[i, j]);
+                gradNorm += value * value;
+            }
         gradNorm = Math.Sqrt(gradNorm);
         double stepSize = gradNorm > 1e-10 ? 0.01 / gradNorm : 0.01;
 
         var updatedStudent = CloneMatrix(student);
         for (int i = 0; i < updatedStudent.Rows; i++)
             for (int j = 0; j < updatedStudent.Columns; j++)
-                updatedStudent[i, j] -= stepSize * gradient[i, j];
+                updatedStudent[i, j] = ToT(ToD(updatedStudent[i, j]) - stepSize * ToD(gradient[i, j]));
 
-        double updatedLoss = strategy.ComputeLoss(updatedStudent, teacher);
+        double updatedLoss = ToD(strategy.ComputeLoss(updatedStudent, teacher));
 
         Assert.True(updatedLoss <= originalLoss + 1e-6,
             $"Gradient descent step should reduce loss: original={originalLoss:E4}, " +
@@ -359,21 +379,27 @@ public abstract class DistillationStrategyTestBase
     // Helpers
     // =========================================================================
 
-    private static Matrix<double> CloneMatrix(Matrix<double> m)
+    private static Matrix<T> CloneMatrix(Matrix<T> m)
     {
-        var clone = new Matrix<double>(m.Rows, m.Columns);
+        var clone = new Matrix<T>(m.Rows, m.Columns);
         for (int i = 0; i < m.Rows; i++)
             for (int j = 0; j < m.Columns; j++)
                 clone[i, j] = m[i, j];
         return clone;
     }
 
-    private static double GradientNorm(Matrix<double> grad)
+    private static double GradientNorm(Matrix<T> grad)
     {
         double sum = 0;
         for (int i = 0; i < grad.Rows; i++)
             for (int j = 0; j < grad.Columns; j++)
-                sum += grad[i, j] * grad[i, j];
+            {
+                double value = ToD(grad[i, j]);
+                sum += value * value;
+            }
         return Math.Sqrt(sum);
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class DistillationStrategyTestBase : DistillationStrategyTestBase<double> { }

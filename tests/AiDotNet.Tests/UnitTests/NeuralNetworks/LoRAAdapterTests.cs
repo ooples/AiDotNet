@@ -52,18 +52,25 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
         [Fact(Timeout = 120000)]
-        public async Task ParameterCount_WithUnfrozenBase_ReturnsAllParameters()
+        public async Task ParameterCount_WithUnfrozenLazyBase_TracksMaterializedParameters()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
             // Act
-            int paramCount = (int)adapter.ParameterCount;
+            int deferredCount = (int)adapter.ParameterCount;
+
+            var input = new Tensor<double>(new[] { 1, 10 });
+            _ = adapter.Forward(input);
+            int materializedCount = (int)adapter.ParameterCount;
 
             // Assert
-            // Should count both: base (10*5 + 5 = 55) + LoRA (45) = 100
-            Assert.Equal(100, paramCount);
+            // Count queries do not allocate lazy base weights. Once a real forward materializes
+            // them, the same adapter includes base (10*5 + 5 = 55) + LoRA (45) = 100.
+            Assert.Equal(45, deferredCount);
+            Assert.Equal(2, adapter.GetSubLayers().Count);
+            Assert.Equal(100, materializedCount);
         }
 
         [Fact(Timeout = 120000)]

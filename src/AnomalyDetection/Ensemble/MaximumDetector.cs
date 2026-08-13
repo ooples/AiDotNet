@@ -39,6 +39,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 public partial class MaximumDetector<T> : AnomalyDetectorBase<T>
 {
     private List<IAnomalyDetector<T>>? _baseDetectors;
+    private List<(T Min, T Max)>? _trainingScoreRanges;
 
     /// <summary>
     /// Creates a new Maximum ensemble anomaly detector.
@@ -93,7 +94,17 @@ public partial class MaximumDetector<T> : AnomalyDetectorBase<T>
             detector.Fit(X);
         }
 
-        // Calculate scores for training data to set threshold
+        // Learn one normalization range per detector from the FIT data. Normalizing each query
+        // batch against itself makes a point's score depend on whatever unrelated rows happen to
+        // be queried alongside it and makes separately scored normal/outlier batches incomparable.
+        _trainingScoreRanges = new List<(T Min, T Max)>(_baseDetectors.Count);
+        foreach (var detector in _baseDetectors)
+        {
+            var scores = detector.ScoreAnomalies(X);
+            _trainingScoreRanges.Add(ScoreRange(scores));
+        }
+
+        // Calculate scores for training data to set threshold.
         var trainingScores = ScoreAnomaliesInternal(X);
         SetThresholdFromContamination(trainingScores);
 
@@ -112,7 +123,9 @@ public partial class MaximumDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         var baseDetectors = _baseDetectors;
-        if (baseDetectors == null)
+        var scoreRanges = _trainingScoreRanges;
+        if (baseDetectors == null || scoreRanges == null ||
+            scoreRanges.Count != baseDetectors.Count)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
@@ -120,10 +133,11 @@ public partial class MaximumDetector<T> : AnomalyDetectorBase<T>
         // Collect and normalize scores from all detectors
         var allScores = new List<Vector<T>>();
 
-        foreach (var detector in baseDetectors)
+        for (int detectorIndex = 0; detectorIndex < baseDetectors.Count; detectorIndex++)
         {
-            var scores = detector.ScoreAnomalies(X);
-            var normalizedScores = NormalizeScores(scores);
+            var scores = baseDetectors[detectorIndex].ScoreAnomalies(X);
+            var range = scoreRanges[detectorIndex];
+            var normalizedScores = NormalizeScores(scores, range.Min, range.Max);
             allScores.Add(normalizedScores);
         }
 
@@ -146,19 +160,22 @@ public partial class MaximumDetector<T> : AnomalyDetectorBase<T>
         return maxScores;
     }
 
-    private Vector<T> NormalizeScores(Vector<T> scores)
+    private (T Min, T Max) ScoreRange(Vector<T> scores)
     {
-        int n = scores.Length;
-        var result = new Vector<T>(n);
-
         T min = NumOps.MaxValue;
         T max = NumOps.MinValue;
-
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < scores.Length; i++)
         {
             if (NumOps.LessThan(scores[i], min)) min = scores[i];
             if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
         }
+        return (min, max);
+    }
+
+    private Vector<T> NormalizeScores(Vector<T> scores, T min, T max)
+    {
+        int n = scores.Length;
+        var result = new Vector<T>(n);
 
         T range = NumOps.Subtract(max, min);
         T eps = NumOps.FromDouble(1e-10);

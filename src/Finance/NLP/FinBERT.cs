@@ -99,19 +99,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     private readonly bool _useNativeMode;
     #endregion
 
-    
-    #region Native Mode Fields
-    private EmbeddingLayer<T>? _tokenEmbedding;
-    private EmbeddingLayer<T>? _positionEmbedding;
-    private LayerNormalizationLayer<T>? _embeddingNorm;
-    private List<MultiHeadAttentionLayer<T>>? _attentionLayers;
-    private List<DenseLayer<T>>? _feedForwardLayers;
-    private List<LayerNormalizationLayer<T>>? _layerNorms;
-    private List<DropoutLayer<T>>? _dropoutLayers;
-    private DenseLayer<T>? _pooler;
-    private DenseLayer<T>? _classifier;
-    #endregion
-
     #region Tokenizer Fields
     /// <summary>
     /// Simple vocabulary mapping for demonstration.
@@ -315,38 +302,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
                 _dropoutRate));
         }
 
-        ExtractLayerReferences();
-    }
-
-    /// <summary>
-    /// Extracts references to specific layer types for direct access.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> After creating layers, we store references to specific
-    /// layers for easier access during forward/backward passes. This enables efficient
-    /// embedding lookup and layer-by-layer processing.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        var embeddings = Layers.OfType<EmbeddingLayer<T>>().ToList();
-        _tokenEmbedding = embeddings.FirstOrDefault();
-        _positionEmbedding = embeddings.Skip(1).FirstOrDefault();
-
-        var norms = Layers.OfType<LayerNormalizationLayer<T>>().ToList();
-        _embeddingNorm = norms.FirstOrDefault();
-        _layerNorms = norms.Skip(1).ToList();
-
-        _attentionLayers = Layers.OfType<MultiHeadAttentionLayer<T>>().ToList();
-        _feedForwardLayers = Layers.OfType<DenseLayer<T>>().ToList();
-        _dropoutLayers = Layers.OfType<DropoutLayer<T>>().ToList();
-
-        // Last two dense layers are pooler and classifier
-        if (_feedForwardLayers.Count >= 2)
-        {
-            _classifier = _feedForwardLayers.Last();
-            _pooler = _feedForwardLayers[_feedForwardLayers.Count - 2];
-        }
     }
 
     /// <summary>
@@ -654,12 +609,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
 
         SetTrainingMode(false);
 
-        // Get token embeddings from embedding layer
-        var embeddings = _tokenEmbedding is not null
-            ? _tokenEmbedding.Forward(tokenIds)
-            : tokenIds;
-
-        return embeddings;
+        return Layers.Count > 0 ? Layers[0].Forward(tokenIds) : tokenIds;
     }
 
     /// <summary>

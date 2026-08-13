@@ -2,6 +2,7 @@ using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -57,18 +58,19 @@ public partial class SupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Stored training features.
     /// </summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Matrix<T>? _xTrain;
 
     /// <summary>
     /// Stored training labels (converted to +1/-1 for binary).
     /// </summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Vector<T>? _yTrain;
 
     /// <summary>
     /// Alpha coefficients from SMO algorithm.
     /// </summary>
+    [FittedParameter]
     private Vector<T>? _alphas;
 
     /// <summary>

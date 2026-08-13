@@ -191,8 +191,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     public EdgeConditionalConvolutionalLayer(
         int inputFeatures,
         int outputFeatures,
-        // _edgeFeatures is already the cached edge tensor, so the count lives under its own name.
-        [LayerState(Member = "_edgeFeaturesCount")] int edgeFeatures,
+        int edgeFeatures,
         int edgeNetworkHiddenDim = 64,
         IActivationFunction<T>? activationFunction = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())

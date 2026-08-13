@@ -373,6 +373,12 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
     /// <inheritdoc/>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
+        // Dense layers are shape-lazy. A clone requested before the first inference used to see an
+        // empty parameter vector, so the source and clone independently initialized different random
+        // policies on their first Predict call. Materialize both online/target networks before the
+        // snapshot, and the corresponding clone networks before restoring it.
+        MaterializeNetworks();
+
         var clonedOptions = new DQNOptions<T>
         {
             StateSize = _dqnOptions.StateSize,
@@ -392,8 +398,16 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
         };
 
         var clone = new DQNAgent<T>(clonedOptions);
+        clone.MaterializeNetworks();
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    private void MaterializeNetworks()
+    {
+        var state = new Tensor<T>([_dqnOptions.StateSize]);
+        _ = _qNetwork.Predict(state);
+        _ = _targetNetwork.Predict(state);
     }
 
     /// <summary>
@@ -435,14 +449,6 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
         }
 
         SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
-    }
-
-    // Helper methods
-
-    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
-    {
-        var sourceParams = source.GetParameters();
-        target.UpdateParameters(sourceParams);
     }
 
     private int ArgMax(Vector<T> vector)

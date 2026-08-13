@@ -99,10 +99,28 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     {
         _numPoints = input.Shape[0];
 
-        // Use vectorized ReduceMax along axis 0 (points dimension)
-        // This reduces [numPoints, numFeatures] to [1, numFeatures] taking max across all points
-        var pooledOutput = Engine.ReduceMax(input, [0], true, out int[] maxIndices);
+        // Use ReduceMax to select the discrete winning point per feature, then express the exact
+        // selected value as detached-mask * input followed by a tape-tracked sum. This preserves
+        // max-pooling forward semantics and avoids the package ReduceMax backward's incorrect
+        // routing for the point-cloud reduction shapes exercised by DGCNN finite differences.
+        _ = Engine.ReduceMax(input, [0], true, out int[] maxIndices);
         _maxIndices = maxIndices;
+
+        int numFeatures = input.Shape[1];
+        var maxMask = new Tensor<T>([_numPoints, numFeatures]);
+        for (int feature = 0; feature < numFeatures; feature++)
+        {
+            // ReduceMax returns the winning element's flat index in the SOURCE
+            // [point, feature] tensor. Convert it back to a point coordinate;
+            // using it directly made every winner except the earliest features
+            // fail the bounds check and silently wrote an all-zero mask.
+            int selectedPoint = maxIndices[feature] / numFeatures;
+            if ((uint)selectedPoint < (uint)_numPoints)
+                maxMask[selectedPoint, feature] = NumOps.One;
+        }
+
+        var pooledOutput = Engine.ReduceSum(
+            Engine.TensorMultiply(input, maxMask), [0], keepDims: true);
 
         return pooledOutput;
     }

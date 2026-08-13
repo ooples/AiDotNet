@@ -88,9 +88,6 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
     // gradient tape can track parameter identity.
     private  Tensor<T> _cls;
 
-    /// <summary>Construction state: the 'initScale' the layer was built with.</summary>
-    private readonly double _initScale;
-
     /// <summary>Creates a CLS-token prepender for embedDim-wide inputs.</summary>
     /// <param name="embedDim">Embedding dimension (must match the input's last axis).</param>
     /// <param name="initScale">Gaussian init std. ViT / BERT both use 0.02.</param>
@@ -101,7 +98,6 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
             outputShape: [-1, -1, -1],
             scalarActivation: new IdentityActivation<T>())
     {
-        _initScale = initScale;
         if (embedDim <= 0) throw new ArgumentOutOfRangeException(nameof(embedDim));
         _embedDim = embedDim;
         _cls = new Tensor<T>(new[] { 1, embedDim });

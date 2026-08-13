@@ -369,9 +369,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <para><b>For Beginners:</b> tell the base what your model is made of and you never write
     /// parameter counting, saving or loading code — it is derived from that one declaration.</para>
     /// </remarks>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
     {
-        _parameterRegistry.Register(component);
+        _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
         InvalidateTrainableParametersCache();
     }
 
@@ -403,6 +407,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     {
     }
 
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
+    {
+    }
+
     /// <summary>Runs <see cref="RegisterComponents"/> once, before the parameter surface is read.</summary>
     private void EnsureComponentsRegistered()
     {
@@ -410,8 +419,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Set BEFORE invoking: RegisterParameterComponent invalidates caches, which can re-enter
         // through a parameter query, and this must not recurse.
         _componentsRegistered = true;
-        if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
-            generated.RegisterGeneratedParameters(_parameterRegistry);
+        RegisterGeneratedParameterComponents(_parameterRegistry);
         RegisterComponents();
     }
 

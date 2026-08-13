@@ -229,14 +229,16 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
         _norm2 = new GroupNormalizationLayer<T>(numGroups, outChannels);
 
         // Convolutional layers (3x3 with padding=1 preserves spatial dimensions)
-        _conv1 = new ConvolutionalLayer<T>(
+        _conv1 = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: inChannels,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        _conv2 = new ConvolutionalLayer<T>(
+        _conv2 = ConvolutionalLayer<T>.WithInputDepth(
+            inputDepth: outChannels,
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
@@ -246,7 +248,8 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
         // Skip connection: 1x1 conv if channels differ
         if (inChannels != outChannels)
         {
-            _skipConv = new ConvolutionalLayer<T>(
+            _skipConv = ConvolutionalLayer<T>.WithInputDepth(
+                inputDepth: inChannels,
                 outputDepth: outChannels,
                 kernelSize: 1,
                 stride: 1,

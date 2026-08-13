@@ -76,21 +76,32 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// <para>Null is tolerated, so a model may register a component a configuration did not build,
     /// and registration is idempotent by reference.</para>
     /// </remarks>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))]
+        string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(
+            GetType().FullName ?? GetType().Name, memberName, componentExpression, component);
 
     /// <summary>Registers an exceptional component by stable identity.</summary>
     protected void RegisterParameterComponent(
         string stableId,
         IParameterSource<T>? component,
-        ParameterSlotRole role = ParameterSlotRole.Trainable)
-        => _parameterRegistry.Register(stableId, component, role);
+        ParameterSlotRole role = ParameterSlotRole.Trainable,
+        ParameterAvailability availability = ParameterAvailability.Construction)
+        => _parameterRegistry.Register(stableId, component, role, availability);
 
     /// <summary>
     /// Declare this model's trainable components here with <see cref="RegisterParameterComponent"/>.
     /// Called once, lazily, so it runs after the constructor has built them.
     /// </summary>
     protected virtual void RegisterComponents()
+    {
+    }
+
+    /// <summary>Generated override chain for fields declared across the model hierarchy.</summary>
+    protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
     {
     }
 
@@ -108,8 +119,7 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
         {
             if (!_componentsRegistered)
             {
-                if (this is IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
 
                 // Generated sources hold accessors rather than snapshots, so registration can be
@@ -232,7 +242,16 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     }
 
     /// <inheritdoc/>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization
+    {
+        get
+        {
+            _ = Components;
+            return _parameterRegistry.HasComponents
+                ? _parameterRegistry.CanInitializeOptimizerParameters
+                : ParameterCount > 0;
+        }
+    }
 
     /// <inheritdoc/>
     /// <remarks>

@@ -1026,7 +1026,13 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
 
             if (_returnSequences && _allHiddenStates != null)
             {
-                _allHiddenStates.Add(h.Clone());
+                // Every recurrence creates a fresh tensor; the next iteration only rebinds
+                // currentHiddenState and never mutates h. Cloning here was therefore unnecessary
+                // and, more importantly, detached every returned time step from the gradient tape.
+                // Models that consume the full sequence (DeepFilterNet is one) still changed under
+                // finite parameter perturbations, but reverse AD reported zero for all upstream
+                // encoder/GRU parameters because the decoder began at these detached clones.
+                _allHiddenStates.Add(h);
             }
         }
 

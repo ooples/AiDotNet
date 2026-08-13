@@ -159,7 +159,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// During training, these weights are adjusted to capture patterns in your data.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenUnits, _visibleUnits")]
 
     private Tensor<T> _weights;
 
@@ -191,7 +191,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// the biases for those background pixels would become negative during training.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_visibleUnits")]
 
     private Tensor<T> _visibleBiases;
 
@@ -215,6 +215,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// These biases help the RBM learn features that occur with different frequencies in your data.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_hiddenUnits")]
     private Tensor<T> _hiddenBiases;
 
     /// <summary>
@@ -425,6 +426,14 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;
+
+        // Restored before the first forward: keep what arrived. Rule in LayerBase,
+        // shapes from the [TrainableParameter(Shape = ...)] annotations.
+        if (TryAdoptRestoredParameters())
+        {
+            _isInitialized = true;
+            return;
+        }
         if (_visibleUnits <= 0)
             throw new InvalidOperationException(
                 "RBMLayer cannot initialize until OnFirstForward has resolved the visible-unit count from input shape.");

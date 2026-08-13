@@ -648,16 +648,9 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
                 maxAudioTokens: maxAudioTokens,
                 dropoutRate: 0.1));
 
-            // For default layers, we know the exact structure from CreateDefaultAudioGenLayers:
-            // - Embedding layer (1)
-            // - Text encoder transformer layers (_numLmLayers / 2)
-            // - Cross-attention projection (1)
-            // - Language model transformer layers (_numLmLayers)
-            // - Output projection (1)
-            int textEncoderLayers = 1 + (_numLmLayers / 2) + 1; // embedding + transformers + projection
             _textEncoderLayerStart = 0;
-            _textEncoderLayerEnd = textEncoderLayers;
-            _languageModelLayerStart = textEncoderLayers;
+            _textEncoderLayerEnd = 0;
+            _languageModelLayerStart = 0;
             _languageModelLayerEnd = Layers.Count;
         }
     }
@@ -675,6 +668,13 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </remarks>
     private void ValidateLayerConfiguration(List<ILayer<T>> layers, out int textEncoderEnd, out int languageModelStart)
     {
+        if (layers.Count == 1 && layers[0] is AutoregressiveEncoderDecoderLayer<T>)
+        {
+            textEncoderEnd = 0;
+            languageModelStart = 0;
+            return;
+        }
+
         if (layers.Count < 3)
         {
             throw new ArgumentException(
@@ -1016,6 +1016,9 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> ForwardTextEncoder(Tensor<T> input)
     {
+        if (Layers.FirstOrDefault() is AutoregressiveEncoderDecoderLayer<T> encoderDecoder)
+            return encoderDecoder.Encode(input);
+
         var x = input;
         // Use layer boundaries instead of hard-coded fractions
         for (int i = _textEncoderLayerStart; i < _textEncoderLayerEnd && i < Layers.Count; i++)
@@ -1116,6 +1119,9 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> ForwardLanguageModel(Tensor<T> textEmbeddings, Tensor<T> audioCodes)
     {
+        if (Layers.FirstOrDefault() is AutoregressiveEncoderDecoderLayer<T> encoderDecoder)
+            return encoderDecoder.Decode(textEmbeddings, audioCodes);
+
         // Forward pass through language model portion of layers
         // Use layer boundaries instead of hard-coded fractions
         var x = audioCodes;

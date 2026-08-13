@@ -15,13 +15,18 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Subclasses override CreateLayer(), and optionally PrimaryInputShape/SecondaryInputShape.
 /// The Forward method is called via the layer's Forward(Tensor, Tensor) overload.
 /// </summary>
-public abstract class DualInputLayerTestBase
+public abstract class DualInputLayerTestBase<T>
 {
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+    protected virtual double Tolerance => typeof(T) == typeof(float) ? 1e-6 : 1e-12;
+
     /// <summary>
     /// Factory method — create a fresh instance of the dual-input layer under test.
     /// The returned layer must have a Forward(Tensor, Tensor) method.
     /// </summary>
-    protected abstract ILayer<double> CreateLayer();
+    protected abstract ILayer<T> CreateLayer();
 
     /// <summary>
     /// Shape of the primary input tensor (first argument to Forward).
@@ -49,12 +54,12 @@ public abstract class DualInputLayerTestBase
     // Helpers
     // =========================================================================
 
-    protected static Tensor<double> CreateRandomTensor(int[] shape, int seed = 42)
+    protected static Tensor<T> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var rng = new Random(seed);
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble() * 2.0 - 1.0;
+            tensor[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
         return tensor;
     }
 
@@ -62,10 +67,10 @@ public abstract class DualInputLayerTestBase
     /// Calls the dual-input Forward method via reflection, since ILayer only declares
     /// Forward(Tensor). Layers with dual-input define an additional Forward(Tensor, Tensor).
     /// </summary>
-    protected Tensor<double> ForwardDual(ILayer<double> layer, Tensor<double> primary, Tensor<double> secondary)
+    protected Tensor<T> ForwardDual(ILayer<T> layer, Tensor<T> primary, Tensor<T> secondary)
     {
         var method = layer.GetType().GetMethod("Forward",
-            new[] { typeof(Tensor<double>), typeof(Tensor<double>) });
+            new[] { typeof(Tensor<T>), typeof(Tensor<T>) });
 
         if (method is null)
         {
@@ -74,11 +79,11 @@ public abstract class DualInputLayerTestBase
         }
 
         var result = method.Invoke(layer, new object[] { primary, secondary });
-        if (result is Tensor<double> tensor)
+        if (result is Tensor<T> tensor)
             return tensor;
 
         throw new InvalidOperationException(
-            $"Forward(Tensor, Tensor) on {layer.GetType().Name} returned {result?.GetType().Name ?? "null"} instead of Tensor<double>.");
+            $"Forward(Tensor, Tensor) on {layer.GetType().Name} returned {result?.GetType().Name ?? "null"} instead of Tensor<{typeof(T).Name}>.");
     }
 
     // =========================================================================
@@ -99,9 +104,9 @@ public abstract class DualInputLayerTestBase
         Assert.True(output.Length > 0, "Layer output should not be empty.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ToD(output[i])),
                 $"Output[{i}] is NaN — numerical instability in Forward.");
-            Assert.False(double.IsInfinity(output[i]),
+            Assert.False(double.IsInfinity(ToD(output[i])),
                 $"Output[{i}] is Infinity — overflow in Forward.");
         }
     }
@@ -156,7 +161,7 @@ public abstract class DualInputLayerTestBase
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ToD(output1[i]) - ToD(output2[i])) > Tolerance)
             {
                 anyDifferent = true;
                 break;
@@ -198,7 +203,7 @@ public abstract class DualInputLayerTestBase
         {
             var paramsForward = layer.GetType().GetMethod(
                 "Forward",
-                new[] { typeof(Tensor<double>[]) });
+                new[] { typeof(Tensor<T>[]) });
             if (paramsForward is not null)
             {
                 paramsForward.Invoke(layer, new object[] { new[] { primary, secondary } });
@@ -214,7 +219,7 @@ public abstract class DualInputLayerTestBase
             {
                 var dualForward = layer.GetType().GetMethod(
                     "Forward",
-                    new[] { typeof(Tensor<double>), typeof(Tensor<double>) });
+                    new[] { typeof(Tensor<T>), typeof(Tensor<T>) });
                 if (dualForward is not null)
                 {
                     dualForward.Invoke(layer, new object[] { primary, secondary });
@@ -258,25 +263,25 @@ public abstract class DualInputLayerTestBase
 
         // Probe Forward(primary) so lazy layers materialise their weights
         // before the roundtrip — same rationale as the parameter-count probe.
-        using (var probe = new Tensor<double>(PrimaryInputShape))
+        using (var probe = new Tensor<T>(PrimaryInputShape))
         {
-            for (int i = 0; i < probe.Length; i++) probe[i] = 0.01 * (i + 1);
+            for (int i = 0; i < probe.Length; i++) probe[i] = ToT(0.01 * (i + 1));
             try { layer.Forward(probe); } catch { }
         }
 
         if (layer.ParameterCount == 0) return;
 
         var original = layer.GetParameters();
-        var modified = new Vector<double>(original.Length);
+        var modified = new Vector<T>(original.Length);
         for (int i = 0; i < original.Length; i++)
-            modified[i] = original[i] + 0.001;
+            modified[i] = NumOps.Add(original[i], ToT(0.001));
 
         layer.SetParameters(modified);
         var retrieved = layer.GetParameters();
 
         Assert.Equal(modified.Length, retrieved.Length);
         for (int i = 0; i < modified.Length; i++)
-            Assert.Equal(modified[i], retrieved[i], 1e-15);
+            Assert.Equal(modified[i], retrieved[i]);
     }
 
     // INVARIANT 7: (Removed — Backward deleted in tape-based autodiff migration)
@@ -300,6 +305,9 @@ public abstract class DualInputLayerTestBase
         var output = ForwardDual(layer, primary, secondary);
         Assert.True(output.Length > 0, "Output should not be empty after ResetState.");
         for (int i = 0; i < output.Length; i++)
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN after ResetState + Forward.");
+            Assert.False(double.IsNaN(ToD(output[i])), $"Output[{i}] is NaN after ResetState + Forward.");
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class DualInputLayerTestBase : DualInputLayerTestBase<double> { }

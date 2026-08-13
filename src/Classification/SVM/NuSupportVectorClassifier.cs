@@ -2,6 +2,7 @@ using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -82,24 +83,26 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Stored training features.
     /// </summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Matrix<T>? _xTrain;
 
     /// <summary>
     /// Stored training labels (converted to +1/-1).
     /// </summary>
-    [Buffer]
+    [Buffer(Availability = ParameterAvailability.Fit)]
     private Vector<T>? _yTrain;
 
     /// <summary>
     /// Alpha coefficients.
     /// </summary>
+    [FittedParameter]
     private Vector<T>? _alphas;
 
     /// <summary>
     /// Rho parameter (offset in the decision function).
     /// </summary>
 
+    [FittedParameter]
     private T _rho;
 
 

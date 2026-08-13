@@ -274,6 +274,11 @@ public class BaseClassesIntegrationTests
         // same weights -- which is what DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks
         // is actually asserting.
 
+        public override IFullModel<double, Vector<double>, Vector<double>> Clone()
+        {
+            return new TestDeepAgent(Options);
+        }
+
         public Vector<double> ComputeGradients(
             Vector<double> input,
             Vector<double> target,

@@ -329,8 +329,12 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <para>Null is tolerated, so an agent may register a component a configuration did not build,
     /// and registration is idempotent by reference.</para>
     /// </remarks>
-    protected void RegisterParameterComponent(IParameterSource<T>? component)
-        => _parameterRegistry.Register(component);
+    protected void RegisterParameterComponent(
+        IParameterSource<T>? component,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(component))] string? componentExpression = null,
+        [System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+        => _parameterRegistry.RegisterLegacy(GetType().FullName ?? GetType().Name,
+            memberName, componentExpression, component);
 
     protected void RegisterParameterComponent(string stableId, IParameterSource<T>? component,
         AiDotNet.Models.Parameters.ParameterSlotRole role = AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
@@ -341,6 +345,11 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// Called once, lazily, so it runs after the constructor has built the networks.
     /// </summary>
     protected virtual void RegisterComponents()
+    {
+    }
+
+    protected virtual void RegisterGeneratedParameterComponents(
+        AiDotNet.Models.Parameters.ParameterComponentRegistry<T> registry)
     {
     }
 
@@ -363,8 +372,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         {
             if (!_componentsRegistered)
             {
-                if (this is AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<T> generated)
-                    generated.RegisterGeneratedParameters(_parameterRegistry);
+                RegisterGeneratedParameterComponents(_parameterRegistry);
                 RegisterComponents();
                 _componentsRegistered = true;
             }

@@ -969,24 +969,31 @@ public partial class DeepState<T> : ForecastingModelBase<T>
         }
 
         // Mismatched element counts: prefer broadcasting if the shapes are
-        // compatible (e.g. [1, N] + [N]), otherwise fall back to a manual
-        // per-element combine that only touches the overlapping prefix.
-        // The upstream broadcaster throws for pathological cases like
-        // [1, 40] + [1, 1600] that arise when the SSM transition/observation
-        // heads produce different latent dims — clipping to the common
-        // prefix keeps the forward pass well-defined instead of collapsing
-        // Predict entirely.
+        // compatible (e.g. [1, N] + [N]), otherwise combine the overlapping
+        // prefix and preserve the remainder of a. Every operation here must
+        // go through Engine: the previous manual Tensor allocation copied
+        // scalar values outside the gradient tape. DeepState therefore
+        // produced correct finite differences but zero analytical gradients
+        // for its transition/observation branches.
         bool broadcastCompatible = BroadcastShapesMatch(a._shape, b._shape);
         if (broadcastCompatible)
             return Engine.TensorBroadcastAdd(a, b);
 
         int minLen = Math.Min(a.Length, b.Length);
-        var result = new Tensor<T>(a._shape);
-        for (int i = 0; i < minLen; i++)
-            result[i] = NumOps.Add(a[i], b[i]);
-        for (int i = minLen; i < a.Length; i++)
-            result[i] = a[i];
-        return result;
+        var flatA = Engine.Reshape(a, [a.Length]);
+        var flatB = Engine.Reshape(b, [b.Length]);
+        var aPrefix = Engine.TensorSlice(flatA, [0], [minLen]);
+        var bPrefix = Engine.TensorSlice(flatB, [0], [minLen]);
+        var sumPrefix = Engine.TensorAdd(aPrefix, bPrefix);
+
+        Tensor<T> flatResult = sumPrefix;
+        if (a.Length > minLen)
+        {
+            var aRemainder = Engine.TensorSlice(flatA, [minLen], [a.Length - minLen]);
+            flatResult = Engine.TensorConcatenate([sumPrefix, aRemainder], axis: 0);
+        }
+
+        return Engine.Reshape(flatResult, a._shape);
     }
 
     private static bool BroadcastShapesMatch(int[] x, int[] y)

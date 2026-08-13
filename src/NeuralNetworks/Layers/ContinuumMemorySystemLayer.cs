@@ -53,17 +53,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>Construction state: the 'hiddenDim' the layer was built with.</summary>
-    private readonly int _hiddenDim;
-
-    /// <summary>The number of frequency levels this layer was built with (k in the paper).</summary>
-    /// <remarks>
-    /// Held as a field only so <c>[LayerState]</c> can read it back at save time. Every use inside
-    /// the constructor is of the parameter, and the arrays below are all sized by it, so this and
-    /// <c>_updateFrequencies.Length</c> are necessarily equal.
-    /// </remarks>
-    private readonly int _numFrequencyLevels;
-
     /// <summary>
     /// Creates a CMS layer as a chain of MLP blocks.
     /// </summary>
@@ -76,20 +65,12 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     public ContinuumMemorySystemLayer(
         int[] inputShape,
         int hiddenDim,
-        // [LayerState] because this one is checked against updateFrequencies, which IS recorded.
-        // Without it the generated factory pinned numFrequencyLevels to the literal default 3 while
-        // reading a five-element updateFrequencies back out of the bag, and the constructor's own
-        // consistency check below rejected the pair -- so a HopeNetwork built with five levels could
-        // not be cloned at all. An optional argument that another recorded argument is validated
-        // against is not optional state.
-        [LayerState] int numFrequencyLevels = 3,
+        int numFrequencyLevels = 3,
         int[]? updateFrequencies = null,
         T[]? learningRates = null,
         IEngine? engine = null)
         : base(inputShape, new[] { hiddenDim })
     {
-        _hiddenDim = hiddenDim;
-        _numFrequencyLevels = numFrequencyLevels;
 
         // Validate inputs
         if (inputShape == null || inputShape.Length == 0)

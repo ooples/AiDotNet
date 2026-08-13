@@ -31,7 +31,7 @@ public static class ShapeInference
 {
     /// <summary>
     /// Reports whether a type's effective <see cref="IShapeContract.OutputAxesFor"/> implementation
-    /// declares a probeable symbolic law rather than an explicit unavailable marker.
+    /// declares a probeable symbolic law rather than an explicit or conditional unavailable marker.
     /// </summary>
     /// <param name="type">A closed concrete type to inspect.</param>
     /// <returns>
@@ -42,6 +42,8 @@ public static class ShapeInference
     /// The interface map resolves overrides and explicit interface implementations correctly. Attribute
     /// inheritance is deliberately disabled: when a derived type overrides an unavailable base method,
     /// that override is a new contract and must be verified unless it explicitly opts out itself.
+    /// Conditional base contracts can also require a virtual metadata property to be overridden; that
+    /// requirement is checked statically so an inherited sentinel value never forces model construction.
     /// </remarks>
     public static bool HasDeclaredOutputShapeContract(Type type)
     {
@@ -60,10 +62,45 @@ public static class ShapeInference
         for (int i = 0; i < map.InterfaceMethods.Length; i++)
         {
             if (map.InterfaceMethods[i] != contractMethod) continue;
-            return !map.TargetMethods[i].IsDefined(typeof(ShapeContractUnavailableAttribute), inherit: false);
+
+            MethodInfo target = map.TargetMethods[i];
+            if (target.IsDefined(typeof(ShapeContractUnavailableAttribute), inherit: false)) return false;
+
+            foreach (ShapeContractRequiresPropertyOverrideAttribute requirement in target.GetCustomAttributes(
+                         typeof(ShapeContractRequiresPropertyOverrideAttribute), inherit: false))
+            {
+                if (!OverridesRequiredProperty(type, target.DeclaringType, requirement.PropertyName))
+                    return false;
+            }
+
+            return true;
         }
 
         return false;
+    }
+
+    private static bool OverridesRequiredProperty(Type concreteType, Type? contractDeclaringType,
+        string propertyName)
+    {
+        if (contractDeclaringType is null) return false;
+
+        const BindingFlags declaredInstance = BindingFlags.Instance | BindingFlags.Public
+            | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        PropertyInfo? declaredProperty = contractDeclaringType.GetProperty(propertyName, declaredInstance);
+        MethodInfo? declaredGetter = declaredProperty?.GetGetMethod(nonPublic: true);
+        if (declaredGetter is null || !declaredGetter.IsVirtual) return false;
+
+        PropertyInfo? effectiveProperty = null;
+        for (Type? cursor = concreteType; cursor is not null; cursor = cursor.BaseType)
+        {
+            effectiveProperty = cursor.GetProperty(propertyName, declaredInstance);
+            if (effectiveProperty is not null) break;
+        }
+
+        MethodInfo? effectiveGetter = effectiveProperty?.GetGetMethod(nonPublic: true);
+        return effectiveGetter is not null
+            && effectiveGetter.DeclaringType != declaredGetter.DeclaringType
+            && effectiveGetter.GetBaseDefinition() == declaredGetter.GetBaseDefinition();
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AiDotNet.Generators;
@@ -496,6 +497,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "MelGAN", "MemFlow", "LegalBERTNER", "KMaXDeepLab",
         // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
         "MiDaS", "METER", "DocPedia", "MERT", "LXMERT",
+        // GradientFlow_ShouldBeNonZeroAndFinite timed out at the 120s gate for these two. Measured
+        // on the sibling hand-written fixture (Phi3Vision, same class of paper-scale VLM): a SINGLE
+        // Predict is 131s, plus 17s in the constructor -- the warmup forward alone exceeds the whole
+        // budget before any gradient work starts. So this is the correct-but-too-slow case this list
+        // exists for, not a fast-failing bug, which must never be tagged.
+        //
+        // The ladder was walked, not assumed: float is already applied (they emit as <base><float>),
+        // and shrink was MEASURED rather than guessed -- cutting Phi3Vision's resolution 336 -> 112,
+        // a 9x reduction in image area, moved Predict only 131s -> 105s. The cost is the paper-scale
+        // 3072-wide decoder, not the vision tower, so the only shrink that would fit the gate would
+        // leave the PR shard exercising a model that is no longer the published architecture.
+        // (LLaVAVideo is already listed above; Phi3Vision and Transfusion carry the trait directly
+        // on their hand-written fixtures. Those three only appeared in a local sweep because the
+        // filter omitted &Category!=HeavyTimeout -- they were never running in the PR shard.)
+        "ClaudeVision", "VoiceCraft",
         // Shard M MedS-Meta. These three exhausted the float -> cap -> shrink ladder, each rung
         // measured rather than assumed:
         //   float  - all three already emit as <base>TestBase<float> via the A-Z shard rule.
@@ -641,6 +657,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> OptimizerWarmupClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
+            // DocGCN's bounded 1-vs-2 probe measured 1.2334 untrained, then 1.3166 / 1.3119:
+            // finite parameters and an improving short-to-long direction, but both observations
+            // still sit inside Adam's initial overshoot. Measure after warm-up rather than hiding
+            // the regression behind a relaxed loss tolerance.
+            "DocGCN",
+            // DiffCut's measured FP32 trajectory is 1.1668 untrained, 1.2762 after one
+            // step, and 1.2517 after two: the second step is already descending, but the
+            // 1-vs-2 fixture stops inside AdamW's initial overshoot. Observe the same
+            // strict baseline comparison after the existing 15-step memorization budget.
+            "DiffCutSegmentation",
             "SALMONN",
             "SeACo",
         };
@@ -3919,7 +3945,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         {
 
-            if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
+            if (model.ClassName == "FastText" && model.TypeParameterCount == 1)
+            {
+                // Production retains fastText's paper-faithful 2,000,000 subword buckets. Its dense
+                // embedding gradient and dense Adam moments make even one test update several GB,
+                // so conformance must exercise the SAME shared word/subword matrix topology at a
+                // generated smoke scale. Keeping this here (rather than a manual fixture override)
+                // makes the resource policy part of the scaffold generator and leaves model defaults
+                // untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputSize: 32, outputSize: 128), " +
+                    "vocabSize: 128, bucketSize: 1024, embeddingDimension: 16, maxTokens: 32)";
+            }
+            else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                     or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
@@ -4763,6 +4803,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DLinearOptions<double> {{ " +
                     "LookbackWindow = 24, ForecastHorizon = 1, MovingAverageKernel = 3, " +
                     "LearningRate = 0.0001, Epochs = 100, BatchSize = 8 })";
+            }
+            else if (model.ClassName == "DGCNN" && model.TypeParameterCount == 1)
+            {
+                // Keep the complete dynamic-graph -> multi-scale concat -> global-pool -> classifier
+                // topology, but make the generated conformance fixture bounded. With N = k + 1 every
+                // point's neighbour set is all other points, so finite differences do not cross the
+                // discrete TopK boundary while perturbing a weight. The production defaults remain
+                // ModelNet40-scale (k=20, 64/64/128/256 channels).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DGCNNOptions {{ " +
+                    "NumClasses = 4, InputFeatureDim = 3, KnnK = 7, " +
+                    "EdgeConvChannels = new[] { 8, 8 }, ClassifierChannels = new[] { 8 }, " +
+                    "UseDropout = false, DropoutRate = 0.0, LearningRate = 0.001 })";
             }
             else if (model.ClassName == "DistilBERTNER" && model.TypeParameterCount == 1)
             {
@@ -5816,6 +5868,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
                     "imageSize: 32, maxSequenceLength: 16, visionDim: 32, textDim: 32, " +
                     "fusionDim: 32, visionLayers: 1, fusionLayers: 1, numHeads: 4, vocabSize: 64)";
+            }
+            else if (model.ClassName == "Pix2Struct" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
+            {
+                // The collision registry deliberately assigns Pix2StructTests to the trainable
+                // PixelToSequence implementation, not the separate VisionLanguage wrapper. Its
+                // paper defaults are 1024-wide with 18+18 layers and a 50,000-token head; merely
+                // selecting FP32 still leaves the generated training and clone probes above the
+                // 120-second gate. Exercise the same patch encoder -> transformer encoder/decoder
+                // -> vocabulary head through the public scale parameters at CI size. Production
+                // defaults and every public customization path remain unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
+                    "imageSize: 32, patchSize: 16, maxPatches: 4, maxSequenceLength: 8, " +
+                    "hiddenDim: 32, numEncoderLayers: 1, numDecoderLayers: 1, " +
+                    "numHeads: 2, vocabSize: 64)";
             }
             else if (model.ClassName == "MATCHA" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -10899,20 +10970,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // to float. Only the generic-type-argument occurrences of `double` are rewritten;
         // the `double`-keyword tolerance/return-type overrides emitted below are untouched.
         // Float-scaffold selection: the legacy hard-coded roster, the self-declaring
-        // [GenerateFloatTestScaffold] attribute, or a currently resource-bound generated
-        // model shard. The A-I and N-Z shards repeatedly exhaust the 16 GB CI runner when
-        // many individually viable neural/layer-based <double> training fixtures execute
-        // back-to-back; using <float> for every generic test family in the affected ranges
-        // prevents the cumulative OOM/timeout whack-a-mole while preserving topology and
-        // invariants. Lightweight non-generic regression/RL/anomaly bases stay unchanged.
-        // GraFPrint and SambaLanguageModel remain in double because their float optimizer
-        // trajectories are known to diverge; their expensive probes are already capped.
-        char shardInitial = model.ClassName.Length > 0
-            ? char.ToUpperInvariant(model.ClassName[0])
-            : '\0';
-        bool isResourceBoundShard = (shardInitial >= 'A' && shardInitial <= 'I')
-                                 || (shardInitial >= 'N' && shardInitial <= 'Z');
+        // [GenerateFloatTestScaffold] attribute, or a supported generic family. Supported
+        // families run at float regardless of the model-name initial; the former A-I / N-Z
+        // shard-letter rule arbitrarily excluded J-M even though genuinely incompatible models
+        // are already named individually below. Non-generic family bases remain at their default
+        // precision until the base itself is made generic. GraFPrint, SambaLanguageModel and
+        // TabPFNNetwork remain in double because their float optimizer trajectories are known to
+        // diverge; their expensive probes are already capped.
         bool supportsFloatScaffold = baseClassName is
+            // These families are explicitly eligible for float scaffolds. Keep this list and the
+            // compiled-output assertions in GeneratedFloatScaffoldSmokeTests in sync.
+            "AnomalyDetectorTestBase" or
+            "CausalModelTestBase" or
+            "ClassificationModelTestBase" or
+            "MultiLabelClassifierTestBase" or
+            "RegressionModelTestBase" or
+            "ReinforcementLearningTestBase" or
+            "RiskModelTestBase" or
+            "VideoDenoisingTestBase" or
+            "VideoInpaintingTestBase" or
+            "VideoStabilizationTestBase" or
             "AudioClassifierTestBase" or
             "AudioNNModelTestBase" or
             "DocumentNNModelTestBase" or
@@ -10928,22 +11005,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "OpticalFlowTestBase" or
             "PortfolioOptimizerTestBase" or
             "SegmentationTestBase" or
+            "SequenceLabelingNERTestBase" or
             "SpanBasedNERTestBase" or
             "SpeakerRecognitionTestBase" or
+            "SurvivalModelTestBase" or
             "TimeSeriesModelTestBase" or
             "TransformerNERTestBase" or
             "TTSModelTestBase" or
             "VideoNNModelTestBase" or
             "VideoSuperResolutionTestBase" or
             "VisionLanguageTestBase";
-        bool useFloat = Fp32TestClassNames.Contains(model.ClassName)
-                     || model.RequestsFloatScaffold
-                     || (isResourceBoundShard
-                         && supportsFloatScaffold
-                         // TabPFN had no timeout/OOM evidence; blanket T-Z floatification
-                         // introduced late-step optimizer drift in MoreData. Keep it in
-                         // the default precision and reserve FP32 for measured resource cases.
-                         && model.ClassName is not ("GraFPrint" or "SambaLanguageModel" or "TabPFNNetwork"));
+        // These exclusions override EVERY opt-in route, including the legacy FP32 roster and an
+        // attribute. SambaLanguageModel is still present in the historical roster above; placing
+        // this check only inside the supported-family branch silently floated it despite the
+        // measured optimizer divergence documented by HeavyTrainingTimeoutClassNames.
+        bool isFloatExcluded = model.ClassName is
+            "GraFPrint" or "SambaLanguageModel" or "TabPFNNetwork";
+        bool useFloat = !isFloatExcluded
+                     && (Fp32TestClassNames.Contains(model.ClassName)
+                         || model.RequestsFloatScaffold
+                         || supportsFloatScaffold);
         if (useFloat)
         {
             baseClassName += "<float>";
@@ -11811,6 +11892,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 50;");
         }
+        else if (model.ClassName == "Pix2Struct"
+                 && typeName.StartsWith(
+                     "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
+        {
+            // The bounded constructor above uses four 16x16 patch tokens and a 64-token head.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 64 };");
+        }
         else if (model.ClassName == "MATCHA"
                  && typeName.StartsWith(
                      "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
@@ -12004,8 +12093,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // branch emits [3, spatial, spatial], tripping that guard. Feed a raw point cloud of N
             // points; N must exceed the dynamic k-NN neighbour count (DGCNNOptions.KnnK default 20).
             // Output is the class logits (DGCNNOptions.NumClasses default 40), independent of N.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 128, 3 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 40 };");
+            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 3 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
             // DGCNN is a multi-class classifier trained with CrossEntropyWithLogitsLoss (fused
             // LogSoftmax + NLL). The base CreateRandomTargetTensor yields dense uniform [0,1)
             // floats — an ill-posed target for cross-entropy: the softmax-minus-target gradient
@@ -12339,23 +12428,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                 sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 4, {codecDim} }};");
                 sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"                tensor[i] = rng.Next(0, {tokenVocab});");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
                 if (model.ClassName is "UniAudio" or "WhisperSpeech" or "XTTSv2" or "XTTSv2Clone")
                 {
                     // These codec language models predict a discrete acoustic token at each
@@ -12372,24 +12444,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    }");
                     sb.AppendLine();
                 }
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            int offset = value < 0.5 ? 1 : 17;");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"                tensor[i] = (i + offset) % {tokenVocab};");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}value;");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "FishSpeech" or "VALLE2" or "XTTSv2Clone"
                         or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm";
@@ -12491,28 +12545,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 8, {(model.ClassName == "FastSpeech" ? 16 : 80)} }};");
                 }
                 sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = rng.Next(0, 64);");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
                 sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
                 sb.AppendLine("    {");
                 sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
                 sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
                 sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        int offset = value < 0.5 ? 1 : 17;");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = (i + offset) % 64;");
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
@@ -12909,35 +12946,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // axis 0 would ask the model for a zero-row input.
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
                 sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                // Match on RANK, not on the exact dimensions: DifferentInputLengths_ShouldNotCrash
-                // asks for a halved [1, 8] input, and an exact-shape test would drop that to the
-                // continuous branch and feed fractional values into a phoneme embedding. The mel
-                // target is rank 3, so rank alone separates input from target.
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = isInputShape ? rng.Next(0, 64) : {(useFloat ? "(float)" : string.Empty)}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        if (!isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine($"            for (int i = 0; i < tensor.Length; i++) tensor[i] = {(useFloat ? "(float)" : string.Empty)}value;");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        // Distinct token run per scalar so different values map to different phoneme");
-                sb.AppendLine("        // sequences rather than collapsing onto the same embedding row.");
-                sb.AppendLine("        int baseTok = value < 0.5 ? 1 : 17;");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = (i + baseTok) % 64;");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
             }
             else if (model.ClassName == "MusicSourceSeparator")
             {
@@ -13112,14 +13120,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
             sb.AppendLine();
-            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-            sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-            sb.AppendLine("            tensor[i] = rng.Next(0, 16);");
-            sb.AppendLine("        return tensor;");
-            sb.AppendLine("    }");
-            sb.AppendLine();
             sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
             sb.AppendLine("    {");
             sb.AppendLine("        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
@@ -13128,15 +13128,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        for (int i = 0; i < samples; i++)");
             sb.AppendLine("            target[i * classes + rng.Next(classes)] = NumOps.One;");
             sb.AppendLine("        return target;");
-            sb.AppendLine("    }");
-            sb.AppendLine();
-            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-            sb.AppendLine("        int offset = value < 0.5 ? 1 : 9;");
-            sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-            sb.AppendLine("            tensor[i] = (i + offset) % 16;");
-            sb.AppendLine("        return tensor;");
             sb.AppendLine("    }");
             sb.AppendLine();
             sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
@@ -13199,7 +13190,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
             // Language-model fixtures use legal token widths; GAN fixtures use their latent/image contracts.
             bool isCausalGanGenerator = model.ClassName == "CausalGANGenerator";
-            int dim = model.ClassName == "XLSTMLanguageModel"
+            int dim = model.ClassName == "FastText"
+                ? 32 // Generated bounded fixture declares inputSize/maxTokens: 32.
+                : model.ClassName is "EagleLanguageModel" or "FinchLanguageModel"
+                ? 4 // Their bounded constructors above declare inputSize: 4.
+                : model.ClassName == "XLSTMLanguageModel"
                 ? 16
                 : model.ClassName is "Mamba2LanguageModel" or "FalconMambaLanguageModel" or "GriffinLanguageModel" or "HawkLanguageModel"
                     or "GLALanguageModel" or "GatedDeltaNetLanguageModel" ? 32
@@ -13213,7 +13208,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else
             {
                 sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
-                sb.AppendLine(model.ClassName == "XLSTMLanguageModel"
+                sb.AppendLine(model.ClassName == "FastText"
+                    ? "    protected override int[] OutputShape => new[] { 128 };"
+                    : model.ClassName == "XLSTMLanguageModel"
                     ? "    protected override int[] OutputShape => new[] { 16, 64 };"
                     : isCausalGanGenerator
                         ? "    protected override int[] OutputShape => new[] { 10 };"
@@ -13231,6 +13228,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        int positions = target.Length / classes;");
                 sb.AppendLine("        for (int p = 0; p < positions; p++)");
                 sb.AppendLine("            target[p * classes + rng.Next(classes)] = 1;");
+                sb.AppendLine("        return target;");
+                sb.AppendLine("    }");
+            }
+
+            if (model.ClassName == "FastText")
+            {
+                // FastText's head is a categorical softmax classifier. Generate one legal class
+                // per output row so every inherited training invariant measures its real objective.
+                string scalarType = useFloat ? "float" : "double";
+                sb.AppendLine();
+                sb.AppendLine($"    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> CreateRandomTargetTensor(int[] shape, System.Random rng)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}>(shape);");
+                sb.AppendLine("        int classes = shape[shape.Length - 1];");
+                sb.AppendLine("        int rows = target.Length / classes;");
+                sb.AppendLine("        for (int row = 0; row < rows; row++)");
+                sb.AppendLine("            target[row * classes + rng.Next(classes)] = 1;");
                 sb.AppendLine("        return target;");
                 sb.AppendLine("    }");
             }
@@ -13302,61 +13316,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // treats as continuous → projects to scalar multiples of one vector → the following
                 // (scale-invariant) LayerNorm collapses them to an identical output, defeating EVERY
                 // input-sensitivity/gradient invariant (DifferentInputs, GradientFlow, ScaledInput,
-                // MoreData, Training_ShouldChangeParameters), not just DifferentInputs_AfterTraining.
-                // Emit token-ID input tensors (legal [0,100) range, well below any standard vocab) for the
-                // INPUT shape only — targets (a different shape, via CreateRandomTargetTensor) stay
-                // continuous as their loss expects. The model is UNCHANGED (still paper-faithful token
-                // embeddings); this only feeds it the discrete token input a lookup model actually consumes.
-                // The reduced Mamba2/Zamba/Zamba2 generated fixtures intentionally use vocabSize=128
-                // through their public constructors. The inherited ScaledInput test multiplies every
-                // generated token by 10, so constrain these fixtures' source tokens to [0, 12):
-                // both original and scaled sequences remain legal token IDs while the unchanged test
-                // still exercises real input sensitivity.
-                int randomTokenUpperBound = model.ClassName == "XLSTMLanguageModel"
-                    ? 6 // ScaledInput multiplies by 10; IDs 0..5 stay legal for the 64-token fixture.
-                    : model.ClassName is "Mamba2LanguageModel" or "FalconMambaLanguageModel" or "GriffinLanguageModel" or "HawkLanguageModel"
-                        or "GLALanguageModel" or "GatedDeltaNetLanguageModel"
-                        or "ZambaLanguageModel" or "Zamba2LanguageModel"
-                        ? 12
-                        : 100;
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"                tensor[i] = rng.Next(0, {randomTokenUpperBound});");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {elemCast}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            // Distinct base token per scalar so different `value`s → different token");
-                sb.AppendLine("            // sequences (0.1 and 0.9 must produce different embeddings, not the same).");
-                sb.AppendLine("            int baseTok = value < 0.5 ? 3 : 37;");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("                tensor[i] = (i + baseTok) % 100;");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {elemCast}value;");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
+                // Input values and constant probes now come from the model's generated contract.
+                // Token ranges and legal discrete mutations therefore follow the constructed
+                // embedding automatically instead of being duplicated in this scaffold.
                 sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
                 sb.AppendLine("    public override async System.Threading.Tasks.Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()");
                 sb.AppendLine("    {");
@@ -14286,6 +14248,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
+        }
+
+        if (model.ClassName == "DCCRN")
+        {
+            // DCCRN's public Train method preprocesses raw waveforms, but its differentiable
+            // ForwardForTraining contract deliberately begins at the complex STFT so the tape
+            // stays on the learnable enhancement graph. Gradcheck must exercise that same graph,
+            // not feed the public waveform shape directly into a rank-4 complex convolution.
+            string scalarType = useFloat ? "float" : "double";
+            sb.AppendLine($"    protected override (AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> Input, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> Target) CreateGradientCheckExample(System.Random rng)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        int[] stftShape = new[] { 1, 2, 33, 4 };");
+            sb.AppendLine("        return (CreateRandomTensor(stftShape, rng), CreateRandomTensor(stftShape, rng));");
+            sb.AppendLine("    }");
+        }
+
+        if (model.ClassName == "EoMT")
+        {
+            // EoMT is a mask transformer with an explicit spatial position signal. A constant image
+            // removes texture but not position, so requiring one near-uniform decoded class is not an
+            // architectural invariant. The base test still runs two complete forwards and requires
+            // every value to be finite and exactly reproducible.
+            sb.AppendLine("    protected override bool UniformInputShouldProduceUniformMask => false;");
         }
 
         // MoreData_ShouldNotDegrade trains two same-weight clones on the SAME seeded random task
@@ -15396,9 +15381,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // the negative ReLU half-space and falsely report identical zeros.
             // Use identity only in the generated fixture so the invariant tests
             // the depthwise/pointwise convolution rather than activation clipping.
-            constructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()";
+            constructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<float>)new AiDotNet.ActivationFunctions.IdentityActivation<float>()";
         }
-        string constructorExpr = $"new {typeName}<double>({constructorArgs})";
+        else
+        {
+            constructorArgs = GeneratedTestFloatify.Floatify(constructorArgs);
+        }
+        string constructorExpr = $"new {typeName}<float>({constructorArgs})";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -15419,10 +15408,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // compile time if it drifts, instead of the old pattern of two
         // strings-in-lockstep that could silently diverge. See issue #1166.
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
-        sb.AppendLine($"public class {testClassName} : LayerTestBase");
+        sb.AppendLine($"public class {testClassName} : LayerTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
+        sb.AppendLine($"    protected override ILayer<float> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
         // Override InputShape if specified
@@ -15468,7 +15457,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
         string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
-        string constructorExpr = $"new {typeName}<double>({constructorArgs})";
+        constructorArgs = GeneratedTestFloatify.Floatify(constructorArgs);
+        string constructorExpr = $"new {typeName}<float>({constructorArgs})";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -15484,10 +15474,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // fails the test-assembly compile rather than silently drifting out of
         // sync with the [CollectionDefinition] name — issue #1166 comment.
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
-        sb.AppendLine($"public class {testClassName} : DualInputLayerTestBase");
+        sb.AppendLine($"public class {testClassName} : DualInputLayerTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
+        sb.AppendLine($"    protected override ILayer<float> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
         // Override input shapes if specified
@@ -15537,7 +15527,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
         string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
-        string constructorExpr = $"new {typeName}<double>({constructorArgs})";
+        constructorArgs = GeneratedTestFloatify.Floatify(constructorArgs);
+        string constructorExpr = $"new {typeName}<float>({constructorArgs})";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -15553,10 +15544,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // fails the test-assembly compile rather than silently drifting out of
         // sync with the [CollectionDefinition] name — issue #1166 comment.
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
-        sb.AppendLine($"public class {testClassName} : MultiInputLayerTestBase");
+        sb.AppendLine($"public class {testClassName} : MultiInputLayerTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
+        sb.AppendLine($"    protected override ILayer<float> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
         if (!string.IsNullOrEmpty(layer.TestInputShape))
@@ -15583,6 +15574,36 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// that calls the appropriate setup method (SetLaplacian, SetEdgeAdjacency, etc.)
     /// with synthetic graph data.
     /// </summary>
+    private static string FloatifyGraphSetupCode(string code)
+    {
+        string typedCode = GeneratedTestFloatify.Floatify(code);
+        var root = CSharpSyntaxTree.ParseText(typedCode).GetRoot();
+        return new DoubleLiteralToFloatRewriter().Visit(root)?.ToFullString() ?? typedCode;
+    }
+
+    /// <summary>
+    /// Changes only parsed double numeric literals to float literals. Using the syntax tree keeps
+    /// numbers inside comments and strings untouched, unlike a textual suffix replacement.
+    /// Integer literals remain integers so array extents, indices, and loop bounds do not drift.
+    /// </summary>
+    private sealed class DoubleLiteralToFloatRewriter : CSharpSyntaxRewriter
+    {
+        public override SyntaxNode? VisitLiteralExpression(LiteralExpressionSyntax node)
+        {
+            if (!node.IsKind(SyntaxKind.NumericLiteralExpression) || node.Token.Value is not double value)
+                return base.VisitLiteralExpression(node);
+
+            string text = node.Token.Text;
+            if (text.EndsWith("d", System.StringComparison.OrdinalIgnoreCase))
+                text = text.Substring(0, text.Length - 1);
+
+            var token = SyntaxFactory.Literal(text + "f", (float)value)
+                .WithLeadingTrivia(node.Token.LeadingTrivia)
+                .WithTrailingTrivia(node.Token.TrailingTrivia);
+            return node.WithToken(token);
+        }
+    }
+
     private static void EmitGraphLayerTestClass(
         SourceProductionContext context,
         LayerTestInfo layer,
@@ -15590,13 +15611,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
         string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
-        string constructorExpr = $"new {typeName}<double>({constructorArgs})";
+        constructorArgs = GeneratedTestFloatify.Floatify(constructorArgs);
+        string constructorExpr = $"new {typeName}<float>({constructorArgs})";
 
         // Setup code comes directly from the layer's [LayerProperty(TestSetupCode = "...")]
         // attribute — no string matching on class names.
         string setupCode = string.IsNullOrEmpty(layer.TestSetupCode)
             ? "        // No setup required"
-            : $"        {layer.TestSetupCode}";
+            : $"        {FloatifyGraphSetupCode(layer.TestSetupCode)}";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -15613,13 +15635,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // fails the test-assembly compile rather than silently drifting out of
         // sync with the [CollectionDefinition] name — issue #1166 comment.
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
-        sb.AppendLine($"public class {testClassName} : GraphLayerTestBase");
+        sb.AppendLine($"public class {testClassName} : GraphLayerTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
+        sb.AppendLine($"    protected override ILayer<float> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine();
-        sb.AppendLine($"    protected override void SetupLayer(ILayer<double> layer)");
+        sb.AppendLine($"    protected override void SetupLayer(ILayer<float> layer)");
         sb.AppendLine("    {");
         sb.AppendLine(setupCode);
         sb.AppendLine("    }");
@@ -15961,8 +15983,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(act.FullyQualifiedName);
         string constructorExpr = act.TypeParameterCount <= 1
-            ? $"new {typeName}<double>()"
-            : $"new {typeName}<double>()";
+            ? $"new {typeName}<float>()"
+            : $"new {typeName}<float>()";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -15972,10 +15994,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        sb.AppendLine($"public class {testClassName} : ActivationFunctionTestBase");
+        sb.AppendLine($"public class {testClassName} : ActivationFunctionTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override IActivationFunction<double> CreateActivation()");
+        sb.AppendLine($"    protected override IActivationFunction<float> CreateActivation()");
         sb.AppendLine($"        => {constructorExpr};");
 
         // Override properties based on attribute metadata
@@ -16010,8 +16032,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
         string constructorExpr = loss.TypeParameterCount <= 1
-            ? $"new {typeName}<double>()"
-            : $"new {typeName}<double>()";
+            ? $"new {typeName}<float>()"
+            : $"new {typeName}<float>()";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -16021,10 +16043,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        sb.AppendLine($"public class {testClassName} : LossFunctionTestBase");
+        sb.AppendLine($"public class {testClassName} : LossFunctionTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILossFunction<double> CreateLoss()");
+        sb.AppendLine($"    protected override ILossFunction<float> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
 
         // Override properties based on attribute metadata
@@ -16133,7 +16155,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
-        string constructorExpr = $"new {typeName}<double>()";
+        string constructorExpr = $"new {typeName}<float>()";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -16143,10 +16165,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        sb.AppendLine($"public class {testClassName} : TripletLossTestBase");
+        sb.AppendLine($"public class {testClassName} : TripletLossTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override TripletLoss<double> CreateLoss()");
+        sb.AppendLine($"    protected override TripletLoss<float> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine("}");
 
@@ -16163,7 +16185,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
-        string constructorExpr = $"new {typeName}<double>()";
+        string constructorExpr = $"new {typeName}<float>()";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -16173,10 +16195,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        sb.AppendLine($"public class {testClassName} : ContrastiveLossTestBase");
+        sb.AppendLine($"public class {testClassName} : ContrastiveLossTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override NoiseContrastiveEstimationLoss<double> CreateLoss()");
+        sb.AppendLine($"    protected override NoiseContrastiveEstimationLoss<float> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine("}");
 
@@ -16193,7 +16215,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
-        string constructorExpr = $"new {typeName}<double>()";
+        string constructorExpr = $"new {typeName}<float>()";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -16203,10 +16225,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        sb.AppendLine($"public class {testClassName} : SparseCategoricalLossTestBase");
+        sb.AppendLine($"public class {testClassName} : SparseCategoricalLossTestBase<float>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILossFunction<double> CreateLoss()");
+        sb.AppendLine($"    protected override ILossFunction<float> CreateLoss()");
         sb.AppendLine($"        => {constructorExpr};");
         sb.AppendLine("}");
 
@@ -16708,6 +16730,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         };
     }
 
+    private static bool IsValleCodecLMModel(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className is "VALLE" or "VALLEX" or "VALLE2" or "VALLEXClone";
+    }
+
     private static int CodecLMInputVocabSize(string className)
     {
         int tickIdx = className.IndexOf('`');
@@ -16716,13 +16745,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2" or "OuteTTS"
                 or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM" or "SoundStorm" or "Zonos" ? 64 : 256;
-    }
-
-    private static bool IsValleCodecLMModel(string className)
-    {
-        int tickIdx = className.IndexOf('`');
-        if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "VALLE" or "VALLEX" or "VALLE2" or "VALLEXClone";
     }
 
     private static string GetValleCodecLMOptionsType(string className)
@@ -17561,9 +17583,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(symbol.ToDisplayString());
-        string constructorExpr = symbol.TypeParameters.Length <= 1
-            ? $"new {typeName}<double>()"
-            : $"new {typeName}<double>()";
+        // GraN-DAG remains an explicit FP64 exception: the genuine FP32 scaffold passes 13/14
+        // causal invariants but learns no true edge in the strong-signal recovery fixture. Keep the
+        // entire generated type chain at one precision; mixing a double factory into a float base
+        // would only hide the failed conversion behind an adapter.
+        bool useDoublePrecision = category == AlgorithmCategory.CausalDiscovery &&
+            testClassName == "GraNDAGAlgorithmTests";
+        string numericType = useDoublePrecision ? "double" : "float";
+        string constructorExpr = $"new {typeName}<{numericType}>()";
 
         // The paper's cMLP is a proximal-gradient model whose absent causes are represented by
         // EXACTLY-zero first-layer groups. The production constructor retains its research-scale
@@ -17572,7 +17599,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // within CI's per-test limit.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "NeuralGrangerAlgorithmTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "HiddenUnits = 10, MaxLag = 3, LearningRate = 0.05, MaxEpochs = 120, " +
                 "SparsityPenalty = 0.1, EdgeThreshold = 0.1 })";
         }
@@ -17584,12 +17611,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // identity-factor initialization.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "NOTEARSLowRankTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "MaxRank = 2 })";
         }
 
         // DAGMA Linear's paper default remains its 30k/60k central-path schedule. The generated
-        // causal scaffold owns double-valued synthetic data, so use the FP32 boundary adapter and
+        // causal scaffold keeps synthetic fixture math in double and converts at its typed boundary;
         // bound each inner stage through the public MaxIterations option. The FP64 5,000-step
         // fixture recovered the true edges but its two-discovery MoreData invariant hit 60 seconds
         // under 4-way runner contention. FP32 at 5,000 steps completes MoreData in under 10 seconds;
@@ -17598,36 +17625,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // defaults and the mathematical assertions remain unchanged.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DAGMALinearTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
-                "EdgeThreshold = 0.01, MaxIterations = 5000, Seed = 42 }))";
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "EdgeThreshold = 0.01, MaxIterations = 5000, Seed = 42 })";
         }
 
-        // The causal invariant base owns double-valued synthetic data, so the neural-model FP32
-        // roster above cannot float this algorithm fixture. Convert only at the scaffold boundary
-        // and run DAGMA nonlinear itself at FP32. Its public MaxIterations cap bounds the paper
+        // The generic causal invariant base converts its double-valued fixtures at the algorithm
+        // boundary, so DAGMA nonlinear itself runs at FP32. Its public MaxIterations cap bounds the paper
         // central-path schedule, and HiddenUnits shrinks the generated fixture's MLP from 10 to 4.
         // A Release-DLL invariant sweep under concurrent shard load proved 250 iterations green
         // (including the two-discovery MoreData probe in 2.7 seconds); omitting either option still
         // preserves the published production defaults.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DAGMANonlinearTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "EdgeThreshold = 0.05, SparsityPenalty = 0.01, HiddenUnits = 4, " +
-                "MaxIterations = 250, Seed = 42 }))";
+                "MaxIterations = 250, Seed = 42 })";
         }
 
         // DYNOTEARS performs 200 inner gradient steps for every outer augmented-Lagrangian
         // iteration. Its paper/default 100-iteration schedule therefore made the generated
         // two-discovery MoreData invariant exceed 60 seconds under four-worker contention.
         // Keep that production default intact; run the deterministic four-variable fixture in
-        // FP32 through the causal boundary adapter and cap only its public outer iteration count.
+        // FP32 through the generic causal boundary and cap only its public outer iteration count.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DYNOTEARSAlgorithmTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
-                "MaxIterations = 25, Seed = 42 }))";
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                // InnerIterations is a public option shared by the continuous causal family; DYNOTEARS
+                // previously ignored it and always ran 200 inner steps. Fifty retains real augmented-
+                // Lagrangian optimization while bounding the generated fixture under shard contention.
+                "MaxIterations = 25, InnerIterations = 50, Seed = 42 })";
         }
 
         // DECI's variational posterior needs a longer, higher-signal warm-up than
@@ -17637,9 +17663,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // defaults intact while exercising its public tuning surface at a bounded scale.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "DECIAlgorithmTests")
         {
-            constructorExpr = $"new global::AiDotNet.Tests.Helpers.FloatCausalDiscoveryAdapter(" +
-                $"new {typeName}<float>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
-                "HiddenUnits = 16, LearningRate = 0.01, MaxEpochs = 200, EdgeThreshold = 0.1, Seed = 42 }))";
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+                "HiddenUnits = 16, LearningRate = 0.01, MaxEpochs = 200, EdgeThreshold = 0.1, Seed = 42 })";
         }
 
         // GOLEM exposes MaxIterations through the shared causal options. Keep
@@ -17648,7 +17673,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // observed in the deterministic smoke data.
         if (category == AlgorithmCategory.CausalDiscovery && testClassName == "GOLEMAlgorithmTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "MaxIterations = 5000, EdgeThreshold = 0.5, Seed = 42 })";
         }
 
@@ -17658,7 +17683,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (category == AlgorithmCategory.CausalDiscovery &&
             testClassName is "NOTEARSNonlinearTests" or "NOTEARSSobolevTests")
         {
-            constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
+            constructorExpr = $"new {typeName}<{numericType}>(new AiDotNet.Models.Options.CausalDiscoveryOptions {{ " +
                 "MaxIterations = 2, HiddenUnits = 4, Seed = 42 })";
         }
 
@@ -17671,27 +17696,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         switch (category)
         {
             case AlgorithmCategory.CausalDiscovery:
-                baseClass = "CausalDiscoveryTestBase";
+                baseClass = $"CausalDiscoveryTestBase<{numericType}>";
                 factoryMethod = "CreateAlgorithm";
-                factoryReturnType = "ICausalDiscoveryAlgorithm<double>";
+                factoryReturnType = $"ICausalDiscoveryAlgorithm<{numericType}>";
                 extraUsings = "using AiDotNet.CausalDiscovery;\n";
                 break;
             case AlgorithmCategory.ActiveLearning:
-                baseClass = "ActiveLearningTestBase";
+                baseClass = "ActiveLearningTestBase<float>";
                 factoryMethod = "CreateStrategy";
-                factoryReturnType = "IActiveLearningStrategy<double>";
+                factoryReturnType = "IActiveLearningStrategy<float>";
                 extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.Models;\n";
                 break;
             case AlgorithmCategory.ContinualLearning:
-                baseClass = "ContinualLearningTestBase";
+                baseClass = "ContinualLearningTestBase<float>";
                 factoryMethod = "CreateStrategy";
-                factoryReturnType = "IContinualLearningStrategy<double>";
+                factoryReturnType = "IContinualLearningStrategy<float>";
                 extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.NeuralNetworks;\n";
                 break;
             case AlgorithmCategory.Distillation:
-                baseClass = "DistillationStrategyTestBase";
+                baseClass = "DistillationStrategyTestBase<float>";
                 factoryMethod = "CreateStrategy";
-                factoryReturnType = "IDistillationStrategy<double>";
+                factoryReturnType = "IDistillationStrategy<float>";
                 extraUsings = "using AiDotNet.Interfaces;\n";
                 break;
             default:
@@ -17759,7 +17784,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Emit mock factory methods for categories that need them
         if (category == AlgorithmCategory.ActiveLearning)
         {
-            EmitMockModelFactory(sb);
+            EmitMockModelFactory(sb, "float");
         }
         else if (category == AlgorithmCategory.ContinualLearning)
         {
@@ -17776,47 +17801,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// <summary>
     /// Emits a CreateMockModel override that returns a simple pass-through IFullModel for active learning tests.
     /// </summary>
-    private static void EmitMockModelFactory(StringBuilder sb)
+    private static void EmitMockModelFactory(StringBuilder sb, string numericType)
     {
         sb.AppendLine();
-        sb.AppendLine("    protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateMockModel()");
+        sb.AppendLine($"    protected override IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> CreateMockModel()");
         sb.AppendLine("        => new PassThroughModel();");
         sb.AppendLine();
-        sb.AppendLine("    private class PassThroughModel : IFullModel<double, Tensor<double>, Tensor<double>>");
+        sb.AppendLine($"    private class PassThroughModel : IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>>");
         sb.AppendLine("    {");
-        sb.AppendLine("        public Tensor<double> Predict(Tensor<double> input)");
+        sb.AppendLine($"        public Tensor<{numericType}> Predict(Tensor<{numericType}> input)");
         sb.AppendLine("        {");
-        sb.AppendLine("            // Return softmax-like output: each sample gets uniform class probabilities");
+        sb.AppendLine("            // Return deterministic, normalized probability-like output.");
         sb.AppendLine("            int batch = input.Shape[0];");
         sb.AppendLine("            int numClasses = 4;");
         sb.AppendLine("            var rng = new System.Random(batch);");
-        sb.AppendLine("            var data = new double[batch * numClasses];");
+        sb.AppendLine($"            var data = new {numericType}[batch * numClasses];");
         sb.AppendLine("            for (int i = 0; i < batch; i++)");
         sb.AppendLine("            {");
-        sb.AppendLine("                double sum = 0;");
+        sb.AppendLine($"                {numericType} sum = 0;");
         sb.AppendLine("                for (int c = 0; c < numClasses; c++)");
         sb.AppendLine("                {");
-        sb.AppendLine("                    data[i * numClasses + c] = rng.NextDouble() + 0.01;");
+        sb.AppendLine($"                    data[i * numClasses + c] = ({numericType})(rng.NextDouble() + 0.01);");
         sb.AppendLine("                    sum += data[i * numClasses + c];");
         sb.AppendLine("                }");
         sb.AppendLine("                for (int c = 0; c < numClasses; c++)");
         sb.AppendLine("                    data[i * numClasses + c] /= sum;");
         sb.AppendLine("            }");
-        sb.AppendLine("            return new Tensor<double>(data, new[] { batch, numClasses });");
+        sb.AppendLine($"            return new Tensor<{numericType}>(data, new[] {{ batch, numClasses }});");
         sb.AppendLine("        }");
-        sb.AppendLine("        public void Train(Tensor<double> input, Tensor<double> output) { }");
-        sb.AppendLine("        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();");
-        sb.AppendLine("        public Vector<double> GetParameters() => new Vector<double>(10);");
-        sb.AppendLine("        public void SetParameters(Vector<double> p) { }");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) => this;");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => this;");
-        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => this;");
+        sb.AppendLine($"        public void Train(Tensor<{numericType}> input, Tensor<{numericType}> output) {{ }}");
+        sb.AppendLine($"        public ILossFunction<{numericType}> DefaultLossFunction => new MeanSquaredErrorLoss<{numericType}>();");
+        sb.AppendLine($"        public Vector<{numericType}> GetParameters() => new Vector<{numericType}>(10);");
+        sb.AppendLine($"        public void SetParameters(Vector<{numericType}> p) {{ }}");
+        sb.AppendLine($"        public IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> WithParameters(Vector<{numericType}> p) => this;");
+        sb.AppendLine($"        public IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> DeepCopy() => this;");
+        sb.AppendLine($"        public IFullModel<{numericType}, Tensor<{numericType}>, Tensor<{numericType}>> Clone() => this;");
         sb.AppendLine("        public long ParameterCount => 10;");
         sb.AppendLine("        public bool SupportsParameterInitialization => false;");
-        sb.AppendLine("        public Vector<double> SanitizeParameters(Vector<double> p) => p;");
-        sb.AppendLine("        public Vector<double> ComputeGradients(Tensor<double> i, Tensor<double> t, ILossFunction<double>? l = null) => new Vector<double>(10);");
-        sb.AppendLine("        public void ApplyGradients(Vector<double> g, double lr) { }");
-        sb.AppendLine("        public AiDotNet.Models.ModelMetadata<double> GetModelMetadata() => new();");
+        sb.AppendLine($"        public Vector<{numericType}> SanitizeParameters(Vector<{numericType}> p) => p;");
+        sb.AppendLine($"        public Vector<{numericType}> ComputeGradients(Tensor<{numericType}> i, Tensor<{numericType}> t, ILossFunction<{numericType}>? l = null) => new Vector<{numericType}>(10);");
+        sb.AppendLine($"        public void ApplyGradients(Vector<{numericType}> g, {numericType} lr) {{ }}");
+        sb.AppendLine($"        public AiDotNet.Models.ModelMetadata<{numericType}> GetModelMetadata() => new();");
         sb.AppendLine("        public byte[] Serialize() => System.Array.Empty<byte>();");
         sb.AppendLine("        public void Deserialize(byte[] data) { }");
         sb.AppendLine("        public void SaveModel(string path) { }");
@@ -17826,7 +17851,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("        public System.Collections.Generic.IEnumerable<int> GetActiveFeatureIndices() => System.Array.Empty<int>();");
         sb.AppendLine("        public void SetActiveFeatureIndices(System.Collections.Generic.IEnumerable<int> f) { }");
         sb.AppendLine("        public bool IsFeatureUsed(int i) => false;");
-        sb.AppendLine("        public System.Collections.Generic.Dictionary<string, double> GetFeatureImportance() => new();");
+        sb.AppendLine($"        public System.Collections.Generic.Dictionary<string, {numericType}> GetFeatureImportance() => new();");
         // IFullModel now requires IDisposable (issue #1136 plan part 3 — every model
         // implementer must declare its disposal contract). PassThroughModel holds
         // no disposable state, so the implementation is a no-op.

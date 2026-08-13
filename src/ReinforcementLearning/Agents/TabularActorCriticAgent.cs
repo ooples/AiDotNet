@@ -180,6 +180,19 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "value-table",
+            new AiDotNet.Models.Parameters.KeyedScalarCollectionParameterSource<T, string>(
+                () => _valueTable));
+        RegisterParameterComponent(
+            "policy",
+            new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
+                () => _policy));
+    }
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()
     {
@@ -237,8 +250,6 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
     }
-
-
     /// <summary>
     /// The value-table states in a fixed order, so export and restore agree.
     /// </summary>

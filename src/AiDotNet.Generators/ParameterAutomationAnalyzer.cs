@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -42,16 +43,6 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
 {
     private const string Category = "AiDotNet.ParameterAutomation";
 
-    private static readonly DiagnosticDescriptor MissingAutoParameters = new(
-        id: "AIDN080",
-        title: "Layer does not use automatic parameter discovery",
-        messageFormat: "Layer '{0}' is not marked [AutoParameters]; its tensor fields must be registered by hand, which is how parameters get silently omitted from training",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true,
-        description: "Add [AutoParameters] so every non-nullable tensor field is registered automatically. " +
-                     "Mark exceptions with [Buffer] (persistent, never trained) or [Scratch] (transient).");
-
     private static readonly DiagnosticDescriptor RedundantParameterSurface = new(
         id: "AIDN081",
         title: "Parameter surface is derived and should not be overridden",
@@ -74,20 +65,6 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                      "diffusion models mixed a COUNT from one child with a VECTOR LENGTH from another " +
                      "in one expression, and VideoUNetPredictor's estimate was nine times out.");
 
-    private static readonly DiagnosticDescriptor UndiscoverableWeight = new(
-        id: "AIDN083",
-        title: "Field holds weights the parameter generator cannot see",
-        messageFormat: "'{0}.{1}' is {2}, so automatic discovery skips it; it contributes to no ParameterCount, no checkpoint and no optimizer",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
-        isEnabledByDefault: true,
-        description: "Make it a non-readonly Tensor<T> if it is trained, or mark it [Buffer] (persistent " +
-                     "state that is never optimized) or [Scratch] (rebuilt each forward). Say which — " +
-                     "silence here is indistinguishable from an oversight, and the parameter-count " +
-                     "contract test cannot catch it because the count and the vector omit the SAME field " +
-                     "and therefore agree on a wrong answer. InformerModel reported 1,688 parameters " +
-                     "against a real 167,640 this way: every Q/K/V/O projection, FFN weight and LayerNorm " +
-                     "gain it owned was readonly, so nothing counted, saved or trained them.");
     private static readonly DiagnosticDescriptor MissingPartialForAutomation = new(
         id: "AIDN085",
         title: "Model must be partial for its weights to be registered automatically",
@@ -124,9 +101,103 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                    + "for -- were in neither surface and were lost on every save.");
 
 
+
+    private static readonly DiagnosticDescriptor CountUsedAsReadiness = new(
+        id: "AIDN087",
+        title: "ParameterCount compared against zero as a readiness test",
+        messageFormat: "'{0}' tests ParameterCount against zero; a zero count means \"not sized yet\", "
+                     + "not \"has no parameters\", so this branch treats a deferred component as an "
+                     + "empty one",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Ask about READINESS instead. A lazily sized component reports 0 until its shape "
+                   + "arrives, so `count == 0` conflates 'nothing to do' with 'ask me later' and the two "
+                   + "need opposite handling: the first is a no-op, the second must park the payload and "
+                   + "replay it at materialization. This is not hypothetical -- LayerBase carried a "
+                   + "comment saying a zero count 'is not a claim that the layer has no parameters; it is "
+                   + "the layer saying it does not know yet' directly above a guard that threw on exactly "
+                   + "that, rejecting every restore into a deferred layer and accounting for ~104 CI "
+                   + "failures. Prefer ParameterLayoutSnapshot readiness (ParameterFree vs ShapeDeferred "
+                   + "vs ShapeResolvedUnmaterialized vs Materialized), or on a layer the local pair "
+                   + "IsShapeResolved || ParametersAreConstructionSized. ParameterFree is the only state "
+                   + "that genuinely means zero.");
+
+    private static readonly DiagnosticDescriptor UnclassifiedNumericState = new(
+        id: "AIDN088",
+        title: "Numeric state requires an explicit semantic classification",
+        messageFormat: "'{0}.{1}' stores {2}, but the generator cannot know whether it is a parameter, fitted state, buffer, alias, external state, or scratch",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Classify the member exactly once with [TrainableParameter], [FittedParameter], "
+                   + "[FrozenParameter], [Buffer], [Scratch], [ParameterAlias], or [ExternalState]. "
+                   + "Tensor type, nullability and field names never imply parameter ownership.");
+
+    private static readonly DiagnosticDescriptor ConflictingNumericState = new(
+        id: "AIDN089",
+        title: "Numeric state has conflicting semantic classifications",
+        messageFormat: "'{0}.{1}' has mutually exclusive state declarations: {2}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A numeric member has one owner and one semantic role. Remove the conflicting "
+                   + "attributes so the generator can emit one canonical manifest slot.");
+
+    private static readonly DiagnosticDescriptor MissingStateAvailability = new(
+        id: "AIDN090",
+        title: "Nullable persistent state requires an explicit availability lifecycle",
+        messageFormat: "'{0}.{1}' is nullable {2}; declare whether it becomes available after shape resolution, fitting, or a conditional branch",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Nullability is a storage fact, not a lifecycle contract. Set Availability on "
+                   + "the semantic attribute (or Optional = true for a conditional trainable "
+                   + "parameter) so pre-fit count, restore, and checkpoint behavior are generated "
+                   + "from an explicit declaration.");
+
+    private static readonly DiagnosticDescriptor InvalidParameterAlias = new(
+        id: "AIDN091",
+        title: "Parameter alias target is invalid",
+        messageFormat: "'{0}.{1}' declares alias target '{2}', but {3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "An alias must name a different member on the same declaration whose numeric "
+                   + "storage has one persistent semantic role. Invalid aliases cannot be excluded "
+                   + "safely because they may hide otherwise unowned state.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // AIDN087 is a CONSUMPTION rule, so it works over expressions rather than declarations: the
+        // other rules in this file catch "you wrote a surface you should not have", and this one
+        // catches "you asked the surface the wrong question". Both failure modes ship silently.
+        var zeroCountComparisons = context.SyntaxProvider.CreateSyntaxProvider(
+                predicate: static (node, _) => IsParameterCountZeroComparison(node),
+                transform: static (ctx, _) => ctx.Node.GetLocation())
+            .Where(static loc => loc is not null);
+
+        context.RegisterSourceOutput(zeroCountComparisons.Collect(), static (spc, locations) =>
+        {
+            foreach (var loc in locations)
+            {
+                if (loc is null) continue;
+                var file = loc.SourceTree?.FilePath ?? string.Empty;
+
+                // The manifest and the layer base are where the readiness distinction is DEFINED, so
+                // they are the two places allowed to compare against zero while implementing it.
+                if (file.EndsWith("ParameterManifest.cs", System.StringComparison.OrdinalIgnoreCase)
+                    || file.EndsWith("ParameterComponentRegistry.cs", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    CountUsedAsReadiness, loc, System.IO.Path.GetFileNameWithoutExtension(file)));
+            }
+        });
+
         var classes = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax,
                 transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
@@ -135,9 +206,127 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         context.RegisterSourceOutput(classes.Collect(), static (spc, symbols) =>
         {
             var seen = new System.Collections.Generic.HashSet<string>();
+            var classified = new System.Collections.Generic.HashSet<string>();
             foreach (var type in symbols)
             {
-                if (type is null || type.IsAbstract || type.TypeKind != TypeKind.Class) continue;
+                if (type is null || type.TypeKind != TypeKind.Class) continue;
+
+                bool parameterOwner = ExtendsLayerBase(type) || ExtendsAny(type,
+                    "AiDotNet.Diffusion.DiffusionModelBase<",
+                    "AiDotNet.Diffusion.VAE.VAEModelBase<",
+                    "AiDotNet.NeuralNetworks.NeuralNetworkBase<",
+                    "AiDotNet.Models.ModelBase<",
+                    "AiDotNet.Models.ModelWrapperBase<",
+                    "AiDotNet.Regression.RegressionBase<",
+                    "AiDotNet.Classification.ClassifierBase<",
+                    "AiDotNet.Clustering.ClusteringBase<",
+                    "AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningAgentBase<",
+                    "AiDotNet.TimeSeries.TimeSeriesModelBase<");
+
+                // AIDN088/089 are the common semantic front door for BOTH generator trunks and
+                // abstract bases. This is intentionally independent of [AutoParameters], nullability,
+                // readonly and registration calls: none of those facts says what numeric storage is.
+                if (parameterOwner && classified.Add(type.ToDisplayString()))
+                {
+                    var registrations =
+                        ParameterMemberSemanticModel.GetRegistrationClassifications(type);
+                    foreach (var member in type.GetMembers())
+                    {
+                        var memberType = ParameterMemberSemanticModel.GetMemberType(member);
+                        if (member.IsStatic || member.IsImplicitlyDeclared || memberType is null
+                            || member is IFieldSymbol { IsConst: true }
+                            || !ParameterMemberSemanticModel.IsNumericStateStorage(memberType)
+                            || member is IFieldSymbol field
+                                && ParameterMemberSemanticModel.IsConventionGradient(
+                                    field, type, registrations))
+                            continue;
+
+                        var classification = ParameterMemberSemanticModel.ClassifyWithRegistrations(
+                            member, registrations);
+                        var memberLocation = member.Locations.FirstOrDefault(location => location.IsInSource);
+                        if (memberLocation is null) continue;
+
+                        if (classification.Kind == ParameterMemberSemanticModel.Kind.Unclassified)
+                        {
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                UnclassifiedNumericState, memberLocation,
+                                type.Name, member.Name, memberType.ToDisplayString()));
+                        }
+                        else if (classification.Kind == ParameterMemberSemanticModel.Kind.Conflicting)
+                        {
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                ConflictingNumericState, memberLocation,
+                                type.Name, member.Name,
+                                string.Join(", ", classification.Declarations)));
+                        }
+                        else if (ParameterMemberSemanticModel.IsNullable(member)
+                            && (classification.Kind is ParameterMemberSemanticModel.Kind.Trainable
+                                or ParameterMemberSemanticModel.Kind.Fitted
+                                or ParameterMemberSemanticModel.Kind.Frozen
+                                or ParameterMemberSemanticModel.Kind.Buffer)
+                            && !ParameterMemberSemanticModel.HasExplicitDeferredAvailability(
+                                member, classification.Kind))
+                        {
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                MissingStateAvailability, memberLocation,
+                                type.Name, member.Name, memberType.ToDisplayString()));
+                        }
+
+                        if (classification.Kind == ParameterMemberSemanticModel.Kind.Alias)
+                        {
+                            string targetName = ParameterMemberSemanticModel.GetAliasTarget(member)
+                                ?? string.Empty;
+                            var targets = type.GetMembers(targetName)
+                                .Where(candidate => candidate is IFieldSymbol or IPropertySymbol)
+                                .ToArray();
+                            string? reason = null;
+                            if (string.IsNullOrWhiteSpace(targetName))
+                                reason = "the target name is empty";
+                            else if (string.Equals(targetName, member.Name,
+                                System.StringComparison.Ordinal))
+                                reason = "an alias cannot target itself";
+                            else if (targets.Length != 1)
+                            {
+                                if (targets.Length > 1)
+                                    reason = "the target is ambiguous";
+                                else if (!DeclaresStableParameterRegistration(type, targetName))
+                                    reason = "no such member or stable registration exists on the declaring type";
+                            }
+                            else
+                            {
+                                var targetClassification =
+                                    ParameterMemberSemanticModel.ClassifyWithRegistrations(
+                                        targets[0], registrations);
+                                if (targetClassification.Kind is ParameterMemberSemanticModel.Kind.Unclassified
+                                    or ParameterMemberSemanticModel.Kind.Conflicting
+                                    or ParameterMemberSemanticModel.Kind.Scratch
+                                    or ParameterMemberSemanticModel.Kind.Alias
+                                    or ParameterMemberSemanticModel.Kind.External)
+                                    reason = "the target is not one explicitly owned persistent state member";
+                                else
+                                {
+                                    var targetType = ParameterMemberSemanticModel.GetMemberType(targets[0]);
+                                    if (targetType is null || !SymbolEqualityComparer.Default.Equals(
+                                        memberType.WithNullableAnnotation(NullableAnnotation.NotAnnotated),
+                                        targetType.WithNullableAnnotation(NullableAnnotation.NotAnnotated)))
+                                        reason = "the target has a different storage type";
+                                }
+                            }
+
+                            if (reason is not null)
+                            {
+                                spc.ReportDiagnostic(Diagnostic.Create(
+                                    InvalidParameterAlias, memberLocation,
+                                    type.Name, member.Name, targetName, reason));
+                            }
+                        }
+                    }
+                }
+
+                // Existing migration rules concern concrete public surfaces. The semantic
+                // classifier above still runs on abstract bases so their generated manifests can
+                // be made exhaustive before those bases participate in emission.
+                if (type.IsAbstract) continue;
 
                 // EVERY root whose base derives the parameter surface. This used to name only the two
                 // diffusion roots, so a hand-written surface on a NeuralNetworkBase, ModelBase,
@@ -281,54 +470,6 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                 var location = type.Locations.FirstOrDefault(l => l.IsInSource);
                 if (location is null) continue;
 
-                bool auto = type.GetAttributes()
-                    .Any(a => a.AttributeClass?.Name is "AutoParametersAttribute" or "AutoParameters");
-
-                // A layer holding no tensors of its own has nothing to discover; nagging it is noise.
-                bool ownsTensors = type.GetMembers().OfType<IFieldSymbol>()
-                    .Any(f => !f.IsStatic && !f.IsImplicitlyDeclared && f.AssociatedSymbol is null
-                              && IsTensorType(f.Type));
-
-                if (!auto && ownsTensors)
-                    spc.ReportDiagnostic(Diagnostic.Create(MissingAutoParameters, location, type.Name));
-
-                // AIDN083: fields the generator's discovery predicate will silently skip. Only checked
-                // under [AutoParameters], where discovery is the ONLY way a weight reaches the surface;
-                // without the attribute the author is registering by hand and knows what they own.
-                if (auto)
-                {
-                    foreach (var f in type.GetMembers().OfType<IFieldSymbol>())
-                    {
-                        if (f.IsStatic || f.IsImplicitlyDeclared || f.AssociatedSymbol is not null) continue;
-                        if (HasAnyAttribute(f, "BufferAttribute", "Buffer", "ScratchAttribute", "Scratch")) continue;
-
-                        // Nullable is the sanctioned way to say "optional / not always present", and the
-                        // gradient and cache fields that use it are legion. Flagging them would bury the
-                        // real finding, so only the two skips that silently ate real weights are reported.
-                        bool nullable = f.NullableAnnotation == NullableAnnotation.Annotated
-                                        || f.Type.NullableAnnotation == NullableAnnotation.Annotated;
-                        if (nullable) continue;
-
-                        // An ARRAY of matrices is skipped for the same reason a single one is, and
-                        // LoHaAdapter holds its Hadamard factors that way -- report the element type
-                        // so the message names something the author can actually find in the file.
-                        var probe = f.Type is IArrayTypeSymbol arr ? arr.ElementType : f.Type;
-
-                        string? why = null;
-                        if (IsTensorType(probe) && f.IsReadOnly)
-                            why = "readonly";
-                        else if (IsMatrixOrVectorType(probe))
-                            why = probe.OriginalDefinition.ToDisplayString().Contains(".Matrix<")
-                                ? (f.Type is IArrayTypeSymbol ? "an array of Matrix<T>" : "Matrix<T>") + " rather than Tensor<T>"
-                                : (f.Type is IArrayTypeSymbol ? "an array of Vector<T>" : "Vector<T>") + " rather than Tensor<T>";
-
-                        if (why is null) continue;
-                        var fl = f.Locations.FirstOrDefault(l => l.IsInSource);
-                        if (fl is null) continue;
-                        spc.ReportDiagnostic(Diagnostic.Create(UndiscoverableWeight, fl, type.Name, f.Name, why));
-                    }
-                }
-
                 foreach (var member in type.GetMembers())
                 {
                     if (!member.IsOverride) continue;
@@ -402,6 +543,32 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         if (keyedCollection)
             return IsTensorType(namedType.TypeArguments[1]);
 
+        return false;
+    }
+
+    private static bool DeclaresStableParameterRegistration(INamedTypeSymbol type, string stableId)
+    {
+        foreach (var syntaxReference in type.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            foreach (var invocation in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            {
+                string? name = invocation.Expression switch
+                {
+                    IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                    MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+                    _ => null
+                };
+                if (name != "RegisterParameterComponent"
+                    || invocation.ArgumentList.Arguments.Count == 0) continue;
+                var expression = invocation.ArgumentList.Arguments[0].Expression;
+                if (expression is LiteralExpressionSyntax literal
+                    && literal.IsKind(SyntaxKind.StringLiteralExpression)
+                    && string.Equals(literal.Token.ValueText, stableId,
+                        System.StringComparison.Ordinal))
+                    return true;
+            }
+        }
         return false;
     }
 
@@ -637,7 +804,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             foreach (var m in c.GetMembers())
             {
                 if (m is not IMethodSymbol ms) continue;
-                if (ms.Name == "RegisterParameterComponent" && ms.Parameters.Length == 1) call = true;
+                if (ms.Name == "RegisterParameterComponent" && ms.Parameters.Length >= 1 &&
+                    ms.Parameters.Skip(1).All(parameter => parameter.IsOptional)) call = true;
                 else if (ms.Name == "RegisterComponents" && ms.Parameters.Length == 0 &&
                          (ms.IsVirtual || ms.IsOverride || ms.IsAbstract)) hook = true;
             }
@@ -720,4 +888,30 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         }
         return false;
     }
+
+    /// <summary>
+    /// True for <c>X.ParameterCount == 0</c> / <c>!= 0</c> in either operand order, including
+    /// <c>ParameterCount</c> reached without a receiver.
+    /// </summary>
+    private static bool IsParameterCountZeroComparison(SyntaxNode node)
+    {
+        if (node is not BinaryExpressionSyntax binary) return false;
+        if (!binary.IsKind(SyntaxKind.EqualsExpression) && !binary.IsKind(SyntaxKind.NotEqualsExpression))
+            return false;
+
+        return (NamesParameterCount(binary.Left) && IsZero(binary.Right))
+            || (NamesParameterCount(binary.Right) && IsZero(binary.Left));
+    }
+
+    private static bool NamesParameterCount(ExpressionSyntax expression) => expression switch
+    {
+        MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText == "ParameterCount",
+        IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "ParameterCount",
+        _ => false,
+    };
+
+    private static bool IsZero(ExpressionSyntax expression)
+        => expression is LiteralExpressionSyntax literal
+           && literal.IsKind(SyntaxKind.NumericLiteralExpression)
+           && literal.Token.ValueText == "0";
 }

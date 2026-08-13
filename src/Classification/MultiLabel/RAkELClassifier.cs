@@ -323,7 +323,15 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
         return result;
     }
 
-
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        RegisterParameterComponent(
+            "labelset-weights",
+            new AiDotNet.Models.Parameters.MatrixCollectionParameterSource<T>(
+                () => _labelsetWeights));
+    }
 
     /// <inheritdoc/>
     public override byte[] Serialize()

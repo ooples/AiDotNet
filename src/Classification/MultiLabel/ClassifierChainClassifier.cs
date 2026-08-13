@@ -83,7 +83,7 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
         if (_chainClassifiers is null) return;
         foreach (var classifier in _chainClassifiers)
         {
-            RegisterParameterComponent(classifier as IParameterSource<T>);
+            RegisterParameterComponent(classifier);
         }
     }
     #region Fields

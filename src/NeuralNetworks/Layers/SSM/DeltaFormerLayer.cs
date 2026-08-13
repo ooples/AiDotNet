@@ -302,75 +302,16 @@ public partial class DeltaFormerLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        // Store attention weights for backward pass
-        _lastAttentionWeights = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                // Compute attention scores: Q * K^T / sqrt(d)
-                for (int ti = 0; ti < seqLen; ti++)
-                {
-                    // Find max for numerical stability
-                    T maxScore = NumOps.FromDouble(-1e9);
-                    var scores = new T[seqLen];
-
-                    for (int tj = 0; tj < seqLen; tj++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            dot = NumOps.Add(dot,
-                                NumOps.Multiply(q[new[] { bi, ti, flatDi }], k[new[] { bi, tj, flatDi }]));
-                        }
-                        scores[tj] = NumOps.Multiply(dot, scale);
-                        double scoreVal = NumOps.ToDouble(scores[tj]);
-                        double maxVal = NumOps.ToDouble(maxScore);
-                        if (scoreVal > maxVal)
-                            maxScore = scores[tj];
-                    }
-
-                    // Softmax
-                    T sumExp = NumOps.Zero;
-                    var expScores = new T[seqLen];
-                    for (int tj = 0; tj < seqLen; tj++)
-                    {
-                        expScores[tj] = NumOps.Exp(NumOps.Subtract(scores[tj], maxScore));
-                        sumExp = NumOps.Add(sumExp, expScores[tj]);
-                    }
-
-                    T sumExpSafe = NumOps.Add(sumExp, NumOps.FromDouble(1e-10));
-                    for (int tj = 0; tj < seqLen; tj++)
-                    {
-                        T weight = NumOps.Divide(expScores[tj], sumExpSafe);
-                        _lastAttentionWeights[new[] { bi, hi, ti, tj }] = weight;
-                    }
-
-                    // Weighted sum of values
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int tj = 0; tj < seqLen; tj++)
-                        {
-                            T weight = _lastAttentionWeights[new[] { bi, hi, ti, tj }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(weight, v[new[] { bi, tj, flatDi }]));
-                        }
-                        output[new[] { bi, ti, flatDi }] = oVal;
-                    }
-                }
-            }
-        }
-
-        return output;
+        var qHeads = ToHeadMajor(q, batchSize, seqLen);
+        var kHeads = ToHeadMajor(k, batchSize, seqLen);
+        var vHeads = ToHeadMajor(v, batchSize, seqLen);
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.BatchMatMul(qHeads, Engine.TensorPermute(kHeads, new[] { 0, 2, 1 })),
+            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var weights = Engine.Softmax(scores, axis: -1);
+        _lastAttentionWeights = Engine.Reshape(weights,
+            new[] { batchSize, _numHeads, seqLen, seqLen });
+        return FromHeadMajor(Engine.BatchMatMul(weights, vHeads), batchSize, seqLen);
     }
 
     /// <summary>
@@ -381,83 +322,45 @@ public partial class DeltaFormerLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        int headBatch = batchSize * _numHeads;
+        var qHeads = ToHeadMajor(q, batchSize, seqLen);
+        var kHeads = Engine.TensorMultiplyScalar(ToHeadMajor(k, batchSize, seqLen),
+            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var vHeads = ToHeadMajor(v, batchSize, seqLen);
+        var state = Tensor<T>.CreateDefault(
+            new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+        var outputs = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Retrieve current state's prediction: S * k
-                    var sK = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        sK[di] = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], keyScale);
-                            sK[di] = NumOps.Add(sK[di],
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], kVal));
-                        }
-                    }
-
-                    // Delta: v - S*k (the correction term)
-                    var delta = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        delta[di] = NumOps.Subtract(v[new[] { bi, t, flatDi }], sK[di]);
-                    }
-
-                    // State update: S = S + delta * k^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], keyScale);
-                            T prevS = state[new[] { bi, hi, di, ki }];
-                            T update = NumOps.Multiply(delta[di], kVal);
-                            state[new[] { bi, hi, di, ki }] = NumOps.Add(prevS, update);
-                        }
-                    }
-
-                    // Output: o = S * q
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], q[new[] { bi, t, flatKi }]));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi2 = 0; hi2 < _numHeads; hi2++)
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int ki = 0; ki < _headDimension; ki++)
-                            allStates[new[] { bi, t + 1, hi2, di, ki }] = state[new[] { bi, hi2, di, ki }];
+            var qCol = Engine.Reshape(Engine.TensorSliceAxis(qHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var kCol = Engine.Reshape(Engine.TensorSliceAxis(kHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var vCol = Engine.Reshape(Engine.TensorSliceAxis(vHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var delta = Engine.TensorSubtract(vCol, Engine.BatchMatMul(state, kCol));
+            state = Engine.TensorAdd(state,
+                Engine.BatchMatMul(delta, Engine.TensorPermute(kCol, new[] { 0, 2, 1 })));
+            outputs.Add(Engine.Reshape(Engine.BatchMatMul(state, qCol),
+                new[] { headBatch, 1, _headDimension }));
         }
 
-        _lastStates = allStates;
-        return output;
+        _lastStates = state;
+        return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
     }
+
+    private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize * _numHeads, seqLen, _headDimension });
+
+    private Tensor<T> FromHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, seqLen, _modelDimension });
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {

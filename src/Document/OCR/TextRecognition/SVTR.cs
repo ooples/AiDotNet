@@ -76,7 +76,6 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private readonly List<ILayer<T>> _decoderLayers = [];
 
     // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
 
     #endregion
 
@@ -253,8 +252,6 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         var random = RandomHelper.CreateSeededRandom(42);
         int numPatches = (ImageSize / 4) * (_imageHeight / 4);
 
-        _positionEmbeddings = Tensor<T>.CreateDefault([numPatches, _embedDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -550,8 +547,12 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         bool flattened = false;
         foreach (var layer in Layers)
         {
-            // Flatten the conv feature map to a token sequence right before the first mixing block.
-            if (!flattened && output.Shape.Length == 4 && layer is TransformerEncoderLayer<T>)
+            // Flatten the conv feature map to a token sequence before the first layer that needs
+            // one. That used to mean the first mixing block; the learned position table now sits in
+            // front of those blocks (positions have to be added BEFORE attention, not after), so the
+            // trigger is the first sequence consumer of either kind rather than the block alone.
+            if (!flattened && output.Shape.Length == 4
+                && (layer is TransformerEncoderLayer<T> or LearnedPositionalEmbeddingLayer<T>))
             {
                 output = FlattenSpatialToSequence(output);
                 flattened = true;
@@ -586,7 +587,11 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         bool flattened = false;
         for (int i = 0; i < Layers.Count; i++)
         {
-            if (!flattened && current.Shape.Length == 4 && Layers[i] is TransformerEncoderLayer<T>)
+            // Same widened trigger as RunNativeLayers: the learned position table now sits in front
+            // of the mixing blocks, so it is the first sequence consumer and the flatten has to
+            // happen before IT, not before the block behind it.
+            if (!flattened && current.Shape.Length == 4
+                && (Layers[i] is TransformerEncoderLayer<T> or LearnedPositionalEmbeddingLayer<T>))
             {
                 current = FlattenSpatialToSequence(current);
                 flattened = true;

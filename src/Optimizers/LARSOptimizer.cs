@@ -368,6 +368,13 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </summary>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
+                nameof(gradient));
+        }
+
         if (_velocity == null || _velocity.Length != parameters.Length)
         {
             _velocity = new Vector<T>(parameters.Length);
@@ -380,7 +387,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         {
             _previousVelocity = new Vector<T>(parameters.Length);
         }
-        _previousVelocity = new Vector<T>(_velocity);
+        _velocity.AsSpan().CopyTo(_previousVelocity.AsWritableSpan());
         _previousT = _t;
 
         _t++;
@@ -424,17 +431,25 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             localLr = NumOps.Multiply(baseLr, larsRatio);
         }
 
-        // Update with weight decay
-        var weightDecayTerm = (Vector<T>)Engine.Multiply(parameters, weightDecay);
-        var updateWithDecay = (Vector<T>)Engine.Add(gradient, weightDecayTerm);
-        var scaledUpdate = (Vector<T>)Engine.Multiply(updateWithDecay, localLr);
+        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var parameterSpan = parameters.AsSpan();
+        var gradientSpan = gradient.AsSpan();
+        var velocitySpan = _velocity.AsWritableSpan();
+        var updatedSpan = updatedParameters.AsWritableSpan();
 
-        // Momentum update
-        var velocityScaled = (Vector<T>)Engine.Multiply(_velocity, momentum);
-        _velocity = (Vector<T>)Engine.Add(velocityScaled, scaledUpdate);
+        for (int i = 0; i < updatedSpan.Length; i++)
+        {
+            T updateWithDecay = NumOps.Add(
+                gradientSpan[i],
+                NumOps.Multiply(weightDecay, parameterSpan[i]));
+            T velocity = NumOps.Add(
+                NumOps.Multiply(momentum, velocitySpan[i]),
+                NumOps.Multiply(localLr, updateWithDecay));
+            velocitySpan[i] = velocity;
+            updatedSpan[i] = NumOps.Subtract(parameterSpan[i], velocity);
+        }
 
-        // Apply update
-        return (Vector<T>)Engine.Subtract(parameters, _velocity);
+        return updatedParameters;
     }
 
     // Per-parameter LARS velocity for tape-based training

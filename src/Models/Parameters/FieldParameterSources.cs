@@ -53,7 +53,9 @@ public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParame
                 value is null ? ParameterReadiness.ShapeDeferred
                     : value.Length == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
                     : ParameterReadiness.Materialized,
-                value is null ? null : (long?)value.Length)
+                value is null ? null : (long?)value.Length,
+                shape: value is null ? null : value.Shape.ToArray(),
+                elementType: typeof(T).FullName)
         };
     }
 
@@ -73,19 +75,13 @@ public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParame
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var t = _get();
         if (t is null)
-        {
-            // NOT A SILENT RETURN. This source reads its tensor through an accessor and has no
-            // setter, so with the field still null there is nowhere to put these values and no way
-            // to create it. Dropping them here is how a restored model came back with its declared
-            // shape and none of its learned weights -- the round-trip reported success and the
-            // model predicted differently. An empty vector is genuinely nothing to do; anything
-            // else is a caller restoring before the owner has materialized its storage.
-            if (parameters.Length == 0) return;
             throw new ParameterLayoutNotReadyException(
                 "restore", new ParameterLayoutSnapshot(GetParameterLayout()));
-        }
-        int n = Math.Min(t.Length, parameters.Length);
-        for (int i = 0; i < n; i++) t[i] = parameters[i];
+        if (parameters.Length != t.Length)
+            throw new ArgumentException(
+                $"Expected exactly {t.Length} values for the tensor field, got {parameters.Length}.",
+                nameof(parameters));
+        parameters.AsSpan().CopyTo(t.AsWritableSpan());
     }
 }
 
@@ -123,7 +119,9 @@ public sealed class MatrixFieldParameterSource<T> : IParameterSource<T>, IParame
                 value is null ? ParameterReadiness.ShapeDeferred
                     : count == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
                     : ParameterReadiness.Materialized,
-                count)
+                count,
+                shape: value is null ? null : new[] { value.Rows, value.Columns },
+                elementType: typeof(T).FullName)
         };
     }
 
@@ -147,21 +145,17 @@ public sealed class MatrixFieldParameterSource<T> : IParameterSource<T>, IParame
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var m = _get();
         if (m is null)
-        {
-            // NOT A SILENT RETURN. This source reads its matrix through an accessor and has no
-            // setter, so with the field still null there is nowhere to put these values and no way
-            // to create it. Dropping them here is how a restored model came back with its declared
-            // shape and none of its learned weights -- the round-trip reported success and the
-            // model predicted differently. An empty vector is genuinely nothing to do; anything
-            // else is a caller restoring before the owner has materialized its storage.
-            if (parameters.Length == 0) return;
             throw new ParameterLayoutNotReadyException(
                 "restore", new ParameterLayoutSnapshot(GetParameterLayout()));
-        }
+        int expected = checked(m.Rows * m.Columns);
+        if (parameters.Length != expected)
+            throw new ArgumentException(
+                $"Expected exactly {expected} values for the matrix field, got {parameters.Length}.",
+                nameof(parameters));
         int idx = 0;
         for (int r = 0; r < m.Rows; r++)
         {
-            for (int c = 0; c < m.Columns && idx < parameters.Length; c++) m[r, c] = parameters[idx++];
+            for (int c = 0; c < m.Columns; c++) m[r, c] = parameters[idx++];
         }
     }
 }
@@ -197,7 +191,9 @@ public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>, IPar
                 value is null ? ParameterReadiness.ShapeDeferred
                     : value.Length == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
                     : ParameterReadiness.Materialized,
-                value is null ? null : (long?)value.Length)
+                value is null ? null : (long?)value.Length,
+                shape: value is null ? null : new[] { value.Length },
+                elementType: typeof(T).FullName)
         };
     }
 
@@ -217,19 +213,13 @@ public sealed class VectorFieldWriteThroughSource<T> : IParameterSource<T>, IPar
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var v = _get();
         if (v is null)
-        {
-            // NOT A SILENT RETURN. This source reads its vector through an accessor and has no
-            // setter, so with the field still null there is nowhere to put these values and no way
-            // to create it. Dropping them here is how a restored model came back with its declared
-            // shape and none of its learned weights -- the round-trip reported success and the
-            // model predicted differently. An empty vector is genuinely nothing to do; anything
-            // else is a caller restoring before the owner has materialized its storage.
-            if (parameters.Length == 0) return;
             throw new ParameterLayoutNotReadyException(
                 "restore", new ParameterLayoutSnapshot(GetParameterLayout()));
-        }
-        int n = Math.Min(v.Length, parameters.Length);
-        for (int i = 0; i < n; i++) v[i] = parameters[i];
+        if (parameters.Length != v.Length)
+            throw new ArgumentException(
+                $"Expected exactly {v.Length} values for the vector field, got {parameters.Length}.",
+                nameof(parameters));
+        parameters.AsSpan().CopyTo(v.AsWritableSpan());
     }
 }
 
@@ -329,11 +319,20 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        var members = new List<IParameterSource<T>>(Members());
+        long expectedLong = 0;
+        for (int i = 0; i < members.Count; i++)
+            expectedLong = checked(expectedLong + members[i].ParameterCount);
+        int expected = checked((int)expectedLong);
+        if (parameters.Length != expected)
+            throw new ArgumentException(
+                $"Expected exactly {expected} values for the component collection, got {parameters.Length}.",
+                nameof(parameters));
+
         int at = 0;
-        foreach (var m in Members())
+        foreach (var m in members)
         {
             int n = (int)m.ParameterCount;
-            if (at + n > parameters.Length) break;
             var slice = new Vector<T>(n);
             for (int j = 0; j < n; j++) slice[j] = parameters[at++];
             m.SetParameters(slice);
@@ -354,6 +353,9 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
         _get = get ?? throw new ArgumentNullException(nameof(get));
     }
 
+    /// <summary>The current component, used internally to deduplicate and materialize its storage.</summary>
+    internal IParameterSource<T>? Current => _get();
+
     /// <inheritdoc />
     public long ParameterCount => _get()?.ParameterCount ?? 0;
 
@@ -367,6 +369,17 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
             {
                 new ParameterSlotDescriptor(
                     "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+            };
+        }
+
+        if (component is NeuralNetworks.NeuralNetworkBase<T> network)
+        {
+            var layout = network.ParameterLayout;
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable, layout.Readiness,
+                    network.ParameterVectorLength)
             };
         }
 

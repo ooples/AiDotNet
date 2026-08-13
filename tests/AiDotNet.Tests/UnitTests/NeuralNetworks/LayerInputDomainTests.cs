@@ -115,17 +115,21 @@ public class LayerInputDomainTests
         var input = new Tensor<double>(continuousShape);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 
-        var ex = Assert.Throws<ArgumentException>(() => layer.Forward(input));
+        var ex = Assert.Throws<InputContractViolationException>(() => layer.Forward(input));
         Assert.Contains("requires token indices", ex.Message);
     }
 
     [Fact]
-    public void Indices_WithNonPositiveVocabulary_FallsBackToContinuous()
+    public async Task Indices_WithNonPositiveVocabulary_IsExplicitlyDeferred()
     {
-        // A degenerate empty range would make EVERY value illegal rather than every value allowed,
-        // which is the wrong failure for a layer that simply is not sized yet.
-        Assert.False(LayerInputDomain.Indices(0).IsIndices);
-        Assert.False(LayerInputDomain.Indices(-3).IsIndices);
+        await Task.Yield();
+        var zero = LayerInputDomain.Indices(0);
+        var negative = LayerInputDomain.Indices(-3);
+
+        Assert.False(zero.IsResolved);
+        Assert.False(negative.IsResolved);
+        Assert.Equal(LayerInputDomainKind.Deferred, zero.Kind);
+        Assert.Contains("must be positive", zero.Detail);
     }
 
     /// <summary>
@@ -164,7 +168,7 @@ public class LayerInputDomainTests
         var input = new Tensor<double>(new[] { 1, 6 });
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 
-        var ex = Assert.Throws<ArgumentException>(() => layer.Forward(input));
+        var ex = Assert.Throws<InputContractViolationException>(() => layer.Forward(input));
         Assert.Contains("requires token indices", ex.Message);
     }
 }

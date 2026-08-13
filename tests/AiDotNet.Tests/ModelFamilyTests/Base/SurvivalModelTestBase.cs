@@ -11,23 +11,27 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: survival function properties, hazard non-negativity,
 /// determinism, and risk ordering consistency.
 /// </summary>
-public abstract class SurvivalModelTestBase
+public abstract class SurvivalModelTestBase<T>
 {
-    protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static T ToT(double value) => NumOps.FromDouble(value);
+    protected static double ToD(T value) => Convert.ToDouble(value);
+
+    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
 
     protected virtual int TrainSamples => 80;
     protected virtual int Features => 3;
 
-    private (Matrix<double> X, Vector<double> Y) GenerateSurvivalData(Random rng)
+    private (Matrix<T> X, Vector<T> Y) GenerateSurvivalData(Random rng)
     {
-        var x = new Matrix<double>(TrainSamples, Features);
-        var y = new Vector<double>(TrainSamples);
+        var x = new Matrix<T>(TrainSamples, Features);
+        var y = new Vector<T>(TrainSamples);
         for (int i = 0; i < TrainSamples; i++)
         {
             for (int j = 0; j < Features; j++)
-                x[i, j] = rng.NextDouble() * 5.0;
+                x[i, j] = ToT(rng.NextDouble() * 5.0);
             // Survival time: higher feature values → shorter survival
-            y[i] = Math.Max(0.1, 10.0 - x[i, 0] + ModelTestHelpers.NextGaussian(rng) * 0.5);
+            y[i] = ToT(Math.Max(0.1, 10.0 - ToD(x[i, 0]) + ModelTestHelpers.NextGaussian(rng) * 0.5));
         }
         return (x, y);
     }
@@ -45,8 +49,9 @@ public abstract class SurvivalModelTestBase
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.False(double.IsNaN(predictions[i]), $"Survival prediction[{i}] is NaN.");
-            Assert.False(double.IsInfinity(predictions[i]), $"Survival prediction[{i}] is Infinity.");
+            double prediction = ToD(predictions[i]);
+            Assert.False(double.IsNaN(prediction), $"Survival prediction[{i}] is NaN.");
+            Assert.False(double.IsInfinity(prediction), $"Survival prediction[{i}] is Infinity.");
         }
     }
 
@@ -114,6 +119,9 @@ public abstract class SurvivalModelTestBase
         using var model = CreateModel();
         var (trainX, trainY) = GenerateSurvivalData(rng);
         model.Train(trainX, trainY);
-        Assert.True(((IParameterizable<double, Matrix<double>, Vector<double>>)model).GetParameters().Length > 0, "Trained survival model should have parameters.");
+        Assert.True(((IParameterizable<T, Matrix<T>, Vector<T>>)model).GetParameters().Length > 0, "Trained survival model should have parameters.");
     }
 }
+
+/// <summary>Default-precision alias for existing hand-written fixtures.</summary>
+public abstract class SurvivalModelTestBase : SurvivalModelTestBase<double> { }

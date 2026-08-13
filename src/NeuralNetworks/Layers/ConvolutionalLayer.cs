@@ -284,7 +284,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
 
     private Tensor<T> _kernels;
 
@@ -307,7 +307,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth")]
 
     private Tensor<T> _biases;
 
@@ -336,11 +336,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T>? _biasReshaped4DSource;
     private int _biasReshaped4DVersion = -1;
-
-    /// <summary>
-    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
-    /// </summary>
-    private Tensor<T>? _preAllocatedOutput;
 
     /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
@@ -1033,6 +1028,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     {
         if (_isInitialized) return;
 
+        // Restored before the first forward: keep what arrived. Rule in LayerBase,
+        // shapes from the [TrainableParameter(Shape = ...)] annotations.
+        if (TryAdoptRestoredParameters())
+        {
+            _isInitialized = true;
+            return;
+        }
+
         // A convolution's WEIGHTS depend only on the channel counts and kernel size — the kernel is
         // [outputDepth, inputDepth/groups, k, k], with no height or width in it, exactly as in
         // PyTorch. So the input CHANNEL count is the whole precondition; spatial extent is not.
@@ -1088,6 +1091,37 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // Depthwise collapses the kernel's in-channel dim to InputDepth/Groups (== 1 for depthwise).
             int[] kShape = [OutputDepth, KernelInChannels, KernelSize, KernelSize];
             int[] bShape = [OutputDepth];
+
+            // Restore and parameter-buffer rebinding can install the final tensors before this
+            // lazy layer sees its first input. In that state the tensors are authoritative: do not
+            // replace checkpointed values merely because the initialization latch has not run.
+            // DenseLayer and Conv3DLayer follow the same idempotent materialization contract.
+            bool hasExpectedKernels =
+                _kernels.Rank == 4 &&
+                _kernels.Shape[0] == kShape[0] &&
+                _kernels.Shape[1] == kShape[1] &&
+                _kernels.Shape[2] == kShape[2] &&
+                _kernels.Shape[3] == kShape[3];
+            bool hasExpectedBiases =
+                _biases.Rank == 1 && _biases.Shape[0] == bShape[0];
+
+            if (hasExpectedKernels && hasExpectedBiases)
+            {
+                RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+                _isInitialized = true;
+                return;
+            }
+
+            if (_kernels.Length > 0 || _biases.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"ConvolutionalLayer parameters do not conform to the resolved shape. " +
+                    $"Expected kernels [{string.Join(", ", kShape)}] and biases [{OutputDepth}], " +
+                    $"but received kernels [{string.Join(", ", _kernels.Shape.ToArray())}] and " +
+                    $"biases [{string.Join(", ", _biases.Shape.ToArray())}].");
+            }
+
             _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentPinned<T>(kShape));
             _biases = AllocateLazyWeight(bShape);
 
@@ -1325,8 +1359,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             _lastInput = new Tensor<T>([0, 0, 0, 0]);
         }
 
-        // === Zero-Allocation Convolution ===
-        // Pre-allocate output buffer on first forward pass, then reuse via Conv2DInto
+        // === Convolution ===
         // Use CalculateOutputDimension here too so a forward call with smaller
         // spatial dims surfaces the same actionable "output would be <= 0"
         // exception the helper already produces, instead of failing deep inside
@@ -1335,24 +1368,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         int outputWidth = CalculateOutputDimension(input4D.Shape[3], KernelSize, Stride, Padding);
         int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
-
-        // Cross-forward output-buffer reuse is unsafe only when a TensorArena is actually
-        // active: _preAllocatedOutput is arena scratch, and reusing the same slot across the
-        // per-step Reset() would alias whatever the next step Rents into that slot (#1668).
-        // Key this off TensorArena.Current (not InferenceMode) so the escape hatch
-        // (AIDOTNET_INFERENCE_ARENA_DIFFUSION=0, which leaves InferenceMode on but disables
-        // the arena) keeps the manual zero-allocation reuse — otherwise we'd rent a fresh
-        // buffer every forward with no arena to pool it. With the arena on, re-renting per
-        // forward stays zero-allocation after warmup (the arena recycles in cursor order).
-        bool arenaActive = AiDotNet.Tensors.Helpers.TensorArena.Current is not null;
-        if (_preAllocatedOutput is null ||
-            arenaActive ||
-            _preAllocatedOutput.Shape[0] != batchSize_conv ||
-            _preAllocatedOutput.Shape[2] != outputHeight ||
-            _preAllocatedOutput.Shape[3] != outputWidth)
-        {
-            _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
-        }
 
         // === Try FusedConv2D: Conv + Bias + Activation in single kernel ===
         // Eliminates 2 intermediate allocations and enables kernel-level optimization
@@ -1421,9 +1436,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         else
         {
             // Inference fast path: separate Conv2DInto + in-place bias + activation.
-            // Safe because no tape is active during inference (NoGradScope).
-            Engine.Conv2DInto(_preAllocatedOutput, input4D, _kernels, Stride, Padding, dilation: 1);
-            var output = _preAllocatedOutput;
+            // Every invocation owns a distinct destination. Reusing a layer-held output buffer
+            // changes the function when one layer instance is called more than once in a graph:
+            // the later call overwrites an earlier result that is still live (shared encoders,
+            // recurrent blocks, Siamese networks, and any caller retaining multiple outputs).
+            // Explicit *Into APIs remain the opt-in zero-allocation contract for callers that can
+            // prove destination lifetime; ordinary Forward must have value semantics. TensorArena
+            // still makes these per-call rents allocation-free within a scoped inference pass.
+            var output = TensorAllocator.Rent<T>(expectedShape);
+            Engine.Conv2DInto(output, input4D, _kernels, Stride, Padding, dilation: 1);
 
             // Reuse a cached rank-4 reshape of _biases. Cache by tensor identity
             // and mutation version because optimizers may rebind the parameter or
@@ -1904,20 +1925,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             Engine.InvalidatePersistentTensor(_kernels);
             Engine.InvalidatePersistentTensor(_biases);
 
-            // Trainable-parameter pool returns (_kernels, _biases) are now
+            // Trainable-parameter pool returns (_kernels, _biases) are
             // handled by the auto-generated ReturnPooledParameters hook
             // invoked from LayerBase.Dispose(bool) — issue #1136 plan part 3.
-            // We only need to return the NON-trainable rented buffer here.
-
-            // Return the rented forward-pass output buffer. Without this,
-            // disposing many ConvolutionalLayer instances (one per conv in
-            // a deep UNet) leaks one rented activation per layer to the pool
-            // free list — dozens of MB per disposed model at SD scale.
-            if (_preAllocatedOutput is not null)
-            {
-                TensorAllocator.Return(_preAllocatedOutput);
-                _preAllocatedOutput = null;
-            }
 
             // Clear other managed resources (CPU)
             _kernelsGradient = null;

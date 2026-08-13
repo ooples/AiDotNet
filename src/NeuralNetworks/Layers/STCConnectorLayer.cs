@@ -363,7 +363,9 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
         if (tokenCount != expectedTokens || featureDim != _visionDim)
         {
             throw new ArgumentException(
-                $"Expected STC tokens [...,{expectedTokens},{_visionDim}], got [...,{tokenCount},{featureDim}].");
+                $"STCConnectorLayer requires token shape [...,{expectedTokens},{_visionDim}] " +
+                $"(height*width={_patchesHeight}*{_patchesWidth} tokens and width={_visionDim} features); " +
+                $"got [...,{tokenCount},{featureDim}].");
         }
     }
 

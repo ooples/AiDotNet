@@ -124,7 +124,7 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     /// <param name="input">Input tensor of shape [batch, seqLen, dim] where seqLen = H*W.</param>
     /// <returns>Output tensor of shape [batch, seqLen/4, dim*2].</returns>
-    /// <exception cref="InvalidOperationException">Thrown if spatial dimensions are not even.</exception>
+    /// <exception cref="ArgumentException">Thrown if the sequence cannot form two even spatial dimensions.</exception>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         int batch = input.Shape[0];
@@ -138,8 +138,9 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
         // Validate dimensions are even
         if (h % 2 != 0 || w % 2 != 0)
         {
-            throw new InvalidOperationException(
-                $"Spatial dimensions must be even for patch merging. Got h={h}, w={w}.");
+            throw new ArgumentException(
+                $"Swin patch merging requires even spatial dimensions; got height={h}, width={w}.",
+                nameof(input));
         }
 
         _cachedBatch = batch;
@@ -215,10 +216,10 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
-        // If no valid even factorization found, throw exception
-        throw new InvalidOperationException(
-            $"Cannot find valid spatial dimensions from sequence length {seqLen}. " +
-            "Sequence length must be factorizable into two even integers for patch merging.");
+        throw new ArgumentException(
+            $"Swin patch merging requires the sequence-length dimension ({seqLen}) to be " +
+            "factorizable into two even spatial dimensions.",
+            nameof(seqLen));
     }
 
     /// <inheritdoc/>

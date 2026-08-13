@@ -100,7 +100,6 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     private bool _branched;
 
     // Learnable embeddings
-    private Tensor<T>? _charEmbeddings;
 
     #endregion
 
@@ -419,8 +418,6 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     private void InitializeEmbeddings()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        _charEmbeddings = Tensor<T>.CreateDefault([_charset.Length + 1, _languageDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_charEmbeddings, random, 0.02);
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)

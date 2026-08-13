@@ -78,9 +78,9 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     private readonly List<ILayer<T>> _transformerLayers = [];
     private readonly List<ILayer<T>> _classificationHead = [];
 
-    // Learnable embeddings
-    private Tensor<T>? _positionEmbeddings;
-    private Tensor<T>? _clsToken;
+    // The CLS token and the learned position table used to be model fields here. They are now the
+    // PrependCLSTokenLayer and LearnedPositionalEmbeddingLayer in the stack, where the forward pass
+    // reads them -- see LayerHelper.CreateDefaultDiTLayers.
 
     #endregion
 
@@ -216,7 +216,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         ImageSize = imageSize;
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -245,29 +244,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             patchSize: _patchSize,
             imageSize: ImageSize,
             numClasses: _numClasses));
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-        int numPatches = (ImageSize / _patchSize) * (ImageSize / _patchSize);
-
-        _positionEmbeddings = Tensor<T>.CreateDefault([numPatches + 1, _hiddenDim], NumOps.Zero);
-        _clsToken = Tensor<T>.CreateDefault([1, _hiddenDim], NumOps.Zero);
-
-        InitializeWithSmallRandomValues(_positionEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_clsToken, random, 0.02);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
     }
 
     #endregion
@@ -557,13 +533,17 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape performs the backward pass and optimizer update. Applying the
+            // hand-collected gradients again treated gradients as replacement parameter values.
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
-
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
@@ -575,13 +555,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     /// reading -- ParameterCount and GetParameters -- stays available either way.
     /// </remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
 
     #endregion
 
