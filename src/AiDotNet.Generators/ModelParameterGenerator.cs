@@ -82,8 +82,6 @@ public class ModelParameterGenerator : IIncrementalGenerator
         {
             var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
             if (model.GetDeclaredSymbol(classDecl) is not INamedTypeSymbol classSymbol) continue;
-            if (classSymbol.IsAbstract) continue;
-
             var elem = ElementTypeParam(classSymbol);
             if (elem is null) continue;
 
@@ -770,6 +768,12 @@ public class ModelParameterGenerator : IIncrementalGenerator
         var scalar = SourceFor(type, elem);
         if (scalar is not null)
         {
+            if (allowDeferredVectorReplacement
+                && scalar == "TensorFieldParameterSource"
+                && CanAssign(member))
+            {
+                return $"new ResizableTensorFieldParameterSource<{elem}>(() => {name}, value => {name} = value)";
+            }
             if (allowDeferredVectorReplacement
                 && scalar == "VectorFieldWriteThroughSource"
                 && CanAssign(member))

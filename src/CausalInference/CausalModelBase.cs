@@ -152,13 +152,12 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParame
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Folds the same enumeration the vector does once components are registered. The
-    /// previous expression is kept for models not yet converted -- and it is exactly why the
-    /// two could disagree: it described the MODEL, not the vector. Measured on
-    /// CausalForest: 5 against a 6-element vector after any restore.
+    /// Folds the same enumeration the vector does once components are registered. Models still
+    /// awaiting manifest conversion fall back to their concrete vector length, so the count cannot
+    /// invent values that their read/write surface does not own.
     /// </remarks>
     public virtual long ParameterCount
-        => Registry.HasComponents ? Registry.ParameterCount : NumFeatures;
+        => Registry.HasComponents ? Registry.ParameterCount : GetParameters().Length;
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 

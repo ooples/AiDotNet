@@ -210,6 +210,30 @@ public partial class MixedLayer<T>
     }
 
     [Fact]
+    public async Task LayerGenerator_FlattensMutableTensorCollectionsDeterministically()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using System.Collections.Generic;
+public partial class CollectionLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [TrainableParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T>[] _ordered = new AiDotNet.Tensors.LinearAlgebra.Tensor<T>[0];
+
+    [TrainableParameter]
+    private Dictionary<string, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> _keyed = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("ParameterCollectionOrdering.PresentNonNull(_ordered)", generated, StringComparison.Ordinal);
+        Assert.Contains("_ordered[__slot] = parameters[__i++]", generated, StringComparison.Ordinal);
+        Assert.Contains("ParameterCollectionOrdering.OrderedValues(_keyed)", generated, StringComparison.Ordinal);
+        Assert.Contains("ParameterCollectionOrdering.OrderedKeys(_keyed)", generated, StringComparison.Ordinal);
+        Assert.Contains("AppendTrainableParameter(__parameter", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ModelGenerator_DoesNotPromoteUnclassifiedTensor()
     {
         await Task.Yield();
@@ -320,5 +344,25 @@ public partial class InvalidLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<
             source).Where(item => item.Id == "ADNBUF001"));
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("running_state", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelGenerator_AbstractBaseEmitsResizableFitTensorSource()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public abstract partial class DeferredTensorModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    [TrainableParameter(Availability = 2)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weights = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains("partial class DeferredTensorModel<T>", generated, StringComparison.Ordinal);
+        Assert.Contains(
+            "new ResizableTensorFieldParameterSource<T>(() => _weights, value => _weights = value)",
+            generated,
+            StringComparison.Ordinal);
     }
 }

@@ -53,15 +53,6 @@ namespace AiDotNet.SurvivalAnalysis;
 [ResearchPaper("Random Survival Forests", "https://doi.org/10.1214/08-AOAS169", Year = 2008, Authors = "Hemant Ishwaran, Udaya B. Kogalur, Eugene H. Blackstone, Michael S. Lauer")]
 public class RandomSurvivalForest<T> : SurvivalModelBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
-
     /// <summary>
     /// Gets the number of trees in the forest.
     /// </summary>
@@ -503,19 +494,6 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
         }
 
         return result;
-    }
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Random Forest parameters are complex - just return tree count
-        return new Vector<T>(new[] { NumOps.FromDouble(NumTrees) });
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // Parameters are read-only for Random Forest
     }
 
     /// <inheritdoc />

@@ -109,8 +109,21 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
     /// <inheritdoc/>
     public IShardingConfiguration<T> ShardingConfiguration => Config;
 
+    /// <summary>
+    /// Returns a specialized authoritative parameter source when a sharding strategy owns a
+    /// structurally different model on this rank. Null keeps the ordinary gathered-shard surface.
+    /// </summary>
+    protected virtual IParameterSource<T>? GetAuthoritativeParameterSource() => null;
+
     /// <inheritdoc/>
-    public long ParameterCount => InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
+    public long ParameterCount
+    {
+        get
+        {
+            var source = GetAuthoritativeParameterSource();
+            return source?.ParameterCount ?? InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
@@ -376,6 +389,8 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
     /// <inheritdoc/>
     public virtual Vector<T> GetParameters()
     {
+        var source = GetAuthoritativeParameterSource();
+        if (source is not null) return source.GetParameters();
         return GatherFullParameters();
     }
 
@@ -387,11 +402,18 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
             throw new ArgumentNullException(nameof(parameters));
         }
 
+        var source = GetAuthoritativeParameterSource();
         if (parameters.Length != ParameterCount)
         {
             throw new ArgumentException(
                 $"Parameter count mismatch. Expected {ParameterCount}, got {parameters.Length}.",
                 nameof(parameters));
+        }
+
+        if (source is not null)
+        {
+            source.SetParameters(parameters);
+            return;
         }
 
         // Update local shard

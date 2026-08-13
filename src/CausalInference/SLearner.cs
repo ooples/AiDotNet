@@ -57,25 +57,18 @@ namespace AiDotNet.CausalInference;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Metalearners for Estimating Heterogeneous Treatment Effects using Machine Learning", "https://doi.org/10.1073/pnas.1804597116", Year = 2019, Authors = "Sören R. Künzel, Jasjeet S. Sekhon, Peter J. Bickel, Bin Yu")]
-public class SLearner<T> : CausalModelBase<T>
+public partial class SLearner<T> : CausalModelBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Derived from the getter, which is what ModelBase already does. The inherited override
-    /// computes NumFeatures x NumClasses, and this model has no such dense weight matrix -- it is
-    /// a forest / ensemble / AFT fit -- so the formula answered 0 while the getter returned real
-    /// values. SetParameters pairs the two by length, so the disagreement is not cosmetic.
-    /// </remarks>
-    public override long ParameterCount => GetParameters().Length;
-
     /// <summary>
     /// The model weights (including treatment as a feature).
     /// </summary>
-    private Vector<T> _weights = new Vector<T>(0);
+    [TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Fit)]
+    private Tensor<T> _weights = new([0]);
 
     /// <summary>
     /// The bias term.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private T _bias;
 
     /// <summary>
@@ -133,7 +126,7 @@ public class SLearner<T> : CausalModelBase<T>
         }
 
         // Initialize weights (p features + 1 treatment)
-        _weights = new Vector<T>(p + 1);
+        _weights = new Tensor<T>([p + 1]);
         _bias = NumOps.Zero;
 
         // Train with gradient descent (ridge regression)
@@ -363,32 +356,6 @@ public class SLearner<T> : CausalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        if (_weights.Length == 0)
-            return new Vector<T>(1) { [0] = _bias };
-
-        var parameters = new Vector<T>(_weights.Length + 1);
-        parameters[0] = _bias;
-        for (int i = 0; i < _weights.Length; i++)
-            parameters[i + 1] = _weights[i];
-        return parameters;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length == 0) return;
-        _bias = parameters[0];
-        if (parameters.Length > 1)
-        {
-            _weights = new Vector<T>(parameters.Length - 1);
-            for (int i = 0; i < _weights.Length; i++)
-                _weights[i] = parameters[i + 1];
-        }
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = new SLearner<T>(MaxIterations, LearningRate, Lambda);
@@ -430,7 +397,7 @@ public class SLearner<T> : CausalModelBase<T>
             _bias = NumOps.FromDouble(modelDataObj["Bias"]!.ToObject<double>());
         if (modelDataObj["Weights"] is Newtonsoft.Json.Linq.JArray weightArr)
         {
-            _weights = new Vector<T>(weightArr.Count);
+            _weights = new Tensor<T>([weightArr.Count]);
             for (int i = 0; i < weightArr.Count; i++)
                 _weights[i] = NumOps.FromDouble(weightArr[i].ToObject<double>());
         }

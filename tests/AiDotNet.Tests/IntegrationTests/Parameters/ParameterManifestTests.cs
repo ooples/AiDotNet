@@ -529,6 +529,45 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task ResizableTensorFieldRestore_ResolvesOneDeferredAxisThenBecomesStrict()
+    {
+        await Task.Yield();
+        Tensor<double>? tensor = new(new[] { 5, 0 });
+        var source = new ResizableTensorFieldParameterSource<double>(
+            () => tensor, value => tensor = value);
+        var restored = new Vector<double>(Enumerable.Range(1, 15).Select(value => (double)value).ToArray());
+
+        Assert.True(source.CanResizeOnRestore);
+        Assert.Equal(ParameterReadiness.ShapeDeferred, Assert.Single(source.GetParameterLayout()).Readiness);
+
+        source.SetParameters(restored);
+
+        Assert.NotNull(tensor);
+        Assert.Equal(new[] { 5, 3 }, tensor.Shape.ToArray());
+        Assert.Equal(restored.ToArray(), source.GetParameters().ToArray());
+        Assert.False(source.CanResizeOnRestore);
+        Assert.Equal(ParameterReadiness.Materialized, Assert.Single(source.GetParameterLayout()).Readiness);
+        Assert.Throws<ArgumentException>(() => source.SetParameters(new Vector<double>(10)));
+    }
+
+    [Fact]
+    public async Task ResizableTensorFieldRestore_RejectsAmbiguousOrNonDivisibleShapes()
+    {
+        await Task.Yield();
+        Tensor<double>? ambiguous = new(new[] { 0, 0 });
+        var ambiguousSource = new ResizableTensorFieldParameterSource<double>(
+            () => ambiguous, value => ambiguous = value);
+        Assert.Throws<ParameterLayoutNotReadyException>(() =>
+            ambiguousSource.SetParameters(new Vector<double>(6)));
+
+        Tensor<double>? nonDivisible = new(new[] { 5, 0 });
+        var nonDivisibleSource = new ResizableTensorFieldParameterSource<double>(
+            () => nonDivisible, value => nonDivisible = value);
+        Assert.Throws<ArgumentException>(() =>
+            nonDivisibleSource.SetParameters(new Vector<double>(12)));
+    }
+
+    [Fact]
     public async Task MatrixAndVectorFieldRestore_RequireExactLengths()
     {
         await Task.Yield();

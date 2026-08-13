@@ -2317,20 +2317,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // models. ParameterLayout is the one ordered ownership record shared by all parameter
             // consumers; unresolved slots remain explicitly unresolved rather than becoming zero.
             var layout = ParameterLayout;
-            if (layout.Readiness is AiDotNet.Models.Parameters.ParameterReadiness.Materialized
-                or AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree)
+            if (layout.Readiness is not AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
+                && layout.ParameterCount.HasValue)
             {
-                return layout.ParameterCount ?? 0;
+                return layout.ParameterCount.Value;
             }
 
-            // A deferred or allocation-free FUTURE layout does not change the CURRENT vector. A
-            // shape-resolved lazy slot has a useful structural count in the manifest, but its values
-            // do not exist yet and GetParameters therefore cannot emit them. Returning that future
-            // count here made fresh models contradict their own vector surface. Dynamic and
-            // conditional networks likewise keep branches deferred after a valid forward.
-            // ParameterVectorLength walks the same concrete state GetParameters emits, so
-            // count/vector equality remains exact. The manifest still retains the structural count
-            // and readiness for checkpoint planning and on-demand restore.
+            // Truly deferred or conditional graphs still have no honest structural total.
+            // ParameterVectorLength walks the concrete state GetParameters can emit today; once
+            // every shape is resolved, the manifest branch above becomes authoritative instead.
             return ParameterVectorLength;
         }
     }
