@@ -5989,7 +5989,8 @@ public static class LayerHelper<T>
         // === AUDIO CODE EMBEDDING ===
 
         // Combined codebook embedding (all codebooks share embedding space)
-        yield return new EmbeddingLayer<T>(codebookSize * numCodebooks + 1, lmHiddenDim); // +1 for start token
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(codebookSize * numCodebooks + 1, lmHiddenDim)); // +1 for start token
 
         // Positional encoding for audio sequence
         yield return new PositionalEncodingLayer<T>(maxAudioTokens, lmHiddenDim);
@@ -6472,7 +6473,7 @@ public static class LayerHelper<T>
         // === TEXT DECODER ===
 
         // Token embedding (Whisper vocabulary)
-        yield return new EmbeddingLayer<T>(vocabSize, modelDim);
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, modelDim));
 
         // Positional encoding for decoder
         yield return new PositionalEncodingLayer<T>(maxTokens, modelDim);
@@ -10632,7 +10633,8 @@ public static class LayerHelper<T>
         // reasons -- the 2D table that carries a token's page position existed only as a model field
         // nothing read, and PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids)
         // where these BERT/XLM-R derived models use LEARNED positions. Token-only input is unchanged.
-        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
+        yield return LayerGraphContract.FromExternalInput(
+            new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D));
 
         // LayerNorm after embeddings
         yield return new LayerNormalizationLayer<T>();
@@ -10722,7 +10724,8 @@ public static class LayerHelper<T>
         // tables that were supposed to carry them lived as model fields, were counted and serialized,
         // and were read by nothing. Folding them in here means the text stream can actually see where
         // a token sits. Token-only input is unchanged when no boxes accompany it.
-        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
+        yield return LayerGraphContract.FromExternalInput(
+            new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D));
 
         // === SPATIAL ENCODINGS (shared) ===
 
@@ -10986,7 +10989,7 @@ public static class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(numPatches, hiddenDim);
 
         // Text embeddings
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, hiddenDim));
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
 
         // Unified encoder
@@ -11256,7 +11259,8 @@ public static class LayerHelper<T>
         // reasons -- the 2D table that carries a token's page position existed only as a model field
         // nothing read, and PositionalEncodingLayer is SupportsTraining => false (fixed sinusoids)
         // where these BERT/XLM-R derived models use LEARNED positions. Token-only input is unchanged.
-        yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
+        yield return LayerGraphContract.FromExternalInput(
+            new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D));
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.1);
 
@@ -11367,9 +11371,11 @@ public static class LayerHelper<T>
         // by construction and a page-relative position has to be re-learned as arithmetic; a table
         // lets each bucket mean whatever the data says it means. The dead _spatialEmbeddings and
         // _layoutPositionEmbeddings fields were exactly these tables, allocated and never read.
-        yield return new LayoutEmbeddingLayer<T>(
-            vocabSize: 1, hiddenDim: layoutDim, maxSequenceLength: maxSequenceLength,
-            maxPosition2D: maxPosition2D, includeTokens: false);
+        yield return LayerGraphContract.FromDerivedInput(
+            new LayoutEmbeddingLayer<T>(
+                vocabSize: 1, hiddenDim: layoutDim, maxSequenceLength: maxSequenceLength,
+                maxPosition2D: maxPosition2D, includeTokens: false),
+            "layout");
         yield return new LayerNormalizationLayer<T>();
 
         // Dual-stream transformer with BiACM
@@ -11643,7 +11649,7 @@ public static class LayerHelper<T>
         // blocks above consume the CONCATENATION of projected visual tokens and embedded text
         // tokens, which a linear walk cannot express. Without it the decoder only ever saw the image
         // and _languageEmbeddings sat dead: a vision-language model with no way in for language.
-        yield return new EmbeddingLayer<T>(vocabSize, textDim);
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, textDim));
     }
 
     /// <summary>
@@ -11715,7 +11721,7 @@ public static class LayerHelper<T>
         // consume the CONCATENATION of projected visual tokens and embedded text, which a linear
         // walk cannot express. Sized fusionDim, the width the visual tokens were projected to, NOT
         // textDim: they share a default of 768 and that coincidence would hide a mismatch.
-        yield return new EmbeddingLayer<T>(vocabSize, fusionDim);
+        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, fusionDim));
     }
 
     /// <summary>
@@ -12320,9 +12326,12 @@ public static class LayerHelper<T>
 
         // The paper uses integer token indices for all four lookup tables.
         yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);  // W       (paper w_i)
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);  // W̃       (paper w̃_j)
-        yield return new EmbeddingLayer<T>(vocabSize, 1);                   // b       (paper b_i)
-        yield return new EmbeddingLayer<T>(vocabSize, 1);                   // b̃       (paper b̃_j)
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabSize, embeddingDimension));          // W̃       (paper w̃_j)
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabSize, 1));                           // b       (paper b_i)
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabSize, 1));                           // b̃       (paper b̃_j)
     }
 
     /// <summary>
@@ -12419,7 +12428,8 @@ public static class LayerHelper<T>
         }
 
         // 3. Text embedding for Q-Former
-        yield return new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim));
 
         // 4. Projection heads
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null); // ITM
@@ -17329,7 +17339,8 @@ public static class LayerHelper<T>
     {
         // Token embeddings
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+        yield return LayerGraphContract.FromDerivedInput(
+            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
 
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
@@ -17373,7 +17384,8 @@ public static class LayerHelper<T>
     {
         // Token and position embeddings
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+        yield return LayerGraphContract.FromDerivedInput(
+            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
 
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
@@ -17462,7 +17474,8 @@ public static class LayerHelper<T>
     {
         // Token and position embeddings
         yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+        yield return LayerGraphContract.FromDerivedInput(
+            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
 
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
@@ -33239,7 +33252,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(lmHiddenDim, (IActivationFunction<T>?)null);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, lmHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, lmHiddenDim));
 
         // Language model transformer layers
         for (int i = 0; i < numLmLayers; i++)
@@ -33323,7 +33337,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, textHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, textHiddenDim));
 
         // Text encoder layers
         int[] textTokenShape = new[] { 1, textHiddenDim };
@@ -33369,7 +33384,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text encoder
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, hiddenDim));
         for (int i = 0; i < numEncoderLayers; i++)
             yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
@@ -33621,7 +33637,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text encoder: EmbeddingLayer + numLayers × TransformerEncoder + projection
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, hiddenDim));
         for (int i = 0; i < numLayers; i++)
             yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
@@ -33674,7 +33691,8 @@ public static class LayerHelper<T>
         }
 
         // Text embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim));
 
         // ITM head + ITC projection + LM projection
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);
@@ -34150,7 +34168,8 @@ public static class LayerHelper<T>
             yield return new CrossAttentionLayer<T>(lmHiddenDim, lmHiddenDim, numHeads);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, lmHiddenDim);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, lmHiddenDim));
 
         // Language model transformer layers
         for (int i = 0; i < numLmLayers; i++)
@@ -34188,7 +34207,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
         // Text token embedding
-        yield return new EmbeddingLayer<T>(vocabularySize, embeddingDimension);
+        yield return LayerGraphContract.FromExternalInput(
+            new EmbeddingLayer<T>(vocabularySize, embeddingDimension));
 
         // Language model transformer layers + cross-attention layers
         int crossAttnCount = 0;

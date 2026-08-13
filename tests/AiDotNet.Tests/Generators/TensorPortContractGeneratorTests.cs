@@ -17,18 +17,35 @@ using System;
 using System.Collections.Generic;
 namespace AiDotNet.NeuralNetworks.Layers
 {
-    public enum LayerInputDomainKind { Unspecified, Continuous, IntegerIndices, BooleanMask }
+    public enum LayerInputDomainKind { Unspecified, Continuous, IntegerIndices, BooleanMask, AdditiveMask, Deferred, Custom }
     public enum TensorPortRole { Unspecified, Features, TokenIds, PositionIds, TokenTypeIds, Mask, EncoderInput, EncoderMemory, DecoderIds, AudioCodes, Output }
+    public enum TensorPortSource { External, Derived, Defaulted, Internal }
+    public sealed class PortShapeConstraint
+    {
+        public static PortShapeConstraint None { get; } = new PortShapeConstraint();
+        public int ExactRank { get; set; }
+        public int MinimumRank { get; set; }
+        public int MaximumRank { get; set; }
+        public int MinimumElementCount { get; set; }
+        public string SameShapeAs { get; set; }
+        public IReadOnlyList<int> MinimumAxisSizes { get; set; }
+        public IReadOnlyList<int> AxisDivisors { get; set; }
+    }
     public sealed class LayerInputDomain
     {
         public static LayerInputDomain Unspecified { get; } = new LayerInputDomain();
         public static LayerInputDomain Continuous { get; } = new LayerInputDomain();
         public static LayerInputDomain BooleanMask { get; } = new LayerInputDomain();
+        public static LayerInputDomain AdditiveMask { get; } = new LayerInputDomain();
+        public static LayerInputDomain Deferred(string reason) => new LayerInputDomain();
         public static LayerInputDomain Indices(int maximum) => new LayerInputDomain();
+        public static LayerInputDomain Custom(string key) => new LayerInputDomain();
     }
     public sealed class LayerPort
     {
-        public LayerPort(string name, int[] shape, bool required, LayerInputDomain domain, TensorPortRole role) { }
+        public LayerPort(string name, int[] shape, bool required, LayerInputDomain domain,
+            TensorPortRole role, string stableId = null, TensorPortSource source = TensorPortSource.External,
+            string variant = ""default"", PortShapeConstraint shapeConstraint = null) { }
     }
     public abstract class LayerBase<T>
     {
@@ -38,14 +55,26 @@ namespace AiDotNet.NeuralNetworks.Layers
         public virtual bool PropagatesInputDomain => false;
         public int[] GetInputShape() => new[] { 1 };
         public int[] GetOutputShape() => new[] { 1 };
+        public AiDotNet.Tensors.LinearAlgebra.Tensor<T> Forward(
+            IReadOnlyDictionary<string, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> inputs) => null;
+        protected virtual AiDotNet.Tensors.LinearAlgebra.Tensor<T> ForwardTraced(
+            AiDotNet.Tensors.LinearAlgebra.Tensor<T> input) => input;
+        protected virtual AiDotNet.Tensors.LinearAlgebra.Tensor<T> ForwardTracedPorts(
+            IReadOnlyDictionary<string, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> inputs) => null;
     }
+}
+namespace AiDotNet.Tensors.LinearAlgebra
+{
+    public sealed class Tensor<T> { }
 }
 namespace AiDotNet.NeuralNetworks
 {
     using AiDotNet.NeuralNetworks.Layers;
     public readonly struct ModelInputShapeConstraint
     {
-        public ModelInputShapeConstraint(int minimumRank, int minimumElements, int exactRank = 0) { }
+        public ModelInputShapeConstraint(int minimumRank, int minimumElements, int exactRank = 0,
+            int maximumRank = 0, IReadOnlyList<int> minimumAxes = null,
+            IReadOnlyList<int> divisors = null) { }
     }
     public abstract class NeuralNetworkBase<T>
     {
@@ -66,8 +95,40 @@ namespace AiDotNet.Attributes
         public bool Required { get; set; } = true;
         public string MaxExclusiveMember { get; set; }
         public string MaxExclusiveResolver { get; set; }
+        public string CustomProviderKey { get; set; }
         public string ShapeMember { get; set; }
         public bool PropagatesInputDomain { get; set; }
+        public string StableId { get; set; }
+        public TensorPortSource Source { get; set; }
+        public string Variant { get; set; } = ""default"";
+        public int ExactRank { get; set; }
+        public int MinimumRank { get; set; }
+        public int MaximumRank { get; set; }
+        public int MinimumElementCount { get; set; }
+        public string SameShapeAs { get; set; }
+        public int[] MinimumAxisSizes { get; set; }
+        public int[] AxisDivisors { get; set; }
+    }
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class GenerateInputContractAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Parameter)]
+    public sealed class TensorInputAttribute : Attribute
+    {
+        public TensorInputAttribute(LayerInputDomainKind domain = LayerInputDomainKind.Continuous) { }
+        public string Name { get; set; }
+        public TensorPortRole Role { get; set; }
+        public string MaxExclusiveMember { get; set; }
+        public string MaxExclusiveResolver { get; set; }
+        public string CustomProviderKey { get; set; }
+        public TensorPortSource Source { get; set; }
+        public string Variant { get; set; }
+        public int ExactRank { get; set; }
+        public int MinimumRank { get; set; }
+        public int MaximumRank { get; set; }
+        public int MinimumElementCount { get; set; }
+        public string SameShapeAs { get; set; }
+        public int[] MinimumAxisSizes { get; set; }
+        public int[] AxisDivisors { get; set; }
     }
     [AttributeUsage(AttributeTargets.Class)]
     public sealed class RankRoutedInputDomainAttribute : Attribute
@@ -79,8 +140,11 @@ namespace AiDotNet.Attributes
     {
         public int ExactRank { get; set; }
         public int MinimumRank { get; set; }
+        public int MaximumRank { get; set; }
         public int MinimumElementCount { get; set; }
         public string MinimumElementCountMember { get; set; }
+        public int[] MinimumAxisSizes { get; set; }
+        public int[] AxisDivisors { get; set; }
     }
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ValidateSequentialLayerDomainsAttribute : Attribute { }
@@ -179,7 +243,7 @@ public partial class Model<T> : NeuralNetworkBase<T> { private int MinimumSize()
         var run = Run(source);
         Assert.Contains("override global::System.Collections.Generic.IReadOnlyList", run.Generated);
         Assert.Contains("LayerInputDomain.Indices(_vocabularySize)", run.Generated);
-        Assert.Contains("GetInputShapeConstraint() => new(2, MinimumSize(), 2)", run.Generated);
+        Assert.Contains("GetInputShapeConstraint() => new(2, MinimumSize(), 2, 0", run.Generated);
     }
 
     [Fact]
@@ -241,5 +305,186 @@ public partial class Model<T> : NeuralNetworkBase<T> { }";
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("LayerIndex is -1", diagnostic.GetMessage());
         Assert.Contains("Correct the attribute values", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task AnnotatedForwardCore_GeneratesBeginnerDefaultAndBridge()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+public partial class Projection<T> : LayerBase<T>
+{
+    [GenerateInputContract]
+    private Tensor<T> Compute(Tensor<T> features) => features;
+}";
+
+        var run = Run(source);
+
+        Assert.DoesNotContain(run.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Contains("LayerInputDomain.Continuous", run.Generated);
+        Assert.Contains("ForwardTraced", run.Generated);
+        Assert.Contains("=> Compute(input)", run.Generated);
+    }
+
+    [Fact]
+    public async Task AnnotatedMultiInputForward_GeneratesTypedFacadeAndSemanticPorts()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+public partial class TokenMixer<T> : LayerBase<T>
+{
+    private int _vocabularySize = 128;
+    [GenerateInputContract]
+    private Tensor<T> Compute(
+        [TensorInput(LayerInputDomainKind.IntegerIndices, Name = ""token_ids"",
+            Role = TensorPortRole.TokenIds, MaxExclusiveMember = ""_vocabularySize"")] Tensor<T> ids,
+        [TensorInput(LayerInputDomainKind.BooleanMask, Name = ""mask"", Role = TensorPortRole.Mask)] Tensor<T> mask)
+        => ids;
+}";
+
+        var run = Run(source);
+
+        Assert.DoesNotContain(run.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Contains("public readonly struct Inputs", run.Generated);
+        Assert.Contains("TokenIds { get; }", run.Generated);
+        Assert.Contains("LayerInputDomain.BooleanMask", run.Generated);
+        Assert.Contains("ForwardTracedPorts", run.Generated);
+    }
+
+    [Fact]
+    public async Task RangeMemberWithWrongType_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""ids"", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
+    MaxExclusiveMember = ""_size"")]
+public partial class Lookup<T> : LayerBase<T> { private string _size = ""ten""; }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT008"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("int field/property", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task AlternativeVariants_MayReuseAStablePortName()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""input"", TensorPortDirection.Input, Variant = ""features"")]
+[TensorPort(""input"", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
+    Variant = ""tokens"", MaxExclusiveMember = ""_size"")]
+public partial class Either<T> : LayerBase<T> { private int _size = 10; }";
+
+        Assert.DoesNotContain(Run(source).Diagnostics, item => item.Id is "ADNPORT003" or "ADNPORT010");
+    }
+
+    [Fact]
+    public async Task GeneratedForwardWithWrongReturnType_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+public partial class Invalid<T> : LayerBase<T>
+{
+    [GenerateInputContract]
+    private int Compute(Tensor<T> input) => 0;
+}";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT009"));
+        Assert.Contains("return Tensor<T>", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task GeneratedDefaultedPortWithoutNullDefault_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+public partial class Invalid<T> : LayerBase<T>
+{
+    [GenerateInputContract]
+    private Tensor<T> Compute(
+        Tensor<T> input,
+        [TensorInput(Source = TensorPortSource.Defaulted)] Tensor<T> context) => input;
+}";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT009"));
+        Assert.Contains("must declare '= null'", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task MissingSameShapePort_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""mask"", TensorPortDirection.Input, SameShapeAs = ""missing"")]
+public partial class Invalid<T> : LayerBase<T> { }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT007"));
+        Assert.Contains("does not exist in variant", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task ModelGeometryMemberWithWrongType_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks;
+[ModelInputShapeConstraint(MinimumElementCountMember = ""MinimumSize"")]
+public partial class Invalid<T> : NeuralNetworkBase<T>
+{
+    private string MinimumSize => ""large"";
+}";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT008"));
+        Assert.Contains("int field/property", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task CustomDomain_GeneratesExplicitProviderBinding()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""input"", TensorPortDirection.Input, LayerInputDomainKind.Custom,
+    CustomProviderKey = ""sparse-probability"")]
+public partial class SparseProbability<T> : LayerBase<T> { }";
+
+        var run = Run(source);
+
+        Assert.DoesNotContain(run.Diagnostics, item => item.Severity == DiagnosticSeverity.Error);
+        Assert.Contains("LayerInputDomain.Custom(\"sparse-probability\")", run.Generated);
+    }
+
+    [Fact]
+    public async Task CustomDomainWithoutProvider_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""input"", TensorPortDirection.Input, LayerInputDomainKind.Custom)]
+public partial class Invalid<T> : LayerBase<T> { }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT007"));
+        Assert.Contains("without a CustomProviderKey", diagnostic.GetMessage());
     }
 }

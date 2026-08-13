@@ -12417,23 +12417,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                 sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 4, {codecDim} }};");
                 sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"                tensor[i] = rng.Next(0, {tokenVocab});");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
                 if (model.ClassName is "UniAudio" or "WhisperSpeech" or "XTTSv2" or "XTTSv2Clone")
                 {
                     // These codec language models predict a discrete acoustic token at each
@@ -12450,24 +12433,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    }");
                     sb.AppendLine();
                 }
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            int offset = value < 0.5 ? 1 : 17;");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"                tensor[i] = (i + offset) % {tokenVocab};");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}value;");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "FishSpeech" or "VALLE2" or "XTTSv2Clone"
                         or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm";
@@ -12569,28 +12534,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 8, {(model.ClassName == "FastSpeech" ? 16 : 80)} }};");
                 }
                 sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = rng.Next(0, 64);");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
                 sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
                 sb.AppendLine("    {");
                 sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
                 sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
                 sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        int offset = value < 0.5 ? 1 : 17;");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = (i + offset) % 64;");
                 sb.AppendLine("        return tensor;");
                 sb.AppendLine("    }");
                 sb.AppendLine();
@@ -12987,35 +12935,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // axis 0 would ask the model for a zero-row input.
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
                 sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                // Match on RANK, not on the exact dimensions: DifferentInputLengths_ShouldNotCrash
-                // asks for a halved [1, 8] input, and an exact-shape test would drop that to the
-                // continuous branch and feed fractional values into a phoneme embedding. The mel
-                // target is rank 3, so rank alone separates input from target.
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = isInputShape ? rng.Next(0, 64) : {(useFloat ? "(float)" : string.Empty)}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        if (!isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine($"            for (int i = 0; i < tensor.Length; i++) tensor[i] = {(useFloat ? "(float)" : string.Empty)}value;");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        // Distinct token run per scalar so different values map to different phoneme");
-                sb.AppendLine("        // sequences rather than collapsing onto the same embedding row.");
-                sb.AppendLine("        int baseTok = value < 0.5 ? 1 : 17;");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("            tensor[i] = (i + baseTok) % 64;");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
             }
             else if (model.ClassName == "MusicSourceSeparator")
             {
@@ -13190,14 +13109,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
             sb.AppendLine();
-            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-            sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-            sb.AppendLine("            tensor[i] = rng.Next(0, 16);");
-            sb.AppendLine("        return tensor;");
-            sb.AppendLine("    }");
-            sb.AppendLine();
             sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
             sb.AppendLine("    {");
             sb.AppendLine("        var target = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
@@ -13206,15 +13117,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        for (int i = 0; i < samples; i++)");
             sb.AppendLine("            target[i * classes + rng.Next(classes)] = NumOps.One;");
             sb.AppendLine("        return target;");
-            sb.AppendLine("    }");
-            sb.AppendLine();
-            sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-            sb.AppendLine("        int offset = value < 0.5 ? 1 : 9;");
-            sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-            sb.AppendLine("            tensor[i] = (i + offset) % 16;");
-            sb.AppendLine("        return tensor;");
             sb.AppendLine("    }");
             sb.AppendLine();
             sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
@@ -13403,63 +13305,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // treats as continuous → projects to scalar multiples of one vector → the following
                 // (scale-invariant) LayerNorm collapses them to an identical output, defeating EVERY
                 // input-sensitivity/gradient invariant (DifferentInputs, GradientFlow, ScaledInput,
-                // MoreData, Training_ShouldChangeParameters), not just DifferentInputs_AfterTraining.
-                // Emit token-ID input tensors (legal [0,100) range, well below any standard vocab) for the
-                // INPUT shape only — targets (a different shape, via CreateRandomTargetTensor) stay
-                // continuous as their loss expects. The model is UNCHANGED (still paper-faithful token
-                // embeddings); this only feeds it the discrete token input a lookup model actually consumes.
-                // The reduced Mamba2/Zamba/Zamba2 generated fixtures intentionally use vocabSize=128
-                // through their public constructors. The inherited ScaledInput test multiplies every
-                // generated token by 10, so constrain these fixtures' source tokens to [0, 12):
-                // both original and scaled sequences remain legal token IDs while the unchanged test
-                // still exercises real input sensitivity.
-                int randomTokenUpperBound = model.ClassName is "EagleLanguageModel" or "FinchLanguageModel"
-                    ? 64 // The bounded fixtures above construct a 64-row embedding table.
-                    : model.ClassName == "XLSTMLanguageModel"
-                    ? 6 // ScaledInput multiplies by 10; IDs 0..5 stay legal for the 64-token fixture.
-                    : model.ClassName is "Mamba2LanguageModel" or "FalconMambaLanguageModel" or "GriffinLanguageModel" or "HawkLanguageModel"
-                        or "GLALanguageModel" or "GatedDeltaNetLanguageModel"
-                        or "ZambaLanguageModel" or "Zamba2LanguageModel"
-                        ? 12
-                        : 100;
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"                tensor[i] = rng.Next(0, {randomTokenUpperBound});");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {elemCast}rng.NextDouble();");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
-                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
-                sb.AppendLine("    {");
-                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
-                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
-                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
-                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
-                sb.AppendLine("        if (isInputShape)");
-                sb.AppendLine("        {");
-                sb.AppendLine("            // Distinct base token per scalar so different `value`s → different token");
-                sb.AppendLine("            // sequences (0.1 and 0.9 must produce different embeddings, not the same).");
-                sb.AppendLine("            int baseTok = value < 0.5 ? 3 : 37;");
-                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine("                tensor[i] = (i + baseTok) % 100;");
-                sb.AppendLine("            return tensor;");
-                sb.AppendLine("        }");
-                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
-                sb.AppendLine($"            tensor[i] = {elemCast}value;");
-                sb.AppendLine("        return tensor;");
-                sb.AppendLine("    }");
-                sb.AppendLine();
+                // Input values and constant probes now come from the model's generated contract.
+                // Token ranges and legal discrete mutations therefore follow the constructed
+                // embedding automatically instead of being duplicated in this scaffold.
                 sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
                 sb.AppendLine("    public override async System.Threading.Tasks.Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()");
                 sb.AppendLine("    {");
@@ -16834,6 +16682,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         };
     }
 
+    private static bool IsValleCodecLMModel(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className is "VALLE" or "VALLEX" or "VALLE2" or "VALLEXClone";
+    }
+
     private static int CodecLMInputVocabSize(string className)
     {
         int tickIdx = className.IndexOf('`');
@@ -16842,13 +16697,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2" or "OuteTTS"
                 or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM" or "SoundStorm" or "Zonos" ? 64 : 256;
-    }
-
-    private static bool IsValleCodecLMModel(string className)
-    {
-        int tickIdx = className.IndexOf('`');
-        if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "VALLE" or "VALLEX" or "VALLE2" or "VALLEXClone";
     }
 
     private static string GetValleCodecLMOptionsType(string className)

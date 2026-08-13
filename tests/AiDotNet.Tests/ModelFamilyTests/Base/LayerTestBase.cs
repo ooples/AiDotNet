@@ -1,6 +1,7 @@
 using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
@@ -323,20 +324,12 @@ public abstract class LayerTestBase
         if (layer is not LayerBase<double> layerBase)
             return CreateRandomTensor(shape, seed);
 
-        var domain = layerBase.GetInputDomain(shape);
-        if (!domain.IsIndices)
-            return CreateRandomTensor(shape, seed);
-
-        var tensor = new Tensor<double>(shape);
-        int cardinality = domain.MaxExclusive - domain.MinInclusive;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            int offset = (int)(((long)i + seed) % cardinality);
-            if (offset < 0) offset += cardinality;
-            tensor[i] = domain.MinInclusive + offset;
-        }
-
-        return tensor;
+        var contract = layerBase.BindInputContract(shape);
+        contract.RequireReady();
+        return InputContractTensorFactory.CreateValid<double>(
+            shape,
+            contract.PrimaryInput.ValueDomain,
+            RandomHelper.CreateSeededRandom(seed));
     }
 
 

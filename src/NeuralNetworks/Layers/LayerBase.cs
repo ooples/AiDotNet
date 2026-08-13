@@ -10,6 +10,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -2530,6 +2531,44 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         ];
 
     /// <summary>
+    /// Returns the canonical generated/runtime input contract for this layer. Ordinary layers
+    /// inherit a single continuous input; specialized and composite layers are populated from
+    /// <c>[TensorPort]</c> declarations by the source generator.
+    /// </summary>
+    public virtual InputContractManifest GetInputContract(int[]? inputShape = null)
+    {
+        IReadOnlyList<LayerPort> ports = InputPorts;
+        if (inputShape is not null && ports.Count > 0)
+        {
+            bool primaryBound = false;
+            ports = ports.Select(port =>
+            {
+                if (port.Source != TensorPortSource.External)
+                    return port;
+                bool isPrimary = !primaryBound;
+                primaryBound = true;
+                if (!isPrimary) return port;
+                return new LayerPort(
+                    port.Name,
+                    inputShape,
+                    port.Required,
+                    GetInputDomain(inputShape),
+                    port.Role,
+                    port.StableId,
+                    port.Source,
+                    port.Variant,
+                    port.ShapeConstraint);
+            }).ToArray();
+        }
+
+        return new InputContractManifest(GetType().Name, ports, OutputPorts);
+    }
+
+    /// <summary>Binds this layer's input contract to a concrete primary-input shape.</summary>
+    public BoundInputContract BindInputContract(int[] inputShape, string variant = "default") =>
+        GetInputContract(inputShape).Bind(inputShape, GetInputDomain(inputShape), variant);
+
+    /// <summary>
     /// Multi-input forward pass. Receives inputs by name, enabling layers that
     /// need multiple distinct tensors (time embeddings, conditioning, Q/K/V, etc.).
     /// </summary>
@@ -2537,6 +2576,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <returns>Output tensor.</returns>
     public Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
+        var contractShape = inputs.Values.FirstOrDefault()?.Shape.ToArray() ?? GetInputShape();
+        var manifest = GetInputContract(contractShape);
+        string variant = manifest.ResolveVariant(inputs.Keys);
+        manifest.Bind(contractShape, variant: variant)
+            .Validate(inputs);
+
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTracedPorts(inputs);
 
@@ -2670,6 +2715,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual Tensor<T> Forward(Tensor<T> input)
     {
+        // Most internal layer calls are the ordinary single, unconstrained continuous case. The
+        // tensor type already guarantees that such a value has a shape, so rebuilding and binding
+        // a manifest on every layer of every training step would add allocations without adding a
+        // check. Semantic domains (indices/masks/custom), generated shape rules and multi-port
+        // contracts still take the strict path. Public model boundaries validate unconditionally.
+        var ports = InputPorts;
+        bool needsContractValidation = ports.Count != 1
+            || ports[0].Source != TensorPortSource.External
+            || ports[0].ValueDomain.Kind != LayerInputDomainKind.Continuous
+            || ports[0].ShapeConstraint.IsConstrained;
+        if (needsContractValidation)
+            BindInputContract(input.Shape.ToArray()).Validate(input);
+
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTraced(input);
 

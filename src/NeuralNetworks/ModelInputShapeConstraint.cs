@@ -9,11 +9,17 @@ namespace AiDotNet.NeuralNetworks;
 public readonly record struct ModelInputShapeConstraint(
     int MinimumRank,
     int MinimumElementCount,
-    int ExactRank = 0)
+    int ExactRank = 0,
+    int MaximumRank = 0,
+    IReadOnlyList<int>? MinimumAxisSizes = null,
+    IReadOnlyList<int>? AxisDivisors = null)
 {
     /// <summary>No additional constraint.</summary>
     public static ModelInputShapeConstraint None { get; } = new(0, 0);
 
     /// <summary>Whether this declaration adds any constraint.</summary>
-    public bool IsConstrained => ExactRank > 0 || MinimumRank > 0 || MinimumElementCount > 0;
+    public bool IsConstrained => ExactRank > 0 || MinimumRank > 0 || MaximumRank > 0
+        || MinimumElementCount > 0
+        || MinimumAxisSizes?.Any(value => value > 0) == true
+        || AxisDivisors?.Any(value => value > 1) == true;
 }

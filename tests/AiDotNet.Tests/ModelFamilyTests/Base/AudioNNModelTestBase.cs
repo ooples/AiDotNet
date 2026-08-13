@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -26,6 +27,13 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
     /// </summary>
     protected override Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
+        // Some audio-family models accept codec/token IDs rather than waveform samples. Their
+        // generated model contract is authoritative: an audio-shaped sine wave would be an illegal
+        // fractional token tensor. Let the shared domain-aware fixture synthesize distinct legal
+        // constants for every non-continuous domain, and reserve the waveform probe for true audio.
+        if (InputDomainFor(shape).Kind != LayerInputDomainKind.Continuous)
+            return base.CreateConstantTensor(shape, value);
+
         var tensor = new Tensor<T>(shape);
         if (value == 0.0) return tensor; // all-zero silence
 
@@ -127,7 +135,7 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var variedShape = (int[])EffectiveInputShape.Clone();
         int lenAxis = VariableLengthAxis;
         variedShape[lenAxis] = checked(variedShape[lenAxis] * 2);
-        var variedInput = CreateRandomTensor(variedShape, rng);
+        var variedInput = CreateRandomInputTensor(variedShape, rng);
 
         var output = network.Predict(variedInput);
         Assert.True(output.Length > 0, "Output should not be empty for a different input length.");

@@ -237,20 +237,20 @@ public class LayerPortTests
     // BackwardGpuMulti test removed — Backward deleted in tape-based autodiff migration
 
     [Fact(Timeout = 120000)]
-    public async Task SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
+    public async Task SingleInputLayer_MultiInputForward_RejectsUndeclaredKeys()
     {
         await Task.Yield();
         var layer = new DenseLayer<double>(2);
         var input = new Tensor<double>([1, 4]);
         for (int i = 0; i < 4; i++) input[0, i] = (i + 1) * 0.1;
 
-        // Pass extra key that doesn't match any port — should be ignored
-        var result = layer.Forward(new Dictionary<string, Tensor<double>>
+        var inputs = new Dictionary<string, Tensor<double>>
         {
             ["input"] = input,
             ["extra_data"] = new Tensor<double>([3])
-        });
+        };
 
-        Assert.True(result.Length > 0);
+        var ex = Assert.Throws<InputContractViolationException>(() => layer.Forward(inputs));
+        Assert.Contains("do not match any declared variant", ex.Message);
     }
 }

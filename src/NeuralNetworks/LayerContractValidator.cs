@@ -82,7 +82,8 @@ public static class LayerContractValidator
             var producerPort = producer.OutputPorts.Count > 0 ? producer.OutputPorts[0] : null;
             var consumerPort = consumer.InputPorts.Count > 0 ? consumer.InputPorts[0] : null;
             if (producerPort is null || consumerPort is null
-                || consumerPort.ValueDomain.Accepts(producerPort.ValueDomain))
+                || consumerPort.ValueDomain.CompatibilityWith(producerPort.ValueDomain)
+                    != Layers.LayerInputDomainCompatibility.Incompatible)
                 continue;
 
             string message = DescribeValueDomainMismatch(
@@ -111,7 +112,8 @@ public static class LayerContractValidator
             ? consumer.InputPorts.FirstOrDefault(p => p.Name == consumerPortName)
             : consumer.InputPorts.FirstOrDefault();
         if (producerPort is null || consumerPort is null
-            || consumerPort.ValueDomain.Accepts(producerPort.ValueDomain))
+            || consumerPort.ValueDomain.CompatibilityWith(producerPort.ValueDomain)
+                != Layers.LayerInputDomainCompatibility.Incompatible)
             return;
 
         throw new InvalidOperationException(DescribeValueDomainMismatch(

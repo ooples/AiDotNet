@@ -16,6 +16,50 @@ public enum TensorPortRole
     Output
 }
 
+/// <summary>Where a tensor port obtains its value.</summary>
+public enum TensorPortSource
+{
+    /// <summary>The caller must supply the tensor.</summary>
+    External,
+
+    /// <summary>The layer derives the tensor from another input.</summary>
+    Derived,
+
+    /// <summary>The layer supplies a default when the caller omits the tensor.</summary>
+    Defaulted,
+
+    /// <summary>The tensor exists only inside the component graph.</summary>
+    Internal
+}
+
+/// <summary>
+/// A small, decidable shape language shared by generated contracts, runtime validation and test
+/// synthesis. Zero-valued limits mean unconstrained.
+/// </summary>
+public sealed record PortShapeConstraint
+{
+    /// <summary>No extra shape restriction.</summary>
+    public static PortShapeConstraint None { get; } = new();
+
+    public int ExactRank { get; init; }
+    public int MinimumRank { get; init; }
+    public int MaximumRank { get; init; }
+    public int MinimumElementCount { get; init; }
+
+    /// <summary>Optional port whose complete shape must match this port.</summary>
+    public string? SameShapeAs { get; init; }
+
+    /// <summary>Per-axis minimum sizes. Zero entries leave the corresponding axis unconstrained.</summary>
+    public IReadOnlyList<int> MinimumAxisSizes { get; init; } = Array.Empty<int>();
+
+    /// <summary>Per-axis divisors. Zero or one leaves the corresponding axis unconstrained.</summary>
+    public IReadOnlyList<int> AxisDivisors { get; init; } = Array.Empty<int>();
+
+    public bool IsConstrained => ExactRank > 0 || MinimumRank > 0 || MaximumRank > 0
+        || MinimumElementCount > 0 || !string.IsNullOrWhiteSpace(SameShapeAs)
+        || MinimumAxisSizes.Any(value => value > 0) || AxisDivisors.Any(value => value > 1);
+}
+
 /// <summary>
 /// Declares a named input or output port on a layer.
 /// Ports enable multi-input layers (e.g., DiffusionResBlock needs "input" + "time_embed")
@@ -36,13 +80,21 @@ public sealed record LayerPort
     public bool Required { get; }
     public LayerInputDomain ValueDomain { get; }
     public TensorPortRole Role { get; }
+    public string StableId { get; }
+    public TensorPortSource Source { get; }
+    public string Variant { get; }
+    public PortShapeConstraint ShapeConstraint { get; }
 
     public LayerPort(
         string Name,
         int[] Shape,
         bool Required = true,
         LayerInputDomain? ValueDomain = null,
-        TensorPortRole Role = TensorPortRole.Unspecified)
+        TensorPortRole Role = TensorPortRole.Unspecified,
+        string? StableId = null,
+        TensorPortSource Source = TensorPortSource.External,
+        string Variant = "default",
+        PortShapeConstraint? ShapeConstraint = null)
     {
         this.Name = Name ?? throw new ArgumentNullException(nameof(Name));
         // Defensive copy to prevent callers from mutating the layer's shape
@@ -50,5 +102,9 @@ public sealed record LayerPort
         this.Required = Required;
         this.ValueDomain = ValueDomain ?? LayerInputDomain.Continuous;
         this.Role = Role;
+        this.StableId = string.IsNullOrWhiteSpace(StableId) ? this.Name : StableId!;
+        this.Source = Source;
+        this.Variant = string.IsNullOrWhiteSpace(Variant) ? "default" : Variant;
+        this.ShapeConstraint = ShapeConstraint ?? PortShapeConstraint.None;
     }
 }

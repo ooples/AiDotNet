@@ -40,6 +40,7 @@ internal static class ShapeConformanceWorker
         object? model = null;
         int[]? inputShape = null;
         int[]? predictedShape = null;
+        BoundInputContract? inputContract = null;
         string? lastError = null;
 
         try
@@ -74,6 +75,16 @@ internal static class ShapeConformanceWorker
                     shape[0] = 1;
                     for (int i = 0; i < perSample.Length; i++) shape[i + 1] = Math.Min(perSample[i], extent);
 
+                    BoundInputContract? candidateContract = null;
+                    if (candidate is NeuralNetworkBase<double> network)
+                    {
+                        shape = InputContractShapeResolver.Conform(
+                            shape,
+                            network.GetInputShapeConstraint());
+                        candidateContract = network.BindInputContract(shape);
+                        candidateContract.RequireReady();
+                    }
+
                     int[]? prediction = ShapeInference.InferOutputShape(contract, shape);
                     if (model is null || prediction is not null)
                     {
@@ -82,6 +93,7 @@ internal static class ShapeConformanceWorker
                         candidate = null;
                         inputShape = shape;
                         predictedShape = prediction;
+                        inputContract = candidateContract;
                         if (prediction is not null) break;
                     }
                 }
@@ -103,7 +115,7 @@ internal static class ShapeConformanceWorker
                 return new ShapeProbeMeasurement("declined", inputShape, null, null,
                     "the concrete contract did not answer any supported probe rank");
 
-            var (actualShape, failure) = TryPredict(model, inputShape);
+            var (actualShape, failure) = TryPredict(model, inputShape, inputContract);
             if (actualShape is null)
                 return new ShapeProbeMeasurement("predict-failed", inputShape, predictedShape, null, failure);
 
@@ -169,12 +181,44 @@ internal static class ShapeConformanceWorker
         }
     }
 
-    private static (int[]? Shape, string? Failure) TryPredict(object model, int[] shape)
+    private static (int[]? Shape, string? Failure) TryPredict(
+        object model,
+        int[] shape,
+        BoundInputContract? contract)
     {
         try
         {
-            var probe = new Tensor<double>(shape);
-            for (int i = 0; i < probe.Length; i++) probe[i] = (i * 7) % 13;
+            Tensor<double> probe;
+            if (contract is null)
+            {
+                probe = new Tensor<double>(shape);
+                for (int i = 0; i < probe.Length; i++) probe[i] = (i * 7) % 13;
+            }
+            else
+            {
+                contract.RequireReady();
+                probe = InputContractTensorFactory.CreateValid<double>(contract, new Random(1789));
+                contract.Validate(probe);
+
+                if (contract.PrimaryInput.ValueDomain.Kind !=
+                    AiDotNet.NeuralNetworks.Layers.LayerInputDomainKind.Continuous)
+                {
+                    var invalid = InputContractTensorFactory.CreateInvalid<double>(
+                        contract.PrimaryInput.Shape.ToArray(),
+                        contract.PrimaryInput.ValueDomain);
+                    try
+                    {
+                        contract.Validate(invalid);
+                        return (null,
+                            "the bound input contract accepted its generated negative example");
+                    }
+                    catch (InputContractViolationException)
+                    {
+                        // This is the negative-sweep success condition.
+                    }
+                }
+            }
+
             var result = (Tensor<double>?)((dynamic)model).Predict(probe);
             return result is null ? (null, "Predict returned null") : (result.Shape.ToArray(), null);
         }

@@ -3397,6 +3397,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         ModelInputShapeConstraint.None;
 
     /// <summary>
+    /// Returns the canonical external-input schema inferred from the first semantic consumer.
+    /// Identity placeholders are skipped, so token models expose the embedding range without a
+    /// model-specific override and ordinary numerical models retain the continuous default.
+    /// </summary>
+    public virtual InputContractManifest GetInputContract(int[]? inputShape = null)
+    {
+        int[] shape = inputShape is { Length: > 0 }
+            ? (int[])inputShape.Clone()
+            : GetInputShape();
+        IReadOnlyList<LayerPort>? ports = null;
+
+        var layers = Layers;
+        if (layers is not null)
+        {
+            for (int i = 0; i < layers.Count; i++)
+            {
+                if (layers[i] is not LayerBase<T> layer) break;
+                if (layer.PropagatesInputDomain) continue;
+
+                ports = layer.InputPorts;
+                break;
+            }
+        }
+
+        if (ports is null || ports.Count == 0)
+        {
+            ports = new[]
+            {
+                new LayerPort(
+                    "input",
+                    shape,
+                    ValueDomain: GetInputDomain(shape),
+                    Role: TensorPortRole.Features)
+            };
+        }
+        else
+        {
+            var primary = ports[0];
+            ports = new[]
+            {
+                new LayerPort(
+                    primary.Name,
+                    shape,
+                    primary.Required,
+                    GetInputDomain(shape),
+                    primary.Role,
+                    primary.StableId,
+                    primary.Source,
+                    primary.Variant,
+                    primary.ShapeConstraint)
+            }.Concat(ports.Skip(1)).ToArray();
+        }
+
+        return new InputContractManifest(
+            GetType().Name,
+            ports,
+            shapeConstraint: GetInputShapeConstraint());
+    }
+
+    /// <summary>Binds external input semantics and geometry to concrete instance configuration.</summary>
+    public BoundInputContract BindInputContract(int[] inputShape, string variant = "default")
+    {
+        if (inputShape is null) throw new ArgumentNullException(nameof(inputShape));
+        var manifest = GetInputContract(inputShape);
+        return manifest.Bind(inputShape, GetInputDomain(inputShape), variant);
+    }
+
+    /// <summary>
     /// Publishes tape-computed gradients onto every layer's gradient surface.
     /// </summary>
     /// <param name="grads">Tape gradients, keyed by parameter tensor reference.</param>
@@ -4872,6 +4940,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        BindInputContract(input.Shape.ToArray()).Validate(input);
+
         // ONE-SHOT chain validation, on the first real forward rather than at construction.
         //
         // Validating at construction had to GUESS the topology, because the chain does not exist as a
