@@ -27,6 +27,7 @@ permissions:
 
 env:
   PERF_SHARD_COUNT: 16
+  TENSORS_PR_944_COMMIT: 449071bb854582084af9e9cb3ee752f4417ac00a
 
 jobs:
   census:
@@ -43,26 +44,45 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Checkout stacked AiDotNet.Tensors dependency
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          repository: ooples/AiDotNet.Tensors
+          ref: ${{ env.TENSORS_PR_944_COMMIT }}
+          path: dependencies/AiDotNet.Tensors
+          persist-credentials: false
+
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
       - name: Restore
+        shell: pwsh
         run: |
-          dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj `
+            -p:CustomAfterMicrosoftCommonTargets=$targets
           dotnet restore tools/ModelPerfProbe/ModelPerfProbe.csproj
 
       - name: Build fixture inventory
-        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
+        shell: pwsh
+        run: |
+          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release `
+            --framework net10.0 --no-restore `
+            -p:CustomAfterMicrosoftCommonTargets=$targets
 
       - name: Record expected fixture inventory
         if: matrix.shard == 0
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/model-performance/shard-0 | Out-Null
+          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 `
-            --list-tests --no-build --no-restore --filter 'Category=ModelPerformanceCensus' |
+            --list-tests --no-build --no-restore `
+            -p:CustomAfterMicrosoftCommonTargets=$targets `
+            --filter 'Category=ModelPerformanceCensus' |
             Set-Content artifacts/model-performance/shard-0/test-list.txt
 
       - name: Run assigned model fixtures serially
@@ -75,6 +95,7 @@ jobs:
           DOTNET_gcServer: '0'
         run: |
           $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
           $config = Get-Content $runnerJson -Raw | ConvertFrom-Json
           $config.parallelizeTestCollections = $false
           $config.maxParallelThreads = 1
@@ -82,6 +103,7 @@ jobs:
           $config | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj `
             -c Release --framework net10.0 --no-build --no-restore `
+            -p:CustomAfterMicrosoftCommonTargets=$targets `
             --filter 'Category=ModelPerformanceCensus' `
             --logger 'trx;LogFileName=model-performance.trx' `
             --results-directory "artifacts/model-performance/shard-${{ matrix.shard }}"

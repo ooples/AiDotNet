@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    PR #2005 is intentionally stacked on AiDotNet.Tensors PR #944. Import the exact
+    checked-out project for the performance census so its 863-fixture evidence is
+    reproducible before the new engine operations are available in a NuGet release.
+    Delete this target and the dependency checkout when AiDotNet consumes that release.
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'AiDotNet'">
+    <PackageReference Remove="AiDotNet.Tensors" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../dependencies/AiDotNet.Tensors/src/AiDotNet.Tensors/AiDotNet.Tensors.csproj" />
+  </ItemGroup>
+</Project>
