@@ -944,6 +944,91 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         return Enumerable.Range(0, _numFeatures > 0 ? _numFeatures : 0);
     }
 
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Options
+        writer.Write(_options.NumFolds);
+        writer.Write((int)_options.MetaLearnerType);
+        writer.Write(_numFeatures);
+
+        // Meta weights
+        writer.Write(_metaWeights?.Length ?? 0);
+        if (_metaWeights != null)
+        {
+            foreach (var w in _metaWeights)
+            {
+                writer.Write(NumOps.ToDouble(w));
+            }
+        }
+        writer.Write(NumOps.ToDouble(_metaIntercept));
+
+        // Normalization params
+        writer.Write(_predMeans?.Length ?? 0);
+        if (_predMeans != null && _predStds != null)
+        {
+            foreach (var mean in _predMeans)
+            {
+                writer.Write(NumOps.ToDouble(mean));
+            }
+            foreach (var std in _predStds)
+            {
+                writer.Write(NumOps.ToDouble(std));
+            }
+        }
+
+        // Note: Base models need to be serialized separately in a real implementation
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        int baseLen = reader.ReadInt32();
+        base.Deserialize(reader.ReadBytes(baseLen));
+
+        _options.NumFolds = reader.ReadInt32();
+        _options.MetaLearnerType = (SuperLearnerMetaLearner)reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+
+        int numWeights = reader.ReadInt32();
+        if (numWeights > 0)
+        {
+            _metaWeights = new Vector<T>(numWeights);
+            for (int i = 0; i < numWeights; i++)
+            {
+                _metaWeights[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+        _metaIntercept = NumOps.FromDouble(reader.ReadDouble());
+
+        int numMeans = reader.ReadInt32();
+        if (numMeans > 0)
+        {
+            _predMeans = new Vector<T>(numMeans);
+            _predStds = new Vector<T>(numMeans);
+            for (int i = 0; i < numMeans; i++)
+            {
+                _predMeans[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            for (int i = 0; i < numMeans; i++)
+            {
+                _predStds[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+    }
+
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         // Clone each base model

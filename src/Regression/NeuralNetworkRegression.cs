@@ -713,11 +713,157 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         Train(x, y);
     }
 
+    /// <summary>
+    /// Serializes the model to a byte array.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method serializes both the base class data and the neural network specific data,
+    /// including the layer sizes, weights, and biases.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// Serialization converts the model's internal state into a format that can be saved to disk or
+    /// transmitted over a network. This allows you to save a trained model and load it later without
+    /// having to retrain it. Think of it like saving your progress in a video game.
+    /// </para>
+    /// </remarks>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Serialize NeuralNetworkRegression specific data
+        writer.Write(_options.LayerSizes.Count);
+        foreach (var size in _options.LayerSizes)
+        {
+            writer.Write(size);
+        }
+
+        writer.Write(_weights.Count);
+        foreach (var weight in _weights)
+        {
+            writer.Write(weight.Rows);
+            writer.Write(weight.Columns);
+            foreach (var value in weight.Flatten())
+            {
+                writer.Write(Convert.ToDouble(value));
+            }
+        }
+
+        writer.Write(_biases.Count);
+        foreach (var bias in _biases)
+        {
+            writer.Write(bias.Length);
+            foreach (var value in bias)
+            {
+                writer.Write(Convert.ToDouble(value));
+            }
+        }
+
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else { writer.Write(0); }
+
+        return ms.ToArray();
+    }
+
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new NeuralNetworkRegression<T>(_options, Regularization);
         clone.Deserialize(Serialize());
         return clone;
+    }
+
+    /// <summary>
+    /// Deserializes the model from a byte array.
+    /// </summary>
+    /// <param name="data">The byte array containing the serialized model data.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes both the base class data and the neural network specific data,
+    /// reconstructing the layer sizes, weights, and biases.
+    /// </para>
+    /// <para>
+    /// For Beginners:
+    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
+    /// the model's internal state. This allows you to load a previously trained model and use it to make
+    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
+    /// </para>
+    /// </remarks>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // Deserialize NeuralNetworkRegression specific data
+        int layerCount = reader.ReadInt32();
+        _options.LayerSizes = new List<int>();
+        for (int i = 0; i < layerCount; i++)
+        {
+            _options.LayerSizes.Add(reader.ReadInt32());
+        }
+
+        int weightCount = reader.ReadInt32();
+        _weights.Clear();
+        for (int i = 0; i < weightCount; i++)
+        {
+            int rows = reader.ReadInt32();
+            int cols = reader.ReadInt32();
+            var weightData = new T[rows, cols];
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    weightData[r, c] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+            _weights.Add(new Matrix<T>(weightData));
+        }
+
+        int biasCount = reader.ReadInt32();
+        _biases.Clear();
+        for (int i = 0; i < biasCount; i++)
+        {
+            int length = reader.ReadInt32();
+            var biasData = new T[length];
+            for (int j = 0; j < length; j++)
+            {
+                biasData[j] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _biases.Add(new Vector<T>(biasData));
+        }
+
+        InitializeNetwork();
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>

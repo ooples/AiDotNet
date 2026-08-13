@@ -679,6 +679,39 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Options
+        writer.Write(_options.NumberOfIterations);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.MaxDepth);
+        writer.Write(_options.DropoutRate);
+        writer.Write(_numFeatures);
+
+        // Trees
+        writer.Write(_trees.Count);
+        foreach (var tree in _trees)
+        {
+            SerializeTree(writer, tree);
+        }
+
+        // Tree weights
+        foreach (var weight in _treeWeights)
+        {
+            writer.Write(NumOps.ToDouble(weight));
+        }
+
+        return ms.ToArray();
+    }
+
     private void SerializeTree(BinaryWriter writer, DARTTree tree)
     {
         writer.Write(tree.IsConstant);
@@ -706,6 +739,35 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         else
         {
             writer.Write(NumOps.ToDouble(tree.LeafValue));
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        int baseLen = reader.ReadInt32();
+        base.Deserialize(reader.ReadBytes(baseLen));
+
+        _options.NumberOfIterations = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.MaxDepth = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        _numFeatures = reader.ReadInt32();
+
+        int numTrees = reader.ReadInt32();
+        _trees = [];
+        for (int t = 0; t < numTrees; t++)
+        {
+            _trees.Add(DeserializeTree(reader));
+        }
+
+        _treeWeights = [];
+        for (int t = 0; t < numTrees; t++)
+        {
+            _treeWeights.Add(NumOps.FromDouble(reader.ReadDouble()));
         }
     }
 

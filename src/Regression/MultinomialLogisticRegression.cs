@@ -523,6 +523,126 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
+    /// Serializes the multinomial logistic regression model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model data.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method converts the entire multinomial logistic regression model, including its parameters and configuration,
+    /// into a byte array that can be stored in a file or database, or transmitted over a network. The model can later be
+    /// restored using the Deserialize method.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves the model to a format that can be stored or shared.
+    /// 
+    /// Serialization:
+    /// - Converts all the model's data into a sequence of bytes
+    /// - Preserves all the important information about the model
+    /// - Allows you to save the trained model to a file
+    /// - Lets you load the model later without having to retrain it
+    /// 
+    /// It's like taking a snapshot of the model that you can use later or share with others.
+    /// </para>
+    /// </remarks>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        // Serialize base class data
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // OLS flag
+        writer.Write(_useOLS);
+
+        // Serialize MultinomialLogisticRegression specific data
+        writer.Write(_numClasses);
+
+        // Write whether _coefficients is null
+        writer.Write(_coefficients != null);
+
+        if (_coefficients != null)
+        {
+            writer.Write(_coefficients.Rows);
+            writer.Write(_coefficients.Columns);
+            for (int i = 0; i < _coefficients.Rows; i++)
+            {
+                for (int j = 0; j < _coefficients.Columns; j++)
+                {
+                    writer.Write(Convert.ToDouble(_coefficients[i, j]));
+                }
+            }
+        }
+
+        // Serialize options
+        writer.Write(_options.MaxIterations);
+        writer.Write(Convert.ToDouble(_options.Tolerance));
+
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Deserializes the multinomial logistic regression model from a byte array.
+    /// </summary>
+    /// <param name="data">A byte array containing the serialized model data.</param>
+    /// <remarks>
+    /// <para>
+    /// This method restores a multinomial logistic regression model from a serialized byte array, reconstructing its parameters
+    /// and configuration. This allows a previously trained model to be loaded from storage or after being received over a network.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method rebuilds the model from a saved format.
+    /// 
+    /// Deserialization:
+    /// - Takes a sequence of bytes that represents a model
+    /// - Reconstructs the original model with all its learned patterns
+    /// - Allows you to use a previously trained model without retraining
+    /// 
+    /// Think of it like unpacking a model that was packed up for storage or shipping,
+    /// so you can use it again exactly as it was before.
+    /// </para>
+    /// </remarks>
+    public override void Deserialize(byte[] data)
+    {
+        using var ms = new MemoryStream(data);
+        using var reader = new BinaryReader(ms);
+
+        // Deserialize base class data
+        int baseDataLength = reader.ReadInt32();
+        byte[] baseData = reader.ReadBytes(baseDataLength);
+        base.Deserialize(baseData);
+
+        // OLS flag
+        _useOLS = reader.ReadBoolean();
+
+        // Deserialize MultinomialLogisticRegression specific data
+        _numClasses = reader.ReadInt32();
+
+        bool coefficientsExist = reader.ReadBoolean();
+        if (coefficientsExist)
+        {
+            int rows = reader.ReadInt32();
+            int cols = reader.ReadInt32();
+            _coefficients = new Matrix<T>(rows, cols);
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    _coefficients[i, j] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+        }
+        else
+        {
+            _coefficients = null;
+        }
+
+        // Deserialize options
+        _options.MaxIterations = reader.ReadInt32();
+        _options.Tolerance = reader.ReadDouble();
+    }
+
+    /// <summary>
     /// Creates a new instance of the Multinomial Logistic Regression model with the same configuration.
     /// </summary>
     /// <returns>A new instance of the Multinomial Logistic Regression model.</returns>

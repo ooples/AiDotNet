@@ -531,6 +531,113 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
+    /// <summary>
+    /// Serializes the model to a byte array for storage or transmission.
+    /// </summary>
+    /// <returns>A byte array containing the serialized model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the AdaBoost.R2 regression model to a byte array, including the
+    /// configuration options, the ensemble of trees with their weights, and the regularization type.
+    /// The serialization is performed using JSON, with the decision trees serialized to Base64 strings.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method converts the trained model into a format that can be
+    /// saved to a file or database.
+    /// 
+    /// Serializing a model allows you to:
+    /// - Save it for later use without having to retrain
+    /// - Share it with others
+    /// - Deploy it to production environments
+    /// 
+    /// The serialized data includes everything needed to recreate the model:
+    /// - All configuration settings
+    /// - The entire ensemble of decision trees and their weights
+    /// - Information about the regularization used
+    /// 
+    /// After serializing, you can store the resulting byte array in a file or database,
+    /// and later restore the model using the Deserialize method.
+    /// </para>
+    /// </remarks>
+    public override byte[] Serialize()
+    {
+        var serializableModel = new
+        {
+            Options = _options,
+            Ensemble = _ensemble.Select(e => new
+            {
+                Tree = Convert.ToBase64String(e.Tree.Serialize()),
+                Weight = e.Weight
+            }).ToList(),
+            Regularization = Regularization.GetType().Name
+        };
+
+        var json = JsonConvert.SerializeObject(serializableModel, Formatting.None);
+        return Encoding.UTF8.GetBytes(json);
+    }
+
+    /// <summary>
+    /// Deserializes the model from a byte array.
+    /// </summary>
+    /// <param name="data">A byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes an AdaBoost.R2 regression model from a byte array, restoring
+    /// the configuration options, the ensemble of trees with their weights, and initializing
+    /// the random number generator. The deserialization is performed using JSON, with the
+    /// decision trees deserialized from Base64 strings.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method restores a previously saved model from its
+    /// serialized format.
+    /// 
+    /// Deserializing allows you to:
+    /// - Load a previously trained model without having to retrain it
+    /// - Use models trained by others
+    /// - Deploy pre-trained models to new environments
+    /// 
+    /// The process reconstructs:
+    /// - All configuration settings
+    /// - The entire ensemble of decision trees and their weights
+    /// - The appropriate random number generator state
+    /// 
+    /// After deserialization, the model is ready to use for making predictions,
+    /// just as if you had just finished training it.
+    /// </para>
+    /// </remarks>
+    public override void Deserialize(byte[] data)
+    {
+        var json = Encoding.UTF8.GetString(data);
+        var deserializedModel = JsonConvert.DeserializeAnonymousType(json, new
+        {
+            Options = new AdaBoostR2RegressionOptions(),
+            Ensemble = new List<dynamic>(),
+            Regularization = ""
+        });
+
+        if (deserializedModel == null)
+        {
+            throw new InvalidOperationException("Failed to deserialize the model");
+        }
+
+        _options = deserializedModel.Options;
+
+        _ensemble = [.. deserializedModel.Ensemble.Select(e =>
+        {
+            var treeOptions = new DecisionTreeOptions
+            {
+                MaxDepth = _options.MaxDepth,
+                MinSamplesSplit = _options.MinSamplesSplit,
+                MaxFeatures = _options.MaxFeatures,
+                Seed = _options.Seed,
+                SplitCriterion = _options.SplitCriterion
+            };
+            var tree = new DecisionTreeRegression<T>(treeOptions, Regularization);
+            tree.Deserialize(Convert.FromBase64String((string)e.Tree));
+            return (Tree: tree, Weight: (T)e.Weight);
+        })];
+
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
+    }
+
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new AdaBoostR2Regression<T>(_options, Regularization);

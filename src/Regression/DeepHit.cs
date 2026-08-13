@@ -1076,6 +1076,70 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Options
+        writer.Write(_options.NumTimeBins);
+        writer.Write(_options.NumSharedLayers);
+        writer.Write(_options.NumCauseLayers);
+        writer.Write(_options.HiddenLayerSize);
+        writer.Write(_options.NumRisks);
+        writer.Write(_options.Activation.GetType().AssemblyQualifiedName ?? _options.Activation.GetType().FullName ?? _options.Activation.GetType().Name);
+        writer.Write(_numFeatures);
+
+        // Time bins
+        writer.Write(_timeBinEdges?.Length ?? 0);
+        if (_timeBinEdges != null)
+        {
+            foreach (var t in _timeBinEdges)
+            {
+                writer.Write(NumOps.ToDouble(t));
+            }
+        }
+
+        // Shared weights and biases
+        SerializeLayerList(writer, _sharedWeights, _sharedBiases);
+
+        // Cause-specific weights and biases
+        for (int k = 0; k < _options.NumRisks; k++)
+        {
+            SerializeLayerList(writer, _causeWeights[k], _causeBiases[k]);
+        }
+
+        // Output weights and biases
+        for (int k = 0; k < _options.NumRisks; k++)
+        {
+            SerializeWeights(writer, _outputWeights[k]);
+            SerializeBiases(writer, _outputBiases[k]);
+        }
+
+        // OLS state
+        writer.Write(_useOLS);
+        writer.Write(NumOps.ToDouble(_yMean));
+        writer.Write(NumOps.ToDouble(_yStd));
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
+
+        return ms.ToArray();
+    }
+
     private void SerializeLayerList(BinaryWriter writer, List<Matrix<T>> weights, List<Vector<T>> biases)
     {
         writer.Write(weights.Count);
@@ -1105,6 +1169,81 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < b.Length; i++)
         {
             writer.Write(NumOps.ToDouble(b[i]));
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        int baseLen = reader.ReadInt32();
+        base.Deserialize(reader.ReadBytes(baseLen));
+
+        _options.NumTimeBins = reader.ReadInt32();
+        _options.NumSharedLayers = reader.ReadInt32();
+        _options.NumCauseLayers = reader.ReadInt32();
+        _options.HiddenLayerSize = reader.ReadInt32();
+        _options.NumRisks = reader.ReadInt32();
+        string activationTypeName = reader.ReadString();
+        var activationType = Type.GetType(activationTypeName);
+        if (activationType is not null
+            && typeof(IActivationFunction<T>).IsAssignableFrom(activationType)
+            && activationType.Namespace is not null
+            && activationType.Namespace.StartsWith("AiDotNet.", StringComparison.Ordinal))
+        {
+            _options.Activation = (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new ReLUActivation<T>());
+        }
+        else
+        {
+            _options.Activation = new ReLUActivation<T>();
+        }
+        _numFeatures = reader.ReadInt32();
+
+        int timeBinLen = reader.ReadInt32();
+        if (timeBinLen > 0)
+        {
+            _timeBinEdges = new Vector<T>(timeBinLen);
+            for (int i = 0; i < timeBinLen; i++)
+            {
+                _timeBinEdges[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        // Shared weights and biases
+        (_sharedWeights, _sharedBiases) = DeserializeLayerList(reader);
+
+        // Cause-specific weights and biases
+        _causeWeights = [];
+        _causeBiases = [];
+        for (int k = 0; k < _options.NumRisks; k++)
+        {
+            var (cw, cb) = DeserializeLayerList(reader);
+            _causeWeights.Add(cw);
+            _causeBiases.Add(cb);
+        }
+
+        // Output weights and biases
+        _outputWeights = [];
+        _outputBiases = [];
+        for (int k = 0; k < _options.NumRisks; k++)
+        {
+            _outputWeights.Add(DeserializeWeights(reader));
+            _outputBiases.Add(DeserializeBiases(reader));
+        }
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        _yMean = NumOps.FromDouble(reader.ReadDouble());
+        _yStd = NumOps.FromDouble(reader.ReadDouble());
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
         }
     }
 

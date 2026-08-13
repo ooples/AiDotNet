@@ -338,9 +338,10 @@ public sealed class ModelStateRegistry<T>
     /// there are and of what type -- which is configuration, and configuration is replayed by the
     /// recorded constructor rather than carried in a state payload.
     /// </remarks>
-    public void DeclareChildren<TInput, TOutput>(
+    public void DeclareChildren<TChild, TInput, TOutput>(
         string name,
-        Func<IReadOnlyList<IFullModel<T, TInput, TOutput>>?> get)
+        Func<IList<TChild>?> get)
+        where TChild : class, IFullModel<T, TInput, TOutput>
         => Add(name,
             w =>
             {
@@ -350,6 +351,12 @@ public sealed class ModelStateRegistry<T>
                 w.Write(children.Count);
                 foreach (var child in children)
                 {
+                    // The concrete TYPE travels with the bytes. An ensemble does not build its
+                    // members in its constructor -- they are created during training -- so a freshly
+                    // constructed clone has an EMPTY list and there is nothing to restore into. The
+                    // type is what lets the members be rebuilt rather than silently dropped, which
+                    // would leave an ensemble that predicts from no members at all.
+                    w.Write(child?.GetType().AssemblyQualifiedName ?? string.Empty);
                     var bytes = child?.Serialize() ?? Array.Empty<byte>();
                     w.Write(bytes.Length);
                     w.Write(bytes);
@@ -361,19 +368,65 @@ public sealed class ModelStateRegistry<T>
                 if (count < 0) return;
 
                 var children = get();
+                if (children is null) return;
+
                 for (int i = 0; i < count; i++)
                 {
+                    string typeName = r.ReadString();
                     int length = r.ReadInt32();
                     var bytes = r.ReadBytes(length);
+                    if (length == 0) continue;
 
-                    // A parent rebuilt with a different child count is a configuration mismatch, and
-                    // loading the first N anyway would leave the tail silently untrained.
-                    if (children is not null && i < children.Count && length > 0)
+                    if (i < children.Count)
                     {
                         children[i]?.Deserialize(bytes);
+                        continue;
                     }
+
+                    if (children.IsReadOnly) continue;
+
+                    if (CreateChild<TInput, TOutput>(typeName) is not TChild child) continue;
+
+                    child.Deserialize(bytes);
+                    children.Add(child);
                 }
             });
+
+    /// <summary>Rebuilds a child from the type name saved beside its bytes.</summary>
+    /// <typeparam name="TInput">The child's input type.</typeparam>
+    /// <typeparam name="TOutput">The child's output type.</typeparam>
+    /// <param name="typeName">The assembly-qualified name recorded at save time.</param>
+    /// <returns>A new child, or <see langword="null"/> when it cannot be constructed.</returns>
+    /// <remarks>
+    /// Invokes a constructor whose parameters are ALL optional, binding each to its declared default,
+    /// which is what most models in this library offer. <c>Activator.CreateInstance(Type)</c> is not
+    /// enough on its own: it requires a genuinely parameterless constructor and declines the
+    /// all-optional ones that are the common shape here.
+    /// </remarks>
+    private static IFullModel<T, TInput, TOutput>? CreateChild<TInput, TOutput>(string typeName)
+    {
+        if (string.IsNullOrEmpty(typeName)) return null;
+
+        var type = Type.GetType(typeName, throwOnError: false);
+        if (type is null) return null;
+
+        foreach (var constructor in type.GetConstructors())
+        {
+            var parameters = constructor.GetParameters();
+            if (Array.Exists(parameters, p => !p.IsOptional)) continue;
+
+            var arguments = new object?[parameters.Length];
+            for (int i = 0; i < arguments.Length; i++) arguments[i] = Type.Missing;
+
+            return constructor.Invoke(
+                System.Reflection.BindingFlags.OptionalParamBinding,
+                binder: null,
+                arguments,
+                culture: null) as IFullModel<T, TInput, TOutput>;
+        }
+
+        return null;
+    }
 
     /// <summary>Writes every declared entry, name-tagged and length-prefixed.</summary>
     /// <param name="writer">The writer receiving the state block.</param>

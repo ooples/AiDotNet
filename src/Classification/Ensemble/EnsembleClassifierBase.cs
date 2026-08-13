@@ -38,6 +38,32 @@ public abstract class EnsembleClassifierBase<T> : ProbabilisticClassifierBase<T>
     /// </summary>
     protected List<IClassifier<T>> Estimators { get; set; } = new();
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The members ARE the ensemble. Every model in this family learns a list of estimators and a
+    /// feature-importance vector derived from them, so declaring both once here covers all of them
+    /// and each model declares only what is genuinely its own -- out-of-bag score, estimator weights,
+    /// an initial prediction.
+    /// </para>
+    /// <para>
+    /// The members are rebuilt on restore rather than restored into place: an ensemble does not build
+    /// them in its constructor, it grows them during training, so a freshly constructed clone has an
+    /// empty list. Restoring "into" it would silently produce an ensemble that predicts from no
+    /// members at all.
+    /// </para>
+    /// </remarks>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+
+        // Estimators itself, not a projection of it: a copied list would take the restored members
+        // and drop them on the floor.
+        state.DeclareChildren<IClassifier<T>, Matrix<T>, Vector<T>>("estimators", () => Estimators);
+
+        state.Declare("featureImportances", () => FeatureImportances, v => FeatureImportances = v);
+    }
+
     /// <summary>
     /// The number of estimators in the ensemble.
     /// </summary>

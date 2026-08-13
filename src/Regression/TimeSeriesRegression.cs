@@ -669,4 +669,103 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     /// loading models, or when deciding how to process them.
     /// </para>
     /// </remarks>
+
+    /// <summary>
+    /// Converts the model into a byte array that can be stored or transmitted.
+    /// </summary>
+    /// <returns>A byte array representation of the model.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method serializes the time series regression model, including its base class data and
+    /// specific configuration options, into a byte array. This allows the model to be saved to disk,
+    /// transmitted over a network, or otherwise persisted.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method saves your trained model to a format that can be stored or shared.
+    /// 
+    /// Serialization:
+    /// - Converts your trained model into simple bytes that can be saved
+    /// - Preserves all the patterns and relationships the model has learned
+    /// - Includes all settings and configuration options
+    /// 
+    /// It's like taking a snapshot of the model that can be saved to a file or database.
+    /// Later, you can use Deserialize to recreate the exact same model without retraining.
+    /// </para>
+    /// </remarks>
+    public override byte[] Serialize()
+    {
+        using (MemoryStream ms = new MemoryStream())
+        using (BinaryWriter writer = new BinaryWriter(ms))
+        {
+            // Serialize base class data
+            byte[] baseData = base.Serialize();
+            writer.Write(baseData.Length);
+            writer.Write(baseData);
+
+            // Serialize TimeSeriesRegression specific data
+            writer.Write(_options.LagOrder);
+            writer.Write(_options.IncludeTrend);
+            writer.Write(_options.SeasonalPeriod);
+            writer.Write(_options.AutocorrelationCorrection);
+            writer.Write((int)_options.ModelType);
+
+            // Serialize the time series model
+            byte[] modelData = _timeSeriesModel.Serialize();
+            writer.Write(modelData.Length);
+            writer.Write(modelData);
+
+            // OLS state
+            writer.Write(_useOLS);
+
+            return ms.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Restores the model state from a byte array previously created by the Serialize method.
+    /// </summary>
+    /// <param name="modelData">The byte array containing the serialized model.</param>
+    /// <remarks>
+    /// <para>
+    /// This method deserializes a time series regression model from a byte array, reconstructing the
+    /// base class data, configuration options, and time series model. This allows a previously saved
+    /// model to be restored without retraining.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method loads a previously saved model.
+    /// 
+    /// Deserialization:
+    /// - Takes the bytes created by Serialize and converts them back into a working model
+    /// - Restores all the learned patterns and relationships
+    /// - Recreates the exact same model configuration
+    /// 
+    /// It's like restoring a snapshot of the model, allowing you to use a trained model
+    /// without having to retrain it each time. This saves time and ensures consistent predictions.
+    /// </para>
+    /// </remarks>
+    public override void Deserialize(byte[] modelData)
+    {
+        using (MemoryStream ms = new MemoryStream(modelData))
+        using (BinaryReader reader = new BinaryReader(ms))
+        {
+            // Deserialize base class data
+            int baseDataLength = reader.ReadInt32();
+            byte[] baseData = reader.ReadBytes(baseDataLength);
+            base.Deserialize(baseData);
+
+            // Deserialize TimeSeriesRegression specific data
+            _options.LagOrder = reader.ReadInt32();
+            _options.IncludeTrend = reader.ReadBoolean();
+            _options.SeasonalPeriod = reader.ReadInt32();
+            _options.AutocorrelationCorrection = reader.ReadBoolean();
+            _options.ModelType = (TimeSeriesModelType)reader.ReadInt32();
+
+            // Deserialize the time series model
+            int modelDataLength = reader.ReadInt32();
+            byte[] timeSeriesModelData = reader.ReadBytes(modelDataLength);
+            _timeSeriesModel = TimeSeriesModelFactory<T, Matrix<T>, Vector<T>>.CreateModel(_options.ModelType, _options);
+            _timeSeriesModel.Deserialize(timeSeriesModelData);
+
+            // OLS state
+            _useOLS = reader.ReadBoolean();
+        }
+    }
 }

@@ -647,6 +647,162 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+
+        // Options
+        writer.Write(_options.NumHiddenLayers);
+        writer.Write(_options.HiddenLayerSize);
+        writer.Write(_options.Activation.GetType().AssemblyQualifiedName ?? _options.Activation.GetType().FullName ?? _options.Activation.GetType().Name);
+        writer.Write(_numFeatures);
+
+        // Weights and biases
+        writer.Write(_weights.Count);
+        foreach (var w in _weights)
+        {
+            writer.Write(w.Rows);
+            writer.Write(w.Columns);
+            for (int i = 0; i < w.Rows; i++)
+            {
+                for (int j = 0; j < w.Columns; j++)
+                {
+                    writer.Write(NumOps.ToDouble(w[i, j]));
+                }
+            }
+        }
+
+        foreach (var b in _biases)
+        {
+            writer.Write(b.Length);
+            for (int i = 0; i < b.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(b[i]));
+            }
+        }
+
+        // Baseline hazard
+        writer.Write(_baselineHazardTimes is not null);
+        if (_baselineHazardTimes is not null && _baselineHazardValues is not null)
+        {
+            writer.Write(_baselineHazardTimes.Length);
+            foreach (var t in _baselineHazardTimes)
+            {
+                writer.Write(NumOps.ToDouble(t));
+            }
+            foreach (var h in _baselineHazardValues)
+            {
+                writer.Write(NumOps.ToDouble(h));
+            }
+        }
+
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
+
+        return ms.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        using var ms = new MemoryStream(modelData);
+        using var reader = new BinaryReader(ms);
+
+        int baseLen = reader.ReadInt32();
+        base.Deserialize(reader.ReadBytes(baseLen));
+
+        _options.NumHiddenLayers = reader.ReadInt32();
+        _options.HiddenLayerSize = reader.ReadInt32();
+        string activationTypeName = reader.ReadString();
+        var activationType = Type.GetType(activationTypeName);
+        if (activationType is not null
+            && typeof(IActivationFunction<T>).IsAssignableFrom(activationType)
+            && activationType.Namespace is not null
+            && activationType.Namespace.StartsWith("AiDotNet.", StringComparison.Ordinal))
+        {
+            _options.Activation = (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new SELUActivation<T>());
+        }
+        else
+        {
+            _options.Activation = new SELUActivation<T>();
+        }
+        _numFeatures = reader.ReadInt32();
+
+        int numLayers = reader.ReadInt32();
+        _weights = [];
+        _biases = [];
+
+        for (int l = 0; l < numLayers; l++)
+        {
+            int rows = reader.ReadInt32();
+            int cols = reader.ReadInt32();
+            var w = new Matrix<T>(rows, cols);
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    w[i, j] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+            _weights.Add(w);
+        }
+
+        for (int l = 0; l < numLayers; l++)
+        {
+            int len = reader.ReadInt32();
+            var b = new Vector<T>(len);
+            for (int i = 0; i < len; i++)
+            {
+                b[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _biases.Add(b);
+        }
+
+        bool hasBaseline = reader.ReadBoolean();
+        if (hasBaseline)
+        {
+            int len = reader.ReadInt32();
+            _baselineHazardTimes = new Vector<T>(len);
+            _baselineHazardValues = new Vector<T>(len);
+            for (int i = 0; i < len; i++)
+            {
+                _baselineHazardTimes[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            for (int i = 0; i < len; i++)
+            {
+                _baselineHazardValues[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
+
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new DeepSurv<T>(_options, Regularization);
