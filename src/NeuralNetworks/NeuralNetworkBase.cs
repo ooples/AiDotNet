@@ -2792,6 +2792,169 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Rebinds derived-class views of <see cref="Layers"/> after the canonical layer graph is
+    /// replaced by deserialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Model implementations commonly keep named fields or encoder/decoder collections that point
+    /// into <see cref="Layers"/>. Those members are aliases, not additional ownership roots. A
+    /// deserialize or eager clone replaces every canonical layer instance, so leaving those aliases
+    /// attached to the constructor graph makes forward execution use stale weights and makes the
+    /// parameter manifest count both graphs.
+    /// </para>
+    /// <para>
+    /// The model parameter generator overrides this hook and rebinds all layer-bearing members by
+    /// reference identity. Authors do not need serialization overrides or model-specific repair
+    /// code. Members that do not point into <paramref name="previousLayers"/> are independent
+    /// modules and are deliberately left unchanged.
+    /// </para>
+    /// </remarks>
+    /// <param name="previousLayers">The canonical graph owned immediately before replacement.</param>
+    /// <param name="replacementLayers">The newly deserialized canonical graph.</param>
+    protected virtual void RebindLayerAliases(
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers)
+    {
+    }
+
+    /// <summary>Returns the replacement for one generated canonical-layer alias.</summary>
+    protected static TLayer? RebindLayerAlias<TLayer>(
+        TLayer? alias,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        if (alias is null)
+            return null;
+
+        for (int index = 0; index < previousLayers.Count; index++)
+        {
+            if (!ReferenceEquals(alias, previousLayers[index]))
+                continue;
+
+            // The destination constructor may have built a larger default topology than the graph
+            // being restored. An alias into a removed canonical layer is absent; it must never be
+            // reclassified as an independently-owned trainable module.
+            if (index >= replacementLayers.Count)
+                return null;
+
+            if (replacementLayers[index] is TLayer replacement)
+                return replacement;
+
+            throw new InvalidOperationException(
+                $"Generated layer alias '{memberName}' targets canonical layer {index}, but its " +
+                $"replacement type '{replacementLayers[index].GetType().FullName}' cannot be assigned " +
+                $"to '{typeof(TLayer).FullName}'. The serialized graph is incompatible with the " +
+                "model's declared layer-alias contract.");
+        }
+
+        // The member owns an independent layer rather than a view into Layers.
+        return alias;
+    }
+
+    /// <summary>Rebinds a non-null canonical-layer alias or reports an incompatible topology.</summary>
+    protected static TLayer RebindRequiredLayerAlias<TLayer>(
+        TLayer alias,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        return RebindLayerAlias(alias, previousLayers, replacementLayers, memberName)
+            ?? throw new InvalidOperationException(
+                $"Required layer alias '{memberName}' targeted a canonical layer removed by the " +
+                "replacement graph. Make the member nullable when that layer is conditional, or " +
+                "restore a topology satisfying the model's declared layer-alias contract.");
+    }
+
+    /// <summary>Rebinds a generated collection view of the canonical layer graph in place.</summary>
+    protected static void RebindLayerAliasCollection<TLayer>(
+        IEnumerable<TLayer>? aliases,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        if (aliases is null)
+            return;
+
+        var current = aliases.ToList();
+        var rebound = new List<TLayer>(current.Count);
+        bool changed = false;
+        for (int index = 0; index < current.Count; index++)
+        {
+            var replacement = RebindLayerAlias(
+                current[index], previousLayers, replacementLayers, memberName + "[" + index + "]");
+            if (replacement is not null)
+                rebound.Add(replacement);
+            changed |= !ReferenceEquals(current[index], replacement);
+        }
+
+        if (!changed)
+            return;
+
+        // Arrays are fixed-size but their elements remain writable.
+        if (aliases is TLayer[] array)
+        {
+            if (rebound.Count != array.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Generated layer alias array '{memberName}' refers to canonical layers removed " +
+                    "by the replacement graph. Arrays cannot shrink; use a mutable IList<TLayer> " +
+                    "for a topology-conditional layer view.");
+            }
+            for (int index = 0; index < rebound.Count; index++)
+                array[index] = rebound[index];
+            return;
+        }
+
+        if (aliases is IList<TLayer> list && !list.IsReadOnly)
+        {
+            for (int index = 0; index < rebound.Count; index++)
+                list[index] = rebound[index];
+            for (int index = list.Count - 1; index >= rebound.Count; index--)
+                list.RemoveAt(index);
+            return;
+        }
+
+        // Sets and other mutable collections do not expose indexed assignment. Rebuild them while
+        // preserving the model author's collection type and its ordering/equality policy.
+        if (aliases is ICollection<TLayer> collection && !collection.IsReadOnly)
+        {
+            collection.Clear();
+            foreach (var replacement in rebound)
+                collection.Add(replacement);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Generated layer alias collection '{memberName}' contains references to the replaced " +
+            "canonical graph but is not mutable. Declare the member as an array, IList<TLayer>, " +
+            "or mutable ICollection<TLayer>, or provide an explicit RebindLayerAliases override.");
+    }
+
+    /// <summary>Fails fast when a readonly scalar member is a stale canonical-layer alias.</summary>
+    protected static void ValidateReadonlyLayerAlias<TLayer>(
+        TLayer? alias,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        var rebound = RebindLayerAlias(
+            alias, previousLayers, replacementLayers, memberName);
+        if (!ReferenceEquals(alias, rebound))
+        {
+            throw new InvalidOperationException(
+                $"Readonly layer member '{memberName}' aliases the canonical Layers graph and cannot " +
+                "be rebound after deserialization. Make the alias member writable or store it in a " +
+                "mutable layer collection so the generated lifecycle contract can update it.");
+        }
+    }
+
+    /// <summary>
     /// Validates that the provided layers form a valid neural network architecture.
     /// </summary>
     /// <param name="layers">The layers to validate.</param>
@@ -11766,6 +11929,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
 
+        // Preserve the constructor graph long enough for generated named-layer views to be rebound
+        // to the deserialized graph. The references are intentionally captured, not cloned.
+        var previousLayers = _layers.ToArray();
+
         // Clear existing layers
         ClearLayers();
 
@@ -11936,6 +12103,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (InvalidateParameterCountCache already calls InvalidateLayerInfoCache)
         InvalidateParameterCountCache();
 
+        // Repair all generated fields and collections that were views into the old canonical graph.
+        // Independent layer members are left alone because rebinding is reference-identity based.
+        RebindLayerAliases(previousLayers, _layers);
+
         // Deserialized models should be in inference mode by default.
         // This ensures BatchNorm uses running statistics (not batch statistics)
         // and dropout is disabled, matching the behavior of the original model.
@@ -12010,21 +12181,125 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        // In-place update — issue #1221: DeepCopy + UpdateParameters loses
-        // gradients for lazy layers because deserialization resets them to
-        // placeholder state where ParameterCount=0, so UpdateParameters
-        // skips them.
-        UpdateParameters(parameters);
-        // The in-place write keeps every weight ARRAY's identity — and the
-        // CPU engine's inference fast paths cache derived weight forms
-        // (pre-packed GEMM panels, transposed conv kernels) keyed by that
-        // identity without re-reading contents. Flush them, or the next
-        // Predict computes with the PRE-update weights (root cause of the
-        // Issue1296 grad-accum probe failure: a WithParameters'd model with
-        // bit-identical parameters predicted differently because its MHA /
-        // FFN GEMMs consumed packs built from the pre-load random init).
-        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-        return this;
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+
+        var sourceLayout = ParameterLayout;
+        if (sourceLayout.Readiness is not (
+                AiDotNet.Models.Parameters.ParameterReadiness.Materialized
+                or AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                or AiDotNet.Models.Parameters.ParameterReadiness.ConditionalAbsent))
+        {
+            throw new AiDotNet.Models.Parameters.ParameterLayoutNotReadyException(
+                "create an independent parameterized clone of",
+                sourceLayout);
+        }
+        long sourceParameterCount = ParameterCount;
+        if (parameters.Length != sourceParameterCount)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name} currently exposes {sourceParameterCount} persistent-state values, " +
+                $"but {parameters.Length} were supplied.",
+                nameof(parameters));
+        }
+
+        // IParameterizable.WithParameters promises a NEW instance. Returning `this` made ordinary
+        // ownership code dispose the source model when it disposed the result, after which lazy
+        // layers attempted to republish buffers into half-cleared registries. Clone uses the
+        // canonical copy-on-write/deep-copy pipeline, so this remains O(1)-until-write where the
+        // model supports it while preserving independent lifetime and parameter storage.
+        var copy = Clone();
+        try
+        {
+            var sourceLayoutAfterClone = ParameterLayout;
+            if (!string.Equals(
+                    sourceLayout.Fingerprint,
+                    sourceLayoutAfterClone.Fingerprint,
+                    StringComparison.Ordinal)
+                || ParameterCount != sourceParameterCount)
+            {
+                throw new InvalidOperationException(
+                    $"Cloning {GetType().Name} mutated the source model's persistent-state manifest. " +
+                    "Clone and WithParameters are observationally read-only on their source, including " +
+                    "for lazy models.");
+            }
+
+            if (copy is not NeuralNetworkBase<T> neuralCopy)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name}.Clone() returned {copy.GetType().Name}, which does not expose " +
+                    "the readiness-aware parameter manifest required to verify an exact clone.");
+            }
+            var copyLayout = neuralCopy.ParameterLayout;
+            if (!string.Equals(sourceLayout.Fingerprint, copyLayout.Fingerprint, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Cloning {GetType().Name} changed parameter-manifest fingerprint " +
+                    $"{sourceLayout.Fingerprint} to {copyLayout.Fingerprint}. A clone must preserve " +
+                    "slot identities, roles, shapes, counts, order, and readiness exactly. " +
+                    DescribeParameterManifestDifference(sourceLayout, copyLayout));
+            }
+            if (copy.ParameterCount != sourceParameterCount)
+            {
+                throw new InvalidOperationException(
+                    $"Cloning {GetType().Name} changed its persistent-state manifest from " +
+                    $"{sourceParameterCount} to {copy.ParameterCount} values. A clone must preserve " +
+                    "the source's exact slot identities, roles, shapes, order, and readiness; it may " +
+                    "not silently materialize additional state.");
+            }
+            copy.SetParameters(parameters);
+            return copy;
+        }
+        catch
+        {
+            copy.Dispose();
+            throw;
+        }
+    }
+
+    private static string DescribeParameterManifestDifference(
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot source,
+        AiDotNet.Models.Parameters.ParameterLayoutSnapshot clone)
+    {
+        int common = Math.Min(source.Slots.Count, clone.Slots.Count);
+        for (int i = 0; i < common; i++)
+        {
+            var expected = source.Slots[i];
+            var actual = clone.Slots[i];
+            if (!string.Equals(expected.StableId, actual.StableId, StringComparison.Ordinal)
+                || expected.Role != actual.Role
+                || expected.Readiness != actual.Readiness
+                || expected.ParameterCount != actual.ParameterCount)
+            {
+                return $"First difference at slot {i}: source " +
+                    $"'{expected.StableId}' ({expected.Role}, {expected.Readiness}, " +
+                    $"count {expected.ParameterCount?.ToString() ?? "deferred"}); clone " +
+                    $"'{actual.StableId}' ({actual.Role}, {actual.Readiness}, " +
+                    $"count {actual.ParameterCount?.ToString() ?? "deferred"}).";
+            }
+        }
+
+        if (source.Slots.Count != clone.Slots.Count)
+        {
+            var sourceIds = source.Slots.Select(slot => slot.StableId).ToHashSet(StringComparer.Ordinal);
+            var cloneIds = clone.Slots.Select(slot => slot.StableId).ToHashSet(StringComparer.Ordinal);
+            var missing = source.Slots
+                .Where(slot => !cloneIds.Contains(slot.StableId))
+                .Select(slot => slot.StableId)
+                .Take(4)
+                .ToArray();
+            var added = clone.Slots
+                .Where(slot => !sourceIds.Contains(slot.StableId))
+                .Select(slot => slot.StableId)
+                .Take(4)
+                .ToArray();
+            string details = missing.Length == 0 && added.Length == 0
+                ? " Stable IDs repeat with different structural metadata."
+                : $" Missing IDs: [{string.Join(", ", missing)}]; added IDs: "
+                  + $"[{string.Join(", ", added)}].";
+            return $"Source has {source.Slots.Count} slots; clone has {clone.Slots.Count}." + details;
+        }
+
+        return "The difference is in shape, element type, update policy, persistence, ownership, or availability.";
     }
 
     /// <summary>
@@ -12412,6 +12687,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         largeBase.DeserializeNetworkSpecificData(nsReader);
                     }
                 }
+                // CreateNewInstance implementations sometimes receive an Architecture whose layer
+                // objects still belong to the source. Generated aliases must always point at the
+                // destination's canonical graph before its manifest or forward path is observed.
+                largeBase.RebindLayerAliases(_layers, largeBase._layers);
                 largeBase.InvalidateParameterCountCache();
                 largeBase.SetTrainingMode(false);
                 // The per-layer parameter copy above skips non-trainable stochastic layers
@@ -12481,6 +12760,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // auto-enable so it does not re-Configure the process-wide singleton streaming pool owned by the
         // original (same guard the eager large/serialize paths use). Must run before any SetTrainingMode.
         copyBase.DisableAutoStreaming();
+
+        // Normalize generated named-layer views before the reflection walk. This is a no-op for the
+        // normal case (aliases already point into copyBase._layers) and repairs CreateNewInstance
+        // implementations that inherited references to this model's canonical graph.
+        copyBase.RebindLayerAliases(_layers, copyBase._layers);
 
         // Materialize the destination's lazy composite structure before taking
         // the reflection snapshots. TransformerDecoderLayer creates its
@@ -12554,19 +12838,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
 
-        // Coverage guard: the share only transfers the tensors GetTrainableParameters exposes. If the
-        // model's total ParameterCount includes MORE than that — a model whose GetParameters reads
-        // weights NOT surfaced through a trainable layer (a nested sub-model's own parameters, a custom
-        // VAE/Siamese/RNN layout) — the share would be incomplete and the clone would diverge after
-        // training. Detect that cheaply (no flatten, side-effect-free) by comparing the walked tensor
-        // element count to ParameterCount, and fall back to the eager full-fidelity copy if they differ.
+        // Coverage guard: compare the walked trainable tensors with the TRAINABLE portion of the
+        // canonical state manifest. ParameterCount also includes registered non-trainable buffers;
+        // comparing the walk with that aggregate incorrectly rejected every BatchNorm model even
+        // though buffers are copied separately below. Components, nested models, or other trainable
+        // state outside the registered layer graph still increase the manifest's trainable total and
+        // conservatively force the eager full-fidelity fallback.
         long walkedParamCount = 0;
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var tp = srcLayers[i].GetTrainableParameters();
+            var tp = srcLayers[i] is LayerBase<T> sourceLayer
+                ? sourceLayer.GetTrainableParametersWithoutMaterialization()
+                : srcLayers[i].GetTrainableParameters();
             for (int p = 0; p < tp.Count; p++) walkedParamCount += tp[p].Length;
         }
-        if (walkedParamCount != ParameterCount)
+        long manifestedTrainableCount = 0;
+        foreach (var chunk in GetParameterStateChunks())
+        {
+            if (chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+                manifestedTrainableCount = checked(manifestedTrainableCount + chunk.Tensor.Length);
+        }
+        if (walkedParamCount != manifestedTrainableCount)
         {
             (copy as IDisposable)?.Dispose();
             return false;
@@ -12593,8 +12885,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // a layer with a legitimately dynamic OUTPUT axis now reports resolved while its weights
             // are still unmaterialised, and this block would skip it.
             if (dst is LayerBase<T> dstBase && src is LayerBase<T> srcBase
-                && srcBase.ParameterCount > 0
-                && (!dstBase.IsShapeResolved || dst.GetTrainableParameters().Count == 0))
+                && srcBase.GetTrainableParametersWithoutMaterialization()
+                    .Any(tensor => tensor is not null
+                                   && tensor.Shape.Length > 0
+                                   && tensor.Length > 0)
+                && (!dstBase.IsShapeResolved
+                    || dstBase.GetTrainableParametersWithoutMaterialization().Count == 0))
             {
                 int[] s = srcBase.GetInputShape();
                 if (s is { Length: > 0 } && Array.TrueForAll(s, d => d > 0))
@@ -12604,8 +12900,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            var sp = src.GetTrainableParameters();
-            var dp = dst.GetTrainableParameters();
+            var sp = src is LayerBase<T> sourceLayer
+                ? sourceLayer.GetTrainableParametersWithoutMaterialization()
+                : src.GetTrainableParameters();
+            var dp = dst is LayerBase<T> destinationLayer
+                ? destinationLayer.GetTrainableParametersWithoutMaterialization()
+                : dst.GetTrainableParameters();
             // A destination holding no tensors is only acceptable when the source holds none either.
             // Allowing it through while the source HAS parameters is a silent weight drop: nothing is
             // shared, no error is raised, and the clone comes back at its initialisation values --
@@ -12638,7 +12938,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var dst = dstLayers[i];
 
             // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
-            var sp = src.GetTrainableParameters();
+            var sp = src is LayerBase<T> sourceLayer
+                ? sourceLayer.GetTrainableParametersWithoutMaterialization()
+                : src.GetTrainableParameters();
             if (sp.Count > 0)
             {
                 var shared = new Tensor<T>[sp.Count];
@@ -12704,6 +13006,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 copyBase.DeserializeNetworkSpecificData(nsReader);
             }
         }
+        copyBase.RebindLayerAliases(_layers, copyBase._layers);
 
         // Copy MODEL-OWNED TRAINABLE tensors — the ones surfaced by GetExtraTrainableTensors()
         // (ViT's CLS + positional tokens, VideoCLIP's token + positional embedding tables, DCCRN's

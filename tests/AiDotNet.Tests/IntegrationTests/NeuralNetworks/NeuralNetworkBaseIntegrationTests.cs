@@ -73,6 +73,7 @@ public class NeuralNetworkBaseIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task NeuralNetworkBase_ParameterCount_UpdatesWhenLayersChange()
     {
+        await Task.Yield();
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
@@ -94,6 +95,53 @@ public class NeuralNetworkBaseIntegrationTests
         Assert.Equal(firstCount, (int)network.ParameterCount);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task GeneratedLayerAliases_RebindByIdentityAcrossTopologyChanges()
+    {
+        await Task.Yield();
+
+        ILayer<float>[] previousLayers =
+        [
+            new DenseLayer<float>(3),
+            new DenseLayer<float>(4),
+            new DenseLayer<float>(5)
+        ];
+        ILayer<float>[] replacementLayers = [new DenseLayer<float>(6)];
+        ILayer<float> independent = new DenseLayer<float>(7);
+
+        Assert.Same(
+            replacementLayers[0],
+            TestNeuralNetwork.RebindOptionalAlias(previousLayers[0], previousLayers, replacementLayers));
+        Assert.Null(
+            TestNeuralNetwork.RebindOptionalAlias(previousLayers[2], previousLayers, replacementLayers));
+        Assert.Same(
+            independent,
+            TestNeuralNetwork.RebindOptionalAlias(independent, previousLayers, replacementLayers));
+
+        var aliases = new List<ILayer<float>>
+        {
+            previousLayers[0],
+            previousLayers[2],
+            independent
+        };
+        TestNeuralNetwork.RebindCollection(aliases, previousLayers, replacementLayers);
+
+        Assert.Collection(
+            aliases,
+            alias => Assert.Same(replacementLayers[0], alias),
+            alias => Assert.Same(independent, alias));
+
+        var requiredException = Assert.Throws<InvalidOperationException>(() =>
+            TestNeuralNetwork.RebindRequiredAlias(
+                previousLayers[2], previousLayers, replacementLayers));
+        Assert.Contains("Required layer alias", requiredException.Message, StringComparison.Ordinal);
+
+        ILayer<float>[] fixedAliases = [previousLayers[0], previousLayers[2]];
+        var arrayException = Assert.Throws<InvalidOperationException>(() =>
+            TestNeuralNetwork.RebindCollection(fixedAliases, previousLayers, replacementLayers));
+        Assert.Contains("Arrays cannot shrink", arrayException.Message, StringComparison.Ordinal);
+    }
+
     private sealed class TestNeuralNetwork : NeuralNetworkBase<float>
     {
         public TestNeuralNetwork(NeuralNetworkArchitecture<float> architecture)
@@ -111,6 +159,30 @@ public class NeuralNetworkBaseIntegrationTests
         public bool RemoveLayer(ILayer<float> layer)
         {
             return RemoveLayerFromCollection(layer);
+        }
+
+        public static ILayer<float>? RebindOptionalAlias(
+            ILayer<float>? alias,
+            IReadOnlyList<ILayer<float>> previousLayers,
+            IReadOnlyList<ILayer<float>> replacementLayers)
+        {
+            return RebindLayerAlias(alias, previousLayers, replacementLayers, "testAlias");
+        }
+
+        public static ILayer<float> RebindRequiredAlias(
+            ILayer<float> alias,
+            IReadOnlyList<ILayer<float>> previousLayers,
+            IReadOnlyList<ILayer<float>> replacementLayers)
+        {
+            return RebindRequiredLayerAlias(alias, previousLayers, replacementLayers, "testAlias");
+        }
+
+        public static void RebindCollection(
+            IEnumerable<ILayer<float>> aliases,
+            IReadOnlyList<ILayer<float>> previousLayers,
+            IReadOnlyList<ILayer<float>> replacementLayers)
+        {
+            RebindLayerAliasCollection(aliases, previousLayers, replacementLayers, "testAliases");
         }
 
         protected override void InitializeLayers()

@@ -397,9 +397,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <para>Examples: BatchNorm running mean/variance, positional encoding tables,
     /// Hebbian/STDP connection weights, precomputed frequency tensors.</para>
     /// </remarks>
-    private readonly List<(string Name, Tensor<T> Tensor)> _registeredBuffers = new();
-    private readonly Dictionary<string, ParameterSlotRole> _registeredBufferStateRoles
-        = new(StringComparer.Ordinal);
+    private sealed class BufferRegistration
+    {
+        public BufferRegistration(
+            string name,
+            Tensor<T> tensor,
+            PersistentTensorRole persistenceRole,
+            ParameterSlotRole stateRole)
+        {
+            Name = name;
+            Tensor = tensor;
+            PersistenceRole = persistenceRole;
+            StateRole = stateRole;
+        }
+
+        public string Name { get; }
+        public Tensor<T> Tensor { get; set; }
+        public PersistentTensorRole PersistenceRole { get; }
+        public ParameterSlotRole StateRole { get; }
+    }
+
+    // One ordered registry is the source of truth for identity, tensor and both roles. The former
+    // list + dictionary representation could drift during disposal and concurrent lazy
+    // materialization, leaving a name in one store but not the other.
+    private readonly object _bufferRegistrationLock = new();
+    private readonly List<BufferRegistration> _registeredBuffers = new();
 
     /// <summary>
     /// Gets or sets the initialization strategy for this layer.
@@ -516,6 +538,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Executes the layer's lazy-initialization hook under the common initialization gate.
+    /// Generated parameter surfaces and base forward/materialization paths use this method so
+    /// individual layer authors do not need to reproduce double-checked locking correctly.
+    /// </summary>
+    protected void EnsureInitializationSerialized()
+    {
+        lock (InitializationLock)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name,
+                    "A disposed layer cannot be initialized or registered again.");
+            EnsureInitialized();
+        }
+    }
+
+    /// <summary>
     /// Materializes this layer, if it can be, before its parameter surface is read or written.
     /// </summary>
     /// <remarks>
@@ -547,6 +585,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected virtual IReadOnlyList<Tensor<T>> GetTrainableParametersUnmaterialized()
         => GetTrainableParameters();
+
+    /// <summary>
+    /// Returns the currently-present trainable tensors without causing lazy weights to be allocated.
+    /// </summary>
+    /// <remarks>
+    /// Clone and parameter-layout infrastructure use this internal view to observe the same state as
+    /// <see cref="ParameterCount"/> and <see cref="GetParameters"/>. Calling the public trainable view
+    /// from those read-only operations can invoke generated lazy initialization and change the model's
+    /// parameter surface merely by inspecting or cloning it.
+    /// </remarks>
+    internal IReadOnlyList<Tensor<T>> GetTrainableParametersWithoutMaterialization() =>
+        GetTrainableParametersUnmaterialized();
 
     /// <summary>
     /// Materializes this layer, if it can be, before its parameter surface is WRITTEN.
@@ -971,7 +1021,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected void InitializeShapesWithoutAllocating()
     {
         IsConstructingShapesOnly = true;
-        try { EnsureInitialized(); }
+        try { EnsureInitializationSerialized(); }
         finally { IsConstructingShapesOnly = false; }
     }
 
@@ -1034,7 +1084,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // that never told the base they were down.
         if (IsShapeResolved || ParametersAreConstructionSized)
         {
-            EnsureInitialized();
+            EnsureInitializationSerialized();
             // #1715: register the just-materialized streaming weights with the pool so transparent
             // auto-eviction can page them out — the forward path does this via
             // EnsureInitializedFromInput → RegisterStreamingWeightsWithPool, but the
@@ -1688,13 +1738,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
-        if (!_firstForwardRan && !IsShapeResolved)
+        lock (InitializationLock)
         {
-            OnFirstForward(input);
-            _firstForwardRan = true;
-            RegisterStreamingWeightsWithPool();
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name,
+                    "A disposed layer cannot execute a forward pass.");
+            if (!_firstForwardRan && !IsShapeResolved)
+            {
+                OnFirstForward(input);
+                _firstForwardRan = true;
+                RegisterStreamingWeightsWithPool();
+            }
+            EnsureInitialized();
         }
-        EnsureInitialized();
     }
 
     /// <summary>
@@ -1902,7 +1958,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         IsResolvingShapesOnly = true;
         try
         {
-            EnsureInitialized();
+            EnsureInitializationSerialized();
         }
         finally
         {
@@ -2579,7 +2635,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var contractShape = inputs.Values.FirstOrDefault()?.Shape.ToArray() ?? GetInputShape();
         var manifest = GetInputContract(contractShape);
         string variant = manifest.ResolveVariant(inputs.Keys);
-        manifest.Bind(contractShape, variant: variant)
+        var inputShapes = inputs.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.Shape.ToArray(),
+            StringComparer.Ordinal);
+        manifest.Bind(inputShapes, variant)
             .Validate(inputs);
 
         var observer = LayerForwardObserver<T>.Current;
@@ -4783,7 +4843,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 new Tensor<T>(new[] { Parameters.Length }, Parameters));
         }
 
-        var trainable = GetTrainableParameters();
+        var trainable = GetTrainableParametersUnmaterialized();
         if (trainable is not null)
         {
             for (int i = 0; i < trainable.Count; i++)
@@ -5808,44 +5868,75 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Buffer name must not be empty.", nameof(name));
 
-        // Buffer registration is name-based, matching PyTorch's register_buffer
-        // contract. Lazy initialization and deserialization can replace a buffer
-        // tensor after a placeholder or restored value is installed; keep the
-        // engine's persistent-tensor registry and the layer's named view aligned.
-        for (int i = 0; i < _registeredBuffers.Count; i++)
+        lock (_bufferRegistrationLock)
         {
-            if (!string.Equals(_registeredBuffers[i].Name, name, StringComparison.Ordinal))
-                continue;
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name,
+                    $"Cannot register persistent state '{name}' after the layer was disposed.");
 
-            var previous = _registeredBuffers[i].Tensor;
-            if (ReferenceEquals(previous, tensor)
-                && _registeredBufferStateRoles.TryGetValue(name, out var existingStateRole)
-                && existingStateRole == stateRole)
+            // Name is the stable identity within a layer. Lazy materialization and restore may
+            // replace its tensor, but may never silently change what kind of state that identity
+            // represents.
+            for (int i = 0; i < _registeredBuffers.Count; i++)
+            {
+                var existing = _registeredBuffers[i];
+                if (!string.Equals(existing.Name, name, StringComparison.Ordinal))
+                    continue;
+
+                if (existing.PersistenceRole != role || existing.StateRole != stateRole)
+                {
+                    throw new InvalidOperationException(
+                        $"Persistent state '{name}' is already registered with roles "
+                        + $"({existing.PersistenceRole}, {existing.StateRole}) and cannot also use "
+                        + $"({role}, {stateRole}). Give structurally different state a unique stable name.");
+                }
+
+                if (ReferenceEquals(existing.Tensor, tensor))
+                    return;
+
+                // Publish the replacement to the engine before retiring the previous tensor. If
+                // registration fails, the canonical entry and previous engine registration remain
+                // untouched.
+                Engine.RegisterPersistentTensor(tensor, role);
+                try
+                {
+                    Engine.UnregisterPersistentTensor(existing.Tensor);
+                }
+                catch
+                {
+                    Engine.UnregisterPersistentTensor(tensor);
+                    throw;
+                }
+
+                existing.Tensor = tensor;
+                BumpParameterEpoch();
                 return;
+            }
 
-            if (ReferenceEquals(previous, tensor))
-                throw new InvalidOperationException(
-                    $"Persistent state '{name}' is already registered as " +
-                    $"{_registeredBufferStateRoles[name]} and cannot also be {stateRole}.");
-
-            Engine.UnregisterPersistentTensor(previous);
             Engine.RegisterPersistentTensor(tensor, role);
-            _registeredBuffers[i] = (name, tensor);
-            _registeredBufferStateRoles[name] = stateRole;
+            try
+            {
+                _registeredBuffers.Add(new BufferRegistration(name, tensor, role, stateRole));
+            }
+            catch
+            {
+                Engine.UnregisterPersistentTensor(tensor);
+                throw;
+            }
             BumpParameterEpoch();
-            return;
         }
-
-        Engine.RegisterPersistentTensor(tensor, role);
-        _registeredBuffers.Add((name, tensor));
-        _registeredBufferStateRoles.Add(name, stateRole);
-        BumpParameterEpoch();
     }
 
     private ParameterSlotRole GetRegisteredBufferStateRole(string name)
-        => _registeredBufferStateRoles.TryGetValue(name, out var role)
-            ? role
-            : ParameterSlotRole.Buffer;
+    {
+        lock (_bufferRegistrationLock)
+        {
+            for (int i = 0; i < _registeredBuffers.Count; i++)
+                if (string.Equals(_registeredBuffers[i].Name, name, StringComparison.Ordinal))
+                    return _registeredBuffers[i].StateRole;
+            return ParameterSlotRole.Buffer;
+        }
+    }
 
     /// <summary>
     /// Gets all registered buffers (non-trainable persistent tensors) for this layer.
@@ -5858,7 +5949,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// avoided: it puts tensors in front of the pre-step buffer-view walk beside the parent that
     /// already handles them, which silently breaks training.
     /// </remarks>
-    public virtual IReadOnlyList<(string Name, Tensor<T> Tensor)> GetRegisteredBuffers() => _registeredBuffers;
+    public virtual IReadOnlyList<(string Name, Tensor<T> Tensor)> GetRegisteredBuffers()
+    {
+        lock (_bufferRegistrationLock)
+        {
+            var snapshot = new (string Name, Tensor<T> Tensor)[_registeredBuffers.Count];
+            for (int i = 0; i < _registeredBuffers.Count; i++)
+                snapshot[i] = (_registeredBuffers[i].Name, _registeredBuffers[i].Tensor);
+            return snapshot;
+        }
+    }
 
     #region ITrainableLayer<T> Implementation
 
@@ -5902,9 +6002,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             var t = _registeredTensors[i];
             if (t is not null && t.Length > 0) t.To(device);
         }
-        for (int i = 0; i < _registeredBuffers.Count; i++)
+        var registeredBuffers = GetRegisteredBuffers();
+        for (int i = 0; i < registeredBuffers.Count; i++)
         {
-            var t = _registeredBuffers[i].Tensor;
+            var t = registeredBuffers[i].Tensor;
             if (t is not null && t.Length > 0) t.To(device);
         }
         for (int i = 0; i < _registeredSubLayers.Count; i++)
@@ -6376,8 +6477,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
-        if (_disposed)
-            return;
+        List<Tensor<T>> bufferSnapshot;
+        lock (InitializationLock)
+        {
+            lock (_bufferRegistrationLock)
+            {
+                if (_disposed)
+                    return;
+
+                // Initialization always takes InitializationLock before publishing a buffer. Taking
+                // the same locks in the same order makes disposal a true lifecycle barrier: no
+                // initializer can allocate state between the terminal flag and registry cleanup.
+                _disposed = true;
+                bufferSnapshot = new List<Tensor<T>>(_registeredBuffers.Count);
+                for (int i = 0; i < _registeredBuffers.Count; i++)
+                    bufferSnapshot.Add(_registeredBuffers[i].Tensor);
+                _registeredBuffers.Clear();
+            }
+        }
 
         if (disposing)
         {
@@ -6408,15 +6525,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
             _registeredTensors.Clear();
 
-            foreach (var (_, tensor) in _registeredBuffers)
+            foreach (var tensor in bufferSnapshot)
             {
                 if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
             }
-            _registeredBuffers.Clear();
         }
-
-        _disposed = true;
     }
 
     /// <summary>

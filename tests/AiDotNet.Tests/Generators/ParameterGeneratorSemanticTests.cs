@@ -59,6 +59,43 @@ namespace AiDotNet.NeuralNetworks.Layers
             AiDotNet.Tensors.Engines.PersistentTensorRole role) { }
     }
 }
+namespace AiDotNet.NeuralNetworks
+{
+    using System.Collections.Generic;
+    using AiDotNet.Interfaces;
+    using AiDotNet.NeuralNetworks.Layers;
+    using AiDotNet.Tensors.LinearAlgebra;
+
+    public abstract class NeuralNetworkBase<T>
+    {
+        public List<ILayer<T>> Layers { get; } = new();
+        protected virtual IEnumerable<Tensor<T>> GetExtraTrainableTensors() => new List<Tensor<T>>();
+        protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() => new List<LayerBase<T>?>();
+        protected virtual void RebindLayerAliases(
+            IReadOnlyList<ILayer<T>> previousLayers,
+            IReadOnlyList<ILayer<T>> replacementLayers) { }
+        protected static TLayer? RebindLayerAlias<TLayer>(
+            TLayer? alias,
+            IReadOnlyList<ILayer<T>> previousLayers,
+            IReadOnlyList<ILayer<T>> replacementLayers,
+            string memberName) where TLayer : class, ILayer<T> => alias;
+        protected static TLayer RebindRequiredLayerAlias<TLayer>(
+            TLayer alias,
+            IReadOnlyList<ILayer<T>> previousLayers,
+            IReadOnlyList<ILayer<T>> replacementLayers,
+            string memberName) where TLayer : class, ILayer<T> => alias;
+        protected static void RebindLayerAliasCollection<TLayer>(
+            IEnumerable<TLayer>? aliases,
+            IReadOnlyList<ILayer<T>> previousLayers,
+            IReadOnlyList<ILayer<T>> replacementLayers,
+            string memberName) where TLayer : class, ILayer<T> { }
+        protected static void ValidateReadonlyLayerAlias<TLayer>(
+            TLayer? alias,
+            IReadOnlyList<ILayer<T>> previousLayers,
+            IReadOnlyList<ILayer<T>> replacementLayers,
+            string memberName) where TLayer : class, ILayer<T> { }
+    }
+}
 namespace AiDotNet.Tensors.Engines
 {
     public enum PersistentTensorRole { Weights, Biases }
@@ -96,6 +133,18 @@ namespace AiDotNet.Models
         GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
         driver = driver.RunGenerators(compilation);
         return string.Join("\n", driver.GetRunResult().GeneratedTrees.Select(tree => tree.GetText().ToString()));
+    }
+
+    private static ImmutableArray<Diagnostic> RunDiagnostics(IIncrementalGenerator generator, string source)
+    {
+        var compilation = CSharpCompilation.Create(
+            "GeneratorContract",
+            new[] { CSharpSyntaxTree.ParseText(Infrastructure), CSharpSyntaxTree.ParseText(source) },
+            BaseReferences(),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
+        driver = driver.RunGenerators(compilation);
+        return driver.GetRunResult().Diagnostics;
     }
 
     [Fact]
@@ -216,5 +265,60 @@ public partial class DeferredBufferModel<T> : AiDotNet.Models.ModelBase<T, objec
             "new ScalarParameterSource<T>(() => _rho, value => _rho = value)",
             generated,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelGenerator_EmitsTypeSafeCanonicalLayerAliasRebinding()
+    {
+        await Task.Yield();
+        const string source = @"
+using System.Collections.Generic;
+public partial class AliasNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+    private AiDotNet.Interfaces.ILayer<T>? _head;
+    private AiDotNet.Interfaces.ILayer<T> _required = null!;
+    private readonly List<AiDotNet.Interfaces.ILayer<T>> _encoder = new();
+    private readonly AiDotNet.Interfaces.ILayer<T>? _readonlyAlias;
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains("protected override void RebindLayerAliases(", generated, StringComparison.Ordinal);
+        Assert.Contains(
+            "_head = RebindLayerAlias(_head, previousLayers, replacementLayers, nameof(_head));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "_required = RebindRequiredLayerAlias(_required, previousLayers, replacementLayers, nameof(_required));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "RebindLayerAliasCollection(_encoder, previousLayers, replacementLayers, nameof(_encoder));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ValidateReadonlyLayerAlias(_readonlyAlias, previousLayers, replacementLayers, nameof(_readonlyAlias));",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_DuplicateBufferIdentity_IsCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class InvalidLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [Buffer(Name = ""running_state"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _first = new();
+    [Buffer(Name = ""running_state"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _second = new();
+}";
+
+        var diagnostic = Assert.Single(RunDiagnostics(
+            new AiDotNet.Generators.TrainableParameterGenerator(),
+            source).Where(item => item.Id == "ADNBUF001"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("running_state", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 }

@@ -357,6 +357,41 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task LayoutFingerprint_DistinguishesReadinessWithIdenticalIdentityAndCount()
+    {
+        await Task.Yield();
+        var unmaterialized = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12)
+        });
+        var materialized = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable,
+                ParameterReadiness.Materialized, 12)
+        });
+
+        Assert.NotEqual(unmaterialized.Fingerprint, materialized.Fingerprint);
+    }
+
+    [Fact]
+    public async Task LayoutSnapshot_RejectsDuplicateStableIdentity()
+    {
+        await Task.Yield();
+        var error = Assert.Throws<ArgumentException>(() => new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 2),
+            new ParameterSlotDescriptor(
+                "weight", ParameterSlotRole.Buffer, ParameterReadiness.Materialized, 2)
+        }));
+
+        Assert.Contains("duplicate stable identity", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task LayoutFingerprint_DistinguishesEqualCountDifferentShapeAndElementType()
     {
         await Task.Yield();

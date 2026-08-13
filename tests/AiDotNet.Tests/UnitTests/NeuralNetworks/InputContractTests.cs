@@ -90,6 +90,24 @@ public class InputContractTests
     }
 
     [Fact]
+    public async Task CallerGeometry_IsInvalid_WhileUnresolvedDeclarationsRemainDeferred()
+    {
+        await Task.Yield();
+        var manifest = new InputContractManifest(
+            "StrictBoundary",
+            [new LayerPort("input", [-1], ValueDomain: LayerInputDomain.Indices(0))]);
+
+        var invalid = manifest.Bind([0, 5]);
+        Assert.Equal(InputContractReadiness.Invalid, invalid.Readiness);
+        Assert.Throws<InputContractViolationException>(() =>
+            invalid.Validate(new Tensor<double>([0, 5])));
+
+        var deferred = manifest.Bind([2, 5]);
+        Assert.Equal(InputContractReadiness.Deferred, deferred.Readiness);
+        Assert.Throws<InputContractBindingException>(() => deferred.RequireReady());
+    }
+
+    [Fact]
     public async Task AlternativeVariants_AreResolvedFromNamedPorts()
     {
         await Task.Yield();
@@ -181,6 +199,41 @@ public class InputContractTests
         Assert.Contains("query", inputs.Keys);
         Assert.Contains("mask", inputs.Keys);
         Assert.DoesNotContain("cache", inputs.Keys);
+    }
+
+    [Fact]
+    public async Task NamedBinding_ResolvesEachPortShapeAndEnforcesRelations()
+    {
+        await Task.Yield();
+        var manifest = new InputContractManifest(
+            "Decoder",
+            [
+                new LayerPort("decoder_input", [-1], Variant: "named"),
+                new LayerPort(
+                    "encoder_output",
+                    [-1],
+                    Source: TensorPortSource.External,
+                    Variant: "named",
+                    ShapeConstraint: new PortShapeConstraint { SameShapeAs = "decoder_input" })
+            ]);
+        var contract = manifest.Bind(
+            new Dictionary<string, int[]>
+            {
+                ["decoder_input"] = [2, 4],
+                ["encoder_output"] = [2, 4]
+            },
+            "named");
+
+        contract.RequireReady();
+        Assert.All(contract.InputPorts, port => Assert.Equal([2, 4], port.Shape));
+
+        var invalid = new Dictionary<string, Tensor<double>>
+        {
+            ["decoder_input"] = new([2, 4]),
+            ["encoder_output"] = new([3, 4])
+        };
+        var error = Assert.Throws<InputContractViolationException>(() => contract.Validate(invalid));
+        Assert.Contains("same shape", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

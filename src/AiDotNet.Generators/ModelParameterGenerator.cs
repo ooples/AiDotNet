@@ -54,6 +54,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private const string RegisterCall = "RegisterParameterComponent";
     private const string ExtraTensorsHook = "GetExtraTrainableTensors";
     private const string ExtraLayersHook = "GetExtraTrainableLayers";
+    private const string RebindLayerAliasesHook = "RebindLayerAliases";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -104,7 +105,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
             // one hook is a claim about that hook only.
             bool emitTensors = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraTensorsHook);
             bool emitLayers = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraLayersHook);
-            if (!hasRegistry && !emitTensors && !emitLayers) continue;
+            bool emitLayerAliasRebinding = onNetworkTrunk && !DeclaresLayerAliasRebinding(classSymbol);
+            if (!hasRegistry && !emitTensors && !emitLayers && !emitLayerAliasRebinding) continue;
 
             if (!processed.Add(classSymbol.ToDisplayString())) continue;
 
@@ -112,6 +114,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             {
                 var tensors = new List<string>();
                 var layerGroups = new List<string>();
+                var layerAliasRebinders = new List<string>();
                 var persistentFields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
                 foreach (var member in classSymbol.GetMembers())
                 {
@@ -119,6 +122,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     {
                         if (tf.IsStatic || tf.IsConst || tf.IsImplicitlyDeclared || tf.AssociatedSymbol is not null)
                             continue;
+                        if (emitLayerAliasRebinding)
+                        {
+                            var rebinder = LayerAliasRebinderFor(tf, elem);
+                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                        }
                         var classification = ParameterMemberSemanticModel.Classify(tf);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
@@ -150,8 +158,13 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     {
                         // Sub-networks are conventionally exposed as properties (GAN's Generator and
                         // Discriminator, StyleGAN's MappingNetwork). Fields alone would miss them.
-                        if (!emitLayers) continue;
                         if (tp.IsStatic || tp.IsImplicitlyDeclared || tp.GetMethod is null) continue;
+                        if (emitLayerAliasRebinding)
+                        {
+                            var rebinder = LayerAliasRebinderFor(tp, elem);
+                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                        }
+                        if (!emitLayers) continue;
                         var classification = ParameterMemberSemanticModel.Classify(tp);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
@@ -182,11 +195,12 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     }
                 }
 
-                if (tensors.Count > 0 || layerGroups.Count > 0)
+                if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0)
                 {
                     context.AddSource(
                         HintName(classSymbol) + ".ModelExtraTensors.g.cs",
-                        GenerateExtraTensorsSource(classSymbol, elem, tensors, layerGroups));
+                        GenerateExtraTensorsSource(
+                            classSymbol, elem, tensors, layerGroups, layerAliasRebinders));
                 }
                 if (persistentFields.Count > 0)
                 {
@@ -358,7 +372,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
     }
 
     private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
-                                                     List<string> tensors, List<string> layerGroups)
+                                                     List<string> tensors, List<string> layerGroups,
+                                                     List<string> layerAliasRebinders)
     {
         var sb = OpenPartial(classSymbol, out var closers);
 
@@ -443,6 +458,23 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
+        if (layerAliasRebinders.Count > 0)
+        {
+            if (tensors.Count > 0 || layerGroups.Count > 0) sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: rebinds named fields and collection views when the canonical");
+            sb.AppendLine("    /// <c>Layers</c> graph is replaced by deserialization or eager cloning.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine($"    protected override void {RebindLayerAliasesHook}(");
+            sb.AppendLine($"        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ILayer<{elem}>> previousLayers,");
+            sb.AppendLine($"        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ILayer<{elem}>> replacementLayers)");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        base.{RebindLayerAliasesHook}(previousLayers, replacementLayers);");
+            foreach (var rebinder in layerAliasRebinders)
+                sb.AppendLine("        " + rebinder);
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
         for (int i = 0; i < closers; i++) sb.AppendLine("}");
         return sb.ToString();
@@ -517,6 +549,58 @@ public class ModelParameterGenerator : IIncrementalGenerator
         if (!IsLayerOf(element, elem)) return null;
         var et = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
         return $"{name} ?? (global::System.Collections.Generic.IEnumerable<{et}>)global::System.Array.Empty<{et}>()";
+    }
+
+    /// <summary>
+    /// Emits type-safe lifecycle repair for a field/property that may be a view into Layers.
+    /// Independent layer ownership is preserved because the base helpers only replace references
+    /// found in the previous canonical graph.
+    /// </summary>
+    private static string? LayerAliasRebinderFor(ISymbol member, string elem)
+    {
+        var type = MemberType(member);
+        if (type is null) return null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        if (IsLayerOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+            return writable
+                ? nullable
+                    ? $"{member.Name} = RebindLayerAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));"
+                    : $"{member.Name} = RebindRequiredLayerAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));"
+                : $"ValidateReadonlyLayerAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
+
+        var element = LayerCollectionElementType(bare);
+        if (element is null || !IsLayerOf(
+                element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+            return null;
+
+        return $"RebindLayerAliasCollection({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+    }
+
+    /// <summary>Returns the element type for a supported layer collection shape.</summary>
+    private static ITypeSymbol? LayerCollectionElementType(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array) return array.ElementType;
+        if (type is not INamedTypeSymbol named || named.TypeArguments.Length != 1) return null;
+
+        var open = named.OriginalDefinition.ToDisplayString();
+        return open.StartsWith("System.Collections.Generic.List<", System.StringComparison.Ordinal)
+            || open.StartsWith("System.Collections.Generic.IList<", System.StringComparison.Ordinal)
+            || open.StartsWith("System.Collections.Generic.IReadOnlyList<", System.StringComparison.Ordinal)
+            || open.StartsWith("System.Collections.Generic.ICollection<", System.StringComparison.Ordinal)
+            || open.StartsWith("System.Collections.Generic.IReadOnlyCollection<", System.StringComparison.Ordinal)
+            || open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal)
+            ? named.TypeArguments[0]
+            : null;
     }
 
     /// <summary>ILayer&lt;T&gt; or a LayerBase&lt;T&gt; subclass over the model's element type.</summary>
@@ -597,6 +681,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private static bool DeclaresOwn(INamedTypeSymbol type, string name) =>
         type.GetMembers(name).OfType<IMethodSymbol>().Any(m => m.Parameters.Length == 0);
+
+    private static bool DeclaresLayerAliasRebinding(INamedTypeSymbol type) =>
+        type.GetMembers(RebindLayerAliasesHook).OfType<IMethodSymbol>()
+            .Any(method => method.Parameters.Length == 2);
 
     /// <summary>
     /// The numeric element type. Conventionally the parameter named <c>T</c>: models in this

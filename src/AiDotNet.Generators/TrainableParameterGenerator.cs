@@ -35,6 +35,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     private const string TensorTypeName = "AiDotNet.Tensors.LinearAlgebra.Tensor";
     private const string ILayerTypeName = "AiDotNet.Interfaces.ILayer";
 
+    private static readonly DiagnosticDescriptor DuplicateBufferIdentity = new(
+        "ADNBUF001",
+        "Generated buffer identity is ambiguous",
+        "'{0}' declares persistent fields '{1}' with the same buffer identity '{2}'. Give each distinct state tensor a unique [Buffer(Name = ...)] identity.",
+        "AiDotNet.ParameterAutomation",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A stable buffer identity maps to exactly one tensor and one semantic role within a layer.");
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Find all class declarations that might have [TrainableParameter] fields
@@ -222,6 +231,18 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 }
             }
 
+            foreach (var duplicate in bufferFields
+                         .GroupBy(item => item.Name, System.StringComparer.Ordinal)
+                         .Where(group => group.Count() > 1))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DuplicateBufferIdentity,
+                    classSymbol.Locations.FirstOrDefault(),
+                    classSymbol.Name,
+                    string.Join(", ", duplicate.Select(item => item.Field)),
+                    duplicate.Key));
+            }
+
             // Merge trainable parameters declared by attribute with the compatibility
             // RegisterTrainableParameter route. Both are explicit semantic declarations; neither
             // is tensor-type inference. Dropping either route makes a partially migrated layer's
@@ -343,13 +364,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // here are covered by one flat vector and one checked count.
         if (bufferFields.Count > 0)
         {
-            sb.AppendLine("    private bool _buffersRegistered;");
-            sb.AppendLine();
             sb.AppendLine("    /// <summary>Auto-generated: registers [Buffer] fields as persistent non-trainable state.</summary>");
             sb.AppendLine("    private void EnsureBuffersRegistered()");
             sb.AppendLine("    {");
-            sb.AppendLine("        if (_buffersRegistered) return;");
-            sb.AppendLine("        _buffersRegistered = true;");
             foreach (var bf in bufferFields)
             {
                 sb.AppendLine($"        if ({bf.Field} is not null) RegisterBuffer({bf.Field}, \"{bf.Name}\", {bf.Role}, {bf.StateRole});");
@@ -503,7 +520,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
-            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitialized();");
+            sb.AppendLine("        if (IsShapeResolved || ParametersAreConstructionSized) EnsureInitializationSerialized();");
             if (hasOptional)
             {
                 sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");

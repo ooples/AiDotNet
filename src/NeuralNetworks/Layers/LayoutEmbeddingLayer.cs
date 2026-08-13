@@ -58,8 +58,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // covered explicitly by LayoutEmbeddingLayerTests.
 [LayerProperty(IsTrainable = true, ChangesShape = true,
     TestInputShape = "8", TestConstructorArgs = "64, 16, 32, 64")]
-[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.IntegerIndices,
-    Role = TensorPortRole.TokenIds, MaxExclusiveResolver = "ResolveInputDomainMaximum")]
+[TensorPort("input", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.TokenIds, DomainResolver = "ResolvePublicInputDomain")]
 [TensorPort("output", TensorPortDirection.Output, LayerInputDomainKind.Continuous,
     Role = TensorPortRole.Features)]
 // Two layouts are declared because two are statically determined. Axis 0/1 is Time - the token's
@@ -175,25 +175,22 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     protected override bool ParametersAreConstructionSized => true;
 
     /// <summary>
-    /// Declares that this layer consumes integer indices, not continuous features, so callers and
-    /// the conformance suite generate legal IDs instead of random reals.
+    /// Resolves the public domain without applying one column's semantics to an entire packed row.
     /// </summary>
     /// <remarks>
-    /// A packed row mixes two domains - column 0 indexes the vocabulary, columns 1-4 index the
-    /// coordinate grid - and a single domain cannot say that. The NARROWER of the two is reported
-    /// for packed shapes, because a value legal in the smaller range is legal in both, whereas
-    /// reporting the wider one would call a coordinate of 20000 acceptable and then saturate it.
+    /// A packed row mixes token IDs with OCR coordinates that are deliberately saturated by the
+    /// layer. The public boundary is therefore continuous for packed/boxes-only input; after the
+    /// columns are extracted, the internal embedding layers validate the token and clamped layout
+    /// tensors independently. Plain token-only input remains an integer-index contract.
     /// </remarks>
-    private int ResolveInputDomainMaximum(int[]? inputShape)
+    private LayerInputDomain ResolvePublicInputDomain(int[]? inputShape)
     {
+        if (!_includeTokens) return LayerInputDomain.Continuous;
+
         bool packed = inputShape is not null
             && inputShape.Length >= 2
-            && inputShape[inputShape.Length - 1] == RowWidth;
-
-        // Boxes-only rows carry no token column, so the coordinate grid is the whole domain.
-        if (!_includeTokens) return _maxPosition2D;
-
-        return packed ? Math.Min(_vocabSize, _maxPosition2D) : _vocabSize;
+            && inputShape[inputShape.Length - 1] == PackedRowWidth;
+        return packed ? LayerInputDomain.Continuous : LayerInputDomain.Indices(_vocabSize);
     }
 
     /// <summary>

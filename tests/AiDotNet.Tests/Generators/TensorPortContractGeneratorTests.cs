@@ -96,6 +96,7 @@ namespace AiDotNet.Attributes
         public string MaxExclusiveMember { get; set; }
         public string MaxExclusiveResolver { get; set; }
         public string CustomProviderKey { get; set; }
+        public string DomainResolver { get; set; }
         public string ShapeMember { get; set; }
         public bool PropagatesInputDomain { get; set; }
         public string StableId { get; set; }
@@ -120,6 +121,7 @@ namespace AiDotNet.Attributes
         public string MaxExclusiveMember { get; set; }
         public string MaxExclusiveResolver { get; set; }
         public string CustomProviderKey { get; set; }
+        public string DomainResolver { get; set; }
         public TensorPortSource Source { get; set; }
         public string Variant { get; set; }
         public int ExactRank { get; set; }
@@ -486,5 +488,76 @@ public partial class Invalid<T> : LayerBase<T> { }";
 
         var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT007"));
         Assert.Contains("without a CustomProviderKey", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public async Task DomainResolver_GeneratesOneShapeAwareBoundaryContract()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""input"", TensorPortDirection.Input, DomainResolver = ""ResolveDomain"")]
+public partial class AdaptiveModel<T> : NeuralNetworkBase<T>
+{
+    private LayerInputDomain ResolveDomain(int[] shape) => LayerInputDomain.Continuous;
+}";
+
+        var run = Run(source);
+        Assert.DoesNotContain(run.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Contains("GetInputContract", run.Generated, StringComparison.Ordinal);
+        Assert.Contains("ResolveDomain(shape)", run.Generated, StringComparison.Ordinal);
+        Assert.Contains("GetInputDomain(int[]? inputShape) => ResolveDomain(inputShape)",
+            run.Generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DomainResolverWithWrongSignature_IsFriendlyCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""input"", TensorPortDirection.Input, DomainResolver = ""ResolveDomain"")]
+public partial class Invalid<T> : LayerBase<T>
+{
+    private int ResolveDomain(int[] shape) => 0;
+}";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT008"));
+        Assert.Contains("LayerInputDomain", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SameShapeCycle_IsCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""left"", TensorPortDirection.Input, SameShapeAs = ""right"")]
+[TensorPort(""right"", TensorPortDirection.Input, SameShapeAs = ""left"")]
+public partial class Invalid<T> : LayerBase<T> { }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT011"));
+        Assert.Contains("cycle", diagnostic.GetMessage(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task IndistinguishableVariantSignatures_AreCompilerError()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.NeuralNetworks.Layers;
+[TensorPort(""input"", TensorPortDirection.Input, Variant = ""first"")]
+[TensorPort(""input"", TensorPortDirection.Input, Variant = ""second"")]
+public partial class Invalid<T> : LayerBase<T> { }";
+
+        var diagnostic = Assert.Single(Run(source).Diagnostics.Where(item => item.Id == "ADNPORT012"));
+        Assert.Contains("first", diagnostic.GetMessage(), StringComparison.Ordinal);
+        Assert.Contains("second", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 }

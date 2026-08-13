@@ -224,6 +224,18 @@ internal static class FinanceModelTestFactory
                         numFeatures: Math.Max(1, financialModel.NumFeatures));
                 }
 
+                // A finance model's storage shape does not determine its value domain. Chronos, for
+                // example, exposes a forecasting interface but quantizes its observations into token
+                // IDs before the first embedding. Synthesize from the same generated public contract
+                // production validates instead of teaching this factory a list of tokenized models.
+                if (model is NeuralNetworkBase<T> contractOwner)
+                {
+                    var contract = contractOwner.BindInputContract(input.Shape.ToArray());
+                    input = InputContractTensorFactory.CreateValid<T>(
+                        contract,
+                        RandomHelper.CreateSeededRandom(42));
+                }
+
                 var output = financialModel.Predict(input);
                 Assert.NotNull(output);
 
@@ -544,12 +556,30 @@ internal static class FinanceModelTestFactory
             Assert.True(InterfaceGuard.FeatureAware(model).IsFeatureUsed(activeFeatures[0]));
         }
 
+        // Parameterized cloning is exact and readiness-aware. Materialize every shape that the
+        // architecture can prove without inventing dimensions for non-sequential or data-dependent
+        // graphs. A remaining deferred manifest is a first-class state, not an empty parameter set.
+        if (model is NeuralNetworkBase<T> neuralNetwork)
+        {
+            neuralNetwork.MaterializeParameters();
+        }
+
         var parameters = ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).GetParameters();
         Assert.Equal(((IParameterizable<T, Tensor<T>, Tensor<T>>)model).ParameterCount, parameters.Length);
 
+        if (model is NeuralNetworkBase<T> readinessAware
+            && readinessAware.ParameterLayout.Readiness is not (
+                AiDotNet.Models.Parameters.ParameterReadiness.Materialized
+                or AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+                or AiDotNet.Models.Parameters.ParameterReadiness.ConditionalAbsent))
+        {
+            Assert.Throws<AiDotNet.Models.Parameters.ParameterLayoutNotReadyException>(() =>
+                ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).WithParameters(parameters));
+            return;
+        }
+
         var withParams = ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).WithParameters(parameters);
         Assert.NotNull(withParams);
-
         if (withParams is IDisposable disposable)
         {
             disposable.Dispose();

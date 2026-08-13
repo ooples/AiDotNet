@@ -304,14 +304,29 @@ public sealed class ParameterSlotDescriptor
 public sealed class ParameterLayoutSnapshot
 {
     /// <summary>The canonical manifest schema used to compute <see cref="Fingerprint"/>.</summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     /// <summary>Creates a layout snapshot from already ordered slots.</summary>
     public ParameterLayoutSnapshot(IReadOnlyList<ParameterSlotDescriptor> slots)
     {
         if (slots is null) throw new ArgumentNullException(nameof(slots));
         var immutableSlots = new List<ParameterSlotDescriptor>(slots.Count);
-        for (int i = 0; i < slots.Count; i++) immutableSlots.Add(slots[i]);
+        var stableIds = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < slots.Count; i++)
+        {
+            var slot = slots[i] ?? throw new ArgumentException(
+                $"Parameter manifest slot {i} is null.",
+                nameof(slots));
+            ParameterStableId.Validate(slot.StableId, nameof(slots));
+            if (!stableIds.Add(slot.StableId))
+            {
+                throw new ArgumentException(
+                    $"Parameter manifest contains duplicate stable identity '{slot.StableId}'. " +
+                    "Every persistent-state slot must have one unique, durable owner path.",
+                    nameof(slots));
+            }
+            immutableSlots.Add(slot);
+        }
         Slots = immutableSlots.AsReadOnly();
 
         bool shapeDeferred = false;
@@ -382,6 +397,7 @@ public sealed class ParameterLayoutSnapshot
             var slot = slots[i];
             canonical.Append(slot.StableId.Length).Append(':').Append(slot.StableId).Append('|')
                 .Append((int)slot.Role).Append('|')
+                .Append((int)slot.Readiness).Append('|')
                 .Append((int)slot.UpdatePolicy).Append('|')
                 .Append((int)slot.Persistence).Append('|')
                 .Append((int)slot.Ownership).Append('|')
@@ -495,7 +511,7 @@ public interface IGeneratedParameterRegistrar<T>
     void RegisterGeneratedParameters(ParameterComponentRegistry<T> registry);
 }
 
-/// <summary>Thrown when an exact vector operation is requested before every slot has a shape.</summary>
+/// <summary>Thrown when an exact vector operation is requested before every slot is ready.</summary>
 public sealed class ParameterLayoutNotReadyException : InvalidOperationException
 {
     /// <summary>Creates a readiness error for the supplied operation.</summary>
@@ -517,7 +533,10 @@ public sealed class ParameterLayoutNotReadyException : InvalidOperationException
         for (int i = 0; i < layout.Slots.Count && ids.Count < 8; i++)
         {
             var slot = layout.Slots[i];
-            if (slot.Readiness is ParameterReadiness.ShapeDeferred or ParameterReadiness.FitDeferred
+            if (slot.Readiness is ParameterReadiness.ShapeDeferred
+                or ParameterReadiness.ShapeResolvedUnmaterialized
+                or ParameterReadiness.FitDeferred
+                or ParameterReadiness.External
                 || !slot.ParameterCount.HasValue)
                 ids.Add(slot.StableId);
         }

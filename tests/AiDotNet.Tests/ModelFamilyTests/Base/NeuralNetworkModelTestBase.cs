@@ -949,6 +949,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             contract,
             ModelTestHelpers.CreateSeededRandom(1789));
         contract.Validate(input);
+
+        // Synthesis and validation are only useful if the value crosses the real public boundary.
+        // This closes the former gap where a manifest could agree with itself while Predict still
+        // rejected the generated tensor or routed it into an incompatible first semantic layer.
+        var output = network.Predict(input);
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0,
+            $"{network.GetType().Name} accepted its generated input contract but returned an empty output.");
     }
 
     [Fact(Timeout = 120000)]

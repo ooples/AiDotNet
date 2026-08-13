@@ -116,6 +116,16 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// <inheritdoc/>
     public int ExpectedImageSize => ImageSize;
 
+    /// <summary>
+    /// Selects UDOP's public modality from tensor geometry. Images are continuous; rank-one and
+    /// rank-two inputs are token IDs. The document base owns the general rule and this override
+    /// supplies only UDOP's configuration-specific vocabulary bound.
+    /// </summary>
+    protected override LayerInputDomain ResolveDocumentInputDomain(int[]? inputShape) =>
+        inputShape is { Length: < 3 }
+            ? LayerInputDomain.Indices(_vocabSize)
+            : LayerInputDomain.Continuous;
+
     /// <inheritdoc/>
     public IReadOnlyList<LayoutElementType> SupportedElementTypes { get; } =
     [
@@ -306,8 +316,11 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
             imageSize: ImageSize,
             maxSequenceLength: MaxSequenceLength);
 
-        Layers.AddRange(encoderLayers);
-        Layers.AddRange(decoderLayers);
+        var encoder = encoderLayers.ToArray();
+        var decoder = decoderLayers.ToArray();
+        Layers.AddRange(encoder);
+        Layers.AddRange(decoder);
+        PartitionDefaultGraph(encoder, decoder);
 
         // Classification head (see field docs): pools the generative sequence and projects to numClasses.
         // Added to Layers so it trains and serializes with the rest, but skipped in the sequential Forward
@@ -315,6 +328,74 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         _classHead = new DenseLayer<T>(_numClasses);
         Layers.Add(_classHead);
         _hasBuiltInClassHead = true;
+    }
+
+    /// <summary>Builds runtime partitions from the same factory graph inspected by the generator.</summary>
+    private void PartitionDefaultGraph(
+        IReadOnlyList<ILayer<T>> encoder,
+        IReadOnlyList<ILayer<T>> decoder)
+    {
+        _visualEncoderLayers.Clear();
+        _textEncoderLayers.Clear();
+        _unifiedEncoderLayers.Clear();
+        _decoderLayers.Clear();
+
+        int textRoot = -1;
+        for (int i = 0; i < encoder.Count; i++)
+        {
+            if (encoder[i] is EmbeddingLayer<T>)
+            {
+                textRoot = i;
+                break;
+            }
+        }
+
+        if (textRoot < 0)
+        {
+            _unifiedEncoderLayers.AddRange(encoder);
+        }
+        else
+        {
+            for (int i = 0; i < textRoot; i++) _visualEncoderLayers.Add(encoder[i]);
+            _textEncoderLayers.Add(encoder[textRoot]);
+            int unifiedStart = textRoot + 1;
+            if (unifiedStart < encoder.Count && encoder[unifiedStart] is PositionalEncodingLayer<T>)
+            {
+                _textEncoderLayers.Add(encoder[unifiedStart]);
+                unifiedStart++;
+            }
+            for (int i = unifiedStart; i < encoder.Count; i++)
+                _unifiedEncoderLayers.Add(encoder[i]);
+        }
+
+        _decoderLayers.AddRange(decoder);
+    }
+
+    private Tensor<T> RunUdopSequence(IReadOnlyList<ILayer<T>> layers, Tensor<T> input)
+    {
+        Tensor<T> output = input;
+        bool hasPassedConvLayer = false;
+        bool hasReshapedToSequence = false;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            var layer = layers[i];
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                    or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+                hasPassedConvLayer = true;
+
+            bool isNonSpatial = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Rank >= 3 && isNonSpatial)
+            {
+                int channels = output.Rank == 4 ? output.Shape[1] : output.Shape[0];
+                int height = output.Rank == 4 ? output.Shape[2] : output.Shape[1];
+                int width = output.Rank == 4 ? output.Shape[3] : output.Shape[2];
+                output = Engine.Reshape(output, [height * width, channels]);
+                hasReshapedToSequence = true;
+            }
+            output = layer.Forward(output);
+        }
+        return output;
     }
 
     /// <summary>
@@ -734,6 +815,18 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
             _classHead = Layers[Layers.Count - 1] as DenseLayer<T>;
         else
             _classHead = null;
+
+        if (_hasBuiltInClassHead)
+        {
+            int encoderCount = 5 + 5 * _numEncoderLayers;
+            int decoderCount = 4 + _numDecoderLayers;
+            if (Layers.Count >= encoderCount + decoderCount + 1)
+            {
+                PartitionDefaultGraph(
+                    Layers.Take(encoderCount).ToArray(),
+                    Layers.Skip(encoderCount).Take(decoderCount).ToArray());
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -757,6 +850,40 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// </summary>
     private Tensor<T> ForwardEncoderDecoder(Tensor<T> input)
     {
+        if (_hasBuiltInClassHead && _decoderLayers.Count > 0)
+        {
+            // UDOP is a graph, not a flat list: select the public modality, run the shared
+            // encoder, then seed the autoregressive decoder with BOS and cross-attend to the
+            // encoder memory. This topology is the unique model logic; parameters, contracts,
+            // initialization and validation remain base/generator-owned.
+            var modalityLayers = input.Rank <= 2 ? _textEncoderLayers : _visualEncoderLayers;
+            Tensor<T> encoderMemory = RunUdopSequence(modalityLayers, input);
+            encoderMemory = RunUdopSequence(_unifiedEncoderLayers, encoderMemory);
+
+            int decoderIndex = 0;
+            Tensor<T> decoderOutput;
+            if (_decoderLayers[0] is EmbeddingLayer<T> tokenEmbedding)
+            {
+                var bos = new Tensor<T>([1]);
+                bos[0] = NumOps.FromDouble(1.0);
+                decoderOutput = tokenEmbedding.Forward(bos);
+                decoderIndex = 1;
+            }
+            else
+            {
+                decoderOutput = encoderMemory;
+            }
+
+            for (; decoderIndex < _decoderLayers.Count; decoderIndex++)
+            {
+                var layer = _decoderLayers[decoderIndex];
+                decoderOutput = layer is TransformerDecoderLayer<T> decoder
+                    ? decoder.Forward(decoderOutput, encoderMemory)
+                    : layer.Forward(decoderOutput);
+            }
+            return decoderOutput;
+        }
+
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
         bool hasPassedConvLayer = false;

@@ -33,6 +33,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // Transformer decoder block over a sequence: shape-preserving at rank 3 [Batch, Time, Features].
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+[TensorPort("decoder_input", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.DecoderIds, Variant = "default")]
+[TensorPort("encoder_output", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.EncoderMemory, Source = TensorPortSource.Derived,
+    SameShapeAs = "decoder_input", Variant = "default")]
+[TensorPort("decoder_input", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.DecoderIds, Variant = "named")]
+[TensorPort("encoder_output", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.EncoderMemory, Variant = "named")]
+[TensorPort("mask", TensorPortDirection.Input, LayerInputDomainKind.Continuous,
+    Role = TensorPortRole.Mask, Required = false, Source = TensorPortSource.Defaulted,
+    Variant = "named")]
 [AutoParameters]
 public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
 {
@@ -721,16 +733,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         _norm2.ResetState();
         _norm3.ResetState();
     }
-
-    /// <summary>
-    /// Declares named input ports for this multi-input layer.
-    /// </summary>
-    public override IReadOnlyList<LayerPort> InputPorts =>
-    [
-        new LayerPort("decoder_input", GetInputShape()),
-        new LayerPort("encoder_output", GetInputShape()),
-        new LayerPort("mask", GetInputShape(), Required: false)
-    ];
 
     /// <summary>
     /// Named multi-input forward pass.
