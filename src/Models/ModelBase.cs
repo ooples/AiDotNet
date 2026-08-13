@@ -336,18 +336,83 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     // --- IModelSerializer ---
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// THIS USED TO THROW, with the message "Override Serialize to provide an implementation", and
+    /// that instruction is the whole reason 368 hand-written Serialize/Deserialize halves exist. A
+    /// base that refuses the job conscripts every author into doing it by hand, and each hand-written
+    /// pair is two places to forget the same field.
+    /// </para>
+    /// <para>
+    /// It does the job now, from what the model has already DECLARED: components registered through
+    /// <see cref="RegisterParameterComponent"/> and
+    /// <see cref="RegisterGeneratedParameterComponents"/> are folded by
+    /// <see cref="GetParameters"/>, so the base can persist all of them without knowing anything
+    /// about a particular model. Configuration is not written here -- a clone gets it from the
+    /// recorded constructor, and a load applies it to a model the caller already constructed.
+    /// </para>
+    /// <para>
+    /// The type token is not decoration. Without it, loading one model's bytes into another whose
+    /// parameter vector happens to be the same length succeeds silently and yields a model that is
+    /// confidently wrong, which is precisely the class of defect this work exists to remove.
+    /// </para>
+    /// </remarks>
     public virtual byte[] Serialize()
     {
-        throw new NotSupportedException(
-            $"Serialization is not supported for {GetType().Name}. Override Serialize to provide an implementation.");
+        var parameters = GetParameters();
+
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        writer.Write(ModelSerializationMagic);
+        writer.Write(GetType().FullName ?? GetType().Name);
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(parameters[i]));
+        }
+
+        writer.Flush();
+        return stream.ToArray();
     }
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
-        throw new NotSupportedException(
-            $"Deserialization is not supported for {GetType().Name}. Override Deserialize to provide an implementation.");
+        if (data is null) throw new ArgumentNullException(nameof(data));
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        int magic = reader.ReadInt32();
+        if (magic != ModelSerializationMagic)
+        {
+            throw new InvalidDataException(
+                $"{GetType().Name}: payload is not an AiDotNet model state block. A checkpoint written "
+                + "by an earlier hand-written Serialize must be regenerated.");
+        }
+
+        string savedType = reader.ReadString();
+        string liveType = GetType().FullName ?? GetType().Name;
+        if (!string.Equals(savedType, liveType, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"State was saved from '{savedType}' and is being loaded into '{liveType}'. Loading it "
+                + "would produce a model that is confidently wrong rather than one that fails.");
+        }
+
+        int count = reader.ReadInt32();
+        var parameters = new Vector<T>(count);
+        for (int i = 0; i < count; i++)
+        {
+            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        SetParameters(parameters);
     }
+
+    /// <summary>Identifies a model state payload written by <see cref="Serialize"/>.</summary>
+    private const int ModelSerializationMagic = unchecked((int)0xA1D00DE1);
 
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)

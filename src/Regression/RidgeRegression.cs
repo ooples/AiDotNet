@@ -208,44 +208,4 @@ public class RidgeRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-
-    /// <summary>
-    /// Serializes the Ridge Regression model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize Ridge-specific data
-        writer.Write(Options.Alpha);
-        writer.Write((int)Options.DecompositionType);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes a Ridge Regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model.</param>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize Ridge-specific data
-        Options.Alpha = reader.ReadDouble();
-        Options.DecompositionType = (MatrixDecompositionType)reader.ReadInt32();
-    }
 }
