@@ -44,13 +44,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Keep this checkout outside GITHUB_WORKSPACE. A nested checkout would inherit
+      # AiDotNet's Directory.Packages.props and incorrectly apply central package
+      # management to the independently versioned Tensors project (NU1008).
       - name: Checkout stacked AiDotNet.Tensors dependency
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          repository: ooples/AiDotNet.Tensors
-          ref: ${{ env.TENSORS_PR_944_COMMIT }}
-          path: dependencies/AiDotNet.Tensors
-          persist-credentials: false
+        shell: pwsh
+        run: |
+          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
+          git init $tensorsRoot
+          git -C $tensorsRoot remote add origin https://github.com/ooples/AiDotNet.Tensors.git
+          git -C $tensorsRoot fetch --depth 1 origin $env:TENSORS_PR_944_COMMIT
+          git -C $tensorsRoot checkout --detach FETCH_HEAD
 
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -61,17 +65,21 @@ jobs:
         shell: pwsh
         run: |
           $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj `
-            -p:CustomAfterMicrosoftCommonTargets=$targets
+            -p:CustomAfterMicrosoftCommonTargets=$targets `
+            -p:TensorsPr944Root=$tensorsRoot
           dotnet restore tools/ModelPerfProbe/ModelPerfProbe.csproj
 
       - name: Build fixture inventory
         shell: pwsh
         run: |
           $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release `
             --framework net10.0 --no-restore `
-            -p:CustomAfterMicrosoftCommonTargets=$targets
+            -p:CustomAfterMicrosoftCommonTargets=$targets `
+            -p:TensorsPr944Root=$tensorsRoot
 
       - name: Record expected fixture inventory
         if: matrix.shard == 0
@@ -79,9 +87,11 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/model-performance/shard-0 | Out-Null
           $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 `
             --list-tests --no-build --no-restore `
             -p:CustomAfterMicrosoftCommonTargets=$targets `
+            -p:TensorsPr944Root=$tensorsRoot `
             --filter 'Category=ModelPerformanceCensus' |
             Set-Content artifacts/model-performance/shard-0/test-list.txt
 
@@ -96,6 +106,7 @@ jobs:
         run: |
           $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
           $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           $config = Get-Content $runnerJson -Raw | ConvertFrom-Json
           $config.parallelizeTestCollections = $false
           $config.maxParallelThreads = 1
@@ -104,6 +115,7 @@ jobs:
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj `
             -c Release --framework net10.0 --no-build --no-restore `
             -p:CustomAfterMicrosoftCommonTargets=$targets `
+            -p:TensorsPr944Root=$tensorsRoot `
             --filter 'Category=ModelPerformanceCensus' `
             --logger 'trx;LogFileName=model-performance.trx' `
             --results-directory "artifacts/model-performance/shard-${{ matrix.shard }}"

@@ -7,6 +7,6 @@
   -->
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'AiDotNet'">
     <PackageReference Remove="AiDotNet.Tensors" />
-    <ProjectReference Include="$(MSBuildThisFileDirectory)../../dependencies/AiDotNet.Tensors/src/AiDotNet.Tensors/AiDotNet.Tensors.csproj" />
+    <ProjectReference Include="$(TensorsPr944Root)/src/AiDotNet.Tensors/AiDotNet.Tensors.csproj" />
   </ItemGroup>
 </Project>
