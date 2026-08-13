@@ -1435,12 +1435,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _ = PredictNoise(dummy, timestep: 0, conditioning: null);
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     #region Layer-Level Backpropagation

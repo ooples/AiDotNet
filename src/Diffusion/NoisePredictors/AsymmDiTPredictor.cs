@@ -97,7 +97,4 @@ public class AsymmDiTPredictor<T> : MMDiTNoisePredictor<T>
         ProbeMaterializeAndCopyInto(clone);
         return clone;
     }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 }

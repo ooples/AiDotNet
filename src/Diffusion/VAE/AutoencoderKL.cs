@@ -520,12 +520,6 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
         return clone;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     /// <summary>

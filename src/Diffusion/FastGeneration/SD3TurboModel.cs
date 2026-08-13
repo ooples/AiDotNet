@@ -115,9 +115,6 @@ public partial class SD3TurboModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // #1711: delegate to predictor/VAE Clone (probe-forward + copy); MMDiT LazyDense weights resolve

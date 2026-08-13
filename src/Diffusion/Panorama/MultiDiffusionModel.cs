@@ -97,8 +97,6 @@ public partial class MultiDiffusionModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL predictor and VAE — the previous code passed neither, so the new instance

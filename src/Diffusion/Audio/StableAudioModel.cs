@@ -218,12 +218,6 @@ public partial class StableAudioModel<T> : AudioDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     #region Metadata

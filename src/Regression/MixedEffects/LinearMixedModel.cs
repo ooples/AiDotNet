@@ -854,6 +854,4 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         }
         return base.Clone();
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

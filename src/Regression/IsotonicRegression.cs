@@ -580,8 +580,6 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new IsotonicRegression<T>(Options, Regularization);

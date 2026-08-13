@@ -1188,9 +1188,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     #endregion
 
     #region Block Structures

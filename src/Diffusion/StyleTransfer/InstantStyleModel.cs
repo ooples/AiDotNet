@@ -214,8 +214,6 @@ public partial class InstantStyleModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         // Fast path: O(1) copy-on-write share when the default clone is structurally identical

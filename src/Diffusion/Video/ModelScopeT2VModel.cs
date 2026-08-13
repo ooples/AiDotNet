@@ -320,12 +320,6 @@ public partial class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     #region Metadata

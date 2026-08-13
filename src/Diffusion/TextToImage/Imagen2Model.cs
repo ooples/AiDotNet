@@ -234,9 +234,6 @@ public partial class Imagen2Model<T> : LatentDiffusionModelBase<T>
     #region ICloneable
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         int baseChannels = _isImagen3 ? 384 : 320;

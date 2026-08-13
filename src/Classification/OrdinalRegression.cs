@@ -796,9 +796,6 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
         return clone;
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     /// <summary>
     /// Computes gradients for the model parameters.
     /// </summary>

@@ -93,8 +93,6 @@ public partial class CatVTONModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         // Delegate to the predictor/VAE's own Clone implementations (mirrors

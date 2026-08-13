@@ -94,9 +94,6 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (SelfOrganizingMap<T>)CreateNewInstance();

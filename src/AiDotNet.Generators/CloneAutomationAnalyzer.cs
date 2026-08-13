@@ -84,7 +84,7 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
         var name = method.Identifier.ValueText;
         if (name is not ("CreateNewInstance" or "DeepCopy" or "Clone")) return;
 
-        if (!IsSingleReturnOfNewObject(method)) return;
+        if (!IsSingleReturnOfNewObject(method) && !IsPureForwarder(method, name)) return;
 
         if (context.ContainingSymbol is not IMethodSymbol symbol) return;
 
@@ -163,6 +163,60 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
 
         // An object initializer sets state the constructor did not, which the plan does not replay.
         return expression is ObjectCreationExpressionSyntax { Initializer: null };
+    }
+
+    /// <summary>
+    /// True when the override only calls its own sibling and adds nothing.
+    /// </summary>
+    /// <param name="method">The override being analysed.</param>
+    /// <param name="name">The override's name.</param>
+    /// <returns><see langword="true"/> for a body that is exactly <c>SomeSibling()</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// This class is not merely redundant, it is FATAL. The bases define
+    /// <c>Clone() =&gt; DeepCopy()</c>, so a type that also defines <c>DeepCopy() =&gt; Clone()</c>
+    /// closes a two-frame cycle as soon as its own real <c>Clone</c> is removed. 227 types carried
+    /// that forwarder and 85 of them were already cyclic; <c>SuperNet</c> crashed the test host with
+    /// a stack overflow after 12015 repetitions.
+    /// </para>
+    /// <para>
+    /// It is also the deletion hazard the rest of this analyzer does not model. Proving the BASE
+    /// reproduces an override says nothing about whether a SIBLING in the same type delegates to
+    /// what is being removed, so removing <c>Clone</c> is correct in isolation and fatal next to a
+    /// forwarder. Reporting the forwarder means the deletion loop removes BOTH, and the pair cannot
+    /// regrow into a cycle.
+    /// </para>
+    /// </remarks>
+    private static bool IsPureForwarder(MethodDeclarationSyntax method, string name)
+    {
+        var expression = method.ExpressionBody?.Expression;
+
+        if (expression is null)
+        {
+            if (method.Body is null || method.Body.Statements.Count != 1) return false;
+            if (method.Body.Statements[0] is not ReturnStatementSyntax { Expression: { } returned })
+            {
+                return false;
+            }
+
+            expression = returned;
+        }
+
+        // Only an unqualified or this-qualified call, and never to itself -- `Clone() => Clone()`
+        // would be its own infinite recursion rather than a forwarder to a sibling.
+        var invoked = expression switch
+        {
+            InvocationExpressionSyntax { ArgumentList.Arguments.Count: 0 } call => call.Expression switch
+            {
+                IdentifierNameSyntax id => id.Identifier.ValueText,
+                MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } member
+                    => member.Name.Identifier.ValueText,
+                _ => null,
+            },
+            _ => null,
+        };
+
+        return invoked is "Clone" or "DeepCopy" or "CreateNewInstance" && invoked != name;
     }
 
     /// <summary>

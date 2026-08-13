@@ -966,12 +966,6 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         source.Data.Span.CopyTo(target.Data.Span);
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     protected override Vector<T> GetParameterGradients()

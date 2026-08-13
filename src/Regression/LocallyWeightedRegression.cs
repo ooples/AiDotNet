@@ -185,8 +185,6 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // In LWR, we don't pre-compute a global model. Instead, we store the training data.

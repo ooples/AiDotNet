@@ -97,8 +97,6 @@ public partial class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         // #1711: delegate to predictor/VAE Clone (probe-forward + copy); DiT LazyDense weights resolve

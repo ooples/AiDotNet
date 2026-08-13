@@ -767,12 +767,6 @@ public partial class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<
 
     #region ICloneable Implementation
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     #region DiffusionModelBase Overrides

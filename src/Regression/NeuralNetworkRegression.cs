@@ -788,8 +788,6 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     /// <summary>
     /// Deserializes the model from a byte array.
     /// </summary>

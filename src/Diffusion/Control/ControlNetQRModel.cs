@@ -128,9 +128,6 @@ public partial class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Lazy-preserving Clone (recipe from #1596): delegate to the base UNet's and VAE's own Clone()

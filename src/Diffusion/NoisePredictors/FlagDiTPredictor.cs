@@ -376,9 +376,6 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override INoisePredictor<T> Clone()
     {
         var clone = new FlagDiTPredictor<T>(_inputChannels, _hiddenSize, _numLayers, _numHeads,

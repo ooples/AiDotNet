@@ -107,9 +107,6 @@ public class MMDiTXNoisePredictor<T> : MMDiTNoisePredictor<T>
         return clone;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     // SD3.5 variant dimensions. hidden % heads == 0 for each (2048%16=128, 2560%20=128).
     private static int GetHiddenSize(MMDiTXVariant variant) => variant switch
     {

@@ -169,8 +169,6 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Auto-scale gamma if using the default value of 1.0

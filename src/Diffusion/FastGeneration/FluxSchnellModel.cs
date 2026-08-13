@@ -124,9 +124,6 @@ public partial class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Reuse THIS model's resolved construction seed (not a fresh one): a never-forwarded predictor is

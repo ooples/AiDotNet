@@ -282,10 +282,8 @@ internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientC
         return copy;
     }
 
-    public override IFullModel<double, Matrix<double>, Vector<double>> Clone()
-    {
-        return DeepCopy();
-    }
+    // Clone is NOT overridden: the base already defines Clone() => DeepCopy(), so repeating it here
+    // adds nothing and becomes a cycle the moment DeepCopy is the one that goes.
 }
 
 internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<double>>,

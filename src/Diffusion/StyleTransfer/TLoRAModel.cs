@@ -276,8 +276,6 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only

@@ -478,12 +478,6 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         SetAllLayersEvalMode();
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        return DeepCopy();
-    }
-
     /// <summary>
     /// Gets the layer at the specified index.
     /// </summary>

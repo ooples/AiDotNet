@@ -136,9 +136,6 @@ public partial class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL predictor and VAE (see InstaFlowModel/MultiDiffusionModel): passing only

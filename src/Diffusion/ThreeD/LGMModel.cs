@@ -300,9 +300,6 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();

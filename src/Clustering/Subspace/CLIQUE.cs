@@ -98,9 +98,6 @@ public class CLIQUE<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (CLIQUE<T>)CreateNewInstance();

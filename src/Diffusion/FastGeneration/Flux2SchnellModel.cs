@@ -127,9 +127,6 @@ public partial class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // #1711: delegate to predictor/VAE Clone (probe-forward + copy); DiT LazyDense weights resolve

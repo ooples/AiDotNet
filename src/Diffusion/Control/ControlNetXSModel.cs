@@ -197,9 +197,6 @@ public partial class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     #region ICloneable
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Delegate to sub-Clones — same lazy-init fix pattern as

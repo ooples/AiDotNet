@@ -94,8 +94,6 @@ public partial class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL predictor/VAE: passing neither rebuilt the default foundation-scale UNet

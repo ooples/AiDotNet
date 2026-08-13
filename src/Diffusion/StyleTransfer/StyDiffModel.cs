@@ -91,8 +91,6 @@ public partial class StyDiffModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         var optionsCopy = new DiffusionModelOptions<T>((DiffusionModelOptions<T>)Options);

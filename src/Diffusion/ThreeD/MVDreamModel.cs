@@ -1143,12 +1143,6 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL multi-view UNet / image VAE (see InstaFlowModel/MultiDiffusionModel):

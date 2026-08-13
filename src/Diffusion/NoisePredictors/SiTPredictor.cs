@@ -101,7 +101,4 @@ public class SiTPredictor<T> : DiTNoisePredictor<T>
         ProbeMaterializeAndCopyInto(clone);
         return clone;
     }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 }

@@ -872,8 +872,6 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         clone._normStd = _normStd;
         return clone;
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }
 
 /// <summary>

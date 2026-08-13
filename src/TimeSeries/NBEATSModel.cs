@@ -1236,6 +1236,4 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
 
 }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
 }

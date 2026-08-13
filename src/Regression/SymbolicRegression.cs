@@ -401,8 +401,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         return base.Clone();
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (_useOLS && _olsCoefficients is not null)

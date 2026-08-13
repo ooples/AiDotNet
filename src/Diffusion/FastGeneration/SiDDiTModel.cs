@@ -120,9 +120,6 @@ public partial class SiDDiTModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // #1711: delegate to the predictor's/VAE's own Clone (probe-forward + copy). The DiT/SiT

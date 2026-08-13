@@ -213,9 +213,6 @@ public partial class EDiffIModel<T> : LatentDiffusionModelBase<T>
     #region ICloneable
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Delegate to _unet.Clone() + _vae.Clone() — same lazy-init fix pattern as

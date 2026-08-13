@@ -370,12 +370,6 @@ public partial class DiffWaveModel<T> : DiffusionModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         var clone = new DiffWaveModel<T>(

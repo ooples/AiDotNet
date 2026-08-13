@@ -488,12 +488,6 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         return new EfficientNetNetwork<T>(Architecture, config, freshOptimizer, _lossFunction);
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        return DeepCopy();
-    }
-
     /// <summary>
     /// Gets the layer at the specified index.
     /// </summary>

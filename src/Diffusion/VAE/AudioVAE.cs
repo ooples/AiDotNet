@@ -678,12 +678,6 @@ public partial class AudioVAE<T> : VAEModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
     public override IVAEModel<T> Clone()
     {
         var clone = new AudioVAE<T>(

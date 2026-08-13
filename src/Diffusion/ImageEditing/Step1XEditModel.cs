@@ -125,9 +125,6 @@ public partial class Step1XEditModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Fast path: O(1) copy-on-write share when the default clone is structurally identical

@@ -399,8 +399,6 @@ public partial class GeneticAlgorithmRegression<T> : RegressionBase<T>
         return base.Clone();
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     /// <summary>
     /// Loads a previously serialized Genetic Algorithm Regression model from a byte array.
     /// </summary>

@@ -201,8 +201,6 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     /// <summary>
     /// Fits the model with NIPALS, the algorithm PLS is defined by.
     /// </summary>

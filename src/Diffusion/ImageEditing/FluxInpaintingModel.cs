@@ -115,9 +115,6 @@ public partial class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Clone the resolved predictor/VAE via their own Clone() (+ same architecture/options/scheduler).

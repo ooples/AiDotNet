@@ -326,12 +326,6 @@ public partial class SDTurboModel<T> : LatentDiffusionModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Clone the U-Net through its OWN Clone(), which reconstructs from the

@@ -651,8 +651,6 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();

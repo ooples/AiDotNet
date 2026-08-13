@@ -223,9 +223,6 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Delegate to the U-Net's and VAE's own Clone implementations, which

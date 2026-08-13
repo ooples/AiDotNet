@@ -1055,8 +1055,6 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {

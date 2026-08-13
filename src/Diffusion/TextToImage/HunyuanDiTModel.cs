@@ -222,9 +222,6 @@ public partial class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     #region ICloneable
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();

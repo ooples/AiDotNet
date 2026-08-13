@@ -440,9 +440,6 @@ public class Denclue<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (Denclue<T>)CreateNewInstance();

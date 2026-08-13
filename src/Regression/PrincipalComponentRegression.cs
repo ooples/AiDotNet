@@ -352,8 +352,6 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     public override Vector<T> Predict(Matrix<T> input)
     {
         // OLS coefficients are in original space. Use base class prediction.

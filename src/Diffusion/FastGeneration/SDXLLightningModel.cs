@@ -122,9 +122,6 @@ public partial class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL predictor and VAE (mirrors InstaFlowModel/MultiDiffusionModel):

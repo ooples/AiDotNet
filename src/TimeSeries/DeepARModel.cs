@@ -878,8 +878,6 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         return clone;
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     // ParameterCount restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <summary>

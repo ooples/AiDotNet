@@ -304,11 +304,5 @@ public partial class DDPMModel<T> : DiffusionModelBase<T>
             customPredictor: _customPredictor);
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 }

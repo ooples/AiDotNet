@@ -122,9 +122,6 @@ public partial class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only

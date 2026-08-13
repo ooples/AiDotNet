@@ -268,9 +268,6 @@ public partial class UniVSTModel<T> : LatentDiffusionModelBase<T>
     // QkvTransform and Smoothing.
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Fast path: an O(1) copy-on-write share when the default clone is structurally identical.

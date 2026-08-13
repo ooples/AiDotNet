@@ -1122,6 +1122,4 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         }
         return clone;
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

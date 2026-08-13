@@ -1516,12 +1516,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         LayerBase<T>.RunShapeInference(() => { _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx); });
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     #region Layer-Level Backpropagation

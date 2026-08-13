@@ -287,9 +287,6 @@ public partial class EQVAEModel<T> : VAEModelBase<T>
         return clone;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

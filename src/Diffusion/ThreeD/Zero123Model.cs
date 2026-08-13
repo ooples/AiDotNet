@@ -466,12 +466,6 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Lazy-preserving Clone (recipe from #1596): inject the UNet's and VAE's own lazy-preserving

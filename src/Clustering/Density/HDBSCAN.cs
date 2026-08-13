@@ -97,9 +97,6 @@ public class HDBSCAN<T> : ClusteringBase<T>
     public override bool SupportsParameterInitialization => false;
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (HDBSCAN<T>)CreateNewInstance();

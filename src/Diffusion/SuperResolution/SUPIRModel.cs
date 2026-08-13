@@ -386,12 +386,6 @@ public partial class SUPIRModel<T> : LatentDiffusionModelBase<T>
     #region ICloneable Implementation
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Delegate to sub-Clones — same lazy-init fix pattern as

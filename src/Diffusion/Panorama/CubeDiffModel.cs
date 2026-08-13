@@ -91,8 +91,6 @@ public partial class CubeDiffModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         // Clone the ACTUAL predictor and VAE (mirrors MultiDiffusionModel/SpotDiffusionModel): the

@@ -168,8 +168,6 @@ public partial class FlowVidModel<T> : VideoDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();

@@ -581,9 +581,6 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         return clone;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();

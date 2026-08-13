@@ -775,12 +775,6 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         _ = Decode(dummyLatent);
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
     #endregion
 
     #region Layer-Level Backpropagation

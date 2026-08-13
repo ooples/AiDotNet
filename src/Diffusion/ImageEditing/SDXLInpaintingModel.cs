@@ -110,9 +110,6 @@ public partial class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
         // Clone the predictor and VAE structurally so the clone respects the

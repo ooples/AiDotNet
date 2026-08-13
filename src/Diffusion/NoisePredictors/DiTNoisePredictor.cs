@@ -1458,9 +1458,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     protected override Vector<T> GetParameterGradients()
     {
         EnsureLayersInitialized();
