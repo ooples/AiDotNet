@@ -221,6 +221,120 @@ public readonly struct LayerStateBag
     /// <returns>The stored value, or the fallback.</returns>
     public int[]? Int32Array(string key, int[]? fallback) => Has(key) ? Int32Array(key) : fallback;
 
+    // The four accessors below exist for the SAME reason Int32Array does: a layer whose constructor
+    // takes an array must be able to read it back, and a factory that cannot read its own saved
+    // value would rebuild the layer with a default instead -- silently, because nothing throws when
+    // a constructor is handed a plausible wrong argument. They are used by the out-of-assembly
+    // factory registry, where the constructor cannot be named at compile time.
+
+    /// <summary>Reads a required double array, stored comma-separated.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored value.</returns>
+    public double[] DoubleArray(string key)
+    {
+        if (!TryRaw(key, out var v)) throw Missing(key, "a comma-separated list of numbers");
+        if (v is double[] arr) return arr;
+
+        var text = AsText(v);
+        if (text.Length == 0) return [];
+
+        var parts = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var result = new double[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out result[i]))
+                throw Unparseable(key, v, "a comma-separated list of numbers");
+        }
+        return result;
+    }
+
+    /// <summary>Reads a double array, or <paramref name="fallback"/> when it was not saved.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <param name="fallback">Value to use when the key is absent.</param>
+    /// <returns>The stored value, or the fallback.</returns>
+    public double[]? DoubleArray(string key, double[]? fallback) => Has(key) ? DoubleArray(key) : fallback;
+
+    /// <summary>Reads a required boolean array, stored comma-separated.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored value.</returns>
+    public bool[] BooleanArray(string key)
+    {
+        if (!TryRaw(key, out var v)) throw Missing(key, "a comma-separated list of true/false");
+        if (v is bool[] arr) return arr;
+
+        var text = AsText(v);
+        if (text.Length == 0) return [];
+
+        var parts = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var result = new bool[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!bool.TryParse(parts[i], out result[i]))
+                throw Unparseable(key, v, "a comma-separated list of true/false");
+        }
+        return result;
+    }
+
+    /// <summary>Reads a boolean array, or <paramref name="fallback"/> when it was not saved.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <param name="fallback">Value to use when the key is absent.</param>
+    /// <returns>The stored value, or the fallback.</returns>
+    public bool[]? BooleanArray(string key, bool[]? fallback) => Has(key) ? BooleanArray(key) : fallback;
+
+    /// <summary>Reads a required string array, stored newline-separated.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored value.</returns>
+    /// <remarks>
+    /// Newline-separated rather than comma-separated: a saved string may legitimately contain a
+    /// comma, and splitting on one would turn a single vocabulary entry into two.
+    /// </remarks>
+    public string[] StringArray(string key)
+    {
+        if (!TryRaw(key, out var v)) throw Missing(key, "a newline-separated list of strings");
+        if (v is string[] arr) return arr;
+
+        var text = AsText(v);
+        return text.Length == 0 ? [] : text.Split('\n');
+    }
+
+    /// <summary>Reads a string array, or <paramref name="fallback"/> when it was not saved.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <param name="fallback">Value to use when the key is absent.</param>
+    /// <returns>The stored value, or the fallback.</returns>
+    public string[]? StringArray(string key, string[]? fallback) => Has(key) ? StringArray(key) : fallback;
+
+    /// <summary>Reads a required jagged integer array: rows separated by ';', values by ','.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>The stored value.</returns>
+    public int[][] Int32Jagged(string key)
+    {
+        if (!TryRaw(key, out var v)) throw Missing(key, "semicolon-separated rows of comma-separated integers");
+        if (v is int[][] arr) return arr;
+
+        var text = AsText(v);
+        if (text.Length == 0) return [];
+
+        var rows = text.Split([';'], StringSplitOptions.RemoveEmptyEntries);
+        var result = new int[rows.Length][];
+        for (int r = 0; r < rows.Length; r++)
+        {
+            var parts = rows[r].Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+            result[r] = new int[parts.Length];
+            for (int c = 0; c < parts.Length; c++)
+            {
+                if (!int.TryParse(parts[c], NumberStyles.Integer, CultureInfo.InvariantCulture, out result[r][c]))
+                    throw Unparseable(key, v, "semicolon-separated rows of comma-separated integers");
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Reads a jagged integer array, or <paramref name="fallback"/> when it was not saved.</summary>
+    /// <param name="key">The metadata key.</param>
+    /// <param name="fallback">Value to use when the key is absent.</param>
+    /// <returns>The stored value, or the fallback.</returns>
+    public int[][]? Int32Jagged(string key, int[][]? fallback) => Has(key) ? Int32Jagged(key) : fallback;
+
     /// <summary>
     /// Rebuilds a pluggable component (an RBF kernel, a distance metric, ...) from the concrete
     /// type recorded at save time.

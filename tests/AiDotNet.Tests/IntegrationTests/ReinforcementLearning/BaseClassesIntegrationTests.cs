@@ -274,10 +274,9 @@ public class BaseClassesIntegrationTests
         // same weights -- which is what DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks
         // is actually asserting.
 
-        public override IFullModel<double, Vector<double>, Vector<double>> Clone()
-        {
-            return new TestDeepAgent(Options);
-        }
+        // Clone is NOT overridden, for the same reason GetParameters is not: the base reproduces it
+        // from the recorded constructor, and a hand-written copy here would be one more place an
+        // Options field could be dropped without any test failing.
 
         public Vector<double> ComputeGradients(
             Vector<double> input,
