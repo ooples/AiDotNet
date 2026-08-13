@@ -668,11 +668,6 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     private List<Entry> OrderedEntries()
     {
-        // Cached: the order can only change when Register is called, and every read of a count, a
-        // vector or a layout went through here. Re-copying and re-sorting the entry list on each of
-        // those was pure waste in a training loop.
-        if (_orderedCache is not null) return _orderedCache;
-
         var ordered = new List<Entry>(_entries);
         ordered.Sort((left, right) =>
         {
