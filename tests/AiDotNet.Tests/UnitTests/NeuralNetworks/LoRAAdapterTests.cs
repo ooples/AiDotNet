@@ -12,11 +12,30 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 {
     public class LoRAAdapterTests
     {
+        private static DenseLayer<double> CreateShapeResolvedBaseLayer(
+            int inputSize = 10,
+            int outputSize = 5,
+            IActivationFunction<double>? activation = null)
+        {
+            var layer = new DenseLayer<double>(outputSize, activation);
+            layer.ResolveShapesOnly(new[] { inputSize });
+            return layer;
+        }
+
+        private static DenseLayer<float> CreateShapeResolvedFloatBaseLayer(
+            int inputSize = 10,
+            int outputSize = 5)
+        {
+            var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
+            layer.ResolveShapesOnly(new[] { inputSize });
+            return layer;
+        }
+
         [Fact(Timeout = 120000)]
         public async Task Constructor_WithValidBaseLayer_InitializesCorrectly()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
 
             // Act
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
@@ -40,7 +59,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task ParameterCount_WithFrozenBase_ReturnsOnlyLoRAParameters()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             // Act
@@ -57,7 +76,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             await Task.Yield();
 
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
             // Act
@@ -79,7 +98,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Forward_ProducesCorrectOutputShape()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
             var input = new Tensor<double>(new[] { 2, 10 });
 
@@ -95,7 +114,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Forward_CombinesBaseAndLoRAOutputs()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Create input
@@ -122,7 +141,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task GetParameters_ReturnsCorrectCount()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             // Act
@@ -136,7 +155,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task SetParameters_ThenGetParameters_ReturnsSetValues()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             var newParams = new Vector<double>(45);
@@ -160,7 +179,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task SetParameters_WithWrongSize_ThrowsArgumentException()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             var wrongParams = new Vector<double>(100);
@@ -173,7 +192,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task MergeToSingleLayer_ProducesDenseLayer()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act
@@ -194,7 +213,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             // adapter: base_output + lora_output = (W*x + b) + (A*B*x)
             // merged: (W + A*B)*x + b
             // These are only equivalent when base layer has no activation applied after LoRA sum
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>)new IdentityActivation<double>());
+            var baseLayer = CreateShapeResolvedBaseLayer(
+                activation: new IdentityActivation<double>());
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Create input
@@ -227,7 +247,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task BaseLayer_Property_ReturnsOriginalLayer()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act
@@ -241,7 +261,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task LoRALayer_Property_ReturnsLoRALayer()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act
@@ -257,8 +277,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task IsBaseLayerFrozen_Property_ReflectsConstructorParameter()
         {
             // Arrange & Act
-            var adapter1 = new DenseLoRAAdapter<double>(new DenseLayer<double>(5, (IActivationFunction<double>?)null), rank: 3, freezeBaseLayer: true);
-            var adapter2 = new DenseLoRAAdapter<double>(new DenseLayer<double>(5, (IActivationFunction<double>?)null), rank: 3, freezeBaseLayer: false);
+            var adapter1 = new DenseLoRAAdapter<double>(CreateShapeResolvedBaseLayer(), rank: 3, freezeBaseLayer: true);
+            var adapter2 = new DenseLoRAAdapter<double>(CreateShapeResolvedBaseLayer(), rank: 3, freezeBaseLayer: false);
 
             // Assert
             Assert.True(adapter1.IsBaseLayerFrozen);
@@ -269,7 +289,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Alpha_Property_ReturnsCorrectValue()
         {
             // Arrange & Act
-            var adapter = new DenseLoRAAdapter<double>(new DenseLayer<double>(5, (IActivationFunction<double>?)null), rank: 3, alpha: 16);
+            var adapter = new DenseLoRAAdapter<double>(CreateShapeResolvedBaseLayer(), rank: 3, alpha: 16);
 
             // Assert
             Assert.Equal(16.0, adapter.Alpha);
@@ -279,7 +299,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task SupportsTraining_ReturnsTrue()
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer();
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3);
 
             // Act & Assert
@@ -293,7 +313,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public void Constructor_WithVariousConfigurations_WorksCorrectly(int inputSize, int outputSize, int rank, bool freeze)
         {
             // Arrange
-            var baseLayer = new DenseLayer<double>(outputSize, (IActivationFunction<double>?)null);
+            var baseLayer = CreateShapeResolvedBaseLayer(inputSize, outputSize);
 
             // Act
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: freeze);
@@ -310,7 +330,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task LoRAAdapter_WithFloat_WorksCorrectly()
         {
             // Arrange
-            var baseLayer = new DenseLayer<float>(5, (IActivationFunction<float>?)null);
+            var baseLayer = CreateShapeResolvedFloatBaseLayer();
             var adapter = new DenseLoRAAdapter<float>(baseLayer, rank: 3);
             var input = new Tensor<float>(new[] { 1, 10 });
 

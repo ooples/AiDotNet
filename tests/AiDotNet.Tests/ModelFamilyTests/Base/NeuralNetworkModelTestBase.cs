@@ -1740,6 +1740,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (count != length && network is NeuralNetworkBase<T> concreteNetwork)
         {
             var mismatches = new List<string>();
+            var topLevelInventory = new List<string>();
             long topLevelDeclared = 0;
             long topLevelActual = 0;
             for (int i = 0; i < concreteNetwork.Layers.Count; i++)
@@ -1749,15 +1750,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 int actual = layer.GetParameters().Length;
                 topLevelDeclared += declared;
                 topLevelActual += actual;
+                topLevelInventory.Add(
+                    $"layers/{i:D8} {layer.GetType().Name}={actual:N0}");
                 if (declared != actual)
                     mismatches.Add($"layers/{i:D8} {layer.GetType().Name}: declared {declared:N0}, actual {actual:N0}");
             }
 
             var layout = concreteNetwork.ParameterLayout;
+            var liveSlots = layout.Slots
+                .Where(slot => slot.MaterializedParameterCount > 0)
+                .Select(slot => $"{slot.StableId}={slot.MaterializedParameterCount:N0}")
+                .ToArray();
             layerMismatches =
                 $" Breakdown: top-level layers declared {topLevelDeclared:N0}, actual {topLevelActual:N0}; " +
                 $"manifest declares {layout.ParameterCount?.ToString("N0") ?? "unresolved"} across " +
-                $"{layout.Slots.Count:N0} slots.";
+                $"{layout.Slots.Count:N0} slots and reports {layout.MaterializedParameterCount:N0} live values. " +
+                $"Top-level vectors: {string.Join("; ", topLevelInventory)}. " +
+                $"Live slots: {string.Join("; ", liveSlots)}.";
             if (mismatches.Count > 0)
                 layerMismatches += " Per-layer mismatches: " + string.Join("; ", mismatches) + ".";
         }

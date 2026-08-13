@@ -90,11 +90,13 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// that the low-rank component can't represent efficiently.
     /// </para>
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _sparseWeights;
 
     /// <summary>
     /// Gradients for the sparse weight component, computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _sparseGradients;
 
     /// <summary>
@@ -104,6 +106,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// Stores the input activations in matrix form [batchSize, inputSize] to enable proper
     /// gradient computation: dL/dW_sparse[i,j] = sum_batch(gradMatrix[b,i] * input[b,j]) / batchSize.
     /// </remarks>
+    [Scratch]
     private Matrix<T>? _cachedInputMatrix;
 
     /// <summary>
@@ -212,8 +215,7 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         // Apply initial pruning to enforce sparsity
         PruneSparseWeights();
 
-        // Update parameters to include sparse component
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // The generated manifest appends the sparse tensor after the inherited LoRA factors.
     }
 
     /// <summary>

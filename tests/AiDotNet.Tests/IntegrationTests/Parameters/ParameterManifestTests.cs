@@ -433,6 +433,31 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public void LayoutSnapshot_SeparatesDeclaredCapacityFromMaterializedStorage()
+    {
+        var snapshot = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "live", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 3),
+            new ParameterSlotDescriptor(
+                "lazy", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12)
+        });
+
+        Assert.Equal(15, snapshot.DeclaredParameterCount);
+        Assert.Equal(3, snapshot.MaterializedParameterCount);
+        Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, snapshot.Readiness);
+    }
+
+    [Fact]
+    public void LayoutSlot_RejectsMaterializedStorageBeyondDeclaredCapacity()
+    {
+        Assert.Throws<ArgumentException>(() => new ParameterSlotDescriptor(
+            "weight", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 3,
+            materializedParameterCount: 4));
+    }
+
+    [Fact]
     public async Task LayoutSnapshot_RejectsDuplicateStableIdentity()
     {
         await Task.Yield();
@@ -800,6 +825,101 @@ public class ParameterManifestTests
         Assert.Equal(ParameterReadiness.Materialized, layout.Readiness);
         Assert.Equal(network.ParameterCount, layout.ParameterCount);
         Assert.Equal(network.ParameterCount, network.GetParameters().Length);
+    }
+
+    [Fact]
+    public void GeneratedFixedParameterView_IsStableAndAllocationFreeAfterWarmup()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        _ = layer.Forward(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+
+        var first = layer.GetTrainableParameters();
+        var second = layer.GetTrainableParameters();
+        Assert.Same(first, second);
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1_024; i++)
+            _ = layer.GetTrainableParameters();
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(allocated <= 128,
+            $"Warm generated parameter views allocated {allocated:N0} bytes.");
+    }
+
+    [Fact]
+    public void NeuralNetworkManifest_WarmReadsReuseSnapshotWithoutAllocating()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { layer });
+        using var network = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(architecture);
+        _ = network.Predict(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+
+        var snapshot = network.ParameterLayout;
+        _ = network.ParameterCount;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1_024; i++)
+        {
+            _ = network.ParameterLayout;
+            _ = network.ParameterCount;
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Same(snapshot, network.ParameterLayout);
+        Assert.True(allocated <= 128,
+            $"Warm layout/count reads allocated {allocated:N0} bytes.");
+    }
+
+    [Fact]
+    public void NeuralNetworkManifest_ParameterReplacementInvalidatesSnapshot()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { layer });
+        using var network = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(architecture);
+        _ = network.Predict(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+        var before = network.ParameterLayout;
+        Assert.Equal(15, before.MaterializedParameterCount);
+
+        _ = layer.Forward(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 2 }));
+        var after = network.ParameterLayout;
+
+        Assert.NotSame(before, after);
+        Assert.Equal(9, after.MaterializedParameterCount);
+        Assert.Equal(9, network.ParameterCount);
+        Assert.Equal(9, network.GetParameters().Length);
+    }
+
+    [Fact]
+    public void NeuralNetworkManifest_ConcurrentWarmReadersSeeOneSnapshot()
+    {
+        using var layer = new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(3);
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { layer });
+        using var network = new AiDotNet.NeuralNetworks.NeuralNetwork<double>(architecture);
+        _ = network.Predict(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4 }));
+        var expected = network.ParameterLayout;
+        var observed = new ParameterLayoutSnapshot[64];
+
+        Parallel.For(0, observed.Length, i =>
+        {
+            observed[i] = network.ParameterLayout;
+            Assert.Equal(expected.MaterializedParameterCount, network.ParameterCount);
+        });
+
+        Assert.All(observed, snapshot => Assert.Same(expected, snapshot));
     }
 
     [Fact]

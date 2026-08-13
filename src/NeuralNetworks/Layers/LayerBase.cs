@@ -186,14 +186,55 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected Vector<T> Parameters;
 
-    // True only when SetParameters received a checkpoint for an explicitly registered parameter
-    // graph whose shapes were still deferred. Parameters is also a legitimate legacy storage slot,
-    // so length alone must never be used to infer this lifecycle state.
-    private bool _hasDeferredParameterPayload;
+    /// <summary>
+    /// A flat restore payload whose destination tensors cannot be sized until the input shape is
+    /// known. This is deliberately separate from <see cref="Parameters"/>: pending state is not a
+    /// live parameter slot and therefore must not be counted or returned by <see cref="GetParameters"/>.
+    /// </summary>
+    private Vector<T>? _pendingParameterRestore;
 
     /// <summary>Length of a parked lazy-restore payload, or zero for ordinary own storage.</summary>
-    internal int DeferredParameterPayloadLength =>
-        _hasDeferredParameterPayload ? Parameters.Length : 0;
+    internal int DeferredParameterPayloadLength => _pendingParameterRestore?.Length ?? 0;
+
+    /// <summary>Prevents the pending-restore replay from re-entering itself.</summary>
+    private bool _applyingPendingParameterRestore;
+
+    /// <summary>The kinds of slot that make up the generated, inheritance-aware parameter walk.</summary>
+    protected enum DeclaredParameterComponentKind
+    {
+        Legacy,
+        Trainable,
+        Buffer,
+        SubLayer,
+    }
+
+    /// <summary>
+    /// One entry in the ordered parameter manifest. The generator appends base-class declarations
+    /// before derived declarations, so inherited adapters keep their base factors ahead of any
+    /// derived state without a model-name exception or a hand-written flat-vector override.
+    /// </summary>
+    protected readonly struct DeclaredParameterComponent
+    {
+        internal DeclaredParameterComponent(
+            DeclaredParameterComponentKind kind,
+            Tensor<T>? tensor = null,
+            ILayer<T>? layer = null,
+            string? name = null,
+            ParameterSlotRole stateRole = ParameterSlotRole.Trainable)
+        {
+            Kind = kind;
+            Tensor = tensor;
+            Layer = layer;
+            Name = name;
+            StateRole = stateRole;
+        }
+
+        internal DeclaredParameterComponentKind Kind { get; }
+        internal Tensor<T>? Tensor { get; }
+        internal ILayer<T>? Layer { get; }
+        internal string? Name { get; }
+        internal ParameterSlotRole StateRole { get; }
+    }
 
     /// <summary>
     /// The gradients of the trainable parameters.
@@ -596,6 +637,172 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         => GetTrainableParameters();
 
     /// <summary>
+    /// Appends this type's declared parameter components to the inheritance-aware manifest.
+    /// Source-generated overrides call <c>base</c> first, then append fields in declaration order.
+    /// </summary>
+    /// <remarks>
+    /// The empty default preserves runtime registration for non-generated and third-party layers.
+    /// <see cref="GetOrderedParameterComponents"/> supplements declarations from the runtime
+    /// registries with reference-identity deduplication, so migration can remain incremental.
+    /// </remarks>
+    protected virtual void AppendDeclaredParameterComponents(List<DeclaredParameterComponent> components)
+    {
+    }
+
+    /// <summary>Adds a generated trainable-tensor declaration.</summary>
+    protected static void DeclareTrainableParameter(
+        List<DeclaredParameterComponent> components,
+        Tensor<T>? tensor)
+    {
+        if (tensor is not null)
+            components.Add(new DeclaredParameterComponent(
+                DeclaredParameterComponentKind.Trainable, tensor: tensor));
+    }
+
+    /// <summary>Adds a generated persistent-buffer declaration.</summary>
+    protected static void DeclareParameterBuffer(
+        List<DeclaredParameterComponent> components,
+        Tensor<T>? tensor,
+        string name,
+        ParameterSlotRole stateRole)
+    {
+        if (tensor is not null)
+            components.Add(new DeclaredParameterComponent(
+                DeclaredParameterComponentKind.Buffer, tensor: tensor, name: name, stateRole: stateRole));
+    }
+
+    /// <summary>Adds a generated child-layer declaration.</summary>
+    protected static void DeclareParameterSubLayer(
+        List<DeclaredParameterComponent> components,
+        ILayer<T>? layer)
+    {
+        if (layer is not null)
+            components.Add(new DeclaredParameterComponent(
+                DeclaredParameterComponentKind.SubLayer, layer: layer));
+    }
+
+    /// <summary>
+    /// Infers a concrete input shape from a complete flat restore payload when generated parameter
+    /// shape declarations make that inference exact. The generator overrides this only when every
+    /// local trainable slot has a shape expression and the class has no child or buffer ambiguity.
+    /// </summary>
+    protected virtual bool TryInferInputShapeFromParameterCount(
+        int parameterCount,
+        out int[] inputShape)
+    {
+        inputShape = System.Array.Empty<int>();
+        return false;
+    }
+
+    /// <summary>
+    /// Returns the one ordered component walk used by count, flat read/write, state chunks, and
+    /// gradient scattering. Generated declarations are authoritative for order; runtime registries
+    /// are a compatibility supplement and may add only components not already declared.
+    /// </summary>
+    private DeclaredParameterComponent[]? _orderedParameterComponents;
+    private int _orderedParameterComponentsEpoch = -1;
+    private int _orderedParameterComponentsOwnLength = -1;
+
+    private DeclaredParameterComponent[] GetOrderedParameterComponents()
+    {
+        int epoch = ParameterSurfaceEpoch;
+        var cached = System.Threading.Volatile.Read(ref _orderedParameterComponents);
+        if (cached is not null
+            && System.Threading.Volatile.Read(ref _orderedParameterComponentsEpoch) == epoch
+            && _orderedParameterComponentsOwnLength == Parameters.Length)
+        {
+            return cached;
+        }
+
+        // Registration and first-use materialization are cold-path mutations. Serialize the
+        // corresponding rebuild so every warm count/read shares one immutable array instead of
+        // allocating a List for every layer on every optimizer or checkpoint query.
+        lock (InitializationLock)
+        {
+            epoch = ParameterSurfaceEpoch;
+            cached = _orderedParameterComponents;
+            if (cached is not null
+                && _orderedParameterComponentsEpoch == epoch
+                && _orderedParameterComponentsOwnLength == Parameters.Length)
+            {
+                return cached;
+            }
+
+            var components = new List<DeclaredParameterComponent>();
+            if (Parameters.Length > 0)
+            {
+                components.Add(new DeclaredParameterComponent(
+                    DeclaredParameterComponentKind.Legacy));
+            }
+
+            AppendDeclaredParameterComponents(components);
+
+            var trainable = GetTrainableParametersUnmaterialized();
+            if (trainable is not null)
+            {
+                for (int i = 0; i < trainable.Count; i++)
+                {
+                    var tensor = trainable[i];
+                    if (tensor is not null && !ContainsDeclaredTensor(components, tensor))
+                        DeclareTrainableParameter(components, tensor);
+                }
+            }
+
+            var buffers = GetRegisteredBuffers();
+            if (buffers is not null)
+            {
+                for (int i = 0; i < buffers.Count; i++)
+                {
+                    var (name, tensor) = buffers[i];
+                    if (tensor is not null && !ContainsDeclaredTensor(components, tensor))
+                    {
+                        DeclareParameterBuffer(
+                            components, tensor, name, GetRegisteredBufferStateRole(name));
+                    }
+                }
+            }
+
+            var subLayers = GetSubLayers();
+            if (subLayers is not null)
+            {
+                for (int i = 0; i < subLayers.Count; i++)
+                {
+                    var layer = subLayers[i];
+                    if (layer is not null && !ContainsDeclaredSubLayer(components, layer))
+                        DeclareParameterSubLayer(components, layer);
+                }
+            }
+
+            cached = components.ToArray();
+            int builtEpoch = ParameterSurfaceEpoch;
+            _orderedParameterComponentsOwnLength = Parameters.Length;
+            // Building can discover and register generated sub-layers, advancing the epoch. Bind
+            // the cache to the version after discovery so the next warm read is a true hit.
+            System.Threading.Volatile.Write(ref _orderedParameterComponents, cached);
+            System.Threading.Volatile.Write(ref _orderedParameterComponentsEpoch, builtEpoch);
+            return cached;
+        }
+    }
+
+    private static bool ContainsDeclaredTensor(
+        List<DeclaredParameterComponent> components,
+        Tensor<T> candidate)
+    {
+        for (int i = 0; i < components.Count; i++)
+            if (ReferenceEquals(components[i].Tensor, candidate)) return true;
+        return false;
+    }
+
+    private static bool ContainsDeclaredSubLayer(
+        List<DeclaredParameterComponent> components,
+        ILayer<T> candidate)
+    {
+        for (int i = 0; i < components.Count; i++)
+            if (ReferenceEquals(components[i].Layer, candidate)) return true;
+        return false;
+    }
+
+    /// <summary>
     /// Returns the currently-present trainable tensors without causing lazy weights to be allocated.
     /// </summary>
     /// <remarks>
@@ -897,10 +1104,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         bool hasParameterChildren = subs is not null && subs.Any(child =>
             child is not null && !IsSubLayerParameterFrozen(child));
 
+        long ownMaterializedCount = GetOwnMaterializedParameterCount();
         if (!TryGetOwnDeclaredParameterCount(out long ownCount, out bool ownMaterialized))
         {
             slots.Add(new ParameterSlotDescriptor(
-                "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null));
+                "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null,
+                materializedParameterCount: ownMaterializedCount));
         }
         else if (ownCount > 0 || !hasParameterChildren)
         {
@@ -911,7 +1120,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     : ownMaterialized
                         ? ParameterReadiness.Materialized
                         : ParameterReadiness.ShapeResolvedUnmaterialized,
-                ownCount));
+                ownCount,
+                materializedParameterCount: ownMaterializedCount));
         }
 
         if (subs is not null)
@@ -941,7 +1151,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                             updatePolicy: childSlot.UpdatePolicy,
                             persistence: childSlot.Persistence,
                             ownership: childSlot.Ownership,
-                            availability: childSlot.Availability));
+                            availability: childSlot.Availability,
+                            materializedParameterCount: childSlot.MaterializedParameterCount));
                     }
                 }
                 else
@@ -953,7 +1164,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                         count == 0
                             ? ParameterReadiness.ParameterFree
                             : ParameterReadiness.Materialized,
-                        count));
+                        count,
+                        materializedParameterCount: count));
                 }
             }
         }
@@ -965,6 +1177,29 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
 
         return slots;
+    }
+
+    /// <summary>Counts only this layer's currently readable storage, excluding child layers.</summary>
+    private long GetOwnMaterializedParameterCount()
+    {
+        long count = 0;
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
+        {
+            var component = components[i];
+            if (component.Kind == DeclaredParameterComponentKind.Legacy)
+            {
+                count = checked(count + Parameters.Length);
+            }
+            else if (component.Kind is DeclaredParameterComponentKind.Trainable
+                     or DeclaredParameterComponentKind.Buffer)
+            {
+                if (component.Tensor is not null)
+                    count = checked(count + TrainableScalarCount(component.Tensor));
+            }
+        }
+
+        return count;
     }
 
     private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
@@ -1276,35 +1511,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
         }
 
-        ReplayDeferredParameterPayload();
-    }
-
-    /// <summary>
-    /// Replays a flat payload that arrived before this layer could expose concrete tensor slots.
-    /// </summary>
-    private void ReplayDeferredParameterPayload()
-    {
-        if (!_hasDeferredParameterPayload) return;
-
-        var deferred = Parameters;
-        Parameters = Vector<T>.Empty();
-        _hasDeferredParameterPayload = false;
-
-        int materializedLength = FillParameters(null, 0);
-        if (materializedLength != deferred.Length)
-        {
-            Parameters = deferred;
-            _hasDeferredParameterPayload = true;
-            throw new InvalidOperationException(
-                $"{GetType().Name} materialized {materializedLength} parameter values, but its " +
-                $"deferred restore payload contains {deferred.Length}. The declared shape contract " +
-                "and checkpoint layout disagree.");
-        }
-
-        // With the shadow slot cleared, the ordinary base setter now distributes into the generated
-        // tensors/buffers/children exactly once. This makes deferred restore the same operation as an
-        // eager restore after materialization, instead of leaving both copies in the flat surface.
-        SetParameters(deferred);
+        TryApplyPendingParameterRestore();
     }
 
     /// <inheritdoc />
@@ -1943,6 +2150,47 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 RegisterStreamingWeightsWithPool();
             }
             EnsureInitialized();
+            TryApplyPendingParameterRestore();
+        }
+    }
+
+    /// <summary>
+    /// Replays a deferred flat restore exactly once after its manifest has materialized. The pending
+    /// slot is cleared only after every value has been distributed successfully, making replay
+    /// atomic from the caller's perspective.
+    /// </summary>
+    private bool TryApplyPendingParameterRestore()
+    {
+        if (_pendingParameterRestore is null || _applyingPendingParameterRestore) return false;
+
+        int concreteCount = FillParameters(null, 0);
+        if (concreteCount != _pendingParameterRestore.Length)
+        {
+            // Before shape resolution there is deliberately nothing to validate against. Once the
+            // real shape has materialized, however, retaining an incompatible restore would hide a
+            // corrupt checkpoint indefinitely. Fail at that boundary instead of running with the
+            // layer's freshly initialized values.
+            if (IsShapeResolved || ParametersAreConstructionSized)
+            {
+                throw new ArgumentException(
+                    $"Deferred restore for {GetType().Name} contains {_pendingParameterRestore.Length} " +
+                    $"parameters, but its resolved manifest requires {concreteCount}.",
+                    "parameters");
+            }
+
+            return false;
+        }
+
+        _applyingPendingParameterRestore = true;
+        try
+        {
+            ApplyConcreteParameterVector(_pendingParameterRestore);
+            _pendingParameterRestore = null;
+            return true;
+        }
+        finally
+        {
+            _applyingPendingParameterRestore = false;
         }
     }
 
@@ -4511,6 +4759,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     private static void BumpParameterEpoch() => System.Threading.Interlocked.Increment(ref s_parameterEpoch);
 
+    /// <summary>
+    /// Process-wide cold-path epoch for parameter storage identity changes. Model snapshots use one
+    /// volatile read of this value to make their warm path O(1); registration and materialization
+    /// are intentionally the only operations that invalidate it.
+    /// </summary>
+    internal static int ParameterSurfaceEpoch =>
+        System.Threading.Volatile.Read(ref s_parameterEpoch);
+
     public virtual long ParameterCount
     {
         get
@@ -4601,31 +4857,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // Layers that aggregate their parameters differently (a
             // GAN reading from frozen modules, a model with shared-weight
             // tying) can still override.
-            long total = Parameters.Length;
-            var trainable = GetTrainableParametersUnmaterialized();
-            if (trainable is not null)
+            long total = 0;
+            var components = GetOrderedParameterComponents();
+            for (int i = 0; i < components.Length; i++)
             {
-                for (int i = 0; i < trainable.Count; i++)
+                var component = components[i];
+                switch (component.Kind)
                 {
-                    var t = trainable[i];
-                    // Sparse tensors contribute their STORED entries, not their dense extent --
-                    // structural zeros are not trainable. Using t.Length here counted them, which
-                    // is why a sparse layer's count only matched its vector while the layer
-                    // overrode both members by hand.
-                    if (t is not null) total += TrainableScalarCount(t);
-                }
-            }
-
-            total += BufferScalarCount();
-
-            var subs = GetSubLayers();
-            if (subs is not null)
-            {
-                for (int i = 0; i < subs.Count; i++)
-                {
-                    if (subs[i] is null) continue;
-                    if (IsSubLayerParameterFrozen(subs[i])) continue;
-                    total += subs[i].ParameterCount;
+                    case DeclaredParameterComponentKind.Legacy:
+                        total += Parameters.Length;
+                        break;
+                    case DeclaredParameterComponentKind.Trainable:
+                    case DeclaredParameterComponentKind.Buffer:
+                        if (component.Tensor is not null)
+                            total += TrainableScalarCount(component.Tensor);
+                        break;
+                    case DeclaredParameterComponentKind.SubLayer:
+                        if (component.Layer is not null && !IsSubLayerParameterFrozen(component.Layer))
+                            total += component.Layer.ParameterCount;
+                        break;
                 }
             }
             _cachedParameterCount = total;
@@ -5052,53 +5302,44 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // their lengths are the concrete projection of the same manifest ParameterCount reads.
         EnsureParametersMaterialized();
 
-        if (Parameters.Length > 0)
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
         {
-            yield return new ParameterChunk<T>(
-                stablePrefix + "/legacy",
-                ParameterSlotRole.Trainable,
-                new Tensor<T>(new[] { Parameters.Length }, Parameters));
-        }
-
-        var trainable = GetTrainableParametersUnmaterialized();
-        if (trainable is not null)
-        {
-            for (int i = 0; i < trainable.Count; i++)
+            var component = components[i];
+            string componentPrefix = stablePrefix + $"/components/{i:D8}";
+            if (component.Kind == DeclaredParameterComponentKind.Legacy)
             {
-                var tensor = trainable[i];
+                if (Parameters.Length > 0)
+                {
+                    yield return new ParameterChunk<T>(
+                        componentPrefix + "/legacy",
+                        ParameterSlotRole.Trainable,
+                        new Tensor<T>(new[] { Parameters.Length }, Parameters));
+                }
+                continue;
+            }
+
+            if (component.Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                var tensor = component.Tensor;
                 if (tensor is null || TrainableScalarCount(tensor) == 0) continue;
                 yield return new ParameterChunk<T>(
-                    stablePrefix + $"/trainable/{i:D8}",
-                    ParameterSlotRole.Trainable,
+                    componentPrefix + (component.Kind == DeclaredParameterComponentKind.Buffer
+                        ? "/buffer/" + (component.Name ?? "unnamed")
+                        : "/trainable"),
+                    component.Kind == DeclaredParameterComponentKind.Buffer
+                        ? component.StateRole
+                        : ParameterSlotRole.Trainable,
                     AsStoredScalarChunk(tensor));
+                continue;
             }
-        }
 
-        var buffers = GetRegisteredBuffers();
-        if (buffers is not null)
-        {
-            for (int i = 0; i < buffers.Count; i++)
-            {
-                var (name, tensor) = buffers[i];
-                if (tensor is null || TrainableScalarCount(tensor) == 0) continue;
-                string bufferId = string.IsNullOrWhiteSpace(name) ? $"buffer-{i:D8}" : name;
-                yield return new ParameterChunk<T>(
-                    stablePrefix + "/buffers/" + bufferId,
-                    GetRegisteredBufferStateRole(name),
-                    AsStoredScalarChunk(tensor));
-            }
-        }
-
-        var subs = GetSubLayers();
-        if (subs is null) yield break;
-        for (int i = 0; i < subs.Count; i++)
-        {
-            var sub = subs[i];
+            var sub = component.Layer;
             if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
-            string subPrefix = stablePrefix + $"/children/{i:D8}";
             if (sub is LayerBase<T> layerBase)
             {
-                foreach (var chunk in layerBase.GetParameterStateChunks(subPrefix))
+                foreach (var chunk in layerBase.GetParameterStateChunks(componentPrefix + "/child"))
                     yield return chunk;
             }
             else
@@ -5106,7 +5347,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 var flat = sub.GetParameters();
                 if (flat.Length == 0) continue;
                 yield return new ParameterChunk<T>(
-                    subPrefix,
+                    componentPrefix + "/child",
                     sub.SupportsTraining ? ParameterSlotRole.Trainable : ParameterSlotRole.LearnedState,
                     new Tensor<T>(new[] { flat.Length }, flat));
             }
@@ -5131,64 +5372,44 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <param name="dest">Destination, or <c>null</c> to count without reading any values.</param>
     private int FillParameters(Vector<T>? dest, int offset)
     {
-        for (int i = 0; i < Parameters.Length; i++)
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
         {
-            if (dest is not null) dest[offset] = Parameters[i];
-            offset++;
-        }
-
-        // The SAME list ParameterCount walks. Going through GetTrainableParameters() here instead
-        // ran the generated lazy-allocation trampoline, so reading materialized a layer that
-        // counting had honestly reported as empty -- TimeMoE answered 16,900 and then produced
-        // 17,972 values.
-        var trainable = GetTrainableParametersUnmaterialized();
-        if (trainable is not null)
-        {
-            for (int i = 0; i < trainable.Count; i++)
+            var component = components[i];
+            if (component.Kind == DeclaredParameterComponentKind.Legacy)
             {
-                var t = trainable[i];
-                if (t is null) continue;
-                int n = TrainableScalarCount(t);
-                if (dest is null) { offset += n; continue; }
-                for (int j = 0; j < n; j++)
-                    dest[offset++] = ReadTrainableScalar(t, j);
-            }
-        }
-
-        var bufs = GetRegisteredBuffers();
-        if (bufs is not null)
-        {
-            for (int i = 0; i < bufs.Count; i++)
-            {
-                var b = bufs[i].Tensor;
-                if (b is null) continue;
-                int bn = TrainableScalarCount(b);
-                if (dest is null) { offset += bn; continue; }
-                for (int j = 0; j < bn; j++)
-                    dest[offset++] = ReadTrainableScalar(b, j);
-            }
-        }
-
-        var subs = GetSubLayers();
-        if (subs is not null)
-        {
-            for (int i = 0; i < subs.Count; i++)
-            {
-                var sub = subs[i];
-                if (sub is null) continue;
-                if (IsSubLayerParameterFrozen(sub)) continue;
-                if (sub is LayerBase<T> lb)
+                for (int j = 0; j < Parameters.Length; j++)
                 {
-                    offset = lb.FillParameters(dest, offset);
+                    if (dest is not null) dest[offset] = Parameters[j];
+                    offset++;
                 }
-                else
-                {
-                    // Not a LayerBase, so it has no slice-filling entry point; fall back to its
-                    // own vector. Only the interface is guaranteed for third-party layers.
-                    var sp = sub.GetParameters();
-                    if (dest is null) { offset += sp.Length; continue; }
-                    for (int j = 0; j < sp.Length; j++) dest[offset++] = sp[j];
-                }
+                continue;
+            }
+
+            if (component.Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                var tensor = component.Tensor;
+                if (tensor is null) continue;
+                int count = TrainableScalarCount(tensor);
+                if (dest is null) { offset += count; continue; }
+                for (int j = 0; j < count; j++)
+                    dest[offset++] = ReadTrainableScalar(tensor, j);
+                continue;
+            }
+
+            var sub = component.Layer;
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (sub is LayerBase<T> layerBase)
+            {
+                offset = layerBase.FillParameters(dest, offset);
+            }
+            else
+            {
+                var subParameters = sub.GetParameters();
+                if (dest is null) { offset += subParameters.Length; continue; }
+                for (int j = 0; j < subParameters.Length; j++)
+                    dest[offset++] = subParameters[j];
             }
         }
 
@@ -5226,65 +5447,53 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
         ref int matched)
     {
-        // The legacy flat store. It is not a tape tensor, so no gradient can be keyed to it; the
-        // slice stays zero and uncounted.
-        offset += Parameters.Length;
-
-        var trainable = GetTrainableParametersUnmaterialized();
-        if (trainable is not null)
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
         {
-            for (int i = 0; i < trainable.Count; i++)
+            var component = components[i];
+            if (component.Kind == DeclaredParameterComponentKind.Legacy)
             {
-                var t = trainable[i];
-                if (t is null) continue;
-                int n = TrainableScalarCount(t);
-                if (dest is null) { offset += n; continue; }
+                offset += Parameters.Length;
+                continue;
+            }
 
-                if (grads.TryGetValue(t, out var g) && g is not null && TrainableScalarCount(g) == n)
+            if (component.Kind == DeclaredParameterComponentKind.Buffer)
+            {
+                if (component.Tensor is not null)
+                    offset += TrainableScalarCount(component.Tensor);
+                continue;
+            }
+
+            if (component.Kind == DeclaredParameterComponentKind.Trainable)
+            {
+                var tensor = component.Tensor;
+                if (tensor is null) continue;
+                int count = TrainableScalarCount(tensor);
+                if (dest is null) { offset += count; continue; }
+                if (grads.TryGetValue(tensor, out var gradient)
+                    && gradient is not null
+                    && TrainableScalarCount(gradient) == count)
                 {
-                    for (int j = 0; j < n; j++)
-                        dest[offset++] = ReadTrainableScalar(g, j);
-                    matched += n;
+                    for (int j = 0; j < count; j++)
+                        dest[offset++] = ReadTrainableScalar(gradient, j);
+                    matched += count;
                 }
                 else
                 {
-                    offset += n;
+                    offset += count;
                 }
+                continue;
             }
-        }
 
-        // Buffers are running statistics, not tape leaves, so they never carry a gradient. They
-        // still occupy space in the parameter vector, so their slice must be stepped over to keep
-        // the two vectors aligned.
-        var bufs = GetRegisteredBuffers();
-        if (bufs is not null)
-        {
-            for (int i = 0; i < bufs.Count; i++)
+            var sub = component.Layer;
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (sub is LayerBase<T> layerBase)
             {
-                var b = bufs[i].Tensor;
-                if (b is null) continue;
-                offset += TrainableScalarCount(b);
+                offset = layerBase.FillParameterGradients(dest, offset, grads, ref matched);
             }
-        }
-
-        var subs = GetSubLayers();
-        if (subs is not null)
-        {
-            for (int i = 0; i < subs.Count; i++)
+            else
             {
-                var sub = subs[i];
-                if (sub is null) continue;
-                if (IsSubLayerParameterFrozen(sub)) continue;
-                if (sub is LayerBase<T> lb)
-                {
-                    offset = lb.FillParameterGradients(dest, offset, grads, ref matched);
-                }
-                else
-                {
-                    // Same fallback FillParameters uses: only the interface is guaranteed for a
-                    // third-party layer, and it exposes no gradient slice, so step over it.
-                    offset += sub.GetParameters().Length;
-                }
+                offset += sub.GetParameters().Length;
             }
         }
 
@@ -5396,155 +5605,110 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 nameof(parameters));
         }
 
-        // Materializes ON DEMAND, never speculatively. Reading and counting stay lazy, so a restore
-        // is the one moment the layer learns it needs weights it does not have yet -- and the
-        // incoming length is the evidence. Materializing unconditionally instead made restore
-        // expect 147,648 values from a save that had honestly written none; never materializing
-        // left a layer-level round trip holding 1,156 slots for a 1,452-value payload. Sizing only
-        // when the lengths actually disagree keeps the common path allocation-free and still lets a
-        // checkpoint bring a lazy layer into being, which is what load_state_dict does for a lazy
-        // module in PyTorch.
-        var trainableForShape = GetTrainableParametersUnmaterialized();
-        var subsForShape = GetSubLayers();
-        bool hasRegistry = (trainableForShape is not null && trainableForShape.Count > 0)
-                        || (subsForShape is not null && subsForShape.Count > 0)
-                        || BufferScalarCount() > 0;
+        var components = GetOrderedParameterComponents();
+        bool hasRegistry = System.Array.Exists(components, component =>
+            component.Kind != DeclaredParameterComponentKind.Legacy);
         int currentConcreteCount = FillParameters(null, 0);
 
         if (hasRegistry && parameters.Length != currentConcreteCount)
         {
             EnsureMaterializedForParameterSurface();
-            trainableForShape = GetTrainableParametersUnmaterialized();
-            subsForShape = GetSubLayers();
-            hasRegistry = (trainableForShape is not null && trainableForShape.Count > 0)
-                       || (subsForShape is not null && subsForShape.Count > 0)
-                       || BufferScalarCount() > 0;
+            components = GetOrderedParameterComponents();
+            hasRegistry = System.Array.Exists(components, component =>
+                component.Kind != DeclaredParameterComponentKind.Legacy);
             currentConcreteCount = FillParameters(null, 0);
         }
 
-        // The length check belongs AFTER this, not before it. A deferred layer has nothing
-        // materialized, so ParameterCount is 0 and the check rejected every restore into one
-        // ("Expected 0 parameters, but got 3072" across the Finance suite) -- refusing exactly the
-        // case the wholesale path below exists to serve. A count of zero here is not a claim that
-        // the layer has no parameters; it is the layer saying it does not know yet.
-        // READINESS, not count. The comment above says a zero count means "I do not know yet" -- and
-        // then this guard treated it as "I have none" and threw, which is the contradiction behind
-        // the ParameterCount == 0 failures. Materialization was already attempted just above; if the
-        // layer STILL cannot size itself, it is genuinely shape-deferred and the incoming vector is
-        // the thing that would have told it. Rejecting it refuses the only information available.
-        //
-        // Expressed against the two facts a layer has locally: a shape-resolved layer, or one whose
-        // weights come entirely from constructor arguments, KNOWS its count and a mismatch is a real
-        // error worth naming. Anything else is still waiting, and falls through to the wholesale
-        // path below, which parks the payload until the shape arrives.
         bool shapeKnown = IsShapeResolved || ParametersAreConstructionSized;
-        // Use the concrete fold, not the cached virtual ParameterCount. A layer can expose fields by
-        // overriding GetTrainableParameters without registering them in the base list; that older
-        // pattern has no way to invalidate the base count cache when construction fills the fields.
-        // GetParameters is already sized from FillParameters for this reason, so restore must ask the
-        // same fold or it can mistake a complete registry for an empty deferred layer.
         bool currentLayoutMatches = parameters.Length == currentConcreteCount;
 
-        if (hasRegistry && shapeKnown && !currentLayoutMatches)
+        // True legacy layers have no tensor/buffer/child manifest. Preserve their wholesale flat
+        // slot, but never use that slot as a waiting room for a generated layer: doing so makes the
+        // payload live immediately and duplicates it when deferred tensors later materialize.
+        if (!hasRegistry)
         {
-            // Name the layer. A bare count pair says a restore failed somewhere in a hundred-layer
-            // model without saying where, and the whole point of deriving these surfaces is that
-            // the mismatch is now diagnosable rather than silent.
-            throw new ArgumentException(
-                $"Expected {currentConcreteCount} parameters, but got {parameters.Length} " +
-                $"(layer {GetType().Name}, own {Parameters.Length}, tensors {trainableForShape?.Count ?? 0}, " +
-                $"buffers {BufferScalarCount()}, sub-layers {subsForShape?.Count ?? 0})");
-        }
-
-        // A layer with nothing registered keeps the ORIGINAL wholesale semantics: the entire vector
-        // goes into Parameters. Deferred layers depend on that. Conv1DLayer holds the incoming
-        // vector in Parameters until its input width arrives and then hands the whole thing to
-        // ApplyResolvedParameters; slicing it by the CURRENT Parameters.Length instead truncates it,
-        // because pre-resolution that length is a placeholder. That is a real failure, not a
-        // hypothetical: it cut a 144-value restore down to the 32-element placeholder and
-        // MusicSourceSeparator threw "Expected 144 parameters, but got 32" on its first forward.
-        // Park-and-replay, for BOTH the no-registry case and a still-deferred layout that does not
-        // already match the incoming vector.
-        //
-        // The no-registry case is the original wholesale semantics described above. The deferred
-        // case is new and necessary: the guard now lets a shape-deferred layer through instead of
-        // throwing, and such a layer must NOT reach the slicing code below. Its slot lengths are
-        // placeholders, so slicing by them truncates exactly the way the comment above records
-        // ("cut a 144-value restore down to the 32-element placeholder"). Letting it through to
-        // slice would have turned a clear error into silent weight loss -- a worse failure than the
-        // one being fixed.
-        //
-        // A matching concrete registry is already a complete restore plan even when InputShape still
-        // contains -1. Constructor-sized layers such as DuelingCombinationLayer own real tensors
-        // before their first forward; parking the same vector in Parameters duplicated that state on
-        // every update (260 extra values per Rainbow update). The vector equality is decisive here:
-        // restore the registry when its current boundaries consume the entire payload, and reserve
-        // park-and-replay for a genuinely different, still-unknown destination layout.
-        //
-        // Parking the whole vector is what a lazy module can correctly do: hold a payload whose
-        // concrete layout is not known yet until the shape arrives, then hand it on at
-        // materialization, which is the convention Conv1DLayer's ApplyResolvedParameters follows.
-        if (!hasRegistry || (!shapeKnown && !currentLayoutMatches))
-        {
-            _hasDeferredParameterPayload = hasRegistry && !shapeKnown && !currentLayoutMatches;
+            _pendingParameterRestore = null;
             Parameters = parameters;
+            BumpParameterEpoch();
             return;
         }
 
-        _hasDeferredParameterPayload = false;
+        if (!shapeKnown && !currentLayoutMatches)
+        {
+            if (Parameters.Length != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} cannot own both a live legacy parameter vector and a " +
+                    "deferred generated-parameter restore.");
+            }
 
+            _pendingParameterRestore = new Vector<T>(parameters.ToArray());
+
+            // Generated [TrainableParameter(Shape = ...)] declarations may make one unknown input
+            // axis exactly recoverable from the payload length. Resolve immediately when they do;
+            // otherwise the first real input will materialize the tensors and replay this payload.
+            if (TryInferInputShapeFromParameterCount(parameters.Length, out var inferredInput))
+                ResolveFromShape(inferredInput);
+
+            TryApplyPendingParameterRestore();
+            return;
+        }
+
+        if (!currentLayoutMatches)
+        {
+            throw new ArgumentException(
+                $"Expected {currentConcreteCount} parameters, but got {parameters.Length} " +
+                $"(layer {GetType().Name}, ordered components {components.Length}).",
+                nameof(parameters));
+        }
+
+        _pendingParameterRestore = null;
+        ApplyConcreteParameterVector(parameters);
+    }
+
+    /// <summary>Distributes a validated vector through the ordered component manifest.</summary>
+    private void ApplyConcreteParameterVector(Vector<T> parameters)
+    {
         int index = 0;
-
-        if (Parameters.Length > 0)
+        var components = GetOrderedParameterComponents();
+        for (int componentIndex = 0; componentIndex < components.Length; componentIndex++)
         {
-            var own = new Vector<T>(Parameters.Length);
-            for (int i = 0; i < Parameters.Length; i++)
-                own[i] = parameters[index++];
-            Parameters = own;
-        }
-
-        var trainable = trainableForShape;
-        if (trainable is not null)
-        {
-            for (int i = 0; i < trainable.Count; i++)
+            var component = components[componentIndex];
+            if (component.Kind == DeclaredParameterComponentKind.Legacy)
             {
-                var t = trainable[i];
-                if (t is null) continue;
-                int n = TrainableScalarCount(t);
-                for (int j = 0; j < n; j++)
-                    WriteTrainableScalar(t, j, parameters[index++]);
+                var own = new Vector<T>(Parameters.Length);
+                for (int j = 0; j < own.Length; j++) own[j] = parameters[index++];
+                Parameters = own;
+                continue;
             }
+
+            if (component.Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                var tensor = component.Tensor;
+                if (tensor is null) continue;
+                int count = TrainableScalarCount(tensor);
+                for (int j = 0; j < count; j++)
+                    WriteTrainableScalar(tensor, j, parameters[index++]);
+                continue;
+            }
+
+            var subLayer = component.Layer;
+            if (subLayer is null || IsSubLayerParameterFrozen(subLayer)) continue;
+            int take = subLayer is LayerBase<T> layerBase
+                ? layerBase.FillParameters(null, 0)
+                : subLayer.GetParameters().Length;
+            if (take <= 0) continue;
+            var slice = new Vector<T>(take);
+            for (int j = 0; j < take; j++) slice[j] = parameters[index++];
+            subLayer.SetParameters(slice);
         }
 
-        var bufs = GetRegisteredBuffers();
-        if (bufs is not null)
-        {
-            for (int i = 0; i < bufs.Count; i++)
-            {
-                var b = bufs[i].Tensor;
-                if (b is null) continue;
-                int bn = TrainableScalarCount(b);
-                for (int j = 0; j < bn; j++) WriteTrainableScalar(b, j, parameters[index++]);
-            }
-        }
+        if (index != parameters.Length)
+            throw new InvalidOperationException(
+                $"{GetType().Name} consumed {index} of {parameters.Length} parameter values.");
 
-        var subs = subsForShape;
-        if (subs is not null)
-        {
-            for (int i = 0; i < subs.Count; i++)
-            {
-                var s = subs[i];
-                if (s is null || IsSubLayerParameterFrozen(s)) continue;
-                int take = s is LayerBase<T> layerBase
-                    ? layerBase.FillParameters(null, 0)
-                    : s.GetParameters().Length;
-                if (take <= 0) continue;
-                var slice = new Vector<T>(take);
-                for (int j = 0; j < take; j++)
-                    slice[j] = parameters[index++];
-                s.SetParameters(slice);
-            }
-        }
+        BumpParameterEpoch();
     }
 
     /// <summary>
@@ -5919,6 +6083,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             _registeredTensors[i] = replacement;
             _registeredTensorRoles[i] = role;
             _cachedParameterCount = -1;
+            BumpParameterEpoch();
             return true;
         }
 
@@ -6333,6 +6498,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
+
+        _cachedParameterCount = -1;
+        BumpParameterEpoch();
     }
 
     /// <summary>
@@ -6377,6 +6545,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             Engine.UnregisterPersistentTensor(tensor);
         _registeredTensors.Clear();
         _registeredTensorRoles.Clear();
+        _cachedParameterCount = -1;
+        BumpParameterEpoch();
     }
 
     /// <summary>

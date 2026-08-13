@@ -46,6 +46,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     AiDotNet.Models.Parameters.IParameterMaterializationSource
 {
     /// <summary>
+    /// Disposes a rejected copy-on-write candidate without crossing an ownership boundary back
+    /// into this model. Some legacy <c>CreateNewInstance</c> implementations reuse the source's
+    /// top-level layer objects. A normal network dispose would cascade into those shared objects
+    /// and poison the still-live source before the eager fallback began.
+    /// </summary>
+    private void DisposeRejectedCopyOnWriteCandidate(NeuralNetworkBase<T> candidate)
+    {
+        // The candidate owns its List instance, but it may not own every object in that list.
+        // Detach source identities first; the remaining candidate-only layers can be reclaimed
+        // normally. LayerBase.Dispose does not cascade into GetSubLayers, so this top-level
+        // ownership cut is both sufficient and deliberately allocation-free.
+        for (int candidateIndex = candidate._layers.Count - 1; candidateIndex >= 0; candidateIndex--)
+        {
+            var candidateLayer = candidate._layers[candidateIndex];
+            for (int sourceIndex = 0; sourceIndex < _layers.Count; sourceIndex++)
+            {
+                if (!ReferenceEquals(candidateLayer, _layers[sourceIndex])) continue;
+                candidate._layers.RemoveAt(candidateIndex);
+                break;
+            }
+        }
+
+        candidate.Dispose();
+    }
+
+    /// <summary>
     /// The internal collection of layers that make up this neural network.
     /// </summary>
     /// <remarks>
@@ -396,6 +422,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     // structure-version bump for downstream caches (buffers, tape training step, layer info)
     // even though the ParameterCount cache itself is gone.
 
+    private sealed class ParameterLayoutCacheEntry
+    {
+        public ParameterLayoutCacheEntry(
+            int structureVersion,
+            int surfaceEpoch,
+            AiDotNet.Models.Parameters.ParameterLayoutSnapshot snapshot)
+        {
+            StructureVersion = structureVersion;
+            SurfaceEpoch = surfaceEpoch;
+            Snapshot = snapshot;
+        }
+
+        public int StructureVersion { get; }
+        public int SurfaceEpoch { get; }
+        public AiDotNet.Models.Parameters.ParameterLayoutSnapshot Snapshot { get; }
+    }
+
+    private readonly object _parameterLayoutCacheLock = new();
+    private ParameterLayoutCacheEntry? _parameterLayoutCache;
+
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).
     /// </summary>
@@ -680,7 +726,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <inheritdoc />
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
-        get => BuildParameterLayout();
+        get
+        {
+            int structureVersion = System.Threading.Volatile.Read(ref _layerStructureVersion);
+            int surfaceEpoch = LayerBase<T>.ParameterSurfaceEpoch;
+            var cached = System.Threading.Volatile.Read(ref _parameterLayoutCache);
+            if (cached is not null
+                && cached.StructureVersion == structureVersion
+                && cached.SurfaceEpoch == surfaceEpoch)
+            {
+                return cached.Snapshot;
+            }
+
+            lock (_parameterLayoutCacheLock)
+            {
+                structureVersion = System.Threading.Volatile.Read(ref _layerStructureVersion);
+                surfaceEpoch = LayerBase<T>.ParameterSurfaceEpoch;
+                cached = _parameterLayoutCache;
+                if (cached is not null
+                    && cached.StructureVersion == structureVersion
+                    && cached.SurfaceEpoch == surfaceEpoch)
+                {
+                    return cached.Snapshot;
+                }
+
+                var snapshot = BuildParameterLayout();
+                // Shape resolution and first-use component registration can mutate the graph while
+                // the snapshot is being captured. Publish against the versions after that work.
+                cached = new ParameterLayoutCacheEntry(
+                    System.Threading.Volatile.Read(ref _layerStructureVersion),
+                    LayerBase<T>.ParameterSurfaceEpoch,
+                    snapshot);
+                System.Threading.Volatile.Write(ref _parameterLayoutCache, cached);
+                return snapshot;
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -700,10 +780,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             string stableId,
             AiDotNet.Models.Parameters.ParameterSlotRole role,
             AiDotNet.Models.Parameters.ParameterReadiness readiness,
-            long? count)
+            long? count,
+            long materializedCount)
         {
             slots.Add(new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
-                stableId, role, readiness, count, offsetKnown ? offset : (long?)null));
+                stableId, role, readiness, count, offsetKnown ? offset : (long?)null,
+                materializedParameterCount: materializedCount));
             if (count.HasValue && offsetKnown)
                 offset = checked(offset + count.Value);
             else
@@ -724,7 +806,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     string id = slot.StableId == "$"
                         ? stableId
                         : stableId + "/" + slot.StableId;
-                    AddSlot(id, slot.Role, slot.Readiness, slot.ParameterCount);
+                    AddSlot(
+                        id,
+                        slot.Role,
+                        slot.Readiness,
+                        slot.ParameterCount,
+                        slot.MaterializedParameterCount);
                 }
                 return;
             }
@@ -741,6 +828,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         chunk.StableId,
                         chunk.Role,
                         AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                        chunk.Tensor.Length,
                         chunk.Tensor.Length);
                 }
                 if (!found)
@@ -749,6 +837,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         stableId,
                         AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
                         AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree,
+                        0,
                         0);
                 }
                 return;
@@ -761,7 +850,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 stableId,
                 AiDotNet.Models.Parameters.ParameterSlotRole.Trainable,
                 readiness,
-                count);
+                count,
+                readiness == AiDotNet.Models.Parameters.ParameterReadiness.Materialized
+                    ? layer.ParameterCount
+                    : 0);
         }
 
         for (int i = 0; i < Layers.Count; i++)
@@ -786,6 +878,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 tensor.Length == 0
                     ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
                     : AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+                tensor.Length,
                 tensor.Length);
         }
 
@@ -798,7 +891,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 "components/" + slot.StableId,
                 slot.Role,
                 slot.Readiness,
-                slot.ParameterCount);
+                slot.ParameterCount,
+                slot.MaterializedParameterCount);
         }
 
         return new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(slots);
@@ -2292,44 +2386,37 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// More complex networks typically have more parameters and can learn more complex patterns, but also
     /// require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.
     /// The count is derived from the same stable parameter manifest used by the flat and chunked parameter
-    /// APIs. When a future lazy slot is still unknown, the manifest remains explicitly deferred while
-    /// this property reports the exact width of every independently resolved slot. It never
-    /// substitutes a guessed future size, and it does include resolved, allocation-free declarations
-    /// because a flat read materializes those values on demand.
+    /// APIs. This property reports only values backed by live storage; the manifest's declared count
+    /// remains available separately for allocation-free capacity planning. It never substitutes a
+    /// guessed future size or reports a parked checkpoint payload as a live parameter.
     /// </remarks>
     public virtual long ParameterCount
     {
         get
         {
-            // Pre-resolve any lazy layers' shapes from the architecture BEFORE summing
-            // per-layer ParameterCount. Lazy DenseLayer / ConvolutionalLayer / FullyConnectedLayer
-            // / FeedForwardLayer return 0 from ParameterCount when InputShape[0] is still the -1
-            // sentinel (issue #1209's lazy-shape-inference migration).
-            //
-            // EnsureParametersReady comes FIRST: resolving shapes over Layers is meaningless for a
-            // model whose layers are not built yet. Models used to solve that by overriding this
-            // property to call their own initializer and delegate to base -- see the hook's remarks.
-            EnsureParametersReady();
-            ResolveLazyLayerShapes();
+            // ParameterCount is the concrete live surface by contract. DeclaredParameterCount on
+            // ParameterLayout remains available for capacity planning without pretending that lazy
+            // storage already exists. Both values come from one immutable, versioned snapshot.
+            return ParameterLayout.MaterializedParameterCount;
+        }
+    }
 
-            // The manifest is rebuilt on every access. A layer's state can grow after construction
-            // when lazy input shapes resolve, so caching either the total or its slice boundaries
-            // would allow ParameterCount, GetParameters and SetParameters to describe different
-            // models. ParameterLayout is the one ordered ownership record shared by all parameter
-            // consumers; unresolved slots remain explicitly unresolved rather than becoming zero.
+    /// <summary>
+    /// Capacity-planning count for memory policies. Unlike the public flat-vector count, this may
+    /// include shape-resolved lazy slots that have not allocated storage yet, allowing streaming
+    /// and optimizer-state policies to engage before first-use allocation creates memory pressure.
+    /// </summary>
+    private long PlanningParameterCount
+    {
+        get
+        {
             var layout = ParameterLayout;
-            if (layout.Readiness is not AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred
-                && layout.ParameterCount.HasValue)
-            {
-                return layout.ParameterCount.Value;
-            }
-
             // A mixed graph can contain one honestly deferred slot and hundreds of independently
-            // resolved, allocation-free slots. Falling back to already-materialized storage here
-            // discarded those resolved widths, then GetParameters materialized them and returned a
-            // larger vector. The snapshot already calculated the exact known subtotal from the same
-            // ordered slots. Unknown slots still contribute zero, so this is not a future-size guess.
-            return layout.KnownParameterCount;
+            // resolved, allocation-free slots. KnownParameterCount retains those exact widths while
+            // unknown slots contribute zero. MaterializedParameterCount can still be larger when a
+            // deferred slot already owns live storage, so capacity planning takes the greater truth.
+            long declared = layout.DeclaredParameterCount ?? layout.KnownParameterCount;
+            return Math.Max(layout.MaterializedParameterCount, declared);
         }
     }
 
@@ -2513,6 +2600,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // side-effects of this call — kept as-is for backward compatibility with the
         // dozens of internal call sites that already invoke this on structural mutations.
         _layerStructureVersion++;
+        System.Threading.Volatile.Write(ref _parameterLayoutCache, null);
         _parameterBuffer = null;
         // Layer structure changed — re-test the skip-buffer threshold next
         // training step. Without this, a model that grew from 100M -> 200M
@@ -7547,7 +7635,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         long paramCount;
         try
         {
-            paramCount = ParameterCount;
+            paramCount = PlanningParameterCount;
         }
         catch (Exception ex) when (
             ex is InvalidOperationException ||
@@ -7946,7 +8034,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_memoryManager is null)
             return null;
 
-        return _memoryManager.EstimateMemorySavings(ParameterCount, batchSize, sequenceLength);
+        return _memoryManager.EstimateMemorySavings(PlanningParameterCount, batchSize, sequenceLength);
     }
 
     /// <summary>
@@ -8697,7 +8785,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // 0.92.0+), so the gradient set is never fully resident and registered
                 // weights are paged in/out around each backward step. Models that
                 // already fit stay on the classic path below (zero overhead).
-                long paramCount = ParameterCount;
+                long paramCount = PlanningParameterCount;
                 if (paramCount <= 0) return false;
                 long elemSize = typeof(T) == typeof(float) ? 4L : 8L;
                 // weights + gradients + Adam first/second moments at full precision.
@@ -11194,7 +11282,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // AIDOTNET_BF16_ADAM=1/0 still forces/pins. The reactive 8-bit ladder (_memoryLeversForced on an
         // actual OOM) is unaffected.
         const long bf16ParamThreshold = 50_000_000L;
-        return ParameterCount >= bf16ParamThreshold;
+        return PlanningParameterCount >= bf16ParamThreshold;
     }
 
     /// <summary>
@@ -12902,7 +12990,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var dstLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(copyBase);
         if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count)
         {
-            (copy as IDisposable)?.Dispose();
+            DisposeRejectedCopyOnWriteCandidate(copyBase);
             return false;
         }
 
@@ -12917,7 +13005,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (ReferenceEquals(srcLayers[i], dstLayers[i]))
             {
-                (copy as IDisposable)?.Dispose();
+                DisposeRejectedCopyOnWriteCandidate(copyBase);
                 return false;
             }
         }
@@ -12932,7 +13020,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             if (extras.MoveNext())
             {
-                (copy as IDisposable)?.Dispose();
+                DisposeRejectedCopyOnWriteCandidate(copyBase);
                 return false;
             }
         }
@@ -12959,7 +13047,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         if (walkedParamCount != manifestedTrainableCount)
         {
-            (copy as IDisposable)?.Dispose();
+            DisposeRejectedCopyOnWriteCandidate(copyBase);
             return false;
         }
 
@@ -13015,7 +13103,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 && dstShapeOnly.IsShapeResolved;
             if (sp.Count != dp.Count && !shapeOnlyDestination)
             {
-                (copy as IDisposable)?.Dispose();
+                DisposeRejectedCopyOnWriteCandidate(copyBase);
                 return false;
             }
             if (!shapeOnlyDestination)
@@ -13024,7 +13112,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     if (!sp[p]._shape.SequenceEqual(dp[p]._shape))
                     {
-                        (copy as IDisposable)?.Dispose();
+                        DisposeRejectedCopyOnWriteCandidate(copyBase);
                         return false;
                     }
                 }
@@ -13048,7 +13136,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 try { dst.SetTrainableParameters(shared); }
                 catch (ArgumentException)
                 {
-                    (copy as IDisposable)?.Dispose();
+                    DisposeRejectedCopyOnWriteCandidate(copyBase);
                     return false;
                 }
             }
@@ -13066,13 +13154,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     try { dstExtras.SetExtraParameters(srcExtras.GetExtraParameters()); }
                     catch (ArgumentException)
                     {
-                        (copy as IDisposable)?.Dispose();
+                        DisposeRejectedCopyOnWriteCandidate(copyBase);
                         return false;
                     }
                 }
                 else
                 {
-                    (copy as IDisposable)?.Dispose();
+                    DisposeRejectedCopyOnWriteCandidate(copyBase);
                     return false;
                 }
             }
@@ -13133,7 +13221,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // The copy enumerates a different number of model-owned tensors than the
                     // source. Its geometry does not match, so fall back to the eager
                     // full-fidelity copy rather than leave the clone partially populated.
-                    (copy as IDisposable)?.Dispose();
+                    DisposeRejectedCopyOnWriteCandidate(copyBase);
                     return false;
                 }
                 if (!hasSrc) break;
@@ -13143,7 +13231,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (srcTensor is null || dstTensor is null) continue;
                 if (srcTensor.Length != dstTensor.Length)
                 {
-                    (copy as IDisposable)?.Dispose();
+                    DisposeRejectedCopyOnWriteCandidate(copyBase);
                     return false;
                 }
                 for (int k = 0; k < srcTensor.Length; k++) dstTensor[k] = srcTensor[k];

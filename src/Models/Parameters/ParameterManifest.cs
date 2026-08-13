@@ -213,17 +213,30 @@ public sealed class ParameterSlotDescriptor
         ParameterUpdatePolicy? updatePolicy = null,
         ParameterPersistence? persistence = null,
         ParameterOwnership? ownership = null,
-        ParameterAvailability availability = ParameterAvailability.Construction)
+        ParameterAvailability availability = ParameterAvailability.Construction,
+        long? materializedParameterCount = null)
     {
         if (string.IsNullOrWhiteSpace(stableId))
             throw new ArgumentException("A parameter slot requires a non-empty stable ID.", nameof(stableId));
         if (parameterCount < 0)
             throw new ArgumentOutOfRangeException(nameof(parameterCount));
 
+        long concreteCount = materializedParameterCount
+            ?? (readiness == ParameterReadiness.Materialized ? parameterCount ?? 0 : 0);
+        if (concreteCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(materializedParameterCount));
+        if (parameterCount.HasValue && concreteCount > parameterCount.Value)
+        {
+            throw new ArgumentException(
+                "A slot cannot materialize more values than its declared layout contains.",
+                nameof(materializedParameterCount));
+        }
+
         StableId = stableId;
         Role = role;
         Readiness = readiness;
         ParameterCount = parameterCount;
+        MaterializedParameterCount = concreteCount;
         Offset = offset;
         if (shape is not null)
         {
@@ -249,6 +262,12 @@ public sealed class ParameterSlotDescriptor
 
     /// <summary>The resolved count, or <c>null</c> while the shape is deferred.</summary>
     public long? ParameterCount { get; }
+
+    /// <summary>
+    /// The exact number of values currently backed by readable storage. Unlike
+    /// <see cref="ParameterCount"/>, this never anticipates a future lazy allocation.
+    /// </summary>
+    public long MaterializedParameterCount { get; }
 
     /// <summary>The offset in the selected flat layout, or <c>null</c> when any preceding count is unresolved.</summary>
     public long? Offset { get; }
@@ -304,7 +323,7 @@ public sealed class ParameterSlotDescriptor
 public sealed class ParameterLayoutSnapshot
 {
     /// <summary>The canonical manifest schema used to compute <see cref="Fingerprint"/>.</summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     /// <summary>Creates a layout snapshot from already ordered slots.</summary>
     public ParameterLayoutSnapshot(IReadOnlyList<ParameterSlotDescriptor> slots)
@@ -335,7 +354,8 @@ public sealed class ParameterLayoutSnapshot
         bool external = false;
         bool unmaterialized = false;
         bool materialized = false;
-        long total = 0;
+        long declaredTotal = 0;
+        long materializedTotal = 0;
         for (int i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
@@ -345,13 +365,15 @@ public sealed class ParameterLayoutSnapshot
             external |= slot.Readiness == ParameterReadiness.External;
             unmaterialized |= slot.Readiness == ParameterReadiness.ShapeResolvedUnmaterialized;
             materialized |= slot.Readiness == ParameterReadiness.Materialized && slot.ParameterCount > 0;
-            if (slot.ParameterCount.HasValue) total = checked(total + slot.ParameterCount.Value);
+            if (slot.ParameterCount.HasValue)
+                declaredTotal = checked(declaredTotal + slot.ParameterCount.Value);
+            materializedTotal = checked(materializedTotal + slot.MaterializedParameterCount);
         }
 
         bool unresolved = shapeDeferred || fitDeferred
             || slots.Any(slot => !slot.ParameterCount.HasValue);
         Readiness = slots.Count == 0 || (!unresolved && !unmaterialized && !materialized
-                                        && !conditionalAbsent && !external && total == 0)
+                                        && !conditionalAbsent && !external && declaredTotal == 0)
             ? ParameterReadiness.ParameterFree
             : shapeDeferred
                 ? ParameterReadiness.ShapeDeferred
@@ -366,8 +388,9 @@ public sealed class ParameterLayoutSnapshot
                             : external
                                 ? ParameterReadiness.External
                                 : ParameterReadiness.ParameterFree;
-        KnownParameterCount = total;
-        ParameterCount = unresolved ? null : total;
+        KnownParameterCount = declaredTotal;
+        ParameterCount = unresolved ? null : declaredTotal;
+        MaterializedParameterCount = materializedTotal;
         Fingerprint = ComputeFingerprint(immutableSlots);
     }
 
@@ -392,6 +415,18 @@ public sealed class ParameterLayoutSnapshot
     /// an unrelated slot is still waiting for shape or fit information.
     /// </remarks>
     public long KnownParameterCount { get; }
+
+    /// <summary>
+    /// The structural total when every slot can be sized, or <c>null</c> while any required
+    /// shape is unresolved. This names the planning meaning of <see cref="ParameterCount"/>.
+    /// </summary>
+    public long? DeclaredParameterCount => ParameterCount;
+
+    /// <summary>
+    /// The exact number of values the live flat parameter surface can emit without allocating
+    /// lazy storage. This value is always concrete, including for partially built graphs.
+    /// </summary>
+    public long MaterializedParameterCount { get; }
 
     /// <summary>The version of the canonical manifest representation.</summary>
     public int SchemaVersion => CurrentSchemaVersion;
@@ -418,6 +453,8 @@ public sealed class ParameterLayoutSnapshot
                 .Append((int)slot.Availability).Append('|')
                 .Append(slot.ParameterCount.HasValue ? slot.ParameterCount.Value.ToString(
                     System.Globalization.CultureInfo.InvariantCulture) : "?").Append('|')
+                .Append(slot.MaterializedParameterCount.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture)).Append('|')
                 .Append(slot.ElementType ?? "?").Append('|');
             if (slot.Shape is null)
             {

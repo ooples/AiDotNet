@@ -102,11 +102,13 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// the shared LoRA adaptation. Different layers can have different scaling factors,
     /// allowing the network to modulate the shared adaptation per layer.
     /// </remarks>
-    private T _layerScaling;
+    [TrainableParameter]
+    private Tensor<T> _layerScaling;
 
     /// <summary>
     /// Gradient for the layer-specific scaling factor.
     /// </summary>
+    [Scratch]
     private T _layerScalingGradient;
 
     /// <summary>
@@ -121,17 +123,19 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stored intermediate value (B_shared * A_shared * input) from forward pass.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastIntermediate;
 
     /// <summary>
     /// Gets the layer-specific scaling factor.
     /// </summary>
-    public double LayerScaling => Convert.ToDouble(_layerScaling);
+    public double LayerScaling => Convert.ToDouble(_layerScaling[0]);
 
     /// <summary>
     /// Gets the layer index.
@@ -221,12 +225,13 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Initialize layer-specific scaling factor to 1.0 (no initial effect)
-        _layerScaling = NumOps.One;
+        _layerScaling = new Tensor<T>([1]);
+        _layerScaling[0] = NumOps.One;
         _layerScalingGradient = NumOps.Zero;
 
-        // Reallocate Parameters to the reduced size (just scaling factor + base if not frozen)
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
+        // Shared factors replace the per-layer standard LoRA factors. The generated manifest owns
+        // the layer-specific scaling tensor (plus the base layer when it is unfrozen).
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>
@@ -458,7 +463,7 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 
             // Apply layer-specific scaling and alpha/rank scaling
             T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-            T totalScaling = NumOps.Multiply(_layerScaling, scaling);
+            T totalScaling = NumOps.Multiply(_layerScaling[0], scaling);
 
             Matrix<T> scaled = new Matrix<T>(batchSize, outputSize);
             for (int i = 0; i < batchSize; i++)
@@ -512,7 +517,7 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         // Update layer-specific scaling factor
         T update = NumOps.Multiply(_layerScalingGradient, learningRate);
-        _layerScaling = NumOps.Subtract(_layerScaling, update);
+        _layerScaling[0] = NumOps.Subtract(_layerScaling[0], update);
 
         // Update base layer if not frozen
         if (!_freezeBaseLayer)
@@ -563,7 +568,7 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 
             // Compute Tied-LoRA weight contribution: layerScaling * (B_shared * A_shared) * (alpha/rank)
             T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-            T totalScaling = NumOps.Multiply(_layerScaling, scaling);
+            T totalScaling = NumOps.Multiply(_layerScaling[0], scaling);
 
             // Multiply: intermediate = A_shared * B_shared
             Matrix<T> intermediate = _sharedMatrixA.Multiply(_sharedMatrixB);

@@ -112,6 +112,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// The magnitude vector stores the L2 norm of each weight vector (one per output neuron).
     /// This is the DoRA component of DVoRA.
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _magnitude;
 
     /// <summary>
@@ -121,6 +122,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// This vector scales the VeRA output on a per-dimension basis.
     /// This is the VeRA component of DVoRA.
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _scalingVectorD;
 
     /// <summary>
@@ -130,36 +132,43 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// This vector scales the intermediate rank-dimensional representation.
     /// This is the VeRA component of DVoRA.
     /// </remarks>
+    [TrainableParameter]
     private Tensor<T> _scalingVectorB;
 
     /// <summary>
     /// Gradient for magnitude vector computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _magnitudeGradient;
 
     /// <summary>
     /// Gradient for scaling vector d computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _scalingVectorDGradient;
 
     /// <summary>
     /// Gradient for scaling vector b computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Vector<T>? _scalingVectorBGradient;
 
     /// <summary>
     /// Cached normalized direction from the last forward pass, used in backpropagation.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastNormalizedDirection;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stored intermediate value from forward pass, needed for backward pass.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _lastIntermediate;
 
     /// <summary>
@@ -242,8 +251,9 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
             _scalingVectorB[i] = NumOps.One;
         }
 
-        // Update parameter vector
-        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // DVoRA owns the magnitude/scaling tensors above and uses shared frozen matrices instead of
+        // the standard LoRA child created by the base constructor.
+        FreezeSubLayerParameters(_loraLayer);
     }
 
     /// <summary>
