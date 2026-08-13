@@ -5379,7 +5379,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
-        ArgumentNullException.ThrowIfNull(parameters);
+        if (parameters is null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
 
         // A parameter-free layer is a closed contract, not a deferred one. The old fallback stored
         // any incoming vector in Parameters whenever no registry entries existed, which meant a
