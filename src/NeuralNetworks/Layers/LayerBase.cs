@@ -4426,6 +4426,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // count-only payload that forced hundreds of layer-specific restore overrides.
         writer.Write(ParameterSerializationMagic);
         WriteParameterLayout(writer);
+        WriteResolvedShape(writer);
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -4466,6 +4467,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var layout = ParameterLayoutNode.Read(reader);
         ApplyParameterLayout(layout);
 
+        // RESOLVE, THEN INITIALIZE, THEN RESTORE VALUES. The parameter layout restores the parameter
+        // SLOTS but not the layer's shape, so a restored layer read back IsShapeResolved == false and
+        // stayed lazy. Its first Forward therefore ran the whole first-use path -- resolve the shape,
+        // allocate the weights, randomize them -- straight over the values Deserialize had just
+        // installed. Measured on GRULayer: all 312 parameters came back exactly right, and the first
+        // Forward replaced every one of them. That reads as "serialization lost the weights" when
+        // serialization had in fact preserved them perfectly.
+        //
+        // Restoring the shape first makes the layer non-lazy, EnsureInitialized then allocates the
+        // tensors, and SetParameters below writes into tensors that already exist. The first forward
+        // finds an initialized layer and leaves it alone.
+        var savedShape = ReadResolvedShape(reader);
+        if (savedShape is not null && !IsShapeResolved)
+        {
+            ResolveFromShape(savedShape);
+        }
+
+        if (IsShapeResolved)
+        {
+            EnsureInitialized();
+        }
+
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
         for (int i = 0; i < count; i++)
@@ -4475,7 +4498,60 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         SetParameters(parameters);
     }
 
-    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E01);
+    // Bumped 0xA1D07E01 -> 0xA1D07E02 when the resolved input shape joined the payload. A reader
+    // that skipped the shape block would misread the parameter count as a rank, so the two formats
+    // cannot be told apart by content and the magic has to separate them. Same pre-1.0 stance as the
+    // previous bump: one authoritative format beats an ambiguous one that needs per-layer rescue.
+    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E02);
+
+    /// <summary>Writes the layer's resolved input shape, or a marker saying it has none yet.</summary>
+    /// <param name="writer">The writer receiving the shape block.</param>
+    /// <remarks>
+    /// A lazy layer carries its capacity in its resolved shape, not in its parameter values, so a
+    /// payload without the shape restores values into a layer that is still lazy -- and the first
+    /// forward re-resolves and re-randomizes straight over them.
+    /// </remarks>
+    private void WriteResolvedShape(BinaryWriter writer)
+    {
+        int[]? shape = null;
+        if (IsShapeResolved)
+        {
+            // GetInputShape throws on layers that will not describe their input. That is not a
+            // serialization failure -- the layer simply stays lazy on restore, exactly as it does
+            // today -- so it is recorded as "no shape" rather than failing the whole save.
+            try { shape = GetInputShape(); }
+            catch (InvalidOperationException) { shape = null; }
+            catch (ArgumentException) { shape = null; }
+        }
+
+        if (shape is null || shape.Length == 0)
+        {
+            writer.Write(0);
+            return;
+        }
+
+        writer.Write(shape.Length);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            writer.Write(shape[i]);
+        }
+    }
+
+    /// <summary>Reads the shape block written by <see cref="WriteResolvedShape"/>.</summary>
+    /// <param name="reader">The reader positioned at the shape block.</param>
+    /// <returns>The saved input shape, or <see langword="null"/> when the layer was still lazy.</returns>
+    private static int[]? ReadResolvedShape(BinaryReader reader)
+    {
+        int rank = reader.ReadInt32();
+        if (rank <= 0) return null;
+
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+        }
+        return shape;
+    }
 
     /// <summary>
     /// Gets all trainable parameters of the layer as a single vector.
