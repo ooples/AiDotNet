@@ -174,9 +174,6 @@ public partial class AuraFlowModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     #endregion
 
     #region Metadata

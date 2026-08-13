@@ -223,9 +223,6 @@ public partial class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     #endregion
 
     #region Metadata

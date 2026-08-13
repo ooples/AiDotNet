@@ -296,9 +296,6 @@ public partial class Flux2Model<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     #endregion
 
     #region Metadata

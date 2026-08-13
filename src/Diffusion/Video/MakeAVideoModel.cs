@@ -267,9 +267,6 @@ public partial class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     #endregion
 
     #region Metadata
