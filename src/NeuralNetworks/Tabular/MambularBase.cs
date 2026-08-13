@@ -101,20 +101,20 @@ public abstract class MambularBase<T> : IParameterSource<T>
             if (_parameterRegistry is not null) return _parameterRegistry;
 
             var registry = new ParameterComponentRegistry<T>();
-            registry.Register("0000/numerical",
+            registry.Register("00000000/numerical",
                 new TensorFieldParameterSource<T>(() => _numericalEmbeddings));
-            registry.Register("0001/categorical",
+            registry.Register("00000001/categorical",
                 new TensorCollectionParameterSource<T>(() => _categoricalEmbeddings));
 
             for (int i = 0; i < _mambaBlocks.Count; i++)
-                registry.Register($"0002/{i:D8}", _mambaBlocks[i]);
+                registry.Register($"00000002/{i:D8}", _mambaBlocks[i]);
 
             for (int i = 0; i < _mlpLayers.Count; i++)
-                registry.Register($"0003/{i:D8}", _mlpLayers[i]);
+                registry.Register($"00000003/{i:D8}", _mlpLayers[i]);
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
             {
-                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
             }
 
             _parameterRegistry = registry;

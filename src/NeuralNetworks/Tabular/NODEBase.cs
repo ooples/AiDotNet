@@ -101,18 +101,18 @@ public abstract class NODEBase<T> : IParameterSource<T>
             if (_parameterRegistry is not null) return _parameterRegistry;
 
             var registry = new ParameterComponentRegistry<T>();
-            registry.Register("0000/preprocessing", _featurePreprocessing);
+            registry.Register("00000000/preprocessing", _featurePreprocessing);
 
-            registry.Register("0001/featureSelection",
+            registry.Register("00000001/featureSelection",
                 new TensorCollectionParameterSource<T>(() => _featureSelectionWeights));
-            registry.Register("0002/thresholds",
+            registry.Register("00000002/thresholds",
                 new TensorCollectionParameterSource<T>(() => _splitThresholds));
-            registry.Register("0003/leaves",
+            registry.Register("00000003/leaves",
                 new TensorCollectionParameterSource<T>(() => _leafValues));
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
             {
-                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
             }
 
             _parameterRegistry = registry;

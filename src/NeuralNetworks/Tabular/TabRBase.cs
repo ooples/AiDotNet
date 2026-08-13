@@ -144,24 +144,24 @@ public abstract class TabRBase<T> : IParameterSource<T>
             var registry = new ParameterComponentRegistry<T>();
 
             for (int i = 0; i < _encoderLayers.Count; i++)
-                registry.Register($"0000/{i:D8}", _encoderLayers[i]);
+                registry.Register($"00000000/{i:D8}", _encoderLayers[i]);
 
-            registry.Register("0001/encoderNorm", _encoderNorm);
+            registry.Register("00000001/encoderNorm", _encoderNorm);
 
             for (int i = 0; i < _contextLayers.Count; i++)
-                registry.Register($"0002/{i:D8}", _contextLayers[i]);
+                registry.Register($"00000002/{i:D8}", _contextLayers[i]);
 
-            registry.Register("0003/contextNorm", _contextNorm);
+            registry.Register("00000003/contextNorm", _contextNorm);
 
-            registry.Register("0004/query", _queryProjection);
-            registry.Register("0005/key", _keyProjection);
-            registry.Register("0006/value", _valueProjection);
-            registry.Register("0007/output", _outputProjection);
+            registry.Register("00000004/query", _queryProjection);
+            registry.Register("00000005/key", _keyProjection);
+            registry.Register("00000006/value", _valueProjection);
+            registry.Register("00000007/output", _outputProjection);
 
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
             {
-                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
             }
 
             _parameterRegistry = registry;

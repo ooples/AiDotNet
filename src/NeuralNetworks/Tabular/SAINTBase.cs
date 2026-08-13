@@ -91,32 +91,32 @@ public abstract class SAINTBase<T> : IParameterSource<T>
             }
 
             var registry = new ParameterComponentRegistry<T>();
-            registry.Register("0000/numerical", _numericalEmbedding);
-            registry.Register("0001/categorical",
+            registry.Register("00000000/numerical", _numericalEmbedding);
+            registry.Register("00000001/categorical",
                 new TensorCollectionParameterSource<T>(() => _categoricalEmbeddings));
-            registry.Register("0002/column",
+            registry.Register("00000002/column",
                 new TensorFieldParameterSource<T>(() => _columnEmbeddings));
 
             for (int i = 0; i < _columnAttentionLayers.Count; i++)
-                registry.Register($"0003/{i:D8}", _columnAttentionLayers[i]);
+                registry.Register($"00000003/{i:D8}", _columnAttentionLayers[i]);
 
             if (_rowAttentionLayers != null)
                 for (int i = 0; i < _rowAttentionLayers.Count; i++)
-                    registry.Register($"0004/{i:D8}", _rowAttentionLayers[i]);
+                    registry.Register($"00000004/{i:D8}", _rowAttentionLayers[i]);
 
             for (int i = 0; i < _ffnLayers.Count; i++)
-                registry.Register($"0005/{i:D8}", _ffnLayers[i]);
+                registry.Register($"00000005/{i:D8}", _ffnLayers[i]);
 
             if (_layerNorms != null)
                 for (int i = 0; i < _layerNorms.Count; i++)
-                    registry.Register($"0006/{i:D8}", _layerNorms[i]);
+                    registry.Register($"00000006/{i:D8}", _layerNorms[i]);
 
             for (int i = 0; i < _mlpLayers.Count; i++)
-                registry.Register($"0007/{i:D8}", _mlpLayers[i]);
+                registry.Register($"00000007/{i:D8}", _mlpLayers[i]);
 
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
-                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
 
             _parameterRegistry = registry;
             return registry;

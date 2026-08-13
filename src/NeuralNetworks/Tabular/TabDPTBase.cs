@@ -117,24 +117,24 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
             if (_parameterRegistry is not null) return _parameterRegistry;
 
             var registry = new ParameterComponentRegistry<T>();
-            registry.Register("0000/projection", _featureProjection);
+            registry.Register("00000000/projection", _featureProjection);
 
             for (int i = 0; i < _categoricalEmbeddings.Length; i++)
-                registry.Register($"0001/{i:D8}", _categoricalEmbeddings[i]);
+                registry.Register($"00000001/{i:D8}", _categoricalEmbeddings[i]);
 
             for (int i = 0; i < _transformerBlocks.Length; i++)
-                registry.Register($"0002/{i:D8}", _transformerBlocks[i]);
+                registry.Register($"00000002/{i:D8}", _transformerBlocks[i]);
 
-            registry.Register("0003/featureAttention", _featureAttention);
+            registry.Register("00000003/featureAttention", _featureAttention);
 
             for (int i = 0; i < _mlpLayers.Length; i++)
-                registry.Register($"0004/{i:D8}", _mlpLayers[i]);
+                registry.Register($"00000004/{i:D8}", _mlpLayers[i]);
 
-            registry.Register("0005/finalNorm", _finalNorm);
+            registry.Register("00000005/finalNorm", _finalNorm);
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
             {
-                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
             }
 
             _parameterRegistry = registry;

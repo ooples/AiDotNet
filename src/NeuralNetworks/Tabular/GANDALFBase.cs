@@ -128,20 +128,20 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
 
             var registry = new ParameterComponentRegistry<T>();
             for (int i = 0; i < _gatingLayers.Count; i++)
-                registry.Register($"0000/{i:D8}", _gatingLayers[i]);
+                registry.Register($"00000000/{i:D8}", _gatingLayers[i]);
 
-            registry.Register("0001/output", _gatingOutput);
+            registry.Register("00000001/output", _gatingOutput);
 
-            registry.Register("0002/splitWeights",
+            registry.Register("00000002/splitWeights",
                 new TensorCollectionParameterSource<T>(() => _treeSplitWeights));
-            registry.Register("0003/splitBiases",
+            registry.Register("00000003/splitBiases",
                 new TensorCollectionParameterSource<T>(() => _treeSplitBiases));
-            registry.Register("0004/leafValues",
+            registry.Register("00000004/leafValues",
                 new TensorCollectionParameterSource<T>(() => _treeLeafValues));
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
             {
-                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
             }
 
             _parameterRegistry = registry;

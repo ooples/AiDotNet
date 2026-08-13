@@ -126,7 +126,7 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
                 layer.MaterializeParameters();
 
             var registry = new ParameterComponentRegistry<T>();
-            registry.Register("0000/categorical",
+            registry.Register("00000000/categorical",
                 new TensorCollectionParameterSource<T>(() => _categoricalEmbeddings));
             // Only when present. This is an OPTIONAL component -- the constructor allocates it just
             // for Options.UseColumnEmbedding, and the old count said the same thing with
@@ -136,21 +136,21 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
             // Absent is not the same as not-yet-sized.
             if (_columnEmbeddings != null)
             {
-                registry.Register("0001/column",
+                registry.Register("00000001/column",
                     new TensorFieldParameterSource<T>(() => _columnEmbeddings));
             }
 
             for (int i = 0; i < _encoderLayers.Count; i++)
-                registry.Register($"0002/{i:D8}", _encoderLayers[i]);
+                registry.Register($"00000002/{i:D8}", _encoderLayers[i]);
 
-            registry.Register("0003/finalNorm", _finalLayerNorm);
+            registry.Register("00000003/finalNorm", _finalLayerNorm);
 
             for (int i = 0; i < _mlpLayers.Count; i++)
-                registry.Register($"0004/{i:D8}", _mlpLayers[i]);
+                registry.Register($"00000004/{i:D8}", _mlpLayers[i]);
 
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
-                if (extra is not null) registry.Register($"9000/{extraIndex++:D8}", extra);
+                if (extra is not null) registry.Register($"00009000/{extraIndex++:D8}", extra);
 
             _parameterRegistry = registry;
             return registry;
