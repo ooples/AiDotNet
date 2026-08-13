@@ -857,14 +857,16 @@ public abstract class LayerTestBase<T>
         Assert.Equal(originalParameters.Length, restoredParameters.Length);
         for (int i = 0; i < originalParameters.Length; i++)
         {
-            Assert.True(Math.Abs(originalParameters[i] - restoredParameters[i]) < 1e-15,
+            double originalParameter = ToD(originalParameters[i]);
+            double restoredParameter = ToD(restoredParameters[i]);
+            Assert.True(EqualityComparer<T>.Default.Equals(originalParameters[i], restoredParameters[i]),
                 $"Parameter[{i}] differs after serialization roundtrip: " +
-                $"original={originalParameters[i]:G17}, deserialized={restoredParameters[i]:G17}");
+                $"original={originalParameter:G17}, deserialized={restoredParameter:G17}");
         }
 
-        var originalTensors = AiDotNet.Training.TapeTrainingStep<double>
+        var originalTensors = AiDotNet.Training.TapeTrainingStep<T>
             .CollectParameters(new[] { layer }, structureVersion: -1);
-        var restoredTensors = AiDotNet.Training.TapeTrainingStep<double>
+        var restoredTensors = AiDotNet.Training.TapeTrainingStep<T>
             .CollectParameters(new[] { layer2 }, structureVersion: -1);
         Assert.Equal(originalTensors.Count, restoredTensors.Count);
         for (int tensorIndex = 0; tensorIndex < originalTensors.Count; tensorIndex++)
@@ -874,18 +876,22 @@ public abstract class LayerTestBase<T>
             Assert.Equal(originalTensor.Shape.ToArray(), restoredTensor.Shape.ToArray());
             for (int i = 0; i < originalTensor.Length; i++)
             {
-                Assert.True(Math.Abs(originalTensor[i] - restoredTensor[i]) < 1e-15,
+                double originalValue = ToD(originalTensor[i]);
+                double restoredValue = ToD(restoredTensor[i]);
+                Assert.True(EqualityComparer<T>.Default.Equals(originalTensor[i], restoredTensor[i]),
                     $"Trainable tensor {tensorIndex}[{i}] differs after serialization roundtrip: " +
-                    $"original={originalTensor[i]:G17}, deserialized={restoredTensor[i]:G17}");
+                    $"original={originalValue:G17}, deserialized={restoredValue:G17}");
             }
         }
 
         var originalReplay = layer.Forward(input).Clone();
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.True(Math.Abs(originalOutput[i] - originalReplay[i]) < 1e-12,
+            double originalValue = ToD(originalOutput[i]);
+            double replayValue = ToD(originalReplay[i]);
+            Assert.True(Math.Abs(originalValue - replayValue) < 1e-12,
                 $"Serializing the layer changed its own output at [{i}]: " +
-                $"before={originalOutput[i]:G17}, after={originalReplay[i]:G17}");
+                $"before={originalValue:G17}, after={replayValue:G17}");
         }
 
         layer2.SetTrainingMode(false);
@@ -967,24 +973,14 @@ public abstract class LayerTestBase<T>
         layer.SetTrainingMode(false);
         var input = CreateConformingInput(layer, InputShape);
 
-<<<<<<< HEAD
-        using var tape = new GradientTape<double>();
-=======
-        // ITrainableLayer<T> exposes the per-tensor trainable references
-        // the source generator emits from [TrainableParameter] fields. If
-        // the layer doesn't implement it, the layer truly has nothing to
-        // train and the invariant is vacuously satisfied.
-        if (layer is not AiDotNet.Interfaces.ITrainableLayer<T> trainable) return;
-
         using var tape = new GradientTape<T>();
->>>>>>> 2fc939e67 (Run single-input layer scaffolds at float precision)
         var output = layer.Forward(input);
 
         // Use the production recursive collector, not only this layer's own tensor list. Composite
         // layers often own no tensors directly—their parameters live entirely in registered child
         // layers—so a local-only lookup made their generated gradient tests pass vacuously.
         // Collect AFTER Forward because lazy layers may replace zero-length placeholders.
-        var trainableParams = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(
+        var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
             new[] { layer }, structureVersion: -1);
         if (trainableParams.Count == 0) return;
 
@@ -1056,17 +1052,12 @@ public abstract class LayerTestBase<T>
         layer.SetTrainingMode(false);
         var input = CreateConformingInput(layer, InputShape);
 
-<<<<<<< HEAD
-=======
-        if (layer is not AiDotNet.Interfaces.ITrainableLayer<T> trainable) return;
-
->>>>>>> 2fc939e67 (Run single-input layer scaffolds at float precision)
         // --- Analytical gradient via tape ---
         using var tape = new GradientTape<T>();
         var output = layer.Forward(input);
         // Match the production training gateway's recursive ownership walk. A composite whose
         // tensors all live in children must be checked, not treated as parameter-free.
-        var trainableParams = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(
+        var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
             new[] { layer }, structureVersion: -1);
         if (trainableParams.Count == 0) return;
         // Fix the projection BEFORE both gradient computations so the
@@ -1078,8 +1069,8 @@ public abstract class LayerTestBase<T>
         var allAxes = new int[elementwise.Shape.Length];
         for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
         var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
-        bool checkInputGradient = ExpectsDifferentiableInput && layer is not ITokenEmbedding<double>;
-        var gradientSources = new List<Tensor<double>>(trainableParams);
+        bool checkInputGradient = ExpectsDifferentiableInput && layer is not ITokenEmbedding<T>;
+        var gradientSources = new List<Tensor<T>>(trainableParams);
         if (checkInputGradient) gradientSources.Add(input);
         var analyticalGrads = tape.ComputeGradients(lossTensor, gradientSources);
 
@@ -1226,18 +1217,22 @@ public abstract class LayerTestBase<T>
                 int index = inputSamples == input.Length
                     ? sample
                     : (sample * Math.Max(1, input.Length / inputSamples)) % input.Length;
-                double original = input[index];
-                input[index] = original + Eps;
-                double lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                input[index] = original - Eps;
-                double lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
-                input[index] = original;
+                double original = ToD(input[index]);
+                double plusValue = ToD(ToT(original + eps));
+                double minusValue = ToD(ToT(original - eps));
+                if (plusValue == minusValue) continue;
 
-                double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
-                double analytical = inputGradient[index];
+                input[index] = ToT(plusValue);
+                double lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                input[index] = ToT(minusValue);
+                double lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                input[index] = ToT(original);
+
+                double numerical = (lossPlus - lossMinus) / (plusValue - minusValue);
+                double analytical = ToD(inputGradient[index]);
                 double difference = Math.Abs(numerical - analytical);
                 double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
-                if (difference / scale < NumericalTolerance)
+                if (difference / scale < numericalTolerance)
                 {
                     inputAgreed++;
                 }
@@ -1274,7 +1269,7 @@ public abstract class LayerTestBase<T>
         // Cover every registered trainable tensor in one normalized direction. Coordinate sampling
         // localizes defects cheaply; this complementary JVP-style check prevents an entire parameter
         // slot from escaping merely because none of its scalar indices happened to be sampled.
-        var direction = new List<(Tensor<double> Parameter, Tensor<double> Gradient, int Index, double Sign)>();
+        var direction = new List<(Tensor<T> Parameter, Tensor<T> Gradient, int Index, double Sign)>();
         for (int parameterIndex = 0; parameterIndex < trainableParams.Count; parameterIndex++)
         {
             var parameter = trainableParams[parameterIndex];
@@ -1289,7 +1284,7 @@ public abstract class LayerTestBase<T>
         if (direction.Count == 0) return;
 
         double directionScale = 1.0 / Math.Sqrt(direction.Count);
-        double directionalStep = Eps / directionScale;
+        double directionalStep = eps / directionScale;
         double analyticalDirection = 0.0;
         foreach (var coordinate in direction)
         {
@@ -1338,7 +1333,7 @@ public abstract class LayerTestBase<T>
             Math.Max(Math.Abs(numericalDirection), Math.Abs(analyticalDirection)),
             1.0);
         double directionRelativeError = Math.Abs(numericalDirection - analyticalDirection) / directionScaleDenom;
-        Assert.True(directionRelativeError < NumericalTolerance * 2.0,
+        Assert.True(directionRelativeError < numericalTolerance * 2.0,
             $"Directional gradient across {direction.Count} trainable parameter tensors disagrees: " +
             $"numerical={numericalDirection:G8}, analytical={analyticalDirection:G8}, " +
             $"relative error={directionRelativeError:G4}.");
