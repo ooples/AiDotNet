@@ -4427,6 +4427,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         writer.Write(ParameterSerializationMagic);
         WriteParameterLayout(writer);
         WriteResolvedShape(writer);
+        WriteRegisteredBuffers(writer);
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -4489,6 +4490,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             EnsureInitialized();
         }
 
+        // AFTER EnsureInitialized, because the buffers are registered during initialization and
+        // there is nothing to restore into before that.
+        ReadRegisteredBuffers(reader);
+
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
         for (int i = 0; i < count; i++)
@@ -4534,6 +4539,84 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < shape.Length; i++)
         {
             writer.Write(shape[i]);
+        }
+    }
+
+    /// <summary>Writes every registered buffer, by name, with its shape and values.</summary>
+    /// <param name="writer">The writer receiving the buffer block.</param>
+    /// <remarks>
+    /// <para>
+    /// Buffers are the declared home for non-trainable persistent state -- running statistics,
+    /// positional tables, Hebbian traces, spectral-normalisation vectors. They are already declared
+    /// through <see cref="RegisterBuffer"/> and already enumerable through
+    /// <see cref="GetRegisteredBuffers"/>, so the base can persist all of them with no per-layer
+    /// code at all. Until now it persisted none of them, which is why layers hand-wrote a
+    /// <c>Serialize</c> override to push the same values out themselves.
+    /// </para>
+    /// <para>
+    /// Keyed by NAME rather than by position: registration order can differ between a trained
+    /// instance and a freshly constructed one, and restoring by position would then quietly load a
+    /// running mean into a positional table. A name present in the payload but absent from the
+    /// instance is skipped rather than fatal, so adding a buffer does not invalidate checkpoints.
+    /// </para>
+    /// </remarks>
+    private void WriteRegisteredBuffers(BinaryWriter writer)
+    {
+        var buffers = GetRegisteredBuffers();
+        writer.Write(buffers.Count);
+
+        foreach (var (name, tensor) in buffers)
+        {
+            writer.Write(name);
+
+            if (tensor is null)
+            {
+                writer.Write(-1);
+                continue;
+            }
+
+            var shape = tensor.Shape;
+            writer.Write(shape.Length);
+            for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
+
+            writer.Write(tensor.Length);
+            for (int i = 0; i < tensor.Length; i++) writer.Write(Convert.ToDouble(tensor[i]));
+        }
+    }
+
+    /// <summary>Restores the buffers written by <see cref="WriteRegisteredBuffers"/>.</summary>
+    /// <param name="reader">The reader positioned at the buffer block.</param>
+    private void ReadRegisteredBuffers(BinaryReader reader)
+    {
+        int bufferCount = reader.ReadInt32();
+        if (bufferCount <= 0) return;
+
+        var live = new Dictionary<string, Tensor<T>>(StringComparer.Ordinal);
+        foreach (var (name, tensor) in GetRegisteredBuffers())
+        {
+            if (tensor is not null) live[name] = tensor;
+        }
+
+        for (int b = 0; b < bufferCount; b++)
+        {
+            string name = reader.ReadString();
+
+            int rank = reader.ReadInt32();
+            if (rank < 0) continue;
+
+            var shape = new int[rank];
+            for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
+
+            int length = reader.ReadInt32();
+            var values = new double[length];
+            for (int i = 0; i < length; i++) values[i] = reader.ReadDouble();
+
+            // Write THROUGH the registered tensor rather than replacing it. The engine's persistent
+            // tensor registry and any GPU-resident copy hold this reference; swapping the object
+            // would leave those pointing at the pre-restore values.
+            if (!live.TryGetValue(name, out var target) || target.Length != length) continue;
+
+            for (int i = 0; i < length; i++) target[i] = NumOps.FromDouble(values[i]);
         }
     }
 
