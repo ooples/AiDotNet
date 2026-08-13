@@ -30,14 +30,10 @@ env:
   TENSORS_PR_944_COMMIT: 449071bb854582084af9e9cb3ee752f4417ac00a
 
 jobs:
-  census:
-    name: Census ${{ matrix.shard }}
+  prepare:
+    name: Build and Inventory Model Fixtures
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -61,7 +57,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore
+      - name: Restore fixture assembly
         shell: pwsh
         run: |
           $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
@@ -69,9 +65,8 @@ jobs:
           dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj `
             -p:CustomAfterMicrosoftCommonTargets=$targets `
             -p:TensorsPr944Root=$tensorsRoot
-          dotnet restore tools/ModelPerfProbe/ModelPerfProbe.csproj
 
-      - name: Build fixture inventory
+      - name: Build fixture assembly once
         shell: pwsh
         run: |
           $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
@@ -81,19 +76,117 @@ jobs:
             -p:CustomAfterMicrosoftCommonTargets=$targets `
             -p:TensorsPr944Root=$tensorsRoot
 
-      - name: Record expected fixture inventory
-        if: matrix.shard == 0
+      - name: Create Linux test dependency bundle
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts/model-performance/shard-0 | Out-Null
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
-          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 `
-            --list-tests --no-build --no-restore `
-            -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsPr944Root=$tensorsRoot `
-            --filter 'Category=ModelPerformanceCensus' |
-            Set-Content artifacts/model-performance/shard-0/test-list.txt
+          $source = Join-Path $env:GITHUB_WORKSPACE 'tests/AiDotNet.Tests/bin/Release/net10.0'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'artifacts/model-performance/test-bundle'
+          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+
+          # The unfiltered output is about 2.6 GiB because NuGet copies native assets for every
+          # supported OS and architecture. Ship the managed dependency closure plus linux-x64
+          # native assets instead, so 16 workers consume one immutable, runner-correct build.
+          $depsPath = Join-Path $source 'AiDotNetTests.deps.json'
+          $deps = Get-Content $depsPath -Raw | ConvertFrom-Json -AsHashtable
+          $target = $deps.targets[$deps.runtimeTarget.name]
+          $managedNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+          foreach ($library in $target.Values) {
+            if ($library.runtime) {
+              foreach ($asset in $library.runtime.Keys) {
+                [void]$managedNames.Add([IO.Path]::GetFileName($asset))
+              }
+            }
+          }
+
+          foreach ($name in $managedNames) {
+            $candidate = Join-Path $source $name
+            if (Test-Path -LiteralPath $candidate) {
+              Copy-Item -LiteralPath $candidate -Destination $bundle
+            }
+          }
+
+          $runnerFiles = @(
+            'AiDotNetTests.dll',
+            'AiDotNetTests.deps.json',
+            'AiDotNetTests.runtimeconfig.json',
+            'xunit.runner.json',
+            'xunit.runner.reporters.netcoreapp10.dll',
+            'xunit.runner.utility.netcoreapp10.dll',
+            'xunit.runner.visualstudio.testadapter.dll'
+          )
+          foreach ($name in $runnerFiles) {
+            $candidate = Join-Path $source $name
+            if (-not (Test-Path -LiteralPath $candidate)) {
+              throw "Required test bundle file is missing: $candidate"
+            }
+            Copy-Item -LiteralPath $candidate -Destination $bundle -Force
+          }
+
+          foreach ($library in $target.Values) {
+            if (-not $library.runtimeTargets) { continue }
+            foreach ($asset in $library.runtimeTargets.GetEnumerator()) {
+              if ($asset.Value.rid -ne 'linux-x64') { continue }
+              $candidate = Join-Path $source $asset.Key
+              if (-not (Test-Path -LiteralPath $candidate)) {
+                throw "Required linux-x64 runtime asset is missing: $candidate"
+              }
+              $destination = Join-Path $bundle $asset.Key
+              New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($destination)) | Out-Null
+              Copy-Item -LiteralPath $candidate -Destination $destination
+            }
+          }
+
+      - name: Record and verify expected fixture inventory
+        shell: pwsh
+        run: |
+          $inventory = Join-Path $env:GITHUB_WORKSPACE 'artifacts/model-performance/inventory'
+          New-Item -ItemType Directory -Force -Path $inventory | Out-Null
+          $arguments = @(
+            'vstest', 'artifacts/model-performance/test-bundle/AiDotNetTests.dll',
+            '--ListTests',
+            '--TestCaseFilter:Category=ModelPerformanceCensus')
+          & dotnet @arguments | Set-Content (Join-Path $inventory 'test-list.txt')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $count = (Select-String -Path (Join-Path $inventory 'test-list.txt') `
+            -Pattern '\.ModelPerformanceCensus$').Count
+          if ($count -le 0) { throw 'No ModelPerformanceCensus fixtures were discovered.' }
+          Write-Host "Discovered $count model performance fixtures."
+
+      - name: Upload immutable test bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: perf-test-bundle
+          path: artifacts/model-performance/test-bundle
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload fixture inventory
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: model-performance-inventory
+          path: artifacts/model-performance/inventory
+          if-no-files-found: error
+
+  census:
+    name: Census ${{ matrix.shard }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download immutable test bundle
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4
+        with:
+          name: perf-test-bundle
+          path: test-bundle
 
       - name: Run assigned model fixtures serially
         shell: pwsh
@@ -104,21 +197,20 @@ jobs:
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
           DOTNET_gcServer: '0'
         run: |
-          $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
-          $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
+          New-Item -ItemType Directory -Force -Path $env:AIDOTNET_MODEL_PERF_DIR | Out-Null
+          $runnerJson = 'test-bundle/xunit.runner.json'
           $config = Get-Content $runnerJson -Raw | ConvertFrom-Json
           $config.parallelizeTestCollections = $false
           $config.maxParallelThreads = 1
           $config | Add-Member -NotePropertyName preEnumerateTheories -NotePropertyValue $false -Force
           $config | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
-          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj `
-            -c Release --framework net10.0 --no-build --no-restore `
-            -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsPr944Root=$tensorsRoot `
-            --filter 'Category=ModelPerformanceCensus' `
-            --logger 'trx;LogFileName=model-performance.trx' `
-            --results-directory "artifacts/model-performance/shard-${{ matrix.shard }}"
+          $arguments = @(
+            'vstest', 'test-bundle/AiDotNetTests.dll',
+            '--TestCaseFilter:Category=ModelPerformanceCensus',
+            '--Logger:trx;LogFileName=model-performance.trx',
+            "--ResultsDirectory:$env:AIDOTNET_MODEL_PERF_DIR")
+          & dotnet @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload shard records
         if: always()
@@ -130,7 +222,7 @@ jobs:
 
   verify:
     name: Model Performance Coverage and Regressions
-    needs: census
+    needs: [prepare, census]
     if: always()
     runs-on: ubuntu-latest
     steps:
