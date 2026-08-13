@@ -366,7 +366,43 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         // Step 4: TTT-Linear recurrence per head
         // At each step t: W_t = W_{t-1} - eta * 2 * (W_{t-1} * k_t - v_t) * k_t^T
         // Output: o_t = W_t * q_t
-        var tttOutput = TTTLinearForward(q, k, v, batchSize, seqLen);
+        // Decompose the learned initial inner model as W_t = W0 + S_t.
+        // The TTT update then becomes the existing fused delta-rule scan:
+        // S_t = S_(t-1) + beta*(v - W0*k - S_(t-1)*k)*k^T,
+        // and the readout is S_t*q + W0*q.
+        var qHeads = Engine.Reshape(
+            q,
+            new[] { batchSize * seqLen * _numHeads, _headDimension, 1 });
+        var kHeads = Engine.Reshape(
+            k,
+            new[] { batchSize * seqLen * _numHeads, _headDimension, 1 });
+        var w0 = Engine.Reshape(
+            Engine.TensorBroadcastTo(
+                Engine.Reshape(
+                    _innerWeightsInit,
+                    new[] { 1, 1, _numHeads, _headDimension, _headDimension }),
+                new[] { batchSize, seqLen, _numHeads, _headDimension, _headDimension }),
+            new[] { batchSize * seqLen * _numHeads, _headDimension, _headDimension });
+        var w0K = Engine.Reshape(
+            Engine.BatchMatMul(w0, kHeads),
+            new[] { batchSize, seqLen, _modelDimension });
+        var w0Q = Engine.Reshape(
+            Engine.BatchMatMul(w0, qHeads),
+            new[] { batchSize, seqLen, _modelDimension });
+        var shiftedValue = Engine.TensorSubtract(v, w0K);
+        var forgetGate = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        forgetGate.Fill(NumOps.One);
+        var writeGate = Engine.TensorBroadcastTo(
+            Engine.Reshape(
+                Engine.TensorMultiplyScalar(
+                    _etaScale,
+                    NumOps.Multiply(_innerLearningRate, NumOps.FromDouble(2.0 * Math.Sqrt(_headDimension)))),
+                new[] { 1, 1, _numHeads }),
+            new[] { batchSize, seqLen, _numHeads });
+        var tttOutput = Engine.TensorAdd(
+            Engine.GatedDeltaNetScanForward(
+                q, k, shiftedValue, forgetGate, writeGate, _numHeads),
+            w0Q);
         _lastTTTOutput = tttOutput;
 
         // Step 5: Gated output
@@ -647,6 +683,7 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_innerWeightsInit, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_etaScale, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);

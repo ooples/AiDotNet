@@ -366,73 +366,66 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> alpha,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        int headBatch = batchSize * _numHeads;
+        var qHeads = ToHeadMajor(q, batchSize, seqLen);
+        var kHeads = Engine.TensorMultiplyScalar(
+            ToHeadMajor(k, batchSize, seqLen),
+            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var vHeads = ToHeadMajor(v, batchSize, seqLen);
+        var alphaHeads = Engine.Reshape(
+            Engine.TensorPermute(alpha, new[] { 0, 2, 1 }),
+            new[] { headBatch, seqLen, 1 });
 
-        // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        // Save all states for backward pass: [batch, seqLen+1, numHeads, headDim, headDim]
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var state = Tensor<T>.CreateDefault(
+            new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+        var outputs = new List<Tensor<T>>(seqLen);
+        var states = new List<Tensor<T>>(seqLen + 1)
+        {
+            Engine.Reshape(state,
+                new[] { batchSize, 1, _numHeads, _headDimension, _headDimension })
+        };
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
+            var qCol = Engine.Reshape(Engine.TensorSliceAxis(qHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var kCol = Engine.Reshape(Engine.TensorSliceAxis(kHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var vCol = Engine.Reshape(Engine.TensorSliceAxis(vHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var alphaT = Engine.Reshape(Engine.TensorSliceAxis(alphaHeads, 1, t),
+                new[] { headBatch, 1, 1 });
+            var oneMinusAlpha = Engine.ScalarMinusTensor(NumOps.One, alphaT);
 
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T alphaVal = alpha[new[] { bi, t, hi }];
-                    T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaVal);
+            var retained = Engine.TensorBroadcastMultiply(state, oneMinusAlpha);
+            var observation = Engine.BatchMatMul(
+                vCol, Engine.TensorPermute(kCol, new[] { 0, 2, 1 }));
+            state = Engine.TensorAdd(
+                retained, Engine.TensorBroadcastMultiply(observation, alphaT));
 
-                    // State update: S_t = (1 - alpha_t) * S_{t-1} + alpha_t * v_t * k_t^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T vVal = v[new[] { bi, t, flatDi }];
-
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], keyScale);
-
-                            T prevS = state[new[] { bi, hi, di, ki }];
-                            T outerProduct = NumOps.Multiply(vVal, kVal);
-                            T newS = NumOps.Add(
-                                NumOps.Multiply(oneMinusAlpha, prevS),
-                                NumOps.Multiply(alphaVal, outerProduct));
-                            state[new[] { bi, hi, di, ki }] = newS;
-                        }
-                    }
-
-                    // Output: o_t = S_t * q_t
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T qVal = q[new[] { bi, t, flatKi }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], qVal));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi2 = 0; hi2 < _numHeads; hi2++)
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int ki = 0; ki < _headDimension; ki++)
-                            allStates[new[] { bi, t + 1, hi2, di, ki }] = state[new[] { bi, hi2, di, ki }];
+            outputs.Add(Engine.Reshape(Engine.BatchMatMul(state, qCol),
+                new[] { headBatch, 1, _headDimension }));
+            states.Add(Engine.Reshape(state,
+                new[] { batchSize, 1, _numHeads, _headDimension, _headDimension }));
         }
 
-        _lastStates = allStates;
-        return output;
+        _lastStates = Engine.TensorConcatenate(states.ToArray(), axis: 1);
+        return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), axis: 1), batchSize, seqLen);
     }
+
+    private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(
+            Engine.TensorPermute(
+                Engine.Reshape(value, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+                new[] { 0, 2, 1, 3 }),
+            new[] { batchSize * _numHeads, seqLen, _headDimension });
+
+    private Tensor<T> FromHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(
+            Engine.TensorPermute(
+                Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
+                new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, seqLen, _modelDimension });
 
     /// <summary>
     /// Applies group normalization to the recurrence output, normalizing within each head independently.

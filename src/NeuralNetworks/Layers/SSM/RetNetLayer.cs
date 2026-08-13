@@ -334,7 +334,18 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
         _lastGate = gate;
 
         // Step 3: Multi-scale retention with causal decay mask (parallel mode)
-        var retentionOutput = MultiScaleRetentionForward(q, k, v, batchSize, seqLen);
+        // Retention is exactly a GLA scan with a constant learned decay per
+        // head: S_t = gamma*S_(t-1) + V_t*K_t^T; O_t = S_t*Q_t.
+        // Scale K before the fused scan to preserve the public retention
+        // definition's 1/sqrt(headDim) score normalization.
+        var scaledKey = Engine.TensorMultiplyScalar(
+            k,
+            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
+        var retentionGate = Engine.TensorBroadcastTo(
+            Engine.Reshape(_gammas, new[] { 1, 1, _numHeads }),
+            new[] { batchSize, seqLen, _numHeads });
+        var retentionOutput = Engine.GlaScanForward(
+            q, scaledKey, v, retentionGate, _numHeads);
         _lastRetentionOutput = retentionOutput;
 
         // Step 4: Group normalization (per-head LayerNorm)

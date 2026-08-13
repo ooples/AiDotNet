@@ -14000,6 +14000,61 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Evaluates the training objective for a finite-difference gradient oracle without
+    /// quantizing the final MSE reduction to <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The forward pass, target alignment, and parameter precision remain exactly those of the
+    /// model under test. Only the final scalar reference reduction is accumulated in <see cref="double"/>.
+    /// This matters for deep FP32 models: a valid parameter perturbation can change individual
+    /// predictions while the rounded scalar MSE remains bit-identical, making a central difference
+    /// spuriously zero. The derivative of that rounded scalar is not a useful gradient oracle.
+    /// </para>
+    /// <para>
+    /// Composite objectives and non-MSE losses retain the normal objective funnel because their
+    /// semantics cannot be reconstructed generically. This method is internal and exists solely for
+    /// conformance diagnostics; production training still uses <see cref="BuildTrainingObjective"/>.
+    /// </para>
+    /// </remarks>
+    internal double EvaluateTrainingObjectiveForNumericalGradient(
+        Tensor<T> input,
+        Tensor<T> target,
+        ILossFunction<T>? lossFunction = null)
+    {
+        using var _ = new NoGradScope<T>();
+
+        var resolved = lossFunction ?? LossFunction;
+        bool usesCompositeObjective = this is ICompositeLoss<T> && _compositeTargetsAreReal;
+        if (resolved is LossFunctions.MeanSquaredErrorLoss<T> && !usesCompositeObjective)
+        {
+            var prediction = ForwardForTraining(input);
+            target = AlignTargetToOutputShape(prediction, target);
+            if (prediction.Length == 0) return 0.0;
+
+            // Neumaier summation also keeps the double reference stable when the squared residuals
+            // have very different magnitudes. The operands deliberately remain T-precision values.
+            double sum = 0.0;
+            double compensation = 0.0;
+            for (int i = 0; i < prediction.Length; i++)
+            {
+                double residual = NumOps.ToDouble(prediction[i]) - NumOps.ToDouble(target[i]);
+                double term = residual * residual;
+                double next = sum + term;
+                compensation += System.Math.Abs(sum) >= System.Math.Abs(term)
+                    ? (sum - next) + term
+                    : (term - next) + sum;
+                sum = next;
+            }
+
+            return (sum + compensation) / prediction.Length;
+        }
+
+        var objective = BuildTrainingObjective(input, target, resolved);
+        return objective.Length > 0 ? NumOps.ToDouble(objective[0]) : 0.0;
+    }
+
+    /// <summary>
     /// Computes a flattened gradient vector for all trainable parameters in the network.
     /// </summary>
     /// <param name="input">The input tensor.</param>
@@ -14037,12 +14092,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var lossTensor = BuildTrainingObjective(input, target, lossFunction);
 
         // Collect parameters AFTER the objective's forward so lazy-initialized layers are included.
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        // The source set must mirror GetParameterStateChunks: model-owned tensors and layers kept
+        // outside Layers are just as trainable as ordinary layer parameters. Previously those extras
+        // were numerically perturbed and serialized, but omitted from reverse-mode sources, so their
+        // analytic gradients were silently zero-padded.
+        var trainableParams = new List<Tensor<T>>();
+        var seenTrainable = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        void AddTrainable(Tensor<T>? tensor)
+        {
+            if (tensor is not null && tensor.Length > 0 && seenTrainable.Add(tensor))
+                trainableParams.Add(tensor);
+        }
+
+        foreach (var tensor in Training.TapeTrainingStep<T>.CollectParameters(Layers))
+            AddTrainable(tensor);
+        foreach (var extraLayer in GetExtraTrainableLayers())
+        {
+            if (extraLayer is null) continue;
+            foreach (var tensor in extraLayer.GetTrainableParameters())
+                AddTrainable(tensor);
+        }
+        foreach (var tensor in GetExtraTrainableTensors())
+            AddTrainable(tensor);
+
         if (trainableParams.Count == 0)
         {
             throw new InvalidOperationException(
                 "No trainable parameters found. ComputeGradients requires at least one " +
-                "layer implementing ITrainableLayer<T> with registered parameters.");
+                "registered layer or model-owned trainable tensor.");
         }
 
         var resolved = lossFunction ?? LossFunction;
@@ -14076,9 +14153,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // reason — surfaced by ResNet's
         // GradientFlow_ShouldBeNonZeroAndFinite, then locked in here
         // for the IGradientComputable contract.
-        // Ask the tape only for declared trainable leaves. The returned dictionary remains
-        // reference-keyed, and genuinely detached slots are zero-padded in manifest order below.
-        var allGrads = tape.ComputeGradients(lossTensor, sources: trainableParams);
+        // Walk the complete graph first, exactly as TrainWithTape does, and only then select
+        // declared trainable leaves while assembling the manifest below. Supplying sources here
+        // lets a parameter view/alias terminate at a different tensor identity, which silently
+        // drops or distorts that route even though the full backward graph contains it.
+        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
         var grads = allGrads;
 
         // Use GetParameterChunks to keep gradient/parameter ordering

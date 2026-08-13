@@ -126,6 +126,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// for one hidden neuron. These weights determine how the previous hidden state influences the
     /// current hidden state and are what gives the recurrent layer its "memory" capability.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _hiddenWeights;
 
     /// <summary>

@@ -348,8 +348,31 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(_emaProjectInBias, new[] { 1, _emaDimension })), new[] { batchSize, seqLen, _emaDimension });
         _lastEmaInput = emaInput;
 
-        // Step 2: Apply multi-dimensional EMA: h_t = alpha * h_{t-1} + (1 - alpha) * x_t
-        var emaOutput = EmaForward(emaInput, batchSize, seqLen);
+        // Step 2: Apply multi-dimensional EMA through the fused RG-LRU scan.
+        // RG-LRU evolves h_t = a*h_{t-1} + sqrt(1-a^2)*(i_t*v_t).
+        // Choosing a = alpha and i_t = (1-alpha)/sqrt(1-alpha^2)
+        // gives exactly h_t = alpha*h_{t-1} + (1-alpha)*x_t while
+        // retaining one analytic BPTT tape node instead of a detached scalar loop.
+        var alpha = Engine.Sigmoid(_emaAlphaLogit);
+        var channelOnes = new Tensor<T>(new[] { _emaDimension });
+        channelOnes.Fill(NumOps.One);
+        var oneMinusAlpha = Engine.TensorSubtract(channelOnes, alpha);
+        var inputScale = Engine.TensorDivide(
+            oneMinusAlpha,
+            Engine.TensorSqrt(Engine.TensorSubtract(
+                channelOnes,
+                Engine.TensorMultiply(alpha, alpha))));
+        var recurrenceGate = Engine.TensorBroadcastTo(
+            Engine.Reshape(channelOnes, new[] { 1, 1, _emaDimension }),
+            new[] { batchSize, seqLen, _emaDimension });
+        var inputGate = Engine.TensorBroadcastTo(
+            Engine.Reshape(inputScale, new[] { 1, 1, _emaDimension }),
+            new[] { batchSize, seqLen, _emaDimension });
+        var emaOutput = Engine.RgLruScanForward(
+            emaInput,
+            recurrenceGate,
+            inputGate,
+            Engine.TensorNegate(_emaAlphaLogit));
 
         // Step 3: Project EMA output back to model dimension
         var emaFlat = Engine.Reshape(emaOutput, new[] { batchSize * seqLen, _emaDimension });
@@ -382,7 +405,8 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
         _lastGate = gate;
 
         // Step 6: Multi-head causal attention
-        var attnOutput = CausalAttentionForward(q, k, v, batchSize, seqLen);
+        var attnOutput = CausalLinearAttention.ScaledDotProduct(
+            Engine, q, k, v, _numHeads, causal: true);
         _lastAttnOutput = attnOutput;
 
         // Step 7: Gated output
