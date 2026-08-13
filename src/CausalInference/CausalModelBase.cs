@@ -468,7 +468,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParame
     {
         ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeSerialize();
-        return SerializeInternalUnchecked();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, SerializeInternalUnchecked());
     }
 
     /// <summary>
@@ -502,6 +502,9 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape, IParame
     /// </summary>
     public virtual void Deserialize(byte[] modelData)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        modelData = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, modelData);
         ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         DeserializeInternalUnchecked(modelData);

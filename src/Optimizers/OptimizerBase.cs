@@ -2000,7 +2000,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         SerializeAdditionalData(writer);
         SerializeExtensionData(writer);
 
-        return memoryStream.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, memoryStream.ToArray());
     }
 
     /// <summary>
@@ -2029,6 +2029,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);

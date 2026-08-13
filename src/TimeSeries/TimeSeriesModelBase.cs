@@ -1239,7 +1239,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         // Let derived classes serialize their specific data
         SerializeCore(writer);
 
-        return ms.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, ms.ToArray());
     }
 
     /// <summary>
@@ -1275,6 +1275,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {

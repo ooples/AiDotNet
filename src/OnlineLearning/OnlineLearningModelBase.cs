@@ -342,7 +342,7 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     public virtual byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
-        return SerializeInternalUnchecked();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, SerializeInternalUnchecked());
     }
 
     /// <summary>
@@ -385,6 +385,9 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     public virtual void Deserialize(byte[] modelData)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        modelData = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, modelData);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         DeserializeInternalUnchecked(modelData);
     }

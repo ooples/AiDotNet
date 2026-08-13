@@ -1608,12 +1608,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using var stream = new MemoryStream();
         SaveState(stream);
-        return stream.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, stream.ToArray());
     }
 
     /// <inheritdoc />
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var stream = new MemoryStream(data);
         LoadState(stream);

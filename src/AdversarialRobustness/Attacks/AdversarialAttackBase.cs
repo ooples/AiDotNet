@@ -132,12 +132,15 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(Options, Formatting.None);
-        return Encoding.UTF8.GetBytes(json);
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, Encoding.UTF8.GetBytes(json));
     }
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {

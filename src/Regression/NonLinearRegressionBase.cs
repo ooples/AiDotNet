@@ -622,7 +622,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         var regularizationOptionsJson = JsonConvert.SerializeObject(Regularization.GetOptions());
         writer.Write(regularizationOptionsJson);
 
-        return ms.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, ms.ToArray());
     }
 
     /// <summary>
@@ -664,6 +664,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual void Deserialize(byte[] modelData)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        modelData = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, modelData);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(modelData);
         using var reader = new BinaryReader(ms);
