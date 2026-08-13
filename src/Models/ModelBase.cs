@@ -105,6 +105,44 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     {
     }
 
+    /// <summary>State that is not a flat parameter vector, declared once and persisted by the base.</summary>
+    private readonly ModelStateRegistry<T> _stateRegistry = new();
+    private bool _stateRegistered;
+
+    /// <summary>
+    /// Declare state here that <see cref="GetParameters"/> does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// <para>
+    /// Every model whose learned state IS its parameter vector needs nothing here. The rest used to
+    /// hand-write a Serialize/Deserialize pair, because there was nowhere to say "this is state too"
+    /// -- and a hand-written pair is two places to forget the same field.
+    /// </para>
+    /// <para>
+    /// A declaration is a name and an accessor pair. Both halves of the payload are driven by it, so
+    /// they cannot drift; nothing here touches a writer or a reader.
+    /// </para>
+    /// </remarks>
+    protected virtual void RegisterState(ModelStateRegistry<T> state)
+    {
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    private ModelStateRegistry<T> State
+    {
+        get
+        {
+            if (!_stateRegistered)
+            {
+                _stateRegistered = true;
+                RegisterState(_stateRegistry);
+            }
+            return _stateRegistry;
+        }
+    }
+
     /// <summary>
     /// Runs after <see cref="SetParameters"/> has distributed values into the components. Override
     /// to refresh anything DERIVED from them.
@@ -372,6 +410,10 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
             writer.Write(Convert.ToDouble(parameters[i]));
         }
 
+        // Whatever the model declared that the parameter vector does not carry: a retained training
+        // set, fitted knots, kernel centres, an ensemble's children.
+        State.WriteAll(writer);
+
         writer.Flush();
         return stream.ToArray();
     }
@@ -409,6 +451,13 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
         }
 
         SetParameters(parameters);
+
+        // AFTER SetParameters: declared state may be derived from, or consistent with, the parameter
+        // vector, and restoring it first would let the parameter restore overwrite it.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            State.ReadAll(reader);
+        }
     }
 
     /// <summary>Identifies a model state payload written by <see cref="Serialize"/>.</summary>

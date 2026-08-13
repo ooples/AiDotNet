@@ -371,6 +371,37 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// this method, so a malicious or careless override of
     /// <see cref="Serialize"/> cannot intercept the clone path.
     /// </summary>
+    /// <summary>State that is not a coefficient vector, declared once and persisted by this base.</summary>
+    /// <remarks>
+    /// RegressionBase does not derive from <c>ModelBase</c> -- they are parallel hierarchies over the
+    /// same interfaces -- so the registry wiring is repeated here while the logic itself lives once
+    /// in <see cref="ModelStateRegistry{T}"/>.
+    /// </remarks>
+    private readonly ModelStateRegistry<T> _stateRegistry = new();
+    private bool _stateRegistered;
+
+    /// <summary>
+    /// Declare state here that the coefficient vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(ModelStateRegistry<T> state)
+    {
+    }
+
+    private ModelStateRegistry<T> State
+    {
+        get
+        {
+            if (!_stateRegistered)
+            {
+                _stateRegistered = true;
+                RegisterState(_stateRegistry);
+            }
+            return _stateRegistry;
+        }
+    }
+
     private byte[] SerializeInternalUnchecked()
     {
         var modelData = new Dictionary<string, object>
@@ -379,6 +410,19 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
             { "Intercept", Intercept ?? NumOps.Zero! },
             { "RegularizationOptions", Regularization.GetOptions() }
         };
+
+        // Carried as one base64 blob rather than as JSON members, so a matrix of training rows does
+        // not become a JSON array whose element type has to be guessed on the way back in.
+        if (State.Count > 0)
+        {
+            using var stateStream = new MemoryStream();
+            using (var stateWriter = new BinaryWriter(stateStream, Encoding.UTF8, leaveOpen: true))
+            {
+                State.WriteAll(stateWriter);
+                stateWriter.Flush();
+            }
+            modelData["DeclaredState"] = Convert.ToBase64String(stateStream.ToArray());
+        }
 
         var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
@@ -431,6 +475,16 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
         if (modelDataObj == null)
         {
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        // Restored BEFORE the coefficients below, so a model whose declared state and coefficients
+        // describe the same fit ends with the coefficient restore as the last word.
+        var declaredState = modelDataObj["DeclaredState"]?.ToObject<string>();
+        if (!string.IsNullOrEmpty(declaredState) && State.Count > 0)
+        {
+            using var stateStream = new MemoryStream(Convert.FromBase64String(declaredState));
+            using var stateReader = new BinaryReader(stateStream, Encoding.UTF8, leaveOpen: true);
+            State.ReadAll(stateReader);
         }
 
         var coefficientsToken = modelDataObj["Coefficients"];
