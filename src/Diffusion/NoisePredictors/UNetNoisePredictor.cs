@@ -1368,9 +1368,17 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // runtime weight state.
         if (_preserveMaterializedParameters)
         {
-            TriggerLazyShapeResolution();
             clone.TriggerLazyShapeResolution();
-            CopyMaterializedParametersTo(clone, this);
+            // Preserve the complete trainable tensor graph. A per-layer
+            // GetParameters/SetParameters round-trip is not equivalent here:
+            // composite U-Net layers expose nested tensors through
+            // ITrainableLayer, and flattening only the parent layer can leave
+            // inference-visible child state at the clone's initialization.
+            // COW also avoids allocating a second foundation-scale parameter
+            // vector; the chunk fallback remains the safe eager path when the
+            // materialized source/clone graphs do not line up exactly.
+            if (!clone.TryShareParametersFrom(this))
+                clone.SetParameterChunks(GetParameterChunks());
         }
         else
         {
