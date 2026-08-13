@@ -33,10 +33,30 @@ public static class CloneRegistry
     /// </summary>
     /// <param name="plan">The plan to register.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan"/> is null.</exception>
+    /// <remarks>
+    /// Any reflection plan already cached for this type is evicted. A reflected plan is a fallback
+    /// for a type nothing registered, so the moment one IS registered the fallback is stale -- and
+    /// <c>GetOrAdd</c> would otherwise keep serving it for the life of the process, silently
+    /// preferring a plan with no constructor over the compile-time one that has it.
+    /// </remarks>
     public static void Register(ClonePlan plan)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         Generated[plan.Type] = plan;
+
+        Reflected.TryRemove(plan.Type, out _);
+        if (plan.Type.IsGenericTypeDefinition)
+        {
+            // Closed forms were cached against the open form's absence, so they are stale too.
+            foreach (var closed in Reflected.Keys)
+            {
+                if (closed.IsGenericType && !closed.IsGenericTypeDefinition
+                    && closed.GetGenericTypeDefinition() == plan.Type)
+                {
+                    Reflected.TryRemove(closed, out _);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -133,11 +153,28 @@ public static class CloneRegistry
         return new ClonePlan(closed, entries, open.ConstructorParameters, open.ConstructorCandidates);
     }
 
-    private static int _generatedLoaded;
+    private static readonly object GeneratedGate = new();
+    private static volatile bool _generatedLoaded;
 
     /// <summary>
-    /// Runs the generated registrations once, on first use.
+    /// Runs the generated registrations once, on first use, and does not return until they are all
+    /// present.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// THE FLAG IS SET AFTER THE WORK, NOT BEFORE. This was a single <c>Interlocked.Exchange</c> that
+    /// claimed the flag and then ran <c>RegisterAll</c>, so a second caller arriving mid-registration
+    /// saw "already loaded", missed a plan that was still on its way in, and fell through to
+    /// <see cref="BuildByReflection"/>. That reflection plan then went into <c>Reflected</c> and
+    /// STAYED there, because <c>GetOrAdd</c> keeps the first value it was given -- so the generated
+    /// plan could never replace it, for the life of the process.
+    /// </para>
+    /// <para>
+    /// The symptom was a type that cloned correctly when its test ran alone and failed when the suite
+    /// ran, reporting "the clone plan recorded no constructor for it". That was true of the cached
+    /// plan and false of the type, which is the worst kind of error message to be handed.
+    /// </para>
+    /// </remarks>
     /// <remarks>
     /// <para>
     /// Resolved by reflection rather than called directly so that this file still compiles when the
@@ -153,14 +190,21 @@ public static class CloneRegistry
     /// </remarks>
     private static void EnsureGeneratedPlansLoaded()
     {
-        if (System.Threading.Interlocked.Exchange(ref _generatedLoaded, 1) != 0) return;
+        if (_generatedLoaded) return;
 
-        var registrations = typeof(CloneRegistry).Assembly
-            .GetType("AiDotNet.Generated.CloneRegistrations", throwOnError: false);
+        lock (GeneratedGate)
+        {
+            if (_generatedLoaded) return;
 
-        registrations
-            ?.GetMethod("RegisterAll", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
-            ?.Invoke(null, null);
+            var registrations = typeof(CloneRegistry).Assembly
+                .GetType("AiDotNet.Generated.CloneRegistrations", throwOnError: false);
+
+            registrations
+                ?.GetMethod("RegisterAll", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
+                ?.Invoke(null, null);
+
+            _generatedLoaded = true;
+        }
     }
 
     /// <summary>

@@ -735,109 +735,17 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         }
         return true;
     }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
+    /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// This method serializes the model's parameters, including base class data, options, centers, and weights.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
-    /// having to retrain it. Think of it like saving your progress in a video game.
-    /// </para>
+    /// The centres are chosen during training and the weights are fitted against them, so a
+    /// restore that keeps one without the other predicts from a basis it was never fitted to.
     /// </remarks>
-    public override byte[] Serialize()
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize RBF specific data
-        writer.Write(_options.NumberOfCenters);
-        writer.Write(_options.Gamma);
-        writer.Write(_options.Seed ?? -1);
-
-        // Serialize centers
-        writer.Write(_centers.Rows);
-        writer.Write(_centers.Columns);
-        for (int i = 0; i < _centers.Rows; i++)
-        {
-            for (int j = 0; j < _centers.Columns; j++)
-            {
-                writer.Write(Convert.ToDouble(_centers[i, j]));
-            }
-        }
-
-        // Serialize weights
-        writer.Write(_weights.Length);
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_weights[i]));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the model's parameters from a serialized byte array, including base class data,
-    /// options, centers, and weights.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
-    /// the model's internal state. This allows you to load a previously trained model and use it to make
-    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize RBF specific data
-        _options.NumberOfCenters = reader.ReadInt32();
-        _options.Gamma = reader.ReadDouble();
-        int seed = reader.ReadInt32();
-        _options.Seed = seed == -1 ? null : seed;
-
-        // Deserialize centers
-        int centerRows = reader.ReadInt32();
-        int centerColumns = reader.ReadInt32();
-        _centers = new Matrix<T>(centerRows, centerColumns);
-        for (int i = 0; i < centerRows; i++)
-        {
-            for (int j = 0; j < centerColumns; j++)
-            {
-                _centers[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Deserialize weights
-        int weightsLength = reader.ReadInt32();
-        _weights = new Vector<T>(weightsLength);
-        for (int i = 0; i < weightsLength; i++)
-        {
-            _weights[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
+        base.RegisterState(state);
+        state.Declare("centers", () => _centers, v => _centers = v ?? new Matrix<T>(0, 0));
+        state.Declare("weights", () => _weights, v => _weights = v ?? new Vector<T>(0));
+        state.DeclareDouble("gamma", () => _options.Gamma, v => _options.Gamma = v);
     }
 
     /// <summary>

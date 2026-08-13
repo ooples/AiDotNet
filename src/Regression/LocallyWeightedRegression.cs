@@ -382,144 +382,18 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// Gets the model type of the Locally Weighted Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-
-    /// <summary>
-    /// Serializes the Locally Weighted Regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
+    /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// This method converts the Locally Weighted Regression model into a byte array that can be stored in a file,
-    /// database, or transmitted over a network. The serialized data includes the base class data, the bandwidth
-    /// parameter, and the training data that is used for making predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
-    /// 
-    /// Serialization allows you to:
-    /// - Save your model to a file
-    /// - Store your model in a database
-    /// - Send your model over a network
-    /// - Keep your model for later use without having to retrain it
-    /// 
-    /// The serialized data includes:
-    /// - The bandwidth parameter that controls the locality of the weighted regression
-    /// - All the training examples (both features and target values)
-    /// 
-    /// Since Locally Weighted Regression stores all training data, the serialized model can be
-    /// quite large compared to parametric models like linear regression.
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Serialize the model
-    /// byte[] modelData = lwr.Serialize();
-    /// 
-    /// // Save to a file
-    /// File.WriteAllBytes("lwr.model", modelData);
-    /// ```
-    /// </para>
+    /// The training set IS this model: locally weighted regression fits at prediction time, so
+    /// nothing it learned lives in the parameter vector. Bandwidth decides how far that fit
+    /// reaches and is just as much state as the points it reaches over.
     /// </remarks>
-    public override byte[] Serialize()
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize LWR specific data
-        writer.Write(_options.Bandwidth);
-
-        // Serialize _xTrain
-        writer.Write(_xTrain.Rows);
-        writer.Write(_xTrain.Columns);
-        for (int i = 0; i < _xTrain.Rows; i++)
-        {
-            for (int j = 0; j < _xTrain.Columns; j++)
-            {
-                writer.Write(Convert.ToDouble(_xTrain[i, j]));
-            }
-        }
-
-        // Serialize _yTrain
-        writer.Write(_yTrain.Length);
-        for (int i = 0; i < _yTrain.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_yTrain[i]));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Loads a previously serialized Locally Weighted Regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs a Locally Weighted Regression model from a byte array that was previously created
-    /// using the Serialize method. It restores the base class data, the bandwidth parameter, and the training data
-    /// that is used for making predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
-    /// 
-    /// Deserialization allows you to:
-    /// - Load a model that was saved earlier
-    /// - Use a model without having to retrain it
-    /// - Share models between different applications
-    /// 
-    /// When you deserialize a model:
-    /// - The bandwidth parameter is restored
-    /// - All training examples are loaded back into memory
-    /// - The model is ready to make predictions immediately
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Load from a file
-    /// byte[] modelData = File.ReadAllBytes("lwr.model");
-    /// 
-    /// // Deserialize the model
-    /// var lwr = new LocallyWeightedRegression&lt;double&gt;();
-    /// lwr.Deserialize(modelData);
-    /// 
-    /// // Now you can use the model for predictions
-    /// var predictions = lwr.Predict(newFeatures);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize LWR specific data
-        _options.Bandwidth = reader.ReadDouble();
-
-        // Deserialize _xTrain
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        _xTrain = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                _xTrain[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Deserialize _yTrain
-        int length = reader.ReadInt32();
-        _yTrain = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
+        base.RegisterState(state);
+        state.DeclareDouble("bandwidth", () => _options.Bandwidth, v => _options.Bandwidth = v);
+        state.Declare("xTrain", () => _xTrain, v => _xTrain = v ?? new Matrix<T>(0, 0));
+        state.Declare("yTrain", () => _yTrain, v => _yTrain = v ?? new Vector<T>(0));
     }
 
     /// <summary>

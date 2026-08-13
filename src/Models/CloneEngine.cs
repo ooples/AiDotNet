@@ -243,9 +243,21 @@ public static class CloneEngine
 
         if (constructor is null)
         {
+            // SAY WHAT ACTUALLY HAPPENED. This used to read "has no parameterless constructor. Add
+            // one", which names a fix that is almost never the right one: reaching here usually means
+            // the plan HAD a recorded constructor and this instance could not satisfy it, and adding
+            // a parameterless constructor would paper over that by producing a default-configured
+            // clone. The message cost a full investigation once; the candidates and the reason each
+            // one declined are what a reader actually needs.
+            var detail = plan.ConstructorCandidates.Count == 0
+                ? "the clone plan recorded no constructor for it (see ADN0059)"
+                : "none of its recorded constructors could be satisfied by this instance: "
+                  + string.Join("; ", plan.ConstructorCandidates.Select(c => DescribeCandidate(type, c, source)));
+
             throw new InvalidOperationException(
-                $"{type.Name} cannot be cloned because it has no parameterless constructor. "
-                + "Add one (it may be private), or override the clone behaviour on the type.");
+                $"{type.Name} cannot be rebuilt: {detail}. It also has no parameterless constructor to "
+                + "fall back on. Store each constructor argument in a member named after it so the "
+                + "generator can replay the constructor.");
         }
 
         return constructor.Invoke(null);
@@ -336,6 +348,42 @@ public static class CloneEngine
     /// else -- and refusing to read it would mean the only rebuildable models are the ones that
     /// happen to re-expose everything they were built from.
     /// </remarks>
+    /// <summary>Explains, for one recorded constructor, why this instance could not satisfy it.</summary>
+    /// <param name="type">The type being rebuilt.</param>
+    /// <param name="candidate">The recorded member names, in constructor-parameter order.</param>
+    /// <param name="source">The instance being cloned.</param>
+    /// <returns>A phrase naming the first member that blocked it.</returns>
+    private static string DescribeCandidate(Type type, IReadOnlyList<string> candidate, object source)
+    {
+        var names = string.Join(", ", candidate);
+
+        for (int i = 0; i < candidate.Count; i++)
+        {
+            if (candidate[i] == UseDefault) continue;
+
+            object? value;
+            try
+            {
+                if (!TryReadMember(type, candidate[i], source, out value))
+                {
+                    return $"[{names}] -- '{candidate[i]}' is not readable on this type";
+                }
+            }
+            catch (Exception ex)
+            {
+                var inner = ex.InnerException ?? ex;
+                return $"[{names}] -- reading '{candidate[i]}' threw {inner.GetType().Name}: {inner.Message}";
+            }
+
+            if (value is null)
+            {
+                return $"[{names}] -- '{candidate[i]}' is null on this instance";
+            }
+        }
+
+        return $"[{names}] -- every member read, so the constructor could not be matched by name";
+    }
+
     private static bool TryReadMember(Type type, string member, object source, out object? value)
     {
         const BindingFlags Flags =

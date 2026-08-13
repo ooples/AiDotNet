@@ -160,6 +160,33 @@ public sealed class ModelStateRegistry<T>
             w => WriteMatrix(w, get()),
             r => set(ReadMatrix(r)));
 
+    /// <summary>Declares a list of vectors, such as per-feature knots or per-output coefficients.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    /// <remarks>
+    /// A per-feature collection is one piece of state, not N of them: restoring some entries and not
+    /// others gives a model that is fitted for part of its input and defaulted for the rest, which
+    /// predicts without complaining.
+    /// </remarks>
+    public void Declare(string name, Func<List<Vector<T>>?> get, Action<List<Vector<T>>?> set)
+        => Add(name,
+            w =>
+            {
+                var list = get();
+                if (list is null) { w.Write(-1); return; }
+                w.Write(list.Count);
+                foreach (var v in list) WriteVector(w, v);
+            },
+            r =>
+            {
+                int count = r.ReadInt32();
+                if (count < 0) { set(null); return; }
+                var list = new List<Vector<T>>(count);
+                for (int i = 0; i < count; i++) list.Add(ReadVector(r) ?? new Vector<T>(0));
+                set(list);
+            });
+
     /// <summary>Declares a tensor.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
@@ -186,6 +213,50 @@ public sealed class ModelStateRegistry<T>
         => Add(name,
             w => WriteDoubles(w, get()),
             r => set(ReadDoubles(r)));
+
+    // Scalars. A hyperparameter that PREDICTION reads is state, however small: k-nearest-neighbours
+    // restored its training set correctly and still predicted differently, because K came back as the
+    // constructor default and the model was voting over the wrong number of neighbours. A field does
+    // not have to be big to change the answer.
+
+    /// <summary>Declares an integer, such as a neighbour count or a tree depth.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void DeclareInt32(string name, Func<int> get, Action<int> set)
+        => Add(name, w => w.Write(get()), r => set(r.ReadInt32()));
+
+    /// <summary>Declares a double, such as a temperature or a learned threshold.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void DeclareDouble(string name, Func<double> get, Action<double> set)
+        => Add(name, w => w.Write(get()), r => set(r.ReadDouble()));
+
+    /// <summary>Declares a boolean, such as a fitted flag or a mode switch.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void DeclareBoolean(string name, Func<bool> get, Action<bool> set)
+        => Add(name, w => w.Write(get()), r => set(r.ReadBoolean()));
+
+    /// <summary>Declares a numeric value held as the model's own numeric type.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void DeclareScalar(string name, Func<T> get, Action<T> set)
+        => Add(name,
+            w => w.Write(Convert.ToDouble(get())),
+            r => set(Ops.FromDouble(r.ReadDouble())));
+
+    /// <summary>Declares a string, such as a fitted category name or a chosen kernel.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current value.</param>
+    /// <param name="set">Installs a restored value.</param>
+    public void DeclareString(string name, Func<string?> get, Action<string?> set)
+        => Add(name,
+            w => { var v = get(); w.Write(v is not null); if (v is not null) w.Write(v); },
+            r => set(r.ReadBoolean() ? r.ReadString() : null));
 
     /// <summary>
     /// Declares a child model whose own state travels with this one -- an ensemble member, a base
