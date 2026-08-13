@@ -66,6 +66,13 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     protected readonly bool _freezeBaseLayer;
 
     /// <summary>
+    /// Whether the standard low-rank child participates in this adapter's parameter graph.
+    /// Specialized parameterizations can reuse rank/alpha metadata while supplying their own
+    /// trainable tensors, without exposing an unused second adaptation.
+    /// </summary>
+    private readonly bool _usesStandardLoRAParameters;
+
+    /// <summary>
     /// Force-resolve <see cref="_baseLayer"/>'s lazy shape using the input
     /// dim that the LoRA layer already settled on. Adapters call this
     /// before any path that needs the base layer's parameter buffer to
@@ -237,9 +244,14 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// Derived classes will call this constructor and then add their own layer-specific logic.
     /// </para>
     /// </remarks>
-    protected LoRAAdapterBase(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
+    protected LoRAAdapterBase(
+        ILayer<T> baseLayer,
+        int rank,
+        double alpha = -1,
+        bool freezeBaseLayer = true,
+        bool usesStandardLoRAParameters = true)
         : this(baseLayer ?? throw new ArgumentNullException(nameof(baseLayer)),
-               rank, alpha, freezeBaseLayer,
+               rank, alpha, freezeBaseLayer, usesStandardLoRAParameters,
                ResolveBaseInputShapeWithProvenance(baseLayer))
     {
     }
@@ -255,11 +267,13 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     /// </summary>
     private LoRAAdapterBase(
         ILayer<T> baseLayer, int rank, double alpha, bool freezeBaseLayer,
+        bool usesStandardLoRAParameters,
         (int[] Shape, bool IsAuthoritative) resolvedInput)
         : base(resolvedInput.Shape, baseLayer.GetOutputShape())
     {
         _baseLayer = baseLayer;
         _freezeBaseLayer = freezeBaseLayer;
+        _usesStandardLoRAParameters = usesStandardLoRAParameters;
 
         // Only eagerly resolve when the shape we just gave the base ctor is
         // authoritative (came from the layer or its actual weights). The
@@ -318,6 +332,10 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
         // base + LoRA. The frozen case looked correct purely because freezing happened to force
         // registration on the way past.
         EnsureSubLayersRegistered();
+        if (!_usesStandardLoRAParameters)
+        {
+            FreezeSubLayerParameters(_loraLayer);
+        }
         if (_freezeBaseLayer)
         {
             FreezeSubLayerParameters(_baseLayer);
@@ -458,8 +476,28 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
 
         if (baseLayer is LayerBase<T> layerBase)
         {
-            int inferred = InferInputSizeFromWeights(baseLayer, layerBase.GetTrainableParameters());
+            int inferred = InferInputSizeFromWeights(
+                baseLayer,
+                layerBase.GetTrainableParametersWithoutMaterialization());
             if (inferred > 0) return (new[] { inferred }, true);
+
+            // A lazy affine layer may have received a flat checkpoint before its input width was
+            // known. LayerBase marks that payload explicitly; for Dense/FC the exact inverse of
+            // total = input*output + bias(output) recovers the width without a heuristic or a
+            // warm-up forward. Resolving from this authoritative value materializes the generated
+            // slots, and LayerBase then replays the parked payload into them.
+            int deferredLength = layerBase.DeferredParameterPayloadLength;
+            var deferredOutputShape = baseLayer.GetOutputShape();
+            int outputSize = deferredOutputShape.Length > 0
+                ? deferredOutputShape[deferredOutputShape.Length - 1]
+                : -1;
+            if (deferredLength > outputSize && outputSize > 0
+                && (baseLayer is DenseLayer<T> || baseLayer is FullyConnectedLayer<T>)
+                && (deferredLength - outputSize) % outputSize == 0)
+            {
+                int exactInputSize = (deferredLength - outputSize) / outputSize;
+                if (exactInputSize > 0) return (new[] { exactInputSize }, true);
+            }
         }
 
         // Convention encoded by the LoRA test suite (Assert.Equal(10, ...) on
@@ -521,7 +559,7 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
         // 1. Weight matrix
         if (_baseLayer is LayerBase<T> layerBase)
         {
-            var weights = layerBase.GetTrainableParameters();
+            var weights = layerBase.GetTrainableParametersWithoutMaterialization();
             if (TryInferBothDimsFromWeights(_baseLayer, weights, out var winSize, out var woutSize))
             {
                 if (winSize > 0) inputSize = winSize;

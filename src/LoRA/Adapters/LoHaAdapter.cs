@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -121,7 +122,12 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
     /// </para>
     /// </remarks>
     public LoHaAdapter(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
-        : base(baseLayer, rank, alpha, freezeBaseLayer)
+        : base(
+            baseLayer,
+            rank,
+            alpha,
+            freezeBaseLayer,
+            usesStandardLoRAParameters: false)
     {
         // Validate base layer has single-dimensional input/output
         if (baseLayer.GetInputShape().Length != 1 || baseLayer.GetOutputShape().Length != 1)
@@ -161,12 +167,12 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
                     _matricesB[r][i, j] = NumOps.Zero;
                 }
             }
+
         }
 
-        // LoHa owns the trainable adaptation matrices. The standard LoRA layer inherited from
-        // LoRAAdapterBase supplies shared rank/alpha metadata but does not participate in LoHa's
-        // forward or update equations, so exclude its tensors from this adapter's parameter surface.
-        FreezeSubLayerParameters(_loraLayer);
+        // The base capability declaration excludes the unused standard LoRA child. The generated
+        // collection surface owns both matrix arrays in stable rank order, with no shadow vector
+        // or constructor-time runtime registration to keep synchronized.
     }
 
     /// <summary>

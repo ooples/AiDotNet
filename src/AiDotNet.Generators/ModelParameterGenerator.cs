@@ -140,6 +140,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
                                 continue;
                             }
                         }
+                        if (emitTensors)
+                        {
+                            var nestedTensors = NestedNetworkTensorAccessorFor(tf.Type, tf.Name, elem);
+                            if (nestedTensors is not null) tensors.Add(nestedTensors);
+                        }
                         var tensorAccessor = classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
                             ? TensorAccessorFor(tf.Type, tf.Name, elem)
                             : null;
@@ -177,6 +182,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
                                     AvailabilityExpression(tp, classification.Kind)));
                                 continue;
                             }
+                        }
+                        if (emitTensors)
+                        {
+                            var nestedTensors = NestedNetworkTensorAccessorFor(tp.Type, tp.Name, elem);
+                            if (nestedTensors is not null) tensors.Add(nestedTensors);
                         }
                         if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable)
                         {
@@ -499,7 +509,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             if (c.OriginalDefinition.ToDisplayString()
                  .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
             {
-                return $"{name}?.Layers ?? (global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)global::System.Array.Empty<global::AiDotNet.Interfaces.ILayer<{elem}>>()";
+                return $"EnumerateNestedNetworkLayers({name})";
             }
         }
 
@@ -540,13 +550,46 @@ public class ModelParameterGenerator : IIncrementalGenerator
                  .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
             {
                 var networkType = element.ToDisplayString();
-                return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{networkType}>)global::System.Array.Empty<{networkType}>()).SelectMany(__n => (global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)__n.Layers)";
+                return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{networkType}>)global::System.Array.Empty<{networkType}>()).SelectMany(__n => EnumerateNestedNetworkLayers(__n))";
             }
         }
 
         if (!IsLayerOf(element, elem)) return null;
         var et = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
         return $"{name} ?? (global::System.Collections.Generic.IEnumerable<{et}>)global::System.Array.Empty<{et}>()";
+    }
+
+    /// <summary>
+    /// An expression yielding raw trainable tensors owned by a nested network. Nested models are a
+    /// graph boundary, not a layer-only boundary: omitting their model-owned tensors makes a parent
+    /// checkpoint and optimizer view incomplete even when all child layers are discovered.
+    /// </summary>
+    private static string? NestedNetworkTensorAccessorFor(ITypeSymbol type, string name, string elem)
+    {
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        for (var c = bare as INamedTypeSymbol; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+            {
+                return $"EnumerateNestedNetworkTensors({name})";
+            }
+        }
+
+        var element = CollectionElementType(bare);
+        if (element is null) return null;
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        for (var c = element as INamedTypeSymbol; c is not null; c = c.BaseType)
+        {
+            if (c.OriginalDefinition.ToDisplayString()
+                 .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+            {
+                var networkType = element.ToDisplayString();
+                return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{networkType}>)global::System.Array.Empty<{networkType}>()).SelectMany(__n => EnumerateNestedNetworkTensors(__n))";
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

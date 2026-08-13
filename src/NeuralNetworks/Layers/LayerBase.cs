@@ -186,6 +186,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected Vector<T> Parameters;
 
+    // True only when SetParameters received a checkpoint for an explicitly registered parameter
+    // graph whose shapes were still deferred. Parameters is also a legitimate legacy storage slot,
+    // so length alone must never be used to infer this lifecycle state.
+    private bool _hasDeferredParameterPayload;
+
+    /// <summary>Length of a parked lazy-restore payload, or zero for ordinary own storage.</summary>
+    internal int DeferredParameterPayloadLength =>
+        _hasDeferredParameterPayload ? Parameters.Length : 0;
+
     /// <summary>
     /// The gradients of the trainable parameters.
     /// </summary>
@@ -753,6 +762,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         => System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
 
     /// <summary>
+    /// Gets whether this layer has at least one currently-enabled generated parameter-shape
+    /// declaration, even when its axes are not resolved yet.
+    /// </summary>
+    /// <remarks>
+    /// Generated code overrides this from the same <c>[TrainableParameter(Shape = ...)]</c>
+    /// declarations that produce <see cref="DeclaredParameterShapes"/>. It preserves the semantic
+    /// difference between "the shape contract is waiting" and "there are no parameter slots" when
+    /// the latter method must temporarily return an empty list for a <c>-1</c> axis.
+    /// </remarks>
+    protected virtual bool HasActiveDeclaredParameterShapes => false;
+
+    /// <summary>
+    /// Gets whether exhaustive generated automation proved that this layer declares no persistent
+    /// trainable state, buffers, or parameter-bearing children.
+    /// </summary>
+    protected virtual bool IsDeclaredParameterFree => false;
+
+    /// <summary>
     /// Computes this layer's own parameter width from declared shapes without allocating lazy
     /// tensors. Child layers are intentionally excluded: the owning graph walk visits each child
     /// once with reference-identity deduplication.
@@ -787,6 +814,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
         else
         {
+            if (HasActiveDeclaredParameterShapes)
+            {
+                materialized = false;
+                return false;
+            }
+
             var trainable = GetTrainableParametersUnmaterialized();
             if ((trainable is null || trainable.Count == 0) && HasUninitializedParameters)
                 return false;
@@ -1112,6 +1145,36 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 if (subs[i] is LayerBase<T> child) child.EnsureParametersMaterialized();
             }
         }
+
+        ReplayDeferredParameterPayload();
+    }
+
+    /// <summary>
+    /// Replays a flat payload that arrived before this layer could expose concrete tensor slots.
+    /// </summary>
+    private void ReplayDeferredParameterPayload()
+    {
+        if (!_hasDeferredParameterPayload) return;
+
+        var deferred = Parameters;
+        Parameters = Vector<T>.Empty();
+        _hasDeferredParameterPayload = false;
+
+        int materializedLength = FillParameters(null, 0);
+        if (materializedLength != deferred.Length)
+        {
+            Parameters = deferred;
+            _hasDeferredParameterPayload = true;
+            throw new InvalidOperationException(
+                $"{GetType().Name} materialized {materializedLength} parameter values, but its " +
+                $"deferred restore payload contains {deferred.Length}. The declared shape contract " +
+                "and checkpoint layout disagree.");
+        }
+
+        // With the shadow slot cleared, the ordinary base setter now distributes into the generated
+        // tensors/buffers/children exactly once. This makes deferred restore the same operation as an
+        // eager restore after materialization, instead of leaving both copies in the flat surface.
+        SetParameters(deferred);
     }
 
     /// <inheritdoc />
@@ -4367,6 +4430,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 && _cachedOwnLength == Parameters.Length)
                 return _cachedParameterCount;
 
+            // Prefer the allocation-free structural manifest whenever the layer can describe it.
+            // A shape-resolved lazy tensor is a real parameter slot even before its backing storage
+            // is allocated; reporting zero made a complete CNN look parameter-free until Forward.
+            // DeclaredParameterShapes is generated from the same [TrainableParameter] declarations
+            // that own get/set/chunk order, so this remains one fold rather than a parallel formula.
+            if (TryGetDeclaredParameterCount(out long declaredTotal, out _))
+            {
+                _cachedParameterCount = declaredTotal;
+                _cachedParameterEpoch = System.Threading.Volatile.Read(ref s_parameterEpoch);
+                _cachedOwnLength = Parameters.Length;
+                return declaredTotal;
+            }
+
             // Deliberately does NOT materialize. Counting must stay side-effect-free: this property
             // is read from ComputeTopologyFingerprint and from Dispose, and allocating weights just
             // to size them threw OutOfMemoryException on a 774M-parameter model that the caller was
@@ -4802,6 +4878,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     public virtual Vector<T> GetParameters()
     {
+        // Reading values is an explicit materialization boundary. ParameterCount remains allocation-
+        // free and can report a shape-resolved structural count, while a caller asking for the flat
+        // payload receives exactly those declared values. This is the same split as a lazy module's
+        // symbolic shape versus its state_dict payload, and prevents count/vector drift without
+        // allocating foundation-scale weights during topology inspection or disposal.
+        EnsureParametersMaterialized();
+
         // One allocation, filled in a single pass. The obvious recursive form -- build a List and,
         // for each child, append the Vector its own GetParameters() returned -- re-copies every
         // scalar once per level of nesting and allocates a whole vector per child on the way. For
@@ -4835,6 +4918,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     internal IEnumerable<ParameterChunk<T>> GetParameterStateChunks(string stablePrefix)
     {
+        // Chunks carry values, not merely schema. Materialize at this explicit value boundary so
+        // their lengths are the concrete projection of the same manifest ParameterCount reads.
+        EnsureParametersMaterialized();
+
         if (Parameters.Length > 0)
         {
             yield return new ParameterChunk<T>(
@@ -5162,6 +5249,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        // A parameter-free layer is a closed contract, not a deferred one. The old fallback stored
+        // any incoming vector in Parameters whenever no registry entries existed, which meant a
+        // typo such as dropout.SetParameters(nonEmpty) silently turned a stateless layer into a
+        // stateful one. The manifest already knows the distinction that a zero count cannot express:
+        // ParameterFree rejects values, while ShapeDeferred may park them until geometry arrives.
+        if (IsDeclaredParameterFree && parameters.Length != 0)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name} is parameter-free and cannot accept {parameters.Length} values.",
+                nameof(parameters));
+        }
+
         // Materializes ON DEMAND, never speculatively. Reading and counting stay lazy, so a restore
         // is the one moment the layer learns it needs weights it does not have yet -- and the
         // incoming length is the evidence. Materializing unconditionally instead made restore
@@ -5252,9 +5353,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // materialization, which is the convention Conv1DLayer's ApplyResolvedParameters follows.
         if (!hasRegistry || (!shapeKnown && !currentLayoutMatches))
         {
+            _hasDeferredParameterPayload = hasRegistry && !shapeKnown && !currentLayoutMatches;
             Parameters = parameters;
             return;
         }
+
+        _hasDeferredParameterPayload = false;
 
         int index = 0;
 

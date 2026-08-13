@@ -60,3 +60,4 @@ AIDN088 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, 
 AIDN089 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Numeric state has conflicting semantic classifications
 AIDN090 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Nullable persistent state requires an explicit availability lifecycle
 AIDN091 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Parameter alias target is invalid
+AIDN092 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Trainable parameter condition must name one instance Boolean field or readable property

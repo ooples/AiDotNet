@@ -22,6 +22,7 @@ namespace AiDotNet.Attributes
         public int Role { get; set; }
         public int Order { get; set; }
         public bool Optional { get; set; }
+        public string? Condition { get; set; }
         public string? Shape { get; set; }
         public int Availability { get; set; }
     }
@@ -160,6 +161,22 @@ public partial class CacheLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
 }";
 
         Assert.DoesNotContain("_lastInput", Run(new AiDotNet.Generators.TrainableParameterGenerator(), source));
+    }
+
+    [Fact]
+    public async Task LayerGenerator_ProvesMigratedStatelessLayerIsParameterFree()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+[AutoParameters]
+public partial class StatelessLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [Scratch] private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _lastInput = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("IsDeclaredParameterFree => true", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -326,6 +343,25 @@ public partial class AliasNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase
     }
 
     [Fact]
+    public async Task ModelGenerator_NestedNetworksUseReadinessAwareLayerAndTensorTraversal()
+    {
+        await Task.Yield();
+        const string source = @"
+public partial class ChildNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+}
+public partial class CompositeNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+    private readonly ChildNetwork<T> _child = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains("EnumerateNestedNetworkLayers(_child)", generated, StringComparison.Ordinal);
+        Assert.Contains("EnumerateNestedNetworkTensors(_child)", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("_child?.Layers", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_DuplicateBufferIdentity_IsCompilerError()
     {
         await Task.Yield();
@@ -345,7 +381,6 @@ public partial class InvalidLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<
         Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Contains("running_state", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
-
     [Fact]
     public async Task ModelGenerator_AbstractBaseEmitsResizableFitTensorSource()
     {
@@ -362,6 +397,52 @@ public abstract partial class DeferredTensorModel<T> : AiDotNet.Models.ModelBase
         Assert.Contains("partial class DeferredTensorModel<T>", generated, StringComparison.Ordinal);
         Assert.Contains(
             "new ResizableTensorFieldParameterSource<T>(() => _weights, value => _weights = value)",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_ConditionControlsEveryGeneratedParameterSurface()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class ConditionalLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    public bool Affine { get; }
+    [TrainableParameter(Condition = nameof(Affine), Shape = ""4"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _gamma = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("if (Affine)", generated, StringComparison.Ordinal);
+        Assert.Contains("(Affine) && (_gamma.Length > 0)", generated, StringComparison.Ordinal);
+        Assert.Contains("if (Affine) __withAllOptional++;", generated, StringComparison.Ordinal);
+        Assert.Contains("HasActiveDeclaredParameterShapes => (Affine)", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_ConditionComposesWithGeneratedCollectionOwnership()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class ConditionalExperts<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    public bool UseExperts { get; }
+    [TrainableParameter(Condition = nameof(UseExperts))]
+    private readonly AiDotNet.Tensors.LinearAlgebra.Tensor<T>[] _experts =
+        System.Array.Empty<AiDotNet.Tensors.LinearAlgebra.Tensor<T>>();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("if (UseExperts)", generated, StringComparison.Ordinal);
+        Assert.Contains(
+            "ParameterCollectionOrdering.PresentNonNull(_experts)",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "if (UseExperts) foreach (var __parameter in global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull(_experts)) __expected++;",
             generated,
             StringComparison.Ordinal);
     }

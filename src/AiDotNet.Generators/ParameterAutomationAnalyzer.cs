@@ -167,6 +167,18 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                    + "storage has one persistent semantic role. Invalid aliases cannot be excluded "
                    + "safely because they may hide otherwise unowned state.");
 
+    private static readonly DiagnosticDescriptor InvalidParameterCondition = new(
+        id: "AIDN092",
+        title: "Trainable parameter condition is invalid",
+        messageFormat: "'{0}.{1}' declares condition '{2}', but {3}",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "TrainableParameter.Condition must name one instance Boolean field or readable "
+                   + "property on the declaring type. Use nameof(...) so renames remain compiler-safe. "
+                   + "A valid condition is the single source of truth for count, optimizer discovery, "
+                   + "checkpoint persistence, and restore acceptance.");
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -270,6 +282,45 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                             spc.ReportDiagnostic(Diagnostic.Create(
                                 MissingStateAvailability, memberLocation,
                                 type.Name, member.Name, memberType.ToDisplayString()));
+                        }
+
+                        if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable)
+                        {
+                            string? conditionName = GetTrainableCondition(member);
+                            if (conditionName is not null)
+                            {
+                                var conditions = type.GetMembers(conditionName)
+                                    .Where(candidate => candidate is IFieldSymbol or IPropertySymbol)
+                                    .ToArray();
+                                string? reason = null;
+                                if (string.IsNullOrWhiteSpace(conditionName))
+                                    reason = "the condition name is empty";
+                                else if (conditions.Length != 1)
+                                    reason = conditions.Length == 0
+                                        ? "no such field or property exists on the declaring type"
+                                        : "the condition name is ambiguous";
+                                else if (conditions[0].IsStatic)
+                                    reason = "the condition must be instance-specific, not static";
+                                else
+                                {
+                                    ITypeSymbol? conditionType = conditions[0] switch
+                                    {
+                                        IFieldSymbol conditionField => conditionField.Type,
+                                        IPropertySymbol conditionProperty when conditionProperty.GetMethod is not null
+                                            && conditionProperty.Parameters.Length == 0 => conditionProperty.Type,
+                                        _ => null
+                                    };
+                                    if (conditionType?.SpecialType != SpecialType.System_Boolean)
+                                        reason = "the named member is not a readable Boolean";
+                                }
+
+                                if (reason is not null)
+                                {
+                                    spc.ReportDiagnostic(Diagnostic.Create(
+                                        InvalidParameterCondition, memberLocation,
+                                        type.Name, member.Name, conditionName, reason));
+                                }
+                            }
                         }
 
                         if (classification.Kind == ParameterMemberSemanticModel.Kind.Alias)
@@ -544,6 +595,21 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
             return IsTensorType(namedType.TypeArguments[1]);
 
         return false;
+    }
+
+    private static string? GetTrainableCondition(ISymbol member)
+    {
+        foreach (var attribute in member.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString()
+                != ParameterMemberSemanticModel.TrainableAttribute) continue;
+            foreach (var argument in attribute.NamedArguments)
+            {
+                if (argument.Key == "Condition" && argument.Value.Value is string condition)
+                    return condition;
+            }
+        }
+        return null;
     }
 
     private static bool DeclaresStableParameterRegistration(INamedTypeSymbol type, string stableId)

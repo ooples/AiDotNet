@@ -207,6 +207,9 @@ internal static class ParameterMemberSemanticModel
             {
                 if (argument.Key == "Optional" && argument.Value.Value is bool optional && optional)
                     return true;
+                if (argument.Key == "Condition" && argument.Value.Value is string condition
+                    && !string.IsNullOrWhiteSpace(condition))
+                    return true;
                 if (argument.Key == "Availability" && argument.Value.Value is int availability
                     && availability != 0)
                     return true;

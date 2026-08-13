@@ -54,6 +54,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         [Fact(Timeout = 120000)]
         public async Task ParameterCount_WithUnfrozenLazyBase_TracksMaterializedParameters()
         {
+            await Task.Yield();
+
             // Arrange
             var baseLayer = new DenseLayer<double>(5, (IActivationFunction<double>?)null);
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);

@@ -2416,6 +2416,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BigGAN_GetParameterCount_ReturnsPositiveValue()
     {
+        await Task.Yield();
+
         // Arrange - BigGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
             InputType.ThreeDimensional,
@@ -2758,6 +2760,8 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SAGAN_GetParameterCount_ReturnsPositiveValue()
     {
+        await Task.Yield();
+
         // Arrange - SAGAN uses ThreeDimensional input for image generation
         var generatorArchitecture = new NeuralNetworkArchitecture<float>(
             InputType.ThreeDimensional,

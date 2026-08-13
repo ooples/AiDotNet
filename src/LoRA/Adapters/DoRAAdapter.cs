@@ -76,7 +76,8 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// Each output neuron gets one magnitude value.
     /// </para>
     /// </remarks>
-    [TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters,
+        Shape = "GetOutputLayerShape()[0]")]
     private Tensor<T> _magnitude;
 
     /// <summary>
@@ -138,8 +139,8 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
         // Decompose initial weights to get magnitude
         DecomposeWeights();
 
-        // _magnitude is part of the generated parameter manifest. No flat shadow vector is
-        // maintained: LayerBase folds this tensor and the active LoRA sub-layer into one surface.
+        // Parameter surfaces are generated from the magnitude declaration and the registered
+        // base/LoRA children. No shadow flat vector is maintained here.
     }
 
     /// <summary>

@@ -4099,6 +4099,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var layer = Layers[i];
             if (layer is null) continue;
 
+            // A graph-root declaration is consumed by both the compiler diagnostic and this
+            // runtime walker. Do not feed the preceding branch's shape into it. When the root has
+            // a constructor-known output (embedding/projection roots commonly do), restart the
+            // chain there; otherwise stop honestly and let the real external input resolve it.
+            if (LayerGraphContract.StartsIndependentBranch(layer))
+            {
+                int[]? rootOutput = null;
+                try { rootOutput = layer.GetOutputShape(); }
+                catch { }
+
+                if (rootOutput is null
+                    || rootOutput.Length == 0
+                    || !System.Array.TrueForAll(rootOutput, d => d > 0))
+                {
+                    break;
+                }
+
+                currentShape = rootOutput;
+                // A graph root is a hard provenance boundary. Even a rank-1 feature
+                // declaration is a better fallback than any shape from the preceding,
+                // unrelated branch. Retaining that branch's last rank >= 2 shape can
+                // silently size a downstream normalization layer from the wrong modality.
+                lastGoodShape = rootOutput;
+                continue;
+            }
+
             if (!TryAdvanceLayerShape(layer, ref currentShape, ref lastGoodShape))
             {
                 // This layer resolved from NEITHER the running shape NOR the last
@@ -4198,7 +4224,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             catch
             {
-                // Running shape rejected — try the fallback shape, if any.
+                // Imperative shape fields can legitimately decline before first forward even when
+                // a verified declarative contract has a complete answer. Reshape is canonical: its
+                // input field is unresolved while its constructor-fixed output is already known.
+                // This is fallback-only, so a successful imperative answer always remains primary.
+                int[]? declaredOutput = SafeInfer(layer, tryShape, isBatched: false)
+                    ?? SafeInfer(layer, tryShape, isBatched: true);
+                if (declaredOutput is not null
+                    && declaredOutput.Length > 0
+                    && System.Array.TrueForAll(declaredOutput, d => d > 0))
+                {
+                    currentShape = declaredOutput;
+                    if (declaredOutput.Length >= 2) lastGoodShape = declaredOutput;
+                    return true;
+                }
+
+                // Running shape and its declaration both declined — try the fallback shape, if any.
             }
         }
         return false;
@@ -7675,6 +7716,66 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
+
+    /// <summary>
+    /// Enumerates the complete layer graph owned by a nested network after allowing that network
+    /// to initialize and resolve itself through its own architecture.
+    /// </summary>
+    /// <remarks>
+    /// Generated composite-model plumbing calls this helper instead of reading a child network's
+    /// <see cref="Layers"/> property directly. A GAN commonly constructs its generator and
+    /// discriminator lazily; reading their layer lists before their own readiness hooks run makes a
+    /// structurally valid parent report zero parameters. Keeping readiness at this boundary also
+    /// prevents every composite model author from having to remember the lifecycle ordering.
+    /// </remarks>
+    protected static IEnumerable<LayerBase<T>?> EnumerateNestedNetworkLayers(
+        NeuralNetworkBase<T>? network)
+    {
+        if (network is null) yield break;
+
+        network.EnsureParametersReady();
+        network.ResolveLazyLayerShapes();
+
+        var seen = new List<object>();
+        bool IsNew(object candidate)
+        {
+            for (int i = 0; i < seen.Count; i++)
+            {
+                if (ReferenceEquals(seen[i], candidate)) return false;
+            }
+
+            seen.Add(candidate);
+            return true;
+        }
+
+        foreach (var layer in network.Layers)
+        {
+            if (layer is LayerBase<T> layerBase && IsNew(layerBase)) yield return layerBase;
+        }
+
+        foreach (var layer in network.GetExtraTrainableLayers())
+        {
+            if (layer is not null && IsNew(layer)) yield return layer;
+        }
+    }
+
+    /// <summary>
+    /// Enumerates raw trainable tensors owned by a nested network after applying the same readiness
+    /// contract used for its layers.
+    /// </summary>
+    protected static IEnumerable<Tensor<T>> EnumerateNestedNetworkTensors(
+        NeuralNetworkBase<T>? network)
+    {
+        if (network is null) yield break;
+
+        network.EnsureParametersReady();
+        network.ResolveLazyLayerShapes();
+
+        foreach (var tensor in network.GetExtraTrainableTensors())
+        {
+            if (tensor is not null) yield return tensor;
+        }
+    }
 
     // NOTE for whoever converges the model-side parameter mechanisms (there are currently three:
     // [AutoParameters] on LayerBase, RegisterComponents duplicated in DiffusionModelBase and

@@ -84,6 +84,24 @@ public sealed class TrainableParameterAttribute : Attribute
     public bool Optional { get; set; }
 
     /// <summary>
+    /// Gets or sets the name of an instance <see cref="bool"/> field or property that enables
+    /// this parameter for the configured layer instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use <c>nameof(...)</c>, for example <c>Condition = nameof(Affine)</c>. When the condition is
+    /// false, the parameter is absent from the generated count, optimizer view, checkpoint surface,
+    /// and restore contract. This differs from <see cref="Optional"/>: an enabled optional parameter
+    /// may be materialized by restore, while a configuration-disabled parameter may not.
+    /// </para>
+    /// <para>
+    /// AIDN092 validates that the named member exists, is an instance Boolean, and is unambiguous,
+    /// turning a misspelled or structurally invalid parameter gate into a compiler error.
+    /// </para>
+    /// </remarks>
+    public string? Condition { get; set; }
+
+    /// <summary>
     /// Gets or sets when the parameter is expected to become available. This declaration is
     /// independent of nullability: a nullable tensor does not tell the generator whether it waits
     /// for shape resolution, fitting, or a conditional architecture branch.
