@@ -91,7 +91,11 @@ public class AllLayersCloneTests
                 var typed = (LayerBase<double>)instance;
                 if (Forward(typed)) forwarded.Add(open.Name);
 
-                var clone = LayerCloning.Clone(typed);
+                // LayerBase declares Clone as a public virtual instance method, which is the
+                // surviving mechanism after #1789 replaced this branch's LayerCloning extension with
+                // LayerStateGenerator's generated factory. The sweep itself is unchanged: construct
+                // every layer, forward it, clone it, and require the clone to be the same type.
+                var clone = typed.Clone();
                 if (clone is null)
                 {
                     failed.Add($"{open.Name}: clone returned null");

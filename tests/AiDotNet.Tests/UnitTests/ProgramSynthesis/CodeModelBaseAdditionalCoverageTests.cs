@@ -210,8 +210,6 @@ public sealed class CodeModelBaseAdditionalCoverageTests
         {
             _ = reader.ReadInt32();
         }
-
-        protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance() => new MinimalCodeModel(CodeArchitecture);
     }
 
     private sealed class ThrowingCodeModel : MinimalCodeModel
