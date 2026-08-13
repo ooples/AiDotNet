@@ -9,6 +9,85 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Models;
 
 /// <summary>
+/// Attaches declared state to a payload whose format this code does not know.
+/// </summary>
+/// <remarks>
+/// <para>
+/// There are twenty-six parallel model base hierarchies, each with its own <c>byte[] Serialize()</c>
+/// and its own format -- some JSON, some binary, some nested metadata. They are siblings over the
+/// same interfaces rather than a hierarchy, so there is no one place to put a state block and no
+/// single format to put it in.
+/// </para>
+/// <para>
+/// So the state is appended as a SUFFIX and located from the END: the trailer is the magic and the
+/// block length, which means the existing payload in front of it is untouched and does not need to
+/// be understood. A payload written before this existed simply has no trailer, so it reads back
+/// exactly as it always did -- old checkpoints keep working instead of failing on a format they
+/// could not have known about.
+/// </para>
+/// </remarks>
+public static class ModelStateEnvelope
+{
+    private const int Magic = unchecked((int)0xA1D057A7);
+    private const int TrailerLength = sizeof(int) * 2;
+
+    /// <summary>Appends the declared state to a payload, or returns it unchanged when none exists.</summary>
+    /// <typeparam name="T">The model's numeric type.</typeparam>
+    /// <param name="state">The model's declared state.</param>
+    /// <param name="payload">Whatever the base already produced.</param>
+    /// <returns>The payload, with a state trailer when there is state to carry.</returns>
+    public static byte[] Append<T>(ModelStateRegistry<T> state, byte[] payload)
+    {
+        if (state is null || state.Count == 0) return payload;
+
+        using var buffer = new MemoryStream();
+        using (var writer = new BinaryWriter(buffer, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            state.WriteAll(writer);
+            writer.Flush();
+        }
+
+        var block = buffer.ToArray();
+        var result = new byte[payload.Length + block.Length + TrailerLength];
+
+        Buffer.BlockCopy(payload, 0, result, 0, payload.Length);
+        Buffer.BlockCopy(block, 0, result, payload.Length, block.Length);
+        Buffer.BlockCopy(BitConverter.GetBytes(block.Length), 0, result, payload.Length + block.Length, sizeof(int));
+        Buffer.BlockCopy(BitConverter.GetBytes(Magic), 0, result, payload.Length + block.Length + sizeof(int), sizeof(int));
+
+        return result;
+    }
+
+    /// <summary>Applies and strips a state trailer, returning the payload the base should read.</summary>
+    /// <typeparam name="T">The model's numeric type.</typeparam>
+    /// <param name="state">The model's declared state.</param>
+    /// <param name="payload">The stored bytes.</param>
+    /// <returns>The payload without its trailer, or the original when there is none.</returns>
+    public static byte[] Extract<T>(ModelStateRegistry<T> state, byte[] payload)
+    {
+        if (payload is null || payload.Length < TrailerLength) return payload ?? Array.Empty<byte>();
+
+        int magic = BitConverter.ToInt32(payload, payload.Length - sizeof(int));
+        if (magic != Magic) return payload;
+
+        int blockLength = BitConverter.ToInt32(payload, payload.Length - TrailerLength);
+        int innerLength = payload.Length - TrailerLength - blockLength;
+        if (blockLength < 0 || innerLength < 0) return payload;
+
+        if (state is not null && state.Count > 0)
+        {
+            using var buffer = new MemoryStream(payload, innerLength, blockLength);
+            using var reader = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
+            state.ReadAll(reader);
+        }
+
+        var inner = new byte[innerLength];
+        Buffer.BlockCopy(payload, 0, inner, 0, innerLength);
+        return inner;
+    }
+}
+
+/// <summary>
 /// The declared home for model state that is not a flat parameter vector.
 /// </summary>
 /// <typeparam name="T">The model's numeric type.</typeparam>
