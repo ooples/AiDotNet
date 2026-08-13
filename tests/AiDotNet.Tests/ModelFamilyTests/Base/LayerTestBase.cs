@@ -84,14 +84,6 @@ public abstract class LayerTestBase<T>
     protected virtual bool ExpectsNonZeroGradients => true;
 
     /// <summary>
-    /// Whether the layer's continuous input participates in the differentiable graph. Token
-    /// embeddings are excluded automatically because their inputs are discrete indices; exceptional
-    /// layers with another discrete/control input can override this instead of weakening the shared
-    /// parameter-gradient contract.
-    /// </summary>
-    protected virtual bool ExpectsDifferentiableInput => true;
-
-    /// <summary>
     /// Tolerance for numerical comparisons. Layers with stochastic behavior
     /// (dropout, noise) may need higher tolerance.
     /// </summary>
@@ -1069,7 +1061,14 @@ public abstract class LayerTestBase<T>
         var allAxes = new int[elementwise.Shape.Length];
         for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
         var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
-        bool checkInputGradient = ExpectsDifferentiableInput && layer is not ITokenEmbedding<T>;
+        // The generated/runtime input contract is the source of truth for differentiability.
+        // Do not infer it from marker interfaces or per-fixture overrides: BERT/FastText/Layout
+        // embedding front ends all consume integer IDs without implementing ITokenEmbedding,
+        // while every ordinary continuous layer must retain a complete VJP to its input.
+        var boundInput = ((LayerBase<T>)layer).BindInputContract(input.Shape.ToArray());
+        boundInput.RequireReady();
+        bool checkInputGradient =
+            boundInput.PrimaryInput.ValueDomain.Kind == LayerInputDomainKind.Continuous;
         var gradientSources = new List<Tensor<T>>(trainableParams);
         if (checkInputGradient) gradientSources.Add(input);
         var analyticalGrads = tape.ComputeGradients(lossTensor, gradientSources);

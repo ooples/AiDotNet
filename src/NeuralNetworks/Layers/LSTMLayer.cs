@@ -1189,7 +1189,12 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             // (ooples/AiDotNet.Tensors#587); on an older package the primitive throws
             // under a tape — caught below so the per-step path still runs.
             Tensor<T>? fusedOutput = null;
-            if (IsTrainingMode)
+            // Eval mode controls stochastic/stateful layer behavior; it must not disable autodiff.
+            // Generated finite-difference checks deliberately use eval mode inside a live tape. In
+            // that case the detached inference weight cache stranded every original trainable
+            // tensor, so choose the differentiable stack whenever a tape is active.
+            bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
+            if (IsTrainingMode || tapeActive)
             {
                 try { fusedOutput = TryFusedLstmForwardTraining(cpuEngForFused, input3D, batchSize, timeSteps); }
                 catch (InvalidOperationException) { fusedOutput = null; }
