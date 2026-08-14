@@ -1262,7 +1262,8 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
             "Sora's declared parameter capacity should be positive (foundation-scale ~5.4 B per the paper).");
         Assert.DoesNotContain(model.ParameterLayout.Slots,
             slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
-        Assert.Equal(model.ParameterCount, model.ParameterLayout.MaterializedParameterCount);
+        Assert.Equal(model.ParameterCount, model.ParameterLayout.DeclaredParameterCount);
+        Assert.Equal(0L, model.ParameterLayout.MaterializedParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -1290,7 +1291,8 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.DoesNotContain(model.ParameterLayout.Slots,
             slot => slot.Readiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
-        Assert.Equal(model.ParameterCount, model.ParameterLayout.MaterializedParameterCount);
+        Assert.Equal(model.ParameterCount, model.ParameterLayout.DeclaredParameterCount);
+        Assert.Equal(0L, model.ParameterLayout.MaterializedParameterCount);
     }
 
     [Fact(Timeout = 120000)]
