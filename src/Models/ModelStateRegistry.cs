@@ -205,6 +205,139 @@ public sealed class ModelStateRegistry<T>
             w => WriteInts(w, get()),
             r => set(ReadInts(r)));
 
+    /// <summary>
+    /// Describes ONE node of a recursive structure, so the registry can walk the whole of it.
+    /// </summary>
+    /// <typeparam name="TNode">The node type.</typeparam>
+    /// <remarks>
+    /// <para>
+    /// A decision tree, a Hoeffding tree, an M5 model tree -- their learned model is a node graph,
+    /// not a vector, and it was the one shape nothing here could express. Every tree model therefore
+    /// kept a hand-written Serialize that walked the graph itself, and every ENSEMBLE of trees
+    /// inherited that: a forest cannot round-trip until its members can.
+    /// </para>
+    /// <para>
+    /// The model describes a single node -- its own fields, and which of its members are children --
+    /// and the registry does the recursion, the null markers and the ordering. Nothing in the model
+    /// touches a reader or a writer, and the description is small enough to read at a glance.
+    /// </para>
+    /// </remarks>
+    public sealed class NodeShape<TNode> where TNode : class
+    {
+        internal Func<TNode>? Factory;
+        internal readonly List<(Action<TNode, BinaryWriter> Write, Action<TNode, BinaryReader> Read)> Fields = new();
+        internal readonly List<(Func<TNode, TNode?> Get, Action<TNode, TNode?> Set)> Children = new();
+
+        /// <summary>Declares how to make an empty node.</summary>
+        /// <param name="factory">Creates a node with no fields set.</param>
+        /// <returns>This shape, for chaining.</returns>
+        public NodeShape<TNode> Create(Func<TNode> factory)
+        {
+            Factory = factory;
+            return this;
+        }
+
+        /// <summary>Declares an integer field on the node.</summary>
+        /// <param name="get">Reads it.</param>
+        /// <param name="set">Writes it.</param>
+        /// <returns>This shape, for chaining.</returns>
+        public NodeShape<TNode> Int32(Func<TNode, int> get, Action<TNode, int> set)
+        {
+            Fields.Add(((n, w) => w.Write(get(n)), (n, r) => set(n, r.ReadInt32())));
+            return this;
+        }
+
+        /// <summary>Declares a boolean field on the node.</summary>
+        /// <param name="get">Reads it.</param>
+        /// <param name="set">Writes it.</param>
+        /// <returns>This shape, for chaining.</returns>
+        public NodeShape<TNode> Boolean(Func<TNode, bool> get, Action<TNode, bool> set)
+        {
+            Fields.Add(((n, w) => w.Write(get(n)), (n, r) => set(n, r.ReadBoolean())));
+            return this;
+        }
+
+        /// <summary>Declares a field held as the model's numeric type.</summary>
+        /// <param name="get">Reads it.</param>
+        /// <param name="set">Writes it.</param>
+        /// <returns>This shape, for chaining.</returns>
+        public NodeShape<TNode> Scalar(Func<TNode, T> get, Action<TNode, T> set)
+        {
+            Fields.Add((
+                (n, w) => w.Write(Convert.ToDouble(get(n))),
+                (n, r) => set(n, Ops.FromDouble(r.ReadDouble()))));
+            return this;
+        }
+
+        /// <summary>Declares a vector field on the node, such as class probabilities.</summary>
+        /// <param name="get">Reads it.</param>
+        /// <param name="set">Writes it.</param>
+        /// <returns>This shape, for chaining.</returns>
+        public NodeShape<TNode> Vector(Func<TNode, Vector<T>?> get, Action<TNode, Vector<T>?> set)
+        {
+            Fields.Add((
+                (n, w) => WriteVector(w, get(n)),
+                (n, r) => set(n, ReadVector(r))));
+            return this;
+        }
+
+        /// <summary>Declares one of the node's children.</summary>
+        /// <param name="get">Reads it.</param>
+        /// <param name="set">Attaches it.</param>
+        /// <returns>This shape, for chaining.</returns>
+        public NodeShape<TNode> Child(Func<TNode, TNode?> get, Action<TNode, TNode?> set)
+        {
+            Children.Add((get, set));
+            return this;
+        }
+    }
+
+    /// <summary>Declares a recursive node graph, such as a decision tree.</summary>
+    /// <typeparam name="TNode">The node type.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="getRoot">Reads the root.</param>
+    /// <param name="setRoot">Installs a restored root.</param>
+    /// <param name="describe">Describes one node.</param>
+    public void DeclareGraph<TNode>(
+        string name,
+        Func<TNode?> getRoot,
+        Action<TNode?> setRoot,
+        Action<NodeShape<TNode>> describe)
+        where TNode : class
+    {
+        var shape = new NodeShape<TNode>();
+        describe(shape);
+
+        if (shape.Factory is null)
+            throw new ArgumentException($"State '{name}' must declare Create so its nodes can be rebuilt.", nameof(describe));
+
+        Add(name,
+            w => WriteNode(w, getRoot(), shape),
+            r => setRoot(ReadNode(r, shape)));
+    }
+
+    private static void WriteNode<TNode>(BinaryWriter w, TNode? node, NodeShape<TNode> shape)
+        where TNode : class
+    {
+        // A presence flag per node, so an absent child costs one byte and a null root is representable.
+        if (node is null) { w.Write(false); return; }
+
+        w.Write(true);
+        foreach (var field in shape.Fields) field.Write(node, w);
+        foreach (var child in shape.Children) WriteNode(w, child.Get(node), shape);
+    }
+
+    private static TNode? ReadNode<TNode>(BinaryReader r, NodeShape<TNode> shape)
+        where TNode : class
+    {
+        if (!r.ReadBoolean()) return null;
+
+        var node = shape.Factory!();
+        foreach (var field in shape.Fields) field.Read(node, r);
+        foreach (var child in shape.Children) child.Set(node, ReadNode(r, shape));
+        return node;
+    }
+
     /// <summary>Declares an array held as the model's own numeric type.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
