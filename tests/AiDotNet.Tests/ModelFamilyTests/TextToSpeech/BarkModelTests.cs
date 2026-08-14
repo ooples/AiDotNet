@@ -54,9 +54,9 @@ public sealed class BarkModelTests
     public async Task DefaultConstruction_IsAllocationLightAndReportsStructuralCapacity()
     {
         await Task.Yield();
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        long before = GetManagedMemoryMeasurement();
         using var model = new BarkModel<float>();
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = GetManagedMemoryMeasurement() - before;
 
         Assert.True(model.EstimatedBarkTransformerParameterCount > 1_000_000_000L);
         Assert.True(allocated < 128L * 1024 * 1024,
@@ -75,7 +75,7 @@ public sealed class BarkModelTests
         var logits = model.PredictSemanticLogits([1, 2, 3, 4]);
 
         stopwatch.Stop();
-        Assert.Equal(new[] { 1, 4, 33 }, logits.Shape);
+        Assert.Equal(new[] { 1, 4, 33 }, logits.Shape.ToArray());
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10),
             $"Tiny Bark semantic forward took {stopwatch.Elapsed}; this is a compute-path regression, not a test-timeout issue.");
         AssertFinite(logits);
@@ -143,7 +143,7 @@ public sealed class BarkModelTests
         for (int codebook = 0; codebook < coarse.GetLength(0); codebook++)
             for (int frame = 0; frame < coarse.GetLength(1); frame++)
                 Assert.Equal(coarse[codebook, frame], fine[codebook, frame]);
-        Assert.Equal(new[] { 1, fine.GetLength(1) }, audio.Shape);
+        Assert.Equal(new[] { 1, fine.GetLength(1) }, audio.Shape.ToArray());
         AssertFinite(audio);
     }
 
@@ -201,7 +201,20 @@ public sealed class BarkModelTests
     private static void AssertFinite(Tensor<float> tensor)
     {
         for (int index = 0; index < tensor.Length; index++)
-            Assert.True(float.IsFinite(tensor[index]), $"Tensor value {index} is not finite.");
+            Assert.False(float.IsNaN(tensor[index]) || float.IsInfinity(tensor[index]),
+                $"Tensor value {index} is not finite.");
+    }
+
+    private static long GetManagedMemoryMeasurement()
+    {
+#if NET471
+        // .NET Framework does not expose per-thread allocation counters. The retained managed
+        // heap is the relevant fallback for this test: eager Bark weights would remain reachable
+        // through the model and exceed the limit by orders of magnitude.
+        return GC.GetTotalMemory(forceFullCollection: false);
+#else
+        return GC.GetAllocatedBytesForCurrentThread();
+#endif
     }
 
     private sealed class TestCodec : IAudioCodec<float>
@@ -241,6 +254,6 @@ public sealed class BarkModelTests
         public Tensor<float> EncodeEmbeddings(Tensor<float> audio) => audio;
         public Tensor<float> DecodeEmbeddings(Tensor<float> embeddings) => embeddings;
         public double GetBitrate(int? numQuantizers = null)
-            => (numQuantizers ?? NumQuantizers) * TokenFrameRate * Math.Log2(CodebookSize);
+            => (numQuantizers ?? NumQuantizers) * TokenFrameRate * Math.Log(CodebookSize, 2.0);
     }
 }
