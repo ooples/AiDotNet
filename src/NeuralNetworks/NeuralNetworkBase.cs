@@ -6483,7 +6483,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return false;
         if (Layers[layerIndex] is not LayerBase<T> layer) return false;
-        foreach (var tensor in layer.GetTrainableParameters())
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
         {
             if (tensor is not null && tensor.Length > 0) return true;
         }
@@ -6563,7 +6563,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return;
         if (Layers[layerIndex] is not LayerBase<T> layer) return;
-        foreach (var tensor in layer.GetTrainableParameters())
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
         {
             if (tensor is null || tensor.Length == 0) continue;
             // Already-registered tensors (StreamingPoolHandle >= 0)
@@ -6657,7 +6657,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private static void CollectStreamingHandles(ILayer<T> layer, System.Collections.Generic.List<long> order)
     {
         if (layer is not LayerBase<T> lb) return;
-        foreach (var t in lb.GetTrainableParameters())
+        foreach (var t in lb.GetTrainableParametersWithoutMaterialization())
             if (t is not null && t.StreamingPoolHandle >= 0) order.Add(t.StreamingPoolHandle);
     }
 
@@ -6683,7 +6683,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (layerIndex < 0 || layerIndex >= Layers.Count) return;
         if (Layers[layerIndex] is not LayerBase<T> layer) return;
-        var tensors = layer.GetTrainableParameters();
+        var tensors = layer.GetTrainableParametersWithoutMaterialization();
         if (tensors is null) return;
         foreach (var tensor in tensors)
         {
@@ -6712,7 +6712,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private IDisposable BeginLayerMaterializeScope(int layerIndex)
     {
         if (Layers[layerIndex] is not LayerBase<T> layer) return NoOpDisposable.Instance;
-        var tensors = layer.GetTrainableParameters();
+        var tensors = layer.GetTrainableParametersWithoutMaterialization();
         if (tensors is null || tensors.Count == 0) return NoOpDisposable.Instance;
 
         // Fast path — common case after first forward: all trainable
@@ -7149,8 +7149,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is not LayerBase<T> layer) continue;
-            layer.UseStreamingAllocator = useStreamingAlloc;
-            foreach (var tensor in layer.GetTrainableParameters())
+            layer.SetStreamingAllocatorRecursively(useStreamingAlloc);
+            // Configuration is an observation boundary, not a materialization boundary. Generated
+            // GetTrainableParameters() initializes constructor-sized lazy layers on the way past;
+            // doing that here allocated and initialized every Q/K/V/O matrix in a foundation model
+            // before its first forward. Besides making configuration take tens of seconds, it defeated
+            // streaming's layer-at-a-time peak-memory contract. Register only tensors that already
+            // exist; the first-forward allocation path uses the streaming allocator and the refresh
+            // pass registers each tensor after it materializes.
+            foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 // Already-registered tensors (StreamingPoolHandle >= 0
@@ -7185,8 +7192,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
-            extra.UseStreamingAllocator = useStreamingAlloc;
-            foreach (var tensor in extra.GetTrainableParameters())
+            extra.SetStreamingAllocatorRecursively(useStreamingAlloc);
+            foreach (var tensor in extra.GetTrainableParametersWithoutMaterialization())
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 if (tensor.StreamingPoolHandle >= 0) continue;
@@ -7544,54 +7551,46 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         if (_streamingAutoDetectDisabled) { _streamingAutoDetectFinalized = true; return; }
 
-        long paramCount;
-        try
-        {
-            paramCount = ParameterCount;
-        }
-        catch (Exception ex) when (
-            ex is InvalidOperationException ||
-            ex is OverflowException ||
-            ex is NullReferenceException)
-        {
-            // ParameterCount can throw on partially-constructed models in
-            // these specific ways:
-            //   - InvalidOperationException: subclass ctor failing before
-            //     InitializeLayers completes (most common).
-            //   - OverflowException: int sum wraps mid-property; the
-            //     caller can fix it but we shouldn't crash auto-detect.
-            //   - NullReferenceException: a sublayer field is still null
-            //     during partial construction.
-            // Other exceptions (real bugs, GPU faults, etc.) propagate so
-            // they aren't hidden behind a silent skip. Don't finalize
-            // either: we want to retry once the model is fully built.
-            // Surface to System.Diagnostics so telemetry pipelines can see
-            // that auto-detect bailed.
-            System.Diagnostics.Debug.WriteLine(
-                $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
-                $"ParameterCount threw {ex.GetType().Name}: {ex.Message}");
-            return;
-        }
-
         long threshold = _streamingThresholdOverride ?? s_streamingThresholdParams;
 
-        // Lazy models (Transformer/VLM decoders built from FullyConnected /
-        // MultiHeadAttention layers that resolve their input dim on first
-        // forward) report ParameterCount == 0 here because no weight tensor
-        // has materialized yet. Relying on the post-first-forward retry is
-        // too late: that first forward is exactly what allocates the entire
-        // (multi-GB) weight set on the GC heap and OOMs on a memory-bounded
-        // runner BEFORE the retry can engage streaming. So when the
-        // materialized count is below threshold, fall back to the model's
-        // structural estimate (computed from its architecture/options, no
-        // materialization required) so streaming turns on in the ctor and
-        // the lazy weights stream as they materialize. See
-        // EstimateStructuralParameterCount.
-        long effectiveCount = paramCount;
+        // Consult the allocation-free structural estimate FIRST. Foundation models already know
+        // they cross the threshold from their options, so walking a hundreds-of-layers parameter
+        // manifest cannot improve the decision and used to add substantial constructor latency.
+        // Models without an estimate (the normal case) still use the exact ParameterCount path.
+        long structuralCount = SafeEstimateStructuralParameterCount();
+        long effectiveCount = structuralCount;
         if (effectiveCount < threshold)
         {
-            long structural = SafeEstimateStructuralParameterCount();
-            if (structural > effectiveCount) effectiveCount = structural;
+            long paramCount;
+            try
+            {
+                paramCount = ParameterCount;
+            }
+            catch (Exception ex) when (
+                ex is InvalidOperationException ||
+                ex is OverflowException ||
+                ex is NullReferenceException)
+            {
+                // ParameterCount can throw on partially-constructed models in
+                // these specific ways:
+                //   - InvalidOperationException: subclass ctor failing before
+                //     InitializeLayers completes (most common).
+                //   - OverflowException: int sum wraps mid-property; the
+                //     caller can fix it but we shouldn't crash auto-detect.
+                //   - NullReferenceException: a sublayer field is still null
+                //     during partial construction.
+                // Other exceptions (real bugs, GPU faults, etc.) propagate so
+                // they aren't hidden behind a silent skip. Don't finalize
+                // either: we want to retry once the model is fully built.
+                // Surface to System.Diagnostics so telemetry pipelines can see
+                // that auto-detect bailed.
+                System.Diagnostics.Debug.WriteLine(
+                    $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
+                    $"ParameterCount threw {ex.GetType().Name}: {ex.Message}");
+                return;
+            }
+
+            if (paramCount > effectiveCount) effectiveCount = paramCount;
         }
 
         if (effectiveCount < threshold)

@@ -1826,6 +1826,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal bool UseStreamingAllocator { get; set; }
 
     /// <summary>
+    /// Applies the network's streaming-allocation mode to this layer and every currently registered
+    /// descendant. Composite children may own the actual lazy weights, so setting only the outer
+    /// layer leaves those allocations on the ordinary GC heap.
+    /// </summary>
+    internal void SetStreamingAllocatorRecursively(bool useStreamingAllocator)
+    {
+        var visited = new HashSet<LayerBase<T>>(ReferenceEqualityComparer.Instance);
+        SetStreamingAllocatorRecursively(useStreamingAllocator, visited);
+    }
+
+    private void SetStreamingAllocatorRecursively(
+        bool useStreamingAllocator,
+        HashSet<LayerBase<T>> visited)
+    {
+        if (!visited.Add(this)) return;
+        UseStreamingAllocator = useStreamingAllocator;
+        foreach (var subLayer in GetSubLayers())
+        {
+            if (subLayer is LayerBase<T> child)
+                child.SetStreamingAllocatorRecursively(useStreamingAllocator, visited);
+        }
+    }
+
+    /// <summary>
     /// Inference-only: keep this layer's large weight matrices RESIDENT at half precision (fp16) and
     /// upcast to the compute type transiently per forward. Halves resident weight memory for a
     /// foundation-scale tower (a 5.75B-param DiT: 23 GB fp32 → ~11.5 GB fp16) so it fits a memory-
@@ -6066,6 +6090,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 return;
         }
         _registeredSubLayers.Add(subLayer);
+
+        // A lazy composite can create children during its first Forward, after its parent network
+        // already enabled streaming. Inherit the allocation mode immediately; otherwise the child
+        // allocates its real weights on the ordinary GC heap and a foundation model retains every
+        // block despite the outer layer reporting that streaming is active.
+        if (subLayer is LayerBase<T> childLayer)
+            childLayer.SetStreamingAllocatorRecursively(UseStreamingAllocator);
 
         // Lazy composite layers can create children during their first
         // Forward, after the parent has already been switched to evaluation
