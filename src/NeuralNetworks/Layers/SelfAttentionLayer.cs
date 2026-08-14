@@ -106,7 +106,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Queries represent what each position in the sequence is looking for in other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_queryWeightsHalf))]
 
     private Tensor<T> _queryWeights;
 
@@ -118,7 +121,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// Keys represent what each position in the sequence has to offer to other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_keyWeightsHalf))]
     private Tensor<T> _keyWeights;
 
     /// <summary>
@@ -130,7 +136,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// is being extracted from each position.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_embeddingDimension, _embeddingDimension")]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _embeddingDimension",
+        LowPrecisionBacking = nameof(_valueWeightsHalf))]
     private Tensor<T> _valueWeights;
 
     /// <summary>
@@ -617,7 +626,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     {
         // Materialize lazy-init weights before any Q/K/V projection runs — same
         // contract DenseLayer gives for lazy layers.
-        EnsureInitialized();
+        EnsureInitializedFromInput(input);
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -829,13 +838,12 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
-        // Materialize lazy Q/K/V/bias tensors before GPU path.
-        EnsureInitialized();
-
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
+        // Materialize or adopt lazy Q/K/V/bias tensors through the common lifecycle before GPU use.
+        EnsureInitializedFromInput(input);
 
         // Get dimensions from input shape
         int[] inputShape = input._shape;

@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -93,6 +94,17 @@ public class PredictorParameterStreamingTests
         var t = new Tensor<double>(new[] { 1, 4, 8, 8 });
         for (int i = 0; i < t.Length; i++) t[i] = (i % 7) * 0.01 - 0.03;
         return t;
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task UViT_ManifestReportsDeferredRatherThanParameterFree()
+    {
+        await System.Threading.Tasks.Task.Yield();
+
+        var predictor = UViT(7);
+        var provider = Assert.IsAssignableFrom<IParameterManifestProvider>(predictor);
+
+        Assert.Equal(ParameterReadiness.ShapeDeferred, provider.ParameterLayout.Readiness);
     }
 
     [Fact]

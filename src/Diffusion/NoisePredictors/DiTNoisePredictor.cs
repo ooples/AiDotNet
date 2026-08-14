@@ -461,7 +461,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // runner just from `new DiTNoisePredictor()`.
         _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
-        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        // The sinusoidal base contract emits TimeEmbeddingDim features. Declare that exact input
+        // width up front so the generated manifest matches the real forward topology; letting the
+        // first forward silently resize a hiddenSize-wide placeholder makes pre-forward counts and
+        // copy-on-write clone validation disagree with the materialized model.
+        _timeEmbed1 = LazyDense(TimeEmbeddingDim, timeEmbedDim, new SiLUActivation<T>());
         _timeEmbed2 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
 
         // Class conditioning embedding (Peebles & Xie 2022 §3.2 / Appendix C).
@@ -1336,7 +1340,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             latentSpatialSize: _latentSpatialSize,
             seed: _seed);
 
-        // Carry the test-only resident-threshold override so the clone's probe forward takes the same
+        // Carry the test-only resident-threshold override so an eager fallback takes the same
         // (fp16-resident vs fp32) path as the source — otherwise a small test clone would materialize fp32
         // while the source is resident, masking the resident clone round-trip under test (#1764). Null in
         // production, so this is a no-op there.
@@ -1347,9 +1351,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Materializes <paramref name="clone"/> through the FORWARD path and copies this predictor's
-    /// trained weights into it. Shared by <see cref="Clone"/> and every derived predictor's
-    /// <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the correct clone semantics.
+    /// Shares this predictor's trained weights with <paramref name="clone"/> through the central
+    /// copy-on-write path, falling back to a materialize-and-copy forward only when the generated
+    /// layer-shape contracts cannot prove the two graphs equivalent. Shared by <see cref="Clone"/>
+    /// and every derived predictor's <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the same
+    /// clone semantics.
     /// </summary>
     /// <remarks>
     /// Preserve trained/materialized weights without forcing a foundation-scale default
@@ -1377,6 +1383,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         Guard.NotNull(clone);
         if (!HasMaterializedParameters()) return;
+
+        // Build only the fixed-shape layer graph. The generator's declared parameter shapes let the
+        // shared helper validate and bind the source tensors directly into the destination's lazy
+        // placeholders. This is O(number of layers) and O(1) weight storage until either side writes,
+        // avoiding both a foundation-scale destination allocation and the extra probe forward.
+        clone.EnsureLayersInitialized();
+        if (clone.TryShareParametersFrom(this))
+            return;
 
         var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
         clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());

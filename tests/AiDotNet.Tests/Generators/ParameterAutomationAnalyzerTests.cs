@@ -21,6 +21,7 @@ namespace AiDotNet.Attributes
         public bool Optional { get; set; }
         public string? Condition { get; set; }
         public string? Shape { get; set; }
+        public string? LowPrecisionBacking { get; set; }
         public int Availability { get; set; }
     }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FittedParameterAttribute : Attribute { }
@@ -344,6 +345,88 @@ public sealed class AdaptiveLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<dou
 }";
 
         Assert.DoesNotContain(Run(source), item => item.Id == "AIDN093");
+    }
+
+    [Fact]
+    public async Task LowPrecisionBacking_IsOneExplicitLogicalParameterSlot()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    [TrainableParameter(LowPrecisionBacking = nameof(_weightHalf))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? _weightHalf;
+}";
+
+        var diagnostics = Run(source);
+        Assert.DoesNotContain(diagnostics, item => item.Id == "AIDN094");
+        Assert.DoesNotContain(diagnostics, item =>
+            item.Id == "AIDN088" && item.GetMessage().Contains("_weightHalf", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("_missing", "no such field")]
+    [InlineData("_wrongType", "not Tensor<Half>")]
+    [InlineData("Shared", "instance-specific")]
+    public async Task LowPrecisionBacking_MustNameOneInstanceHalfTensor(
+        string backing, string expectedReason)
+    {
+        await Task.Yield();
+        string source = $@"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<float>? _wrongType;
+    private static AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? Shared;
+    [TrainableParameter(LowPrecisionBacking = ""{backing}"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _weight = new();
+}}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN094"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains(expectedReason, diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LowPrecisionBacking_CannotRepresentTwoLogicalParameters()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? _shared;
+    [TrainableParameter(LowPrecisionBacking = nameof(_shared))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _first = new();
+    [TrainableParameter(LowPrecisionBacking = nameof(_shared))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double> _second = new();
+}";
+
+        var diagnostics = Run(source).Where(item => item.Id == "AIDN094").ToArray();
+        Assert.Equal(2, diagnostics.Length);
+        Assert.All(diagnostics, diagnostic =>
+            Assert.Contains("more than one trainable parameter", diagnostic.GetMessage(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task LowPrecisionBacking_CannotBeAttachedToAParameterCollection()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ResidentLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<System.Half>? _shared;
+    [TrainableParameter(LowPrecisionBacking = nameof(_shared))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<double>[] _weights =
+        System.Array.Empty<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>();
+}";
+
+        var diagnostic = Assert.Single(Run(source).Where(item => item.Id == "AIDN094"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("only one tensor field", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 
     [Fact]

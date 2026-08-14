@@ -151,6 +151,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     var optional = false;
                     string? shape = null;
                     string? condition = null;
+                    string? lowPrecisionBacking = null;
 
                     foreach (var namedArg in attr.NamedArguments)
                     {
@@ -164,6 +165,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             shape = shapeVal;
                         else if (namedArg.Key == "Condition" && namedArg.Value.Value is string conditionVal)
                             condition = conditionVal;
+                        else if (namedArg.Key == "LowPrecisionBacking" && namedArg.Value.Value is string backingVal)
+                            lowPrecisionBacking = backingVal;
                     }
 
                     var explicitNullable = field.NullableAnnotation == NullableAnnotation.Annotated
@@ -179,7 +182,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             // Optional/Availability is explicit, and the classifier never promotes an
                             // unannotated nullable tensor into the graph.
                             Optional: optional || explicitNullable, Nullable: explicitNullable,
-                            Shape: shape, Condition: condition));
+                            Shape: shape, Condition: condition,
+                            LowPrecisionBacking: lowPrecisionBacking));
                     }
                     else if (TryGetTensorCollection(field.Type, classSymbol, out var collectionKind))
                     {
@@ -192,7 +196,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             field.Name, role, order, DeclIndex: 0,
                             TypeName: field.Type.ToDisplayString(),
                             Optional: optional || explicitNullable, Nullable: explicitNullable,
-                            Shape: shape, CollectionKind: collectionKind, Condition: condition));
+                            Shape: shape, CollectionKind: collectionKind, Condition: condition,
+                            LowPrecisionBacking: lowPrecisionBacking));
                     }
                 }
 
@@ -745,6 +750,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     sb.AppendLine($"        {pf.Name} = parameters[{indexExpr}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {idxLabel} is null.\");");
                 }
+                if (pf.LowPrecisionBacking is not null)
+                    sb.AppendLine($"        {pf.LowPrecisionBacking} = null;");
             }
 
             // Re-sync _registeredTensors with the newly assigned field values.
@@ -832,12 +839,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine("        if (RegisteredTrainableParameterCount == parameters.Count)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            base.SetTrainableParameters(parameters);");
+                sb.AppendLine("            MarkTrainableParametersRebound();");
                 sb.AppendLine("            return;");
                 sb.AppendLine("        }");
                 sb.AppendLine();
                 sb.AppendLine("        ClearRegisteredParameters();");
                 foreach (var pf in paramFields)
                     EmitCollectionRegister(sb, pf);
+                sb.AppendLine("        MarkTrainableParametersRebound();");
             }
             else
             {
@@ -868,6 +877,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine($"        if (RegisteredTrainableParameterCount == {paramFields.Count})");
                 sb.AppendLine("        {");
                 sb.AppendLine("            base.SetTrainableParameters(parameters);");
+                sb.AppendLine("            MarkTrainableParametersRebound();");
                 sb.AppendLine("            return;");
                 sb.AppendLine("        }");
                 sb.AppendLine();
@@ -876,6 +886,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     sb.AppendLine($"        AppendTrainableParameter({paramFields[i].Name}, {paramFields[i].Role});");
                 }
+                sb.AppendLine("        MarkTrainableParametersRebound();");
             }
             sb.AppendLine("    }");
             sb.AppendLine();
@@ -1152,10 +1163,13 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     {
         if (parameter.CollectionKind == ParameterCollectionKind.Direct)
         {
+            string declaration = parameter.LowPrecisionBacking is null
+                ? $"DeclareTrainableParameter(components, {parameter.Name});"
+                : $"DeclareTrainableParameter(components, {parameter.Name}, {parameter.LowPrecisionBacking});";
             if (parameter.Condition is not null)
-                sb.AppendLine($"        if ({parameter.Condition}) DeclareTrainableParameter(components, {parameter.Name});");
+                sb.AppendLine($"        if ({parameter.Condition}) {declaration}");
             else
-                sb.AppendLine($"        DeclareTrainableParameter(components, {parameter.Name});");
+                sb.AppendLine($"        {declaration}");
             return;
         }
 
@@ -1857,7 +1871,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         bool Nullable = false,
         string? Shape = null,
         ParameterCollectionKind CollectionKind = ParameterCollectionKind.Direct,
-        string? Condition = null);
+        string? Condition = null,
+        string? LowPrecisionBacking = null);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
     private record struct SubLayerFieldInfo(string Name, bool IsNullable, bool IsCollection, string? InputShape = null);
 }

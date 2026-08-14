@@ -210,15 +210,10 @@ public partial class BarkModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedTransformer = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS, numHeads: NUM_HEADS,
-            patchSize: 1, contextDim: CONTEXT_DIM);
-        // Layer-by-layer copy avoids the ~3 GB flat-vector intermediate
-        // that GetParameters + SetParameters would produce — real Bark is
-        // ~360 M params (3 GB doubles) and the round-trip OOMs CI hosts.
-        clonedTransformer.CopyParametersFrom(_transformer);
-        return new BarkModel<T>(transformer: clonedTransformer,
+        // Delegate common parameter cloning to the predictor/VAE base automation. DiT uses the
+        // generated shape manifest to establish an O(1)-until-write COW share, avoiding Bark's former
+        // paper-scale layer-by-layer copy and its extra materialization boundary.
+        return new BarkModel<T>(transformer: (DiTNoisePredictor<T>)_transformer.Clone(),
             audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
             conditioner: _conditioner);
     }
