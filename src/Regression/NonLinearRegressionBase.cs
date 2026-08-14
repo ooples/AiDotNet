@@ -692,15 +692,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         };
         var optionsJson = reader.ReadString();
 
-        // Materialised as the type this model ALREADY holds, not as the declared base. TypeNameHandling
-        // honours $type when the payload carries one, but a payload written without it -- an older
-        // file, or a model whose options were serialised through a base-typed reference -- came back as
-        // a plain NonLinearRegressionOptions, and every subclass that reads its own options type then
-        // threw InvalidCastException on the first prediction after a round trip.
-        // LocallyWeightedRegression failed 19 tests on exactly that, all of them inside Predict rather
-        // than anywhere near deserialisation, which is what made it look like a model bug.
-        var optionsType = Options?.GetType() ?? typeof(NonLinearRegressionOptions);
-        var optionsObj = JsonConvert.DeserializeObject(optionsJson, optionsType, serializerSettings);
+        // REVERTED, and the reason is worth keeping. Materialising into the type the model already
+        // holds looked like the fix for LocallyWeighted's InvalidCastException; it was not -- carrying
+        // the span and bandwidth as model state was -- and three ensemble models that passed before it
+        // failed their clone round trip with it in. A speculative change that does not fix the thing it
+        // was written for and correlates with new failures is not a change to keep.
+        // The typeof here is the base type, and TypeNameHandling.All honours $type metadata.
+        var optionsObj = JsonConvert.DeserializeObject(optionsJson, typeof(NonLinearRegressionOptions), serializerSettings);
         Options = (NonLinearRegressionOptions)(optionsObj ?? new NonLinearRegressionOptions());
 
         // Deserialize support vectors

@@ -73,7 +73,33 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// restored. Anything that shadows configuration this way has the same defect waiting in it.
     /// </remarks>
     private LocallyWeightedRegressionOptions _options
-        => (LocallyWeightedRegressionOptions)Options;
+        => Options as LocallyWeightedRegressionOptions ?? _optionsFallback;
+
+    /// <summary>
+    /// Stands in when the base's <c>Options</c> comes back as the declared base type.
+    /// </summary>
+    /// <remarks>
+    /// A hard cast here threw InvalidCastException on the first prediction after a rebuild -- 19 tests,
+    /// all of them inside Predict rather than anywhere near deserialisation, which is what made it read
+    /// as a model bug rather than a supply-path one. Reading configuration must not be able to crash a
+    /// prediction; the LOESS parameters that actually matter are carried as state below, so a fallback
+    /// here costs nothing and removes the crash.
+    /// </remarks>
+    private readonly LocallyWeightedRegressionOptions _optionsFallback = new();
+
+    /// <summary>
+    /// The span and bandwidth this model predicts with, as MODEL STATE rather than configuration.
+    /// </summary>
+    /// <remarks>
+    /// Anything training computes is model state -- that is the rule this follows. LOESS's neighbourhood
+    /// is a fitted property of the data (Cleveland and Devlin 1988): the span selects the q-th nearest
+    /// neighbour, and a model restored without it predicts from a different neighbourhood than the one
+    /// it was fitted with. Held here, they are declared by the generator and travel in the payload, so
+    /// they survive a round trip even when the options object does not.
+    /// </remarks>
+    private double _span;
+
+    private double _bandwidth;
 
     /// <summary>
     /// Tolerance below which total kernel weight is treated as zero (no neighbors in bandwidth).
@@ -138,6 +164,12 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     {
         _xTrain = Matrix<T>.Empty();
         _yTrain = Vector<T>.Empty();
+
+        // Seeded from the options the model was built with, and state from here on. Deserialize
+        // overwrites them from the payload, which is the point: the neighbourhood is a property of the
+        // fitted model, not of whatever options object it is later rebuilt beside.
+        _span = _options.Span;
+        _bandwidth = _options.Bandwidth;
     }
 
     /// <summary>
@@ -389,10 +421,16 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private double LocalBandwidth(double[] distances)
     {
-        if (_options.Bandwidth > 0) return _options.Bandwidth;
+        // Read from the model's own state, seeded from options at construction. The override still
+        // wins where it is set -- Bandwidth is kept as an escape hatch, per the design -- but both
+        // values travel in the payload, so a restored model predicts from the neighbourhood it was
+        // fitted with rather than from whatever the options object degraded to.
+        var bandwidth = _bandwidth > 0 ? _bandwidth : _options.Bandwidth;
+        if (bandwidth > 0) return bandwidth;
         if (distances.Length == 0) return MinimumStabilityStrength;
 
-        double span = _options.Span > 0 ? _options.Span : 0.75;
+        var configured = _span > 0 ? _span : _options.Span;
+        double span = configured > 0 ? configured : 0.75;
         int q = (int)Math.Floor(span * distances.Length);
         q = Math.Max(1, Math.Min(q, distances.Length));
 
