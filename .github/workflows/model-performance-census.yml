@@ -30,7 +30,9 @@ permissions:
 env:
   PERF_SHARD_COUNT: 32
   PERF_MODEL_TIMEOUT_SECONDS: 180
-  TENSORS_COMMIT: 35aae6d02e23f548366b35cb83c9b47b22ffeaae
+  # Final merge of AiDotNet.Tensors #945; this is the exact source represented by
+  # the pending 0.126.0 lockstep release.
+  TENSORS_COMMIT: 4965fc0973083e5aa5c338ced7731423c6ced082
 
 jobs:
   prepare:
@@ -63,34 +65,34 @@ jobs:
       - name: Restore fixture assembly
         shell: pwsh
         run: |
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-unreleased.targets'
           $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj `
             -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsPr944Root=$tensorsRoot
+            -p:TensorsSourceRoot=$tensorsRoot
 
       - name: Build fixture assembly once
         shell: pwsh
         run: |
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-unreleased.targets'
           $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release `
             --framework net10.0 --no-restore `
             -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsPr944Root=$tensorsRoot
+            -p:TensorsSourceRoot=$tensorsRoot
 
       - name: Build exact-fixture performance host
         shell: pwsh
         run: |
-          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-pr944.targets'
+          $targets = Join-Path $env:GITHUB_WORKSPACE '.github/ci/aidotnet-tensors-unreleased.targets'
           $tensorsRoot = Join-Path $env:RUNNER_TEMP 'AiDotNet.Tensors'
           dotnet restore tools/ModelPerfFixtureRunner/ModelPerfFixtureRunner.csproj `
             -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsPr944Root=$tensorsRoot
+            -p:TensorsSourceRoot=$tensorsRoot
           dotnet build tools/ModelPerfFixtureRunner/ModelPerfFixtureRunner.csproj -c Release `
             --framework net10.0 --no-restore `
             -p:CustomAfterMicrosoftCommonTargets=$targets `
-            -p:TensorsPr944Root=$tensorsRoot
+            -p:TensorsSourceRoot=$tensorsRoot
 
       - name: Create Linux test dependency bundle
         shell: pwsh

@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    PR #2005 temporarily consumes the exact merged AiDotNet.Tensors source that will
+    become release 0.126.0. Importing that checkout keeps the performance census
+    reproducible before the package is published. Delete this target and the dependency
+    checkout when AiDotNet consumes the published lockstep release.
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'AiDotNet'">
+    <PackageReference Remove="AiDotNet.Tensors" />
+    <ProjectReference Include="$(TensorsSourceRoot)/src/AiDotNet.Tensors/AiDotNet.Tensors.csproj" />
+  </ItemGroup>
+</Project>
