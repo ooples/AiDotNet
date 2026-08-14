@@ -1152,15 +1152,27 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     {
         if (parameter.CollectionKind == ParameterCollectionKind.Direct)
         {
-            sb.AppendLine($"        DeclareTrainableParameter(components, {parameter.Name});");
+            if (parameter.Condition is not null)
+                sb.AppendLine($"        if ({parameter.Condition}) DeclareTrainableParameter(components, {parameter.Name});");
+            else
+                sb.AppendLine($"        DeclareTrainableParameter(components, {parameter.Name});");
             return;
         }
 
         string values = parameter.CollectionKind == ParameterCollectionKind.Keyed
             ? $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.OrderedValues({parameter.Name})"
             : $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull({parameter.Name})";
-        sb.AppendLine($"        foreach (var __componentTensor in {values})");
-        sb.AppendLine("            DeclareTrainableParameter(components, __componentTensor);");
+        if (parameter.Condition is not null)
+        {
+            sb.AppendLine($"        if ({parameter.Condition})");
+            sb.AppendLine($"            foreach (var __componentTensor in {values})");
+            sb.AppendLine("                DeclareTrainableParameter(components, __componentTensor);");
+        }
+        else
+        {
+            sb.AppendLine($"        foreach (var __componentTensor in {values})");
+            sb.AppendLine("            DeclareTrainableParameter(components, __componentTensor);");
+        }
     }
 
     private static void EmitDeferredInputShapeInference(
@@ -1175,6 +1187,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             && bufferFields.Count == 0
             && paramFields.All(field => field.CollectionKind == ParameterCollectionKind.Direct
                 && !field.Optional
+                && field.Condition is null
                 && !string.IsNullOrWhiteSpace(field.Shape)
                 && !field.Shape!.Contains("*"));
         if (!completeLocalFormula) return;

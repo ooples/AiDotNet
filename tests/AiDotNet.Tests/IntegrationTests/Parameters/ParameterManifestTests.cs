@@ -686,6 +686,26 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task ComponentCollection_PreservesDeclaredMemberLayoutAcrossReadAndRestore()
+    {
+        await Task.Yield();
+        var member = new ContractProbeSource(
+            declaredCount: 3,
+            values: new[] { 1d, 2d, 3d },
+            reportedParameterCount: 2);
+        var source = new ComponentCollectionParameterSource<double>(() => new[] { member });
+
+        var slot = Assert.Single(source.GetParameterLayout());
+        Assert.Equal("index=00000000", slot.StableId);
+        Assert.Equal(3, slot.ParameterCount);
+        Assert.Equal(3, source.ParameterCount);
+        Assert.Equal(new[] { 1d, 2d, 3d }, source.GetParameters().ToArray());
+
+        source.SetParameters(new Vector<double>(new[] { 4d, 5d, 6d }));
+        Assert.Equal(new[] { 4d, 5d, 6d }, member.LastRestored);
+    }
+
+    [Fact]
     public async Task KeyedCollections_UseCanonicalKeyOrder()
     {
         await Task.Yield();

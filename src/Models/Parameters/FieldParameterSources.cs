@@ -383,7 +383,13 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
         get
         {
             long total = 0;
-            foreach (var m in Members()) total += m.ParameterCount;
+            foreach (var member in Members())
+            {
+                var layout = GetMemberLayout(member);
+                if (!TryGetResolvedCount(layout, out long count))
+                    count = member.ParameterCount;
+                total = checked(total + count);
+            }
             return total;
         }
     }
@@ -395,11 +401,34 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
         int index = 0;
         foreach (var member in Members())
         {
-            long count = member.ParameterCount;
-            slots.Add(new ParameterSlotDescriptor(
-                $"index={index++:D8}", ParameterSlotRole.Trainable,
-                count == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
-                count));
+            string prefix = $"index={index++:D8}";
+            var memberSlots = GetMemberLayout(member);
+            if (memberSlots.Count == 0)
+            {
+                slots.Add(new ParameterSlotDescriptor(
+                    prefix, ParameterSlotRole.Trainable, ParameterReadiness.ParameterFree, 0));
+                continue;
+            }
+
+            for (int slotIndex = 0; slotIndex < memberSlots.Count; slotIndex++)
+            {
+                var memberSlot = memberSlots[slotIndex];
+                string stableId = memberSlot.StableId == "$"
+                    ? prefix
+                    : prefix + "/" + memberSlot.StableId;
+                slots.Add(new ParameterSlotDescriptor(
+                    stableId,
+                    memberSlot.Role,
+                    memberSlot.Readiness,
+                    memberSlot.ParameterCount,
+                    shape: memberSlot.Shape,
+                    elementType: memberSlot.ElementType,
+                    updatePolicy: memberSlot.UpdatePolicy,
+                    persistence: memberSlot.Persistence,
+                    ownership: memberSlot.Ownership,
+                    availability: memberSlot.Availability,
+                    materializedParameterCount: memberSlot.MaterializedParameterCount));
+            }
         }
         if (slots.Count == 0)
         {
@@ -435,9 +464,17 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var members = new List<IParameterSource<T>>(Members());
+        var memberCounts = new int[members.Count];
         long expectedLong = 0;
         for (int i = 0; i < members.Count; i++)
-            expectedLong = checked(expectedLong + members[i].ParameterCount);
+        {
+            var layout = GetMemberLayout(members[i]);
+            if (!TryGetResolvedCount(layout, out long count))
+                throw new ParameterLayoutNotReadyException(
+                    "restore component collection", new ParameterLayoutSnapshot(GetParameterLayout()));
+            memberCounts[i] = checked((int)count);
+            expectedLong = checked(expectedLong + count);
+        }
         int expected = checked((int)expectedLong);
         if (parameters.Length != expected)
             throw new ArgumentException(
@@ -445,13 +482,49 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
                 nameof(parameters));
 
         int at = 0;
-        foreach (var m in members)
+        for (int i = 0; i < members.Count; i++)
         {
-            int n = (int)m.ParameterCount;
+            int n = memberCounts[i];
             var slice = new Vector<T>(n);
             for (int j = 0; j < n; j++) slice[j] = parameters[at++];
-            m.SetParameters(slice);
+            members[i].SetParameters(slice);
         }
+    }
+
+    private static IReadOnlyList<ParameterSlotDescriptor> GetMemberLayout(IParameterSource<T> member)
+    {
+        if (member is IParameterManifestProvider manifestProvider)
+            return manifestProvider.ParameterLayout.Slots;
+        if (member is IParameterLayoutSource layoutSource)
+            return layoutSource.GetParameterLayout();
+
+        long count = member.ParameterCount;
+        return new[]
+        {
+            new ParameterSlotDescriptor(
+                "$", ParameterSlotRole.Trainable,
+                count == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
+                count,
+                materializedParameterCount: count)
+        };
+    }
+
+    private static bool TryGetResolvedCount(
+        IReadOnlyList<ParameterSlotDescriptor> slots, out long count)
+    {
+        count = 0;
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i].Readiness == ParameterReadiness.ShapeDeferred
+                || !slots[i].ParameterCount.HasValue)
+            {
+                count = 0;
+                return false;
+            }
+
+            count = checked(count + slots[i].ParameterCount!.Value);
+        }
+        return true;
     }
 }
 

@@ -532,6 +532,10 @@ public partial class ConditionalLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerB
         Assert.Contains("(Affine) && (_gamma.Length > 0)", generated, StringComparison.Ordinal);
         Assert.Contains("if (Affine) __withAllOptional++;", generated, StringComparison.Ordinal);
         Assert.Contains("HasActiveDeclaredParameterShapes => (Affine)", generated, StringComparison.Ordinal);
+        Assert.Contains(
+            "if (Affine) DeclareTrainableParameter(components, _gamma);",
+            generated,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -556,6 +560,10 @@ public partial class ConditionalExperts<T> : AiDotNet.NeuralNetworks.Layers.Laye
             StringComparison.Ordinal);
         Assert.Contains(
             "if (UseExperts) foreach (var __parameter in global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull(_experts)) __expected++;",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"if (UseExperts){System.Environment.NewLine}            foreach (var __componentTensor in global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull(_experts))",
             generated,
             StringComparison.Ordinal);
     }
